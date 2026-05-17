@@ -33,9 +33,16 @@ function saveBans() {
     fs.writeFileSync(BANS_FILE, JSON.stringify(bans, null, 2));
 }
 function checkBan(userId, guildId, channelId) {
-    if (bans.users[userId]) return { type: 'user', typeName: 'Usuário', reason: bans.users[userId].reason };
-    if (guildId && bans.guilds[guildId]) return { type: 'guild', typeName: 'Servidor', reason: bans.guilds[guildId].reason };
-    if (channelId && bans.channels[channelId]) return { type: 'channel', typeName: 'Canal', reason: bans.channels[channelId].reason };
+    const sanitize = (r) => {
+        if (!r) return null;
+        if (r.includes('Identificado termo proibido no') && r.includes(':')) {
+            return r.split(':')[0] + '.';
+        }
+        return r;
+    };
+    if (bans.users[userId]) return { type: 'user', typeName: 'Usuário', reason: sanitize(bans.users[userId].reason) };
+    if (guildId && bans.guilds[guildId]) return { type: 'guild', typeName: 'Servidor', reason: sanitize(bans.guilds[guildId].reason) };
+    if (channelId && bans.channels[channelId]) return { type: 'channel', typeName: 'Canal', reason: sanitize(bans.channels[channelId].reason) };
     return null;
 }
 function addBan(type, id, reason = "Violação dos Termos de Uso.") {
@@ -59,7 +66,7 @@ const forbiddenKeywords = [
     'suicídio', 'auto-mutilação', 'autoflagelação',
     'terrorismo', 'nazismo', 'hitler', 'suástica', 'extremismo', '1488',
     'xvideos', 'pornhub', 'redtube', 'rule34', 'r34', 'lolicon', 'shotacon',
-    'foder', 'fodendo', 'foda-se', 'boquete', 'viado', 'traveco', 'punheta', 'orgia', 'suruba', 'nude', 'nudes', 'clitóris', 'ânus', 'felação',
+    'foder', 'fodendo', 'foda-se', 'fodase', 'boquete', 'viado', 'traveco', 'punheta', 'orgia', 'suruba', 'nude', 'nudes', 'clitóris', 'ânus', 'felação',
     'masturbação', 'masturbar', 'ejaculação', 'sêmen',
     'arrombado', 'filho da puta', 'fdp',
     'cuzão', 'bicha',
@@ -89,11 +96,11 @@ function checkAutoBan(prompt, guildName, guildId, channelName, channelId, userId
         });
     };
     const guildK = isForbidden(lowerGuild, 'guild');
-    if (guildK && guildId) return { type: 'guild', id: guildId, keyword: guildK, reason: `Identificado termo proibido no servidor: ${guildK}` };
+    if (guildK && guildId) return { type: 'guild', id: guildId, keyword: guildK, reason: 'Identificado termo proibido no servidor.' };
     const channelK = isForbidden(lowerChannel, 'channel');
-    if (channelK && channelId) return { type: 'channel', id: channelId, keyword: channelK, reason: `Identificado termo proibido no canal: ${channelK}` };
+    if (channelK && channelId) return { type: 'channel', id: channelId, keyword: channelK, reason: 'Identificado termo proibido no canal.' };
     const promptK = isForbidden(lowerPrompt, 'prompt');
-    if (promptK && userId) return { type: 'user', id: userId, keyword: promptK, reason: `Identificado termo proibido no prompt: ${promptK}` };
+    if (promptK && userId) return { type: 'user', id: userId, keyword: promptK, reason: 'Identificado termo proibido no prompt.' };
     return null;
 }
 async function handleBanInteraction(interaction, client) {

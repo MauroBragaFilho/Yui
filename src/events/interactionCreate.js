@@ -188,9 +188,9 @@ module.exports = {
             if (banInfo && interaction.commandName !== 'ajuda') {
                 const banEmbed = new EmbedBuilder()
                     .setColor(0xE74C3C)
-                    .setTitle('🛑 Acesso Bloqueado!')
-                    .setDescription(`Desculpe, mas seu acesso à **Hikari** foi suspenso.\n\n**Tipo de Bloqueio:** ${banInfo.typeName || banInfo.type}\n**Motivo:** ${banInfo.reason || "Violação dos Termos de Uso."}\n\nCaso acredite que isso seja um erro, entre em contato com o desenvolvedor. <@${config.ownerId}> ✨`)
-                    .setFooter({ text: 'Hikari Security System • by yGuilhermy' })
+                    .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
+                    .setDescription(`Sua tentativa de execução foi abortada. O acesso à **IA Hikari** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **Tipo:** ${banInfo.typeName || banInfo.type}\n- **Motivo do Banimento:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Hikari."}\n- **Status Atual:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.\n\nSe você acredita que isso é um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> ✨`)
+                    .setFooter({ text: 'Hikari Security & Moderation • by yGuilhermy' })
                     .setTimestamp();
                 return interaction.reply({ embeds: [banEmbed], ephemeral: false });
             }

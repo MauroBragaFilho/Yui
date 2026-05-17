@@ -1069,15 +1069,18 @@ async function processQueue() {
                     console.warn(`[AUTO-BAN] ${autoBanTrigger.type} bloqueado. Gatilho: ${autoBanTrigger.keyword}`);
                     const banEmbed = new EmbedBuilder()
                         .setColor(0xFF0000)
-                        .setTitle('⚠️ Detecção de Violação de Segurança')
-                        .setDescription(`Olá! Identificamos um termo ou comportamento que viola as minhas diretrizes de segurança e termos de uso. Por esse motivo, o processamento foi interrompido e um bloqueio foi aplicado.
+                        .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
+                        .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**
 
-**Detalhes da Ocorrência:**
-- **Alvo:** ${autoBanTrigger.type === 'user' ? 'Seu perfil de usuário' : autoBanTrigger.type === 'guild' ? 'Este servidor' : 'Este canal'}
-- **Gatilho:** \`${autoBanTrigger.keyword}\`
-- **Status:** Bloqueio preventivo ativado.
+Sua última ação violou gravemente as diretrizes de segurança da **IA Hikari**. O sistema de moderação automática identificou uma conduta inaceitável e perigosa.
 
-Caso acredite ser um falso positivo, utilize o botão de apelação abaixo para que meu criador possa revisar manualmente.
+**DETALHES DO BANIMENTO DA HIKARI:**
+- **ALVO PENALIZADO:** ${autoBanTrigger.type === 'user' ? 'Seu perfil de usuário (Banido Globalmente)' : autoBanTrigger.type === 'guild' ? 'Este servidor (Bot Inutilizado)' : 'Este canal (Canal Bloqueado)'}
+- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.
+
+O acesso aos serviços foi completamente revogado e a Hikari não irá responder a você. Qualquer nova tentativa de burlar a segurança agravará a punição.
+
+Se você julga que isso é um erro grave do bot, você pode tentar apelar pelo botão abaixo para que o desenvolvedor avalie a gravidade.
 
 ---
 ✨ **Dica:** Deseja uma versão da **IA Hikari** totalmente aberta, sem filtros ou bloqueios de segurança?
@@ -1102,12 +1105,15 @@ Você pode hospedar sua própria versão privada facilmente!
             console.warn(`[BAN] Uso bloqueado para ${banInfo.type} (ID: ${userId || guildId || channelId}). Motivo: ${banInfo.reason}`);
             const banEmbed = new EmbedBuilder()
                 .setColor(0xE74C3C)
-                .setTitle('🛑 Acesso Bloqueado!')
-                .setDescription(`Desculpe, mas seu acesso à **IA Hikari** foi suspenso globalmente.
+                .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
+                .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Hikari** está permanentemente bloqueado para você.
 
-**Detalhes do Bloqueio:**
-- **Tipo:** ${banInfo.typeName || banInfo.type}
-- **Motivo:** ${banInfo.reason || "Violação dos Termos de Uso."}
+**DETALHES DO SEU BANIMENTO:**
+- **ALVO:** ${banInfo.typeName || banInfo.type}
+- **MOTIVO DO BANIMENTO:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Hikari."}
+- **STATUS ATUAL:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.
+
+Você perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.
 
 Se você acredita que isso é um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> ✨
 
