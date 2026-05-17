@@ -156,7 +156,7 @@ async function handleBanInteraction(interaction, client) {
                     .setStyle(ButtonStyle.Danger)
             );
             await appealChannel.send({
-                content: `🔔 Um novo appeal requer atenção dos Administradores (<@${config.ownerId}>).`,
+                content: `🔔 Um novo appeal requer atenção dos Administradores (<@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})]).`,
                 embeds: [embed],
                 components: [row]
             });
