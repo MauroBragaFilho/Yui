@@ -52,6 +52,8 @@ Centralizamos todas as constantes globais para facilitar a manutenção. Abaixo,
 | `requireTos` | `REQUIRE_TOS` | Se `true`, exige aceitação dos termos ao entrar em novos servidores. |
 | `saveHistory` | `SAVE_HISTORY` | Se `true`, salva logs de prompt e resposta no arquivo `historico.txt`. |
 | `localLlmUrl` | `LOCAL_LLM_URL` | Endpoint para integração com LM Studio ou Ollama. |
+| `defaultAutoMod` | `DEFAULT_AUTOMOD` | Habilita ou desabilita o AutoMod por padrão para novos servidores (Padrão: `true`). |
+| `automodMode` | `AUTOMOD_MODE` | Define o modo de operação do AutoMod (`off`, `trigger`, `mcp`, `both`). |
 
 ---
 

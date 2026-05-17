@@ -52,6 +52,8 @@ All global constants are centralized for easier maintenance. Below are the prima
 | `requireTos` | `REQUIRE_TOS` | If `true`, requires acceptance of terms when joining new servers. |
 | `saveHistory` | `SAVE_HISTORY` | If `true`, saves prompt and response logs to `history.txt`. |
 | `localLlmUrl` | `LOCAL_LLM_URL` | Endpoint for integration with LM Studio or Ollama. |
+| `defaultAutoMod` | `DEFAULT_AUTOMOD` | Enables or disables AutoMod by default for new servers (Default: `true`). |
+| `automodMode` | `AUTOMOD_MODE` | Defines the AutoMod operating mode (`off`, `trigger`, `mcp`, `both`). |
 
 ---
 

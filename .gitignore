@@ -28,3 +28,6 @@ Thumbs.db
 
 # Cookies
 cookies.txt
+
+# Scripts de uso unico
+enable_automod.js

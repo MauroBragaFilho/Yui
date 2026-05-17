@@ -69,8 +69,17 @@ function resetServerTools(guildId) {
 }
 function buildToolsPayload(guildId) {
     const disabled = getDisabledTools(guildId);
+    const mode = getAutoBlockMode(guildId);
+    const automodActive = mode !== 'off';
     return ALL_MCP_TOOLS
         .filter(t => !disabled.includes(t.function.name))
+        .filter(t => {
+            if (t.meta && t.meta.guardAutomod) {
+                if (!automodActive) return false;
+                return mode === 'mcp' || mode === 'both';
+            }
+            return true;
+        })
         .map(t => ({
             type: t.type,
             function: {
@@ -82,7 +91,17 @@ function buildToolsPayload(guildId) {
 }
 function buildToolsDefinition(guildId) {
     const disabled = getDisabledTools(guildId);
-    const activeTools = ALL_MCP_TOOLS.filter(t => !disabled.includes(t.function.name));
+    const mode = getAutoBlockMode(guildId);
+    const automodActive = mode !== 'off';
+    const activeTools = ALL_MCP_TOOLS
+        .filter(t => !disabled.includes(t.function.name))
+        .filter(t => {
+            if (t.meta && t.meta.guardAutomod) {
+                if (!automodActive) return false;
+                return mode === 'mcp' || mode === 'both';
+            }
+            return true;
+        });
     let toolList = '';
     let exampleList = '';
     let idx = 1;
@@ -283,7 +302,7 @@ function stripThinking(text) {
         return text.trim();
 }
 const { isServerAccepted, sendTermsOfService, handleTosInteraction, reportNewGuild } = require('./tosHandler');
-const { checkBan, addBan, removeBan, getBans, checkAutoBan, getAutoBlock, forbiddenKeywords } = require('./banHandler');
+const { checkBan, addBan, removeBan, getBans, checkAutoBan, getAutoBlock, getAutoBlockMode, forbiddenKeywords } = require('./banHandler');
 async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interaction) {
     const webhookUrl = config.avisosWebhookUrl;
     if (!webhookUrl) return;
@@ -1059,7 +1078,10 @@ async function processQueue() {
     };
     try {
         const triggerSource = options.searchPrompt || prompt;
-        const autoBanTrigger = checkAutoBan(triggerSource, guildName, guildId, channelName, channelId, userId);
+        const _automodMode = getAutoBlockMode(guildId);
+        const _automodActive = _automodMode !== 'off';
+        const _triggerEnabled = _automodActive && (_automodMode === 'trigger' || _automodMode === 'both');
+        const autoBanTrigger = _triggerEnabled ? checkAutoBan(triggerSource, guildName, guildId, channelName, channelId, userId) : null;
         if (autoBanTrigger) {
             const isAutoBlockOn = typeof getAutoBlock === 'function' && getAutoBlock(guildId);
             if (isAutoBlockOn && guildId) {
@@ -1519,6 +1541,34 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                         } catch (imgError) {
                             console.error('[GenerateImage Tool] Erro:', imgError.message);
                             processedResponse = `❌ Erro ao gerar imagem: ${imgError.message}`;
+                        }
+                    }
+                }
+                if (toolData.tool === 'ia_automod') {
+                    const _mode = getAutoBlockMode(guildId);
+                    const _automodActive = _mode !== 'off';
+                    if (!_automodActive || (_mode !== 'mcp' && _mode !== 'both')) {
+                        console.warn('[IA_AUTOMOD] Tool acionada mas modo/automod não permite. Ignorado.');
+                    } else {
+                        const { reason, severity } = toolData.args;
+                        const alreadyBanned = checkBan(userId, null, null);
+                        if (!alreadyBanned) {
+                            addBan('user', userId, reason || 'Violação dos Termos detectada pela IA Hikari.');
+                            console.warn(`[IA_AUTOMOD] Usuário ${userTag} (${userId}) banido pela IA. Severidade: ${severity}. Motivo: ${reason}`);
+                            const banEmbed = new EmbedBuilder()
+                                .setColor(0xFF0000)
+                                .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
+                                .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**\n\nO sistema de inteligência da Hikari analisou o contexto desta conversa e identificou uma conduta que viola gravemente os Termos de Uso.\n\n**DETALHES DO BANIMENTO:**\n- **ALVO PENALIZADO:** Seu perfil de usuário (Banido Globalmente)\n- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.\n\nO acesso aos serviços foi completamente revogado. Qualquer nova tentativa de burlar a segurança agravará a punição.\n\nSe você julga que isso é um erro, utilize o botão de apelação abaixo.\n\n---\n✨ **Dica:** Quer a Hikari sem filtros? Hospede sua própria versão!\n🚀 **GitHub:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
+                                .setFooter({ text: 'Hikari AI AutoMod • by yGuilhermy' })
+                                .setTimestamp();
+                            const githubButton = new ButtonBuilder()
+                                .setLabel('Página do Projeto')
+                                .setURL('https://github.com/yGuilhermy/Hikari')
+                                .setStyle(ButtonStyle.Link)
+                                .setEmoji('🚀');
+                            const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
+                            savePromptToHistory(prompt, userTag, userId, `[IA_AUTOMOD BAN - Severidade: ${severity}]`, interaction);
+                            return await unifiedReply(null, [], [banRow], [banEmbed]);
                         }
                     }
                 }

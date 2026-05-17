@@ -23,7 +23,7 @@ Ao ser adicionada a uma guilda, se `REQUIRE_TOS` estiver ativo:
 
 ## 🛡️ 2. Hierarquia do AutoMod (Automated Blocking)
 
-O sistema de AutoMod analisa prompts e contextos em busca de padrões proibidos (RegEx e Listas Negras). A punição segue uma hierarquia de três níveis:
+O sistema de AutoMod analisa prompts e contextos em busca de padrões proibidos (RegEx, Listas Negras e Análise Cognitiva). A punição segue uma hierarquia de três níveis:
 
 ### 🏙️ Nível 1: Servidor (Guild Ban)
 - **O que checa:** O nome do servidor onde o bot foi convidado.
@@ -36,22 +36,30 @@ O sistema de AutoMod analisa prompts e contextos em busca de padrões proibidos 
 - **Ação:** As funções de IA são silenciadas especificamente naquele canal.
 
 ### 👤 Nível 3: Usuário (User Ban)
-- **O que checa:** O conteúdo do prompt enviado pelo usuário.
-- **Trigger:** Tentativas de "Jailbreak", solicitações NSFW, racismo ou comportamentos tóxicos.
-- **Ação:** O usuário é banido globalmente do bot.
+O bloqueio do usuário pode ser ativado por dois métodos simultâneos:
+1. **Filtro de Gatilhos Rápido (Keyword Trigger):** Bloqueio imediato caso o prompt contenha termos sensíveis ou proibidos (ex: crimes graves, termos explícitos).
+2. **Análise Cognitiva da IA (AI AutoMod MCP):** O modelo avalia a intenção do chat de forma autônoma. Se identificar abusos verbais, assédio, xingamentos à Hikari ou tentativas persistentes de manipulação (jailbreak), a IA executará a ferramenta `ia_automod` de forma autônoma, aplicando o banimento global definitivo.
 
 ---
 
 ## 🔨 3. Comandos de Administração Remota
 
-Todo alerta de segurança enviado via Webhook possui botões de ação imediata. Isso é processado pelo `interactionCreate.js` de forma assíncrona.
+Todo alerta de segurança enviado via Webhook possui botões de ação imediata. Isso é processado de forma assíncrona.
 
 - `/adm_banir type:[user|guild] id:[ID] motivo:[texto]`
 - `/adm_desbanir`
 - `/adm_lista_bans`
+- `/adm_automod id:[ID] modo:[off|trigger|mcp|both]` - Permite que os administradores mudem dinamicamente o comportamento de segurança de cada servidor individualmente:
+  - `off`: Desativa qualquer AutoMod.
+  - `trigger`: Ativa apenas o Filtro de Gatilhos Rápido.
+  - `mcp`: Ativa apenas a moderação cognitiva da IA.
+  - `both`: Ativa ambos os mecanismos de segurança.
+
+---
 
 ## 💡 Dicas de Moderação e Segurança
 
+- 💡 **Script enable_automod.js:** Você pode rodar `node enable_automod.js` no terminal da aplicação para atualizar síncronamente todos os servidores para o modo `both`, excluir servidores específicos via lista de exclusão (whitelist) e disparar um anúncio formal com botão do GitHub aos chats gerais dos servidores cadastrados.
 - 💡 **ID do Canal de Apelação:** Configure `APPEAL_CHANNEL_ID` no `.env`. Usuários banidos receberão um link para este canal para tentar reverter a punição.
 - 💡 **Remoção Silenciosa:** Se você clicar no botão `Remover Bot` no webhook administrativo, a Hikari sairá do servidor de destino sem emitir nenhum aviso, evitando atritos desnecessários.
 - 💡 **Trigger Word:** O log de aviso agora exibe exatamente a **Palavra Chave** que ativou o AutoMod, facilitando o discernimento entre ataques reais e falsos positivos.

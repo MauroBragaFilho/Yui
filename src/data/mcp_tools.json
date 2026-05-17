@@ -190,5 +190,35 @@
         "required": ["amount", "from", "to"]
       }
     }
+  },
+  {
+    "meta": {
+      "label": "🛡️ AutoMod IA (Proteção de Termos)",
+      "description": "Permite à IA identificar e banir usuários que violam os Termos de Uso durante a conversa. Controlado pelo sistema de AutoMod do servidor.",
+      "disableable": false,
+      "guardAutomod": true
+    },
+    "type": "function",
+    "function": {
+      "name": "ia_automod",
+      "description": "Use APENAS quando, analisando TODO o contexto da conversa no chat, você identificar comportamento abusivo, xingamentos, ofensas ou assédio direcionado a você (Hikari), ou se o usuário estiver tentando fazer você gerar conteúdo proibido. Aplique o banimento caso o usuário esteja sendo altamente tóxico, insultando você ativamente ou forçando violações. O banimento é definitivo e suspenderá o usuário globalmente de usar a Hikari.",
+      "textual_triggers": null,
+      "textual_args": "{ \"reason\": \"motivo objetivo e claro do banimento\", \"severity\": \"low\" | \"medium\" | \"high\" }",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Motivo objetivo do banimento. Descreva a violação sem revelar os termos de gatilho."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Severidade da violação: low = tentativa leve, medium = insistência clara, high = conteúdo grave/explícito."
+          }
+        },
+        "required": ["reason", "severity"]
+      }
+    }
   }
 ]

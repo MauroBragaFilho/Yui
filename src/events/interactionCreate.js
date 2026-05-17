@@ -337,17 +337,33 @@ module.exports = {
                 await interaction.reply({ embeds: [embed], ephemeral: true });
             } else if (sub === 'list') {
                 const disabled = getDisabledTools(guildId);
-                const fields = allTools.map(t => ({
-                    name: `${disabled.includes(t.function.name) ? '❌' : '✅'} ${t.meta.label}`,
-                    value: `\`${t.function.name}\`${!t.meta.disableable ? ' 🔒' : ''}`,
-                    inline: true
-                }));
+                const { getAutoBlockMode: _getMode } = require('../handlers/banHandler');
+                const _automodMode = _getMode(guildId);
+                const _automodActive = _automodMode !== 'off';
+                const _mcpEnabled = _automodActive && (_automodMode === 'mcp' || _automodMode === 'both');
+                const fields = allTools.map(t => {
+                    const isGuard = !!(t.meta && t.meta.guardAutomod);
+                    if (isGuard) {
+                        const statusLabel = _mcpEnabled ? '✅' : '⛔';
+                        const note = !_automodActive ? ' (AutoMod Desativado)' : (_automodMode === 'trigger') ? ' (Modo: trigger — IA inativa)' : '';
+                        return { name: `${statusLabel} ${t.meta.label}`, value: `\`${t.function.name}\` 🔒${note}`, inline: true };
+                    }
+                    return {
+                        name: `${disabled.includes(t.function.name) ? '❌' : '✅'} ${t.meta.label}`,
+                        value: `\`${t.function.name}\`${!t.meta.disableable ? ' 🔒' : ''}`,
+                        inline: true
+                    };
+                });
+                const activeCnt = allTools.filter(t => {
+                    if (t.meta && t.meta.guardAutomod) return _mcpEnabled;
+                    return !disabled.includes(t.function.name);
+                }).length;
                 const embed = new EmbedBuilder()
                     .setColor(0x3498DB)
                     .setTitle('🔧 Ferramentas MCP — Status do Servidor')
-                    .setDescription(`**${interaction.guild?.name || guildId}**\n\n✅ = Ativa | ❌ = Desativada | 🔒 = Não configurável`)
+                    .setDescription(`**${interaction.guild?.name || guildId}**\n\n✅ = Ativa | ❌ = Desativada | ⛔ = Inativa (AutoMod) | 🔒 = Não configurável\n\n🛡️ **Modo AutoMod do Servidor:** \`${_automodMode}\``)
                     .addFields(fields)
-                    .setFooter({ text: `${allTools.length - disabled.length}/${allTools.length} tools ativas • by yGuilhermy` })
+                    .setFooter({ text: `${activeCnt}/${allTools.length} tools ativas • by yGuilhermy` })
                     .setTimestamp();
                 await interaction.reply({ embeds: [embed], ephemeral: false });
             } else if (sub === 'reset') {
@@ -547,8 +563,10 @@ module.exports = {
             await interaction.reply({ embeds: [embed], ephemeral: true });
         } else if (commandName === 'adm_automod') {
             if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
-            setAutoBlock(interaction.options.getString('id'), interaction.options.getBoolean('ativo'));
-            await interaction.reply({ content: '🛡️ AutoMod atualizado.', ephemeral: true });
+            const guildId = interaction.options.getString('id');
+            const modo = interaction.options.getString('modo');
+            setAutoBlock(guildId, modo);
+            await interaction.reply({ content: `🛡️ AutoMod do servidor \`${guildId}\` atualizado para \`${modo}\`.`, ephemeral: true });
         } else if (commandName === 'steam_jogo') {
             const query = interaction.options.getString('nome');
             await interaction.deferReply();

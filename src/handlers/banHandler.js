@@ -18,13 +18,23 @@ function loadBans() {
     }
 }
 loadBans();
-function getAutoBlock(guildId) {
-    if (!guildId) return false;
-    return !!bans.autoblock[guildId];
+function getAutoBlockMode(guildId) {
+    if (!guildId) return 'off';
+    const val = bans.autoblock[guildId];
+    if (val === undefined) {
+        return config.defaultAutoMod !== false ? (config.automodMode || 'both') : 'off';
+    }
+    if (val === true) return 'both';
+    if (val === false) return 'off';
+    if (['off', 'both', 'mcp', 'trigger'].includes(val)) return val;
+    return 'off';
 }
-function setAutoBlock(guildId, enabled) {
+function getAutoBlock(guildId) {
+    return getAutoBlockMode(guildId) !== 'off';
+}
+function setAutoBlock(guildId, val) {
     if (!guildId) return false;
-    bans.autoblock[guildId] = enabled;
+    bans.autoblock[guildId] = val;
     saveBans();
     return true;
 }
@@ -184,6 +194,7 @@ module.exports = {
     checkAutoBan,
     handleBanInteraction,
     getAutoBlock,
+    getAutoBlockMode,
     setAutoBlock,
     forbiddenKeywords
 };

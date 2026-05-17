@@ -222,15 +222,21 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('adm_automod')
-            .setDescription('Ativa ou desativa o bloqueio automático (AutoMod) em um servidor específico. (Admin Only)')
+            .setDescription('Configura o modo do AutoMod em um servidor específico. (Admin Only)')
             .addStringOption(opt =>
                 opt.setName('id')
                     .setDescription('ID do servidor para configurar.')
                     .setRequired(true))
-            .addBooleanOption(opt =>
-                opt.setName('ativo')
-                    .setDescription('True para ativar o bloqueio, False para usar apenas o webhook de alerta.')
-                    .setRequired(true))
+            .addStringOption(opt =>
+                opt.setName('modo')
+                    .setDescription('Escolha o modo de funcionamento do AutoMod para este servidor.')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: '🔴 Desativado (off)', value: 'off' },
+                        { name: '🛡️ Somente Palavras Gatilho (trigger)', value: 'trigger' },
+                        { name: '🧠 Somente IA (mcp)', value: 'mcp' },
+                        { name: '⚡ Ambos: Gatilhos + IA (both)', value: 'both' }
+                    ))
     ),
     setGlobalContext(
         new SlashCommandBuilder()

@@ -15,7 +15,9 @@ module.exports = {
     ownerId:         (process.env.OWNER_ID || '593372065730396160').split(',')[0].trim(), 
     appealChannelId: process.env.APPEAL_CHANNEL_ID || '1483987324869017662',
     requireTos:      process.env.REQUIRE_TOS === 'true',
-    saveHistory:     process.env.SAVE_HISTORY !== 'false', // Default true
+    saveHistory:     process.env.SAVE_HISTORY !== 'false',
+    defaultAutoMod:  process.env.DEFAULT_AUTOMOD !== 'false',
+    automodMode:     ['off', 'mcp', 'trigger', 'both'].includes(process.env.AUTOMOD_MODE) ? process.env.AUTOMOD_MODE : 'both',
 
     // ────────── PROVEDORES DE IA (KEYS) ──────────
     stabilityApiKeys: (process.env.STABILITY_API_KEY || '').split(',').map(k => k.trim()).filter(k => k),
