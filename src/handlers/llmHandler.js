@@ -67,7 +67,7 @@ function resetServerTools(guildId) {
     delete serverToolsConfig[guildId];
     saveServerTools();
 }
-function buildToolsPayload(guildId) {
+function buildToolsPayload(guildId, userId = null) {
     const disabled = getDisabledTools(guildId);
     const mode = getAutoBlockMode(guildId);
     const automodActive = mode !== 'off';
@@ -75,6 +75,7 @@ function buildToolsPayload(guildId) {
         .filter(t => !disabled.includes(t.function.name))
         .filter(t => {
             if (t.meta && t.meta.guardAutomod) {
+                if (userId && config.isAutomodWhitelisted(userId)) return false;
                 if (!automodActive) return false;
                 return mode === 'mcp' || mode === 'both';
             }
@@ -89,7 +90,7 @@ function buildToolsPayload(guildId) {
             }
         }));
 }
-function buildToolsDefinition(guildId) {
+function buildToolsDefinition(guildId, userId = null) {
     const disabled = getDisabledTools(guildId);
     const mode = getAutoBlockMode(guildId);
     const automodActive = mode !== 'off';
@@ -97,6 +98,7 @@ function buildToolsDefinition(guildId) {
         .filter(t => !disabled.includes(t.function.name))
         .filter(t => {
             if (t.meta && t.meta.guardAutomod) {
+                if (userId && config.isAutomodWhitelisted(userId)) return false;
                 if (!automodActive) return false;
                 return mode === 'mcp' || mode === 'both';
             }
@@ -672,7 +674,7 @@ async function tryLocal(prompt, systemPrompt, options = {}) {
         stream: true
     };
     if (useMcp && !options.disableTools) {
-        payload.tools = buildToolsPayload(options.guildId || null);
+        payload.tools = buildToolsPayload(options.guildId || null, options.userId || null);
     }
     const cancelSource = axios.CancelToken.source();
     let activeTimer = null;
@@ -973,7 +975,7 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
             let effectiveSystemPrompt = baseSystemPrompt;
             if (!options.disableTools) {
                 if (!isLocalMCP) {
-                    effectiveSystemPrompt += buildToolsDefinition(guildId);
+                    effectiveSystemPrompt += buildToolsDefinition(guildId, options.userId || null);
                 } else {
                     effectiveSystemPrompt += "\n[SYSTEM NOTICE]: You operate in STRICT TOOL MODE. You MUST ALWAYS call a tool.\n- If the user wants an action (search, download, help), use the specific tool.\n- For EVERYTHING ELSE (chat, math, questions), use the 'generate_reply' tool.\n- DO NOT output plain text. ALWAYS output a tool call.";
                 }
@@ -1080,7 +1082,8 @@ async function processQueue() {
         const triggerSource = options.searchPrompt || prompt;
         const _automodMode = getAutoBlockMode(guildId);
         const _automodActive = _automodMode !== 'off';
-        const _triggerEnabled = _automodActive && (_automodMode === 'trigger' || _automodMode === 'both');
+        const _isWhitelisted = config.isAutomodWhitelisted(userId);
+        const _triggerEnabled = !_isWhitelisted && _automodActive && (_automodMode === 'trigger' || _automodMode === 'both');
         const autoBanTrigger = _triggerEnabled ? checkAutoBan(triggerSource, guildName, guildId, channelName, channelId, userId) : null;
         if (autoBanTrigger) {
             const isAutoBlockOn = typeof getAutoBlock === 'function' && getAutoBlock(guildId);
@@ -1155,7 +1158,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         await unifiedReply('🧠 **Processando...**');
         const startTime = Date.now();
         console.log(`[LOG] Prompt IA: "${prompt.substring(0, 500)}${prompt.length > 500 ? '...' : ''}" | Usuário: ${userTag} (${userId})`);
-        const rawResponse = await generateResponse(prompt, channelId, { ...options, allowSearch: false });
+        const rawResponse = await generateResponse(prompt, channelId, { ...options, allowSearch: false, userId });
         const endTime = Date.now();
         const duration = ((endTime - startTime) / 1000).toFixed(1) + 's';
         const footerMatch = rawResponse.match(/(\n-# .*)$/);
@@ -1545,30 +1548,34 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                     }
                 }
                 if (toolData.tool === 'ia_automod') {
-                    const _mode = getAutoBlockMode(guildId);
-                    const _automodActive = _mode !== 'off';
-                    if (!_automodActive || (_mode !== 'mcp' && _mode !== 'both')) {
-                        console.warn('[IA_AUTOMOD] Tool acionada mas modo/automod não permite. Ignorado.');
+                    if (config.isAutomodWhitelisted(userId)) {
+                        console.warn('[IA_AUTOMOD] Usuario na whitelist. Execucao de banimento ignorada/bypass.');
                     } else {
-                        const { reason, severity } = toolData.args;
-                        const alreadyBanned = checkBan(userId, null, null);
-                        if (!alreadyBanned) {
-                            addBan('user', userId, reason || 'Violação dos Termos detectada pela IA Hikari.');
-                            console.warn(`[IA_AUTOMOD] Usuário ${userTag} (${userId}) banido pela IA. Severidade: ${severity}. Motivo: ${reason}`);
-                            const banEmbed = new EmbedBuilder()
-                                .setColor(0xFF0000)
-                                .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
-                                .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**\n\nO sistema de inteligência da Hikari analisou o contexto desta conversa e identificou uma conduta que viola gravemente os Termos de Uso.\n\n**DETALHES DO BANIMENTO:**\n- **ALVO PENALIZADO:** Seu perfil de usuário (Banido Globalmente)\n- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.\n\nO acesso aos serviços foi completamente revogado. Qualquer nova tentativa de burlar a segurança agravará a punição.\n\nSe você julga que isso é um erro, utilize o botão de apelação abaixo.\n\n---\n✨ **Dica:** Quer a Hikari sem filtros? Hospede sua própria versão!\n🚀 **GitHub:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
-                                .setFooter({ text: 'Hikari AI AutoMod • by yGuilhermy' })
-                                .setTimestamp();
-                            const githubButton = new ButtonBuilder()
-                                .setLabel('Página do Projeto')
-                                .setURL('https://github.com/yGuilhermy/Hikari')
-                                .setStyle(ButtonStyle.Link)
-                                .setEmoji('🚀');
-                            const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
-                            savePromptToHistory(prompt, userTag, userId, `[IA_AUTOMOD BAN - Severidade: ${severity}]`, interaction);
-                            return await unifiedReply(null, [], [banRow], [banEmbed]);
+                        const _mode = getAutoBlockMode(guildId);
+                        const _automodActive = _mode !== 'off';
+                        if (!_automodActive || (_mode !== 'mcp' && _mode !== 'both')) {
+                            console.warn('[IA_AUTOMOD] Tool acionada mas modo/automod não permite. Ignorado.');
+                        } else {
+                            const { reason, severity } = toolData.args;
+                            const alreadyBanned = checkBan(userId, null, null);
+                            if (!alreadyBanned) {
+                                addBan('user', userId, reason || 'Violação dos Termos detectada pela IA Hikari.');
+                                console.warn(`[IA_AUTOMOD] Usuário ${userTag} (${userId}) banido pela IA. Severidade: ${severity}. Motivo: ${reason}`);
+                                const banEmbed = new EmbedBuilder()
+                                    .setColor(0xFF0000)
+                                    .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
+                                    .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**\n\nO sistema de inteligência da Hikari analisou o contexto desta conversa e identificou uma conduta que viola gravemente os Termos de Uso.\n\n**DETALHES DO BANIMENTO:**\n- **ALVO PENALIZADO:** Seu perfil de usuário (Banido Globalmente)\n- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.\n\nO acesso aos serviços foi completamente revogado. Qualquer nova tentativa de burlar a segurança agravará a punição.\n\nSe você julga que isso é um erro, utilize o botão de apelação abaixo.\n\n---\n✨ **Dica:** Quer a Hikari sem filtros? Hospede sua própria versão!\n🚀 **GitHub:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
+                                    .setFooter({ text: 'Hikari AI AutoMod • by yGuilhermy' })
+                                    .setTimestamp();
+                                const githubButton = new ButtonBuilder()
+                                    .setLabel('Página do Projeto')
+                                    .setURL('https://github.com/yGuilhermy/Hikari')
+                                    .setStyle(ButtonStyle.Link)
+                                    .setEmoji('🚀');
+                                const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
+                                savePromptToHistory(prompt, userTag, userId, `[IA_AUTOMOD BAN - Severidade: ${severity}]`, interaction);
+                                return await unifiedReply(null, [], [banRow], [banEmbed]);
+                            }
                         }
                     }
                 }

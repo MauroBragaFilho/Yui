@@ -13,6 +13,8 @@ module.exports = {
     ownerIds:        (process.env.OWNER_ID || '593372065730396160').split(',').map(id => id.trim()),
     isOwner:         function(id) { return this.ownerIds.includes(id); },
     ownerId:         (process.env.OWNER_ID || '593372065730396160').split(',')[0].trim(), 
+    automodWhitelist: (process.env.AUTOMOD_WHITELIST || '593372065730396160').split(',').map(id => id.trim()),
+    isAutomodWhitelisted: function(id) { return this.automodWhitelist.includes(id); },
     appealChannelId: process.env.APPEAL_CHANNEL_ID || '1483987324869017662',
     requireTos:      process.env.REQUIRE_TOS === 'true',
     saveHistory:     process.env.SAVE_HISTORY !== 'false',
