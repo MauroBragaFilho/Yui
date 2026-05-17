@@ -1118,6 +1118,10 @@ Você pode hospedar sua própria versão privada facilmente!
                         .setURL('https://github.com/yGuilhermy/Hikari')
                         .setStyle(ButtonStyle.Link)
                         .setEmoji('🚀');
+                    const appealButton = new ButtonBuilder()
+                        .setCustomId(`appeal_ban_user_${userId}`)
+                        .setLabel('⚖️ Solicitar Apelação')
+                        .setStyle(ButtonStyle.Secondary);
                     const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
                     return await unifiedReply(null, [], [banRow], [banEmbed]);
                 }
@@ -1140,7 +1144,7 @@ Você pode hospedar sua própria versão privada facilmente!
 
 Você perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.
 
-Se você acredita que isso é um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> ✨
+Se você acredita que isso é um erro, solicite um desbanimento pelo botão abaixo.
 
 ---
 💡 **Quer usar a Hikari sem restrições?**
@@ -1148,7 +1152,17 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
 🚀 **Repositório:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
                 .setFooter({ text: 'Hikari Security & Moderation • by yGuilhermy' })
                 .setTimestamp();
-            return await unifiedReply(null, [], [], [banEmbed]);
+            const appealButton = new ButtonBuilder()
+                .setCustomId(`appeal_ban_user_${userId}`)
+                .setLabel('⚖️ Solicitar Apelação')
+                .setStyle(ButtonStyle.Secondary);
+            const githubButton = new ButtonBuilder()
+                .setLabel('Página do Projeto')
+                .setURL('https://github.com/yGuilhermy/Hikari')
+                .setStyle(ButtonStyle.Link)
+                .setEmoji('🚀');
+            const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
+            return await unifiedReply(null, [], [banRow], [banEmbed]);
         }
         if (guildId && !isServerAccepted(guildId)) {
             console.log(`[TOS] Servidor ${guildName} (${guildId}) ainda não aceitou os termos.`);
@@ -1572,6 +1586,10 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                     .setURL('https://github.com/yGuilhermy/Hikari')
                                     .setStyle(ButtonStyle.Link)
                                     .setEmoji('🚀');
+                                const appealButton = new ButtonBuilder()
+                                    .setCustomId(`appeal_ban_user_${userId}`)
+                                    .setLabel('⚖️ Solicitar Apelação')
+                                    .setStyle(ButtonStyle.Secondary);
                                 const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
                                 savePromptToHistory(prompt, userTag, userId, `[IA_AUTOMOD BAN - Severidade: ${severity}]`, interaction);
                                 return await unifiedReply(null, [], [banRow], [banEmbed]);

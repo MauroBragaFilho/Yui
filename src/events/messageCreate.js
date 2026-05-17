@@ -1,4 +1,4 @@
-const { AttachmentBuilder } = require('discord.js');
+const { AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const { checkBan } = require('../handlers/banHandler');
 const { resolveMentions } = require('../utils/mentions');
@@ -12,7 +12,27 @@ module.exports = {
     async execute(message, client) {
         if (message.author.bot) return;
         const banInfo = checkBan(message.author.id, message.guildId, message.channelId);
-        if (banInfo) return;
+        if (banInfo) {
+            const isMentionForBan = message.mentions.has(client.user, { ignoreEveryone: true });
+            if (!isMentionForBan) return;
+            const banEmbed = new EmbedBuilder()
+                .setColor(0xE74C3C)
+                .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
+                .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Hikari** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **ALVO:** ${banInfo.typeName || banInfo.type}\n- **MOTIVO:** ${banInfo.reason || 'Violação severa dos Termos de Uso da IA Hikari.'}\n- **STATUS:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços.\n\nSe acredita que isso é um erro, solicite um desbanimento pelo botão abaixo.\n\n---\n💡 **Quer usar a Hikari sem restrições?** Hospede sua própria versão!\n🚀 **Repositório:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
+                .setFooter({ text: 'Hikari Security & Moderation • by yGuilhermy' })
+                .setTimestamp();
+            const appealButton = new ButtonBuilder()
+                .setCustomId(`appeal_ban_user_${message.author.id}`)
+                .setLabel('⚖️ Solicitar Apelação')
+                .setStyle(ButtonStyle.Secondary);
+            const githubButton = new ButtonBuilder()
+                .setLabel('Página do Projeto')
+                .setURL('https://github.com/yGuilhermy/Hikari')
+                .setStyle(ButtonStyle.Link)
+                .setEmoji('🚀');
+            const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
+            return message.reply({ embeds: [banEmbed], components: [banRow] }).catch(() => {});
+        }
         const serverSettings = getServerSettings(message.guildId);
         const respondToEveryone = serverSettings.respondToEveryone || false;
         const isMention = message.mentions.has(client.user, { ignoreEveryone: true }) || (respondToEveryone && message.mentions.everyone);
