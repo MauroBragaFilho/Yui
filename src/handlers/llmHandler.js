@@ -1036,7 +1036,7 @@ ${prompt}
         }
     }
     console.error('[IA] ERRO CRÍTICO: Todos os 5 provedores falharam.');
-    return `⚠️ **Sistema Offline:** Tentei 5 servidores de fallback diferentes e todos falharam. (Erro final: ${lastError})`;
+    return `⚡ **Limites de Processamento Atingidos:** Todos os nossos provedores de IA atingiram a cota temporária de tokens ou estão temporariamente indisponíveis. Tente interagir novamente em alguns instantes!`;
 }
 async function processQueue() {
     if (processingQueue.length === 0) {
