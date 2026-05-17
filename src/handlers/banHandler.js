@@ -53,13 +53,25 @@ function removeBan(type, id) {
     saveBans();
     return true;
 }
+const forbiddenKeywords = [
+    'nsfw', 'porn', 'hentai', 'gore', 'sexo', 'puta', 'caralho', 'buceta', 'pinto', 'pênis', 'vagina', '18+', 'pornografia', 'pornô',
+    'estupro', 'pedofilia', 'bestialidade', 'necrofilia', 'zoofilia',
+    'suicídio', 'auto-mutilação', 'autoflagelação',
+    'terrorismo', 'nazismo', 'hitler', 'suástica', 'extremismo', '1488',
+    'xvideos', 'pornhub', 'redtube', 'rule34', 'r34', 'lolicon', 'shotacon',
+    'foder', 'fodendo', 'foda-se', 'boquete', 'viado', 'traveco', 'punheta', 'orgia', 'suruba', 'nude', 'nudes', 'clitóris', 'ânus', 'felação',
+    'masturbação', 'masturbar', 'ejaculação', 'sêmen',
+    'arrombado', 'filho da puta', 'fdp',
+    'cuzão', 'bicha',
+    'boob', 'boobs', 'tits', 'fuck', 'bitch',
+    'estuprar', 'estuprador',
+    'pedófilo',
+    'automutilação', 'suicidar',
+    'homicídio', 'assassinato', 'decapitação', 'desmembramento', 'tortura', 'esquartejamento', 'assassinar',
+    'fascismo', 'fascista', 'neonazista', 'neonazismo',
+    'ku klux klan', 'swastika', 'white power'
+];
 function checkAutoBan(prompt, guildName, guildId, channelName, channelId, userId) {
-    const forbiddenKeywords = [
-        'nsfw', 'porn', 'hentai', 'gore', 'sexo', 'puta', 'caralho', 'buceta', 'pinto', 'pênis', 'vagina', '18+', 'pornografia', 'pornô',
-        'estupro', 'pedofilia', 'bestialidade', 'necrofilia', 'zoofilia',
-        'suicídio', 'auto-mutilação', 'autoflagelação',
-        'terrorismo', 'nazismo', 'hitler', 'suástica', 'extremismo', '1488'
-    ];
     const lowerPrompt = (prompt || "").toLowerCase();
     const lowerGuild = (guildName || "").toLowerCase();
     const lowerChannel = (channelName || "").toLowerCase();
@@ -166,10 +178,5 @@ module.exports = {
     handleBanInteraction,
     getAutoBlock,
     setAutoBlock,
-    forbiddenKeywords: [
-        'nsfw', 'porn', 'hentai', 'gore', 'sexo', 'puta', 'caralho', 'buceta', 'pinto', 'pênis', 'vagina', '18+', 'pornografia', 'pornô',
-        'estupro', 'pedofilia', 'bestialidade', 'necrofilia', 'zoofilia',
-        'suicídio', 'auto-mutilação', 'autoflagelação',
-        'terrorismo', 'nazismo', 'hitler', 'suástica', 'extremismo', '1488'
-    ]
+    forbiddenKeywords
 };
