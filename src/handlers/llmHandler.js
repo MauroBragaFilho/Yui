@@ -119,7 +119,7 @@ function buildToolsDefinition(guildId, userId = null) {
         download_audio:  'User: "Baixe pra mim https://youtu.be/..."\nResponse: { "thought": "User quer baixar audio.", "tool": "download_audio", "args": { "url": "https://youtu.be/..." } }',
         search_game:     'User: "Arruma o torrent do GTA V"\nResponse: { "thought": "User quer jogo GTA V.", "tool": "search_game", "args": { "game_name": "Grand Theft Auto V" } }',
         search_web:      'User: "Pesquise sobre Hytale"\nResponse: { "thought": "User quer info externa (Web).", "tool": "search_web", "args": { "query": "Hytale game information news" } }',
-        show_bot_menu:   'User: "quais seus comandos?"\nResponse: { "thought": "User quer ajuda.", "tool": "show_bot_menu", "args": { "context": "geral" } }',
+        show_bot_menu:   'User: "Hikari, abra o menu interativo de ajuda por favor"\nResponse: { "thought": "User pediu explicitamente para abrir o menu visual de ajuda.", "tool": "show_bot_menu", "args": { "context": "geral" } }',
         generate_image:  'User: "gera uma imagem de um gato spacial"\nResponse: { "thought": "User quer uma imagem gerada por IA.", "tool": "generate_image", "args": { "prompt": "a space cat floating in galaxy, cinematic, detailed fur, neon lights", "negative_prompt": "nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18" } }',
         check_steam:     'User: "Elden Ring ta em promo na steam?"\nResponse: { "thought": "User quer saber preço de Elden Ring.", "tool": "check_steam", "args": { "game": "Elden Ring" } }',
         convert_currency:'User: "quanto ta 50 dolares em reais?"\nResponse: { "thought": "User quer converter 50 USD para BRL.", "tool": "convert_currency", "args": { "amount": 50, "from": "USD", "to": "BRL" } }',
@@ -1038,7 +1038,7 @@ ${prompt}
         }
     }
     console.error('[IA] ERRO CRÍTICO: Todos os 5 provedores falharam.');
-    return `⚡ **Limites de Processamento Atingidos:** Todos os nossos provedores de IA atingiram a cota temporária de tokens ou estão temporariamente indisponíveis. Tente interagir novamente em alguns instantes!`;
+    return `⚡ **Limites de Processamento Atingidos:** Todos os nossos provedores de IA atingiram a cota temporária de tokens ou estão temporariamente indisponíveis. Tente interagir novamente daqui algumas horas! ✨`;
 }
 async function processQueue() {
     if (processingQueue.length === 0) {
@@ -1284,7 +1284,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                 let helpEmbed;
                                 if (toolData.args && toolData.args.context) {
                                     const specificItem = helpData.find(i => i.id === toolData.args.context);
-                                    if (specificItem) {
+                                    if (specificItem && specificItem.answer) {
                                         helpEmbed = new EmbedBuilder()
                                             .setColor(0x9B59B6)
                                             .setTitle(specificItem.label)

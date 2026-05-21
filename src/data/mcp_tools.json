@@ -14,9 +14,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "url": { "type": "string", "description": "URL do vídeo do YouTube" }
+          "url": {
+            "type": "string",
+            "description": "URL do vídeo do YouTube"
+          }
         },
-        "required": ["url"]
+        "required": [
+          "url"
+        ]
       }
     }
   },
@@ -35,9 +40,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "game_name": { "type": "string", "description": "Nome do Jogo" }
+          "game_name": {
+            "type": "string",
+            "description": "Nome do Jogo"
+          }
         },
-        "required": ["game_name"]
+        "required": [
+          "game_name"
+        ]
       }
     }
   },
@@ -56,9 +66,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "query": { "type": "string", "description": "Termo de busca" }
+          "query": {
+            "type": "string",
+            "description": "Termo de busca"
+          }
         },
-        "required": ["query"]
+        "required": [
+          "query"
+        ]
       }
     }
   },
@@ -77,9 +92,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "content": { "type": "string", "description": "O texto da resposta para o usuário." }
+          "content": {
+            "type": "string",
+            "description": "O texto da resposta para o usuário."
+          }
         },
-        "required": ["content"]
+        "required": [
+          "content"
+        ]
       }
     }
   },
@@ -92,19 +112,25 @@
     "type": "function",
     "function": {
       "name": "show_bot_menu",
-      "description": "MENU DE AJUDA E SISTEMA. Use APENAS para exibir painéis interativos. Gatilhos: 'comandos', 'ajuda', 'help', 'menu', 'redes sociais', 'redes sociais do seu criador', 'changelog', 'mensagem secreta', 'regras do bot', 'termos'. NÃO use para explicar comandos por texto.",
-      "textual_triggers": "Gatilhos: \"quais seus comandos?\", \"me ajuda\", \"help\", \"quem te criou\", \"suas redes sociais\", \"redes sociais do criador\", \"novidades\", \"changelog\", \"mensagem secreta\", \"quais as regras?\", \"termos de uso\"",
-      "textual_args": "{ \"context\": \"geral\" | \"socials\" | \"changelog\" | \"regras\" | \"Mensagem Secreta\" }",
+      "description": "NUNCA use esta ferramenta, exceto se o usuário pedir explicitamente para abrir o menu visual de ajuda ou painel interativo de comandos na tela do Discord, como 'abrir menu de ajuda interativo' ou 'mostrar painel físico de comandos' (NÃO use se o usuário estiver apenas conversando, perguntando algo comum ou pedindo ajuda por texto)",
+      "textual_triggers": "Gatilhos: \"abrir menu de ajuda interativo\", \"mostrar painel de comandos do discord\"",
+      "textual_args": "{ \"context\": \"geral\" | \"regras\" | \"sobre\"}",
       "parameters": {
         "type": "object",
         "properties": {
           "context": {
             "type": "string",
-            "enum": ["geral", "socials", "changelog", "regras", "Mensagem Secreta"],
+            "enum": [
+              "geral",
+              "regras",
+              "sobre"
+            ],
             "description": "Categoria do menu a ser exibido."
           }
         },
-        "required": ["context"]
+        "required": [
+          "context"
+        ]
       }
     }
   },
@@ -140,7 +166,10 @@
             "description": "Altura da imagem em pixels (padrão: 1024, max: 1280)"
           }
         },
-        "required": ["prompt", "negative_prompt"]
+        "required": [
+          "prompt",
+          "negative_prompt"
+        ]
       }
     }
   },
@@ -164,7 +193,9 @@
             "description": "Nome do jogo para pesquisar na Steam"
           }
         },
-        "required": ["game"]
+        "required": [
+          "game"
+        ]
       }
     }
   },
@@ -183,11 +214,24 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "amount": { "type": "number", "description": "Valor numérico a ser convertido" },
-          "from": { "type": "string", "description": "Código da moeda de origem (ex: USD, BRL, EUR, BTC)" },
-          "to": { "type": "string", "description": "Código da moeda de destino (ex: USD, BRL, EUR, BTC)" }
+          "amount": {
+            "type": "number",
+            "description": "Valor numérico a ser convertido"
+          },
+          "from": {
+            "type": "string",
+            "description": "Código da moeda de origem (ex: USD, BRL, EUR, BTC)"
+          },
+          "to": {
+            "type": "string",
+            "description": "Código da moeda de destino (ex: USD, BRL, EUR, BTC)"
+          }
         },
-        "required": ["amount", "from", "to"]
+        "required": [
+          "amount",
+          "from",
+          "to"
+        ]
       }
     }
   },
@@ -213,11 +257,18 @@
           },
           "severity": {
             "type": "string",
-            "enum": ["low", "medium", "high"],
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
             "description": "Severidade da violação: low = tentativa leve, medium = insistência clara, high = conteúdo grave/explícito."
           }
         },
-        "required": ["reason", "severity"]
+        "required": [
+          "reason",
+          "severity"
+        ]
       }
     }
   }
