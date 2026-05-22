@@ -14,6 +14,7 @@ const {
     setServerToolEnabled,
     resetServerTools,
     updateShowModel,
+    updateShowModelThinking,
     updateProviderSetting,
     getProviderSettings,
     setChannelPersona,
@@ -818,13 +819,18 @@ module.exports = {
             const provider = interaction.options.getString('provider');
             const setting = interaction.options.getString('setting');
             const value = interaction.options.getNumber('value');
-            const mostrarModelo = interaction.options.getBoolean('mostrar_modelo');
-            if (mostrarModelo !== null) updateShowModel(mostrarModelo);
             if (provider) {
                 if (!setting || value === null) return interaction.reply({ content: '❌ Forneça config e valor.', ephemeral: true });
                 updateProviderSetting(provider, setting, value);
             }
             await interaction.reply({ content: '✅ Configurações atualizadas.', ephemeral: true });
+        } else if (commandName === 'ia_model_config') {
+            if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
+            const mostrarModelo = interaction.options.getBoolean('mostrar_modelo');
+            const mostrarModeloPensamento = interaction.options.getBoolean('mostrar_modelo_pensamento');
+            if (mostrarModelo !== null) updateShowModel(mostrarModelo);
+            if (mostrarModeloPensamento !== null) updateShowModelThinking(mostrarModeloPensamento);
+            await interaction.reply({ content: '✅ Configurações de exibição do modelo atualizadas.', ephemeral: true });
         } else if (commandName === 'adm_banir') {
             if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Negado.', ephemeral: true });
             const tipo = interaction.options.getString('tipo');

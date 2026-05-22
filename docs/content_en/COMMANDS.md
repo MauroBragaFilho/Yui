@@ -125,7 +125,13 @@ Adjusts technical parameters of AI models.
 - **Provider:** Which AI to configure.
 - **Setting:** Choose between `Timeout`, `Temperature`, or `Max Tokens`.
 - **Value:** The new numeric value.
+
+### `/ia_model_config` (Owner)
+
+Configures the display of the model name in responses and in the AI's thinking/processing.
+
 - **Show Model:** Displays or hides the model name in the AI's response.
+- **Show Model Thought:** Displays or hides the name of the model that is processing the response in the thinking message.
 
 ### `/ia_prompt` (Owner)
 

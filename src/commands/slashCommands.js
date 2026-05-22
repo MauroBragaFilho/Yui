@@ -194,9 +194,18 @@ const commands = [
                 option.setName('value')
                     .setDescription('O novo valor para a configuração.')
                     .setRequired(false))
+    ),
+    setGlobalContext(
+        new SlashCommandBuilder()
+            .setName('ia_model_config')
+            .setDescription('Configura a exibição do modelo nas respostas e pensamentos. (Admin Only)')
             .addBooleanOption(option =>
                 option.setName('mostrar_modelo')
                     .setDescription('Mostrar ou não o nome do modelo nas respostas (Global).')
+                    .setRequired(false))
+            .addBooleanOption(option =>
+                option.setName('mostrar_modelo_pensamento')
+                    .setDescription('Mostrar ou não o modelo que está processando no pensamento (Global).')
                     .setRequired(false))
     ),
     setGlobalContext(

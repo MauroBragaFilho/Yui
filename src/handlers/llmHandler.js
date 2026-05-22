@@ -127,7 +127,7 @@ function buildToolsDefinition(guildId, userId = null) {
     for (const [name, example] of Object.entries(examplesMap)) {
         if (!disabled.includes(name)) exampleList += `\n${example}\n`;
     }
-    return `\n--- FERRAMENTAS DISPONÍVEIS ---\nVocê tem acesso às seguintes ferramentas para executar ações reais.\nUse-as quando o usuário pedir para baixar algo ou buscar um jogo.\n${toolList}\n--- INSTRUÇÃO DE PENSAMENTO E DECISÃO ---\nAntes de responder, ANALISE:\n1. O usuário quer apenas conversar ou uma informação que você já sabe? -> Responda apenas com texto (Sem JSON).\n2. O usuário quer uma AÇÃO ESPECÍFICA (Download, Busca Web)? -> Responda com JSON.\n\nFORMATO PARA USO DE FERRAMENTA (JSON):\n{\n  "thought": "Pense aqui: O que o usuário quer? Qual ferramenta resolve? (Seja breve)",\n  "tool": "nome_da_ferramenta",\n  "args": { ...argumentos... }\n}\n\nEXEMPLOS:${exampleList}\nUser: "Como você está?"\nResponse: Estou bem, e você?\n\n---------------------------------------\n`;
+    return `\n--- FERRAMENTAS DISPONÍVEIS ---\nVocê tem acesso às seguintes ferramentas para executar ações reais.\nUse-as quando o usuário pedir para baixar algo ou buscar um jogo.\n${toolList}\n--- INSTRUÇÃO DE PENSAMENTO E DECISÃO ---\nAntes de responder, ANALISE:\n1. O usuário quer apenas conversar ou uma informação que você já sabe? -> Responda apenas com texto (Sem JSON).\n2. O usuário quer uma AÇÃO ESPECÍFICA (Download, Busca Web)? -> Responda com JSON.\n\nFORMATO PARA USO DE FERRAMENTA (JSON):\n{\n  "thought": "Pensamento ultra-curto (1 a 3 palavras para economizar tokens, ex: 'baixar audio')",\n  "tool": "nome_da_ferramenta",\n  "args": { ...argumentos... }\n}\n\nEXEMPLOS:${exampleList}\nUser: "Como você está?"\nResponse: Estou bem, e você?\n\n---------------------------------------\n`;
 }
 loadServerTools();
 const providerSettings = {
@@ -971,6 +971,18 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
             continue;
         }
         try {
+            const providerKey = provider.func === tryLocal ? 'local' :
+                                provider.func === tryGemini ? 'gemini' :
+                                provider.func === tryPollinations ? 'pollinations' :
+                                provider.func === tryHuggingFace ? 'hf' :
+                                provider.func === tryKoboldHorde ? 'horde' : 'unknown';
+            if (options.onProviderAttempt) {
+                try {
+                    await options.onProviderAttempt(providerKey);
+                } catch (e) {
+                    console.warn(`Erro ao atualizar mensagem de processamento para ${providerKey}:`, e.message);
+                }
+            }
             const isLocalMCP = (provider.func === tryLocal && config.lmStudioApiKey);
             let effectiveSystemPrompt = baseSystemPrompt;
             if (!options.disableTools) {
@@ -1172,7 +1184,16 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         await unifiedReply('🧠 **Processando...**');
         const startTime = Date.now();
         console.log(`[LOG] Prompt IA: "${prompt.substring(0, 500)}${prompt.length > 500 ? '...' : ''}" | Usuário: ${userTag} (${userId})`);
-        const rawResponse = await generateResponse(prompt, channelId, { ...options, allowSearch: false, userId });
+        const rawResponse = await generateResponse(prompt, channelId, {
+            ...options,
+            allowSearch: false,
+            userId,
+            onProviderAttempt: async (providerKey) => {
+                if (getShowModelThinking()) {
+                    await unifiedReply(`-# 🧠 **Processando...**\n-# 🧠 (${providerKey}) Processando...`);
+                }
+            }
+        });
         const endTime = Date.now();
         const duration = ((endTime - startTime) / 1000).toFixed(1) + 's';
         const footerMatch = rawResponse.match(/(\n-# .*)$/);
@@ -1664,6 +1685,14 @@ function updateShowModel(value) {
 function getShowModel() {
     return globalShowModel;
 }
+let globalShowModelThinking = true;
+function updateShowModelThinking(value) {
+    globalShowModelThinking = value;
+    console.log(`[CONFIG] show_model_thinking atualizado para ${value}`);
+}
+function getShowModelThinking() {
+    return globalShowModelThinking;
+}
 function updateProviderSetting(provider, key, value) {
     if (providerSettings[provider] && providerSettings[provider][key] !== undefined) {
         providerSettings[provider][key] = value;
@@ -1686,6 +1715,8 @@ module.exports = {
     getProviderSettings,
     updateShowModel,
     getShowModel,
+    updateShowModelThinking,
+    getShowModelThinking,
     generateResponse,
     getServerPrompt,
     setServerPrompt,

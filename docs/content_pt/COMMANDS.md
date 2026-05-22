@@ -125,7 +125,13 @@ Ajusta parâmetros técnicos dos modelos de IA.
 - **Provider:** Qual IA configurar.
 - **Setting:** Escolha entre `Timeout`, `Temperatura` ou `Max Tokens`.
 - **Value:** O novo valor numérico.
+
+### `/ia_model_config` (Dono)
+
+Configura a exibição do nome do modelo nas respostas e no pensamento/processamento da IA.
+
 - **Mostrar Modelo:** Exibe ou oculta o nome do modelo na resposta da IA.
+- **Mostrar Modelo Pensamento:** Exibe ou oculta o nome do modelo que está processando a resposta no pensamento.
 
 ### `/ia_prompt` (Dono)
 

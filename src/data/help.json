@@ -6,7 +6,7 @@
     "commands": [
       {
         "title": "🧠 Inteligência Artificial (IA)",
-        "content": "**• /ia_chat:** Converse com o cérebro da Hikari. Suporta visibilidade `Privada` e citações.\n**• /ia_ferramentas:** (Server-Admin) Ativa/Desativa o que a IA pode usar (Pesquisa, Imagens, etc).\n**• /ia_mention_todos:** (Server-Admin) Define se a Hikari responde a @everyone/@here.\n**• /ia_prompt:** (Dono) Sobrescreve o comportamento base do bot neste servidor.\n**• /ia_config:** (Dono) Ajusta Timeout, Temperatura e qual modelo de IA usar."
+        "content": "**• /ia_chat:** Converse com o cérebro da Hikari. Suporta visibilidade `Privada` e citações.\n**• /ia_ferramentas:** (Server-Admin) Ativa/Desativa o que a IA pode usar (Pesquisa, Imagens, etc).\n**• /ia_mention_todos:** (Server-Admin) Define se a Hikari responde a @everyone/@here.\n**• /ia_prompt:** (Dono) Sobrescreve o comportamento base do bot neste servidor.\n**• /ia_config:** (Dono) Ajusta Timeout, Temperatura e Max Tokens dos provedores.\n**• /ia_model_config:** (Dono) Configura a exibição do nome do modelo nas respostas e no pensamento."
       },
       {
         "title": "🎨 Arte & Criatividade",
