@@ -15,6 +15,7 @@ const {
     resetServerTools,
     updateShowModel,
     updateShowModelThinking,
+    updateErrorRetries,
     updateProviderSetting,
     getProviderSettings,
     setChannelPersona,
@@ -828,9 +829,11 @@ module.exports = {
             if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
             const mostrarModelo = interaction.options.getBoolean('mostrar_modelo');
             const mostrarModeloPensamento = interaction.options.getBoolean('mostrar_modelo_pensamento');
+            const tentativasErro = interaction.options.getInteger('tentativas_erro');
             if (mostrarModelo !== null) updateShowModel(mostrarModelo);
             if (mostrarModeloPensamento !== null) updateShowModelThinking(mostrarModeloPensamento);
-            await interaction.reply({ content: '✅ Configurações de exibição do modelo atualizadas.', ephemeral: true });
+            if (tentativasErro !== null) updateErrorRetries(tentativasErro);
+            await interaction.reply({ content: '✅ Configurações de exibição do modelo e tentativas atualizadas.', ephemeral: true });
         } else if (commandName === 'adm_banir') {
             if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Negado.', ephemeral: true });
             const tipo = interaction.options.getString('tipo');

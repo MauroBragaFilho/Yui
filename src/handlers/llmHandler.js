@@ -1201,16 +1201,35 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         await unifiedReply('🧠 **Processando...**');
         const startTime = Date.now();
         console.log(`[LOG] Prompt IA: "${prompt.substring(0, 500)}${prompt.length > 500 ? '...' : ''}" | Usuário: ${userTag} (${userId})`);
-        const rawResponse = await generateResponse(prompt, channelId, {
-            ...options,
-            allowSearch: false,
-            userId,
-            onProviderAttempt: async (providerKey) => {
-                if (getShowModelThinking()) {
-                    await unifiedReply(`-# 🧠 **Processando...**\n-# 🧠 (${providerKey}) Processando...`);
+        let rawResponse;
+        let isBlocked = false;
+        let attemptsLeft = getErrorRetries();
+        const thoughtLeakRegex = /\{\s*"thought"\s*:/i;
+        do {
+            rawResponse = await generateResponse(prompt, channelId, {
+                ...options,
+                allowSearch: false,
+                userId,
+                onProviderAttempt: async (providerKey) => {
+                    if (getShowModelThinking()) {
+                        await unifiedReply(`-# 🧠 **Processando...**\n-# 🧠 (${providerKey}) Processando...`);
+                    }
                 }
+            });
+            if (rawResponse && (rawResponse.includes('[Tool Use:') || thoughtLeakRegex.test(rawResponse))) {
+                isBlocked = true;
+                console.error('[SECURITY BLOCK] Bloqueado vazamento de Tool Use/JSON Raw:', rawResponse);
+                if (attemptsLeft > 0) {
+                    console.log(`[RETRY] Tentando novamente devido ao bloqueio de segurança. Tentativas restantes: ${attemptsLeft}`);
+                    attemptsLeft--;
+                } else {
+                    break;
+                }
+            } else {
+                isBlocked = false;
+                break;
             }
-        });
+        } while (isBlocked);
         const endTime = Date.now();
         const duration = ((endTime - startTime) / 1000).toFixed(1) + 's';
         const footerMatch = rawResponse.match(/(\n-# .*)$/);
@@ -1638,7 +1657,6 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
             }
         } catch (e) {
         }
-        const thoughtLeakRegex = /\{\s*"thought"\s*:/i;
         if (processedResponse && (processedResponse.includes('[Tool Use:') || thoughtLeakRegex.test(processedResponse))) {
             console.error('[SECURITY BLOCK] Bloqueado vazamento de Tool Use/JSON Raw:', processedResponse);
             processedResponse = "⚠️ **Erro de Processamento:** A IA tentou usar uma ferramenta mas o formato saiu inválido. Tente novamente. ou use os comando /game ou /yt_music";
@@ -1710,6 +1728,14 @@ function updateShowModelThinking(value) {
 function getShowModelThinking() {
     return globalShowModelThinking;
 }
+let globalErrorRetries = 0;
+function updateErrorRetries(value) {
+    globalErrorRetries = value;
+    console.log(`[CONFIG] error_retries atualizado para ${value}`);
+}
+function getErrorRetries() {
+    return globalErrorRetries;
+}
 function updateProviderSetting(provider, key, value) {
     if (providerSettings[provider] && providerSettings[provider][key] !== undefined) {
         providerSettings[provider][key] = value;
@@ -1734,6 +1760,8 @@ module.exports = {
     getShowModel,
     updateShowModelThinking,
     getShowModelThinking,
+    updateErrorRetries,
+    getErrorRetries,
     generateResponse,
     getServerPrompt,
     setServerPrompt,

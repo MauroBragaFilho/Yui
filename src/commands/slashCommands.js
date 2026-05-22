@@ -207,7 +207,13 @@ const commands = [
                 option.setName('mostrar_modelo_pensamento')
                     .setDescription('Mostrar ou não o modelo que está processando no pensamento (Global).')
                     .setRequired(false))
+            .addIntegerOption(option =>
+                option.setName('tentativas_erro')
+                    .setDescription('Número de re-tentativas caso ocorra erro ou vazamento de ferramenta (Global).')
+                    .setMinValue(0)
+                    .setRequired(false))
     ),
+
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('adm_banir')
