@@ -301,8 +301,25 @@ function stripThinking(text) {
     if (!text) return text;
     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
     text = text.replace(/<think>[\s\S]*/gi, '');
-        return text.trim();
+    let clean = text.trim();
+    if (/^(thought|thinking|pensamento|thinking\s+process)s?\b/i.test(clean)) {
+        const labelMatch = clean.match(/(?:response|reply|resposta|fala|hikari|output|text)\s*:\s*([\s\S]+)$/i);
+        if (labelMatch) {
+            return labelMatch[1].trim();
+        }
+        const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length > 1) {
+            let lastLine = lines[lines.length - 1];
+            const concatMatch = lastLine.match(/^(?:i'll|i will|i should|i need to|let's|so i'll|therefore|i must)\s+[\s\S]+?[\.\!\?]\s*([A-Z\u00C0-\u00DC\d].*)$/i);
+            if (concatMatch) {
+                return concatMatch[1].trim();
+            }
+            return lastLine;
+        }
+    }
+    return clean;
 }
+
 const { isServerAccepted, sendTermsOfService, handleTosInteraction, reportNewGuild } = require('./tosHandler');
 const { checkBan, addBan, removeBan, getBans, checkAutoBan, getAutoBlock, getAutoBlockMode, forbiddenKeywords } = require('./banHandler');
 async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interaction) {
