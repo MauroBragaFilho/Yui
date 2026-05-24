@@ -808,6 +808,12 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
     for (let i = 0; i < apiKeys.length; i++) {
         const currentKey = apiKeys[i];
         try {
+            if (options.onProviderAttempt) {
+                try {
+                    await options.onProviderAttempt(`gemini ${i + 1}/${apiKeys.length}`);
+                } catch (e) {
+                }
+            }
             if (apiKeys.length > 1) {
                 console.log(`[Gemini] Usando chave ${i + 1}/${apiKeys.length}...`);
             }
@@ -989,7 +995,7 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
         }
         try {
             const providerKey = provider.func === tryLocal ? 'local' :
-                                provider.func === tryGemini ? 'gemini' :
+                                provider.func === tryGemini ? `gemini 1/${config.geminiApiKeys.length || 1}` :
                                 provider.func === tryPollinations ? 'pollinations' :
                                 provider.func === tryHuggingFace ? 'hf' :
                                 provider.func === tryKoboldHorde ? 'horde' : 'unknown';
