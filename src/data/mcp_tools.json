@@ -34,7 +34,7 @@
     "type": "function",
     "function": {
       "name": "search_game",
-      "description": "Use APENAS se o usuário pedir explicitamente para BAIXAR (Download/Torrent)/procurar/arrumar/trazer/pegar/mandar um jogo pirata. NÃO use para buscar informações sobre jogos. Ignore caso for mobile e avise que é apenas para PC. Corrija para o nome correto do jogo antes de usar a tool. Exemplo: Se o usuário pedir 'quero baixar o jogo GTA V', use 'Grand Theft Auto V' como game_name.",
+      "description": "Use APENAS se o usuário pedir explicitamente para BAIXAR (Download/Torrent)/procurar/arrumar/trazer/pegar/mandar um jogo pirata. NÃO use para buscar informações sobre jogos. Ignore caso for mobile e avise que é apenas para PC. Corrija para o nome correto do jogo antes de usar a tool, usando nomes base. Exemplo: Se o usuário pedir 'quero baixar o jogo GTA V', use 'Grand Theft Auto V' como game_name. ou 'quero minecraft mais recente', use 'minecraft' como game_name",
       "textual_triggers": "Gatilhos: \"quero baixar o jogo X\", \"me arruma o torrent de Y\", \"crack do jogo Z\".",
       "textual_args": "{ \"game_name\": \"Nome do Jogo\" }",
       "parameters": {
