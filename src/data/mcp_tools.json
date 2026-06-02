@@ -156,7 +156,7 @@
     "type": "function",
     "function": {
       "name": "generate_image",
-      "description": "Use QUANDO o usuário pedir para GERAR, CRIAR, DESENHAR ou IMAGINAR uma imagem, ilustração ou arte. Gatilhos: 'gera uma imagem de', 'desenhe', 'crie uma foto de', 'cria uma arte de', 'imagine', 'me mostra como ficaria'. SEMPRE inclua um negative_prompt robusto bloqueando conteúdo NSFW, adulto, gore e violento para manter a resposta family-friendly.",
+      "description": "Use QUANDO o usuário pedir para GERAR, CRIAR, DESENHAR ou IMAGINAR uma imagem, ilustração ou arte. Você não tem visão computacional e não é capaz de editar ou ver imagens fornecidas pelos usuários. Se o usuário pedir para alterar, editar ou descrever uma imagem existente, NÃO chame a ferramenta generate_image. Responda em texto puro explicando suas limitações. Gatilhos: 'gera uma imagem de', 'desenhe', 'crie uma foto de', 'cria uma arte de', 'imagine', 'me mostra como ficaria'. SEMPRE inclua um negative_prompt robusto bloqueando conteúdo NSFW, adulto, gore e violento para manter a resposta family-friendly.",
       "textual_triggers": "Gatilhos: \"gera uma imagem de X\", \"desenhe Y\", \"crie uma foto de Z\", \"me mostre como seria\".",
       "textual_args": "{ \"prompt\": \"descrição detalhada da imagem\", \"negative_prompt\": \"nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing\" }",
       "parameters": {

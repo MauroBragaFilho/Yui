@@ -62,7 +62,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_imagem')
-            .setDescription('Gera uma imagem usando a IA dreamstudio (SDXL).')
+            .setDescription('Gera uma imagem nova a partir do texto. (Nota: Não edita imagens/fotos).')
             .addStringOption(option =>
                 option.setName('prompt')
                     .setDescription('A descrição da imagem que você quer gerar.')

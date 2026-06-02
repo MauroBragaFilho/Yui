@@ -278,6 +278,22 @@ module.exports = {
     name: 'interactionCreate',
     once: false,
     async execute(interaction, client) {
+        if (interaction.guildId) {
+            const { isServerAccepted } = require('../handlers/tosHandler');
+            if (!isServerAccepted(interaction.guildId)) {
+                const isTosAction = (interaction.isCommand() && interaction.commandName === 'aceitar_tos') ||
+                                    (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline'));
+                if (!isTosAction) {
+                    if (interaction.isRepliable()) {
+                        return interaction.reply({
+                            content: '❌ **Acesso Bloqueado!** Este servidor ainda não aceitou os **Termos de Uso da Hikari**. Peça para um administrador liberar o bot executando o comando \`/aceitar_tos\`.',
+                            ephemeral: true
+                        });
+                    }
+                    return;
+                }
+            }
+        }
         if (interaction.isStringSelectMenu()) {
             if (interaction.customId.startsWith('banlist_select_')) {
                 if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
@@ -472,15 +488,6 @@ module.exports = {
         }
         if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
         if (interaction.isCommand()) {
-            if (interaction.guildId) {
-                const { isServerAccepted } = require('../handlers/tosHandler');
-                if (!isServerAccepted(interaction.guildId) && interaction.commandName !== 'aceitar_tos') {
-                    return interaction.reply({
-                        content: '❌ **Acesso Bloqueado!** Este servidor ainda não aceitou os **Termos de Uso da Hikari**. Peça para um administrador liberar o bot executando o comando \`/aceitar_tos\`.',
-                        ephemeral: true
-                    });
-                }
-            }
             if (interaction.guildId && interaction.channelId) {
                 setServerLastChannel(interaction.guildId, interaction.channelId);
                 const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
@@ -760,6 +767,7 @@ module.exports = {
                     const drawEmbed = new EmbedBuilder()
                         .setColor(0x3498DB)
                         .setTitle('🎨 Imagem Gerada')
+                        .setDescription('⚠️ **Aviso:** Eu apenas **gero** imagens novas a partir de texto. Eu **não edito** imagens e **não tenho visão computacional** para ver arquivos.')
                         .addFields(
                             { name: '🤖 Modelo', value: `\`${imageData.modelName || 'Desconhecido'}\``, inline: false },
                             { name: '🌱 Seed', value: `\`${imageData.actualSeed}\``, inline: true },

@@ -979,7 +979,7 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     ];
     const guildId = options.guildId || null;
     const serverCustomPrompt = getServerPrompt(guildId);
-    let baseSystemPrompt = serverCustomPrompt || config.systemPrompt;
+    let baseSystemPrompt = (serverCustomPrompt || config.systemPrompt) + "\n[IMAGEM/VISÃO]: Você não tem visão computacional e não é capaz de ver, editar, alterar ou descrever imagens fornecidas pelos usuários. Se o usuário pedir para editar/alterar uma imagem existente, recuse amigavelmente por texto explicativo direto e sugira a geração de uma arte inteiramente nova do zero.";
     if (channelId) {
         const settings = channelSettings[channelId];
         const channelPersona = (typeof settings === 'string') ? settings : settings?.instruction;
@@ -1687,6 +1687,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 }
                                 const imageEmbed = new EmbedBuilder()
                                     .setColor(0x9B59B6)
+                                    .setDescription('⚠️ **Aviso:** Eu apenas **gero** imagens novas a partir de texto. Eu **não edito** imagens e **não tenho visão computacional** para ver arquivos.')
                                     .addFields(
                                         { name: '🤖 Modelo', value: `\`${imageData.modelName || 'Desconhecido'}\``, inline: false },
                                         { name: '🌱 Seed',   value: `\`${imageData.actualSeed}\``, inline: true },
