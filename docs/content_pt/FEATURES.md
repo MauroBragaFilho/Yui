@@ -43,22 +43,27 @@ A Hikari possui um motor de fallback agressivo para garantir que o usuário rece
 
 ---
 
-## 🎵 3. Processamento de Áudio e YouTube
+## 🎵 3. Processamento de Mídia (Áudio, Vídeo e Compressão)
 
-Implementamos um sistema higiênico de download via `youtubeAudioHandler.js`.
+Implementamos um sistema completo de download e manipulação de mídia via `youtubeAudioHandler.js`.
 
-- **Estratégia:** O bot utiliza o binário `yt-dlp` para extrair apenas o melhor stream de áudio (`bestaudio`).
-- **Conversão:** O áudio é convertido via `ffmpeg` para MP3 com taxa de bits otimizada para o Discord.
-- **Cleanup Automático:** Após o envio do arquivo, o handler limpa automaticamente o arquivo local da pasta `temp_audio` (ou a pasta de audios correspondente) para não saturar o disco.
+- **Suporte Multplataforma:** O bot suporta download de áudio e vídeo de plataformas populares, como YouTube (geral para áudio, apenas Shorts para vídeo), Instagram Reels e TikTok (incluindo subdomínios como `vt.tiktok.com`).
+- **Download Inteligente de Áudio:** Extração apenas do melhor stream de áudio (`bestaudio`) via `yt-dlp` e conversão dinâmica com `ffmpeg` para MP3.
+- **Download de Vídeo com Metadados:** Ao baixar vídeos, a Hikari pode extrair o uploader original e a descrição para exibição rica no chat, configurável via parâmetro.
+- **Compressão Inteligente:** Se o arquivo de vídeo ultrapassar o limite de upload do servidor (detectado dinamicamente: 25MB para padrão, 50MB para Boost Nível 2 e 100MB para Boost Nível 3), o usuário recebe a opção de iniciar a compressão.
+- **Fila Global & Proteção da Host:** O processo de compressão FFMPEG roda em uma fila global (apenas uma compressão simultânea) para preservar os recursos da VPS. Há um monitor de RAM ativo: se o uso de memória passar de 95%, a compressão é cancelada imediatamente para evitar travamento do servidor.
+- **Limitação de Uso:** Há uma limitação estrita de 1 download/processo ativo por usuário ao mesmo tempo para evitar sobrecarga.
+- **Cleanup Automático:** Todos os arquivos temporários são deletados após o envio. Vídeos grandes que aguardam compressão expiram após 6 horas.
 
 ---
 
 ## 💡 Dicas de Uso Avançado
 
-- 💡 **Resumo de Chat (`/chat_resumo`):** A IA lê as últimas N mensagens e cria um mapeamento sântico de quem falou o que e sobre quais tópicos. Excelente para gerenciar canais movimentados.
+- 💡 **Resumo de Chat (`/chat_resumo`):** A IA lê as últimas N mensagens e cria um mapeamento semântico de quem falou o que e sobre quais tópicos. Excelente para gerenciar canais movimentados.
 - 💡 **Trace.moe Integration:** A função `/anime_origem` permite que você encontre animes apenas enviando um frame. Ela retorna o título, episódio e o timestamp aproximado.
-- 💡 **Busca de Jogos e Preços da Steam:** A Hikari não apenas busca links Magnéticos em bancos de dados FitGirl/DODI, mas também pode consultar nativamente a **Steam**! Basta perguntar naturalmente como "O Elden Ring está em promoção na Steam?" e ela retornará dados atualizados, preços e sinopse, tudo direto do chat.
-- 💡 **Conversor de Moedas e Cripto:** Converta qualquer valor entre moedas reais (BRL, USD, EUR) ou cripto (BTC, ETH) apenas perguntando "quanto tá o bitcoin hoje?". Ela usa APIs financeiras de tempo real para garantir precisão matemática.
+- 💡 **Busca de Jogos e Preços da Steam:** A Hikari não apenas busca links Magnéticos em bases de dados, mas também pode consultar nativamente a **Steam**! Basta perguntar naturalmente como "O Elden Ring está em promoção na Steam?" e ela retornará dados atualizados, preços e sinopse, além de fazer um comentário divertido.
+- 💡 **Conversor de Moedas e Cripto:** Converta qualquer valor entre moedas reais (BRL, USD, EUR) ou cripto (BTC, ETH) apenas perguntando "quanto tá o bitcoin hoje?". Ela usa APIs financeiras com cache local de expiração diária e fallback automático.
+- 💡 **Visão Computacional e Edição:** A Hikari possui regras claras avisando que ela não realiza edições de imagens existentes e não possui visão computacional nativa em tempo real.
 
 ---
 

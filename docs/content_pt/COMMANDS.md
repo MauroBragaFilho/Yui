@@ -70,10 +70,18 @@ Gera imagens usando diversos modelos de difusão.
 
 ### `/baixar_musica`
 
-Converte vídeos do YouTube para MP3.
+Extrai e converte o áudio de vídeos em formato MP3.
 
-- **URL:** O link do vídeo.
-- **Advanced:** Utiliza `yt-dlp` para extrair o áudio com a melhor qualidade possível e limpa os arquivos temporários após o envio.
+- **URL:** O link do vídeo (YouTube, Instagram Reels ou TikTok).
+- **Advanced:** Utiliza `yt-dlp` para baixar a melhor qualidade de áudio e `ffmpeg` para converter em MP3 de forma limpa, limpando os arquivos locais em seguida.
+
+### `/baixar_video`
+
+Baixa vídeos e envia em formato MP4 no chat do Discord.
+
+- **URL:** O link do vídeo (YouTube Shorts, Instagram Reels ou TikTok).
+- **Descricao (Boolean):** Se verdadeiro, exibe o autor e a descrição do vídeo original na mensagem. Padrão: `false`.
+- **Advanced:** Detecta o limite de upload do servidor para aplicar compressão de vídeo em FFMPEG se ultrapassar os limites do Discord. Oferece fila de compressão assíncrona.
 
 ### `/anime_origem`
 
@@ -90,7 +98,7 @@ Converte moedas fiduciárias e criptomoedas em tempo real.
 - **Valor:** Montante numérico a ser convertido.
 - **De:** Código de origem (Ex: USD, EUR, BTC).
 - **Para:** Código de destino (Ex: BRL).
-- **Advanced:** Usa a API de câmbio oficial para dar a cotação exata atual. Integrado na IA (você pode apenas perguntar via chat).
+- **Advanced:** Utiliza uma API de câmbio em tempo real integrada com cache físico diário (JSON) no bot e fallback inteligente para moedas menos comuns. Totalmente integrada à IA via chat.
 
 ---
 
@@ -98,10 +106,10 @@ Converte moedas fiduciárias e criptomoedas em tempo real.
 
 ### `/buscar_jogo`
 
-Procura torrents/magnets de jogos.
+Procura torrents/magnets de jogos de forma abrangente.
 
 - **Nome:** Título do jogo.
-- **Advanced:** Pesquisa nas bases de dados da FitGirl e DODI Repacks.
+- **Advanced:** Pesquisa refinada nas bases de dados da FitGirl e DODI Repacks. Agora inclui um paginador com botões para alternar as páginas de 5 em 5 itens diretamente no Discord.
 
 ---
 
@@ -154,6 +162,19 @@ Configura se a Hikari deve responder a marcações de `@everyone` e `@here` no s
 
 - **Ativo:** Sim para responder, Não para ignorar.
 - **Advanced:** Útil para evitar que a IA se intrometa em avisos globais do servidor, ou para permitir que ela interaja quando o servidor todo for chamado.
+
+### `/aceitar_tos` (Admin)
+
+Aceita os Termos de Serviço da Hikari para liberar e autorizar a utilização de todas as funções do bot neste servidor.
+
+- **Advanced:** Este comando desbloqueia o servidor. Todos os chats e comandos permanecem sob bloqueio completo até que o TOS seja aceito por um administrador.
+
+### `/chat_updates` (Admin)
+
+Configura o canal onde o bot enviará anúncios de atualizações e novas versões do sistema Hikari.
+
+- **Canal (Opcional):** O canal de texto a ser configurado (se deixado em branco, utiliza o canal atual).
+- **Advanced:** Servidores novos registram automaticamente o canal onde o TOS foi aceito como chat de updates. Servidores antigos salvam o último chat utilizado.
 
 ### `/adm_banir` / `/adm_desbanir` (Dono)
 

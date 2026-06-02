@@ -6,10 +6,11 @@ Este guia é voltado para desenvolvedores e entusiastas que desejam expandir o c
 
 ## 📂 Sumário
 
-1. [🧰 1. Entendendo as "Tools" (Ferramentas)](#-1-entendo-as-tools-ferramentas)
-2. [📂 2. Como criar uma nova Ferramenta?](#-2-como-criar-uma-nova-ferramenta)
-3. [🏗️ 3. Personalizando a Alma (System Prompt)](#-3-personalizando-a-alma-system-prompt)
-4. [💡 Dicas de Desenvolvimento](#-dicas-de-desenvolvimento)
+1. [🧰 1. Entendendo as "Tools" (Ferramentas)](#-1-entendendo-as-tools-ferramentas)
+2. [🤖 2. Ferramentas Nativas Melhoradas (MCP)](#-2-ferramentas-nativas-melhoradas-mcp)
+3. [📂 3. Como criar uma nova Ferramenta?](#-3-como-criar-uma-nova-ferramenta)
+4. [🏗️ 4. Personalizando a Alma (System Prompt)](#-4-personalizando-a-alma-system-prompt)
+5. [💡 Dicas de Desenvolvimento](#-dicas-de-desenvolvimento)
 
 ---
 
@@ -24,7 +25,27 @@ A Hikari não sabe fazer tudo sozinha. Ela utiliza "Tools" para estender suas ca
 
 ---
 
-## 📂 2. Como criar uma nova Ferramenta?
+## 🤖 2. Ferramentas Nativas Melhoradas (MCP)
+
+O ecossistema MCP da Hikari foi robustamente aprimorado com comportamentos nativos específicos:
+
+### 1. Câmbio e Finanças (`convert_currency`)
+- **Resiliência a Erros:** O MCP foi aprimorado para lidar com rate-limit e falhas de API financeira. Caso a API principal falhe, há um fallback de cotação.
+- **Cache Diário:** O sistema salva uma tabela diária de conversões no arquivo JSON local, evitando requisições desnecessárias a moedas frequentes.
+
+### 2. Busca de Jogos (`search_game`)
+- **Flexibilidade Linguística:** Se o nome do jogo buscado falhar na base FitGirl/DODI, a IA tenta buscar por nomes ligeiramente diferentes ou variações.
+- **Embed de Lista:** A ferramenta pode retornar uma lista interativa de jogos encontrados, permitindo que a IA apresente uma seleção para o usuário escolher em vez de enviar diretamente o Torrent.
+
+### 3. Geração de Imagens (`image_gen`)
+- **Transparência de Limitações:** A IA agora é instruída a recusar pedidos de edição de imagens e deixar claro que não possui visão computacional nativa em tempo real ao usar a ferramenta.
+
+### 4. Downloader de Mídia (`download_video` & `download_audio`)
+- **Direcionamento Inteligente:** A IA identifica a intenção do usuário sobre baixar vídeo ou áudio. Caso o pedido seja ambíguo, a IA faz perguntas de esclarecimento ao usuário no chat em vez de disparar a ferramenta às cegas. O MCP não inicia processos de compressão; essa decisão fica a cargo do Discord e do usuário via botões.
+
+---
+
+## 📂 3. Como criar uma nova Ferramenta?
 
 ### Passo 1: Definir no JSON
 Adicione um novo objeto em `src/data/mcp_tools.json`:
@@ -44,7 +65,7 @@ No arquivo `src/handlers/llmHandler.js`, adicione a lógica de execução dentro
 
 ---
 
-## 🏗️ 3. Personalizando a Alma (System Prompt)
+## 🏗️ 4. Personalizando a Alma (System Prompt)
 
 A personalidade da Hikari não é apenas texto; é um conjunto de diretrizes de segurança e comportamento.
 - **Local:** `src/config/index.js` -> campo `systemPrompt`.

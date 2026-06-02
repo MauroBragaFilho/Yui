@@ -16,10 +16,10 @@ Hikari operates under a philosophy of "Sanity as a Service." This document expla
 ## ⚖️ 1. The Terms of Service (TOS) Flow
 
 When added to a guild, if `REQUIRE_TOS` is active:
-1.  **Command Block:** All AI commands return a "TOS Pending" warning.
-2.  **Administrator Warning:** Hikari sends an interactive embed detecting who added the bot.
-3.  **Audit Webhook:** The bot owner receives a notification with the options: `REMOVE BOT` or `CONFIRM SERVER`.
-    - *This allows you to monitor who is using your instance.*
+1.  **Full Server Block:** All Hikari commands, chats, and interactions in the server are completely blocked, responding with a warning that the TOS needs to be accepted.
+2.  **Administrator Warning:** Hikari sends an interactive embed in the first available channel or the channel she was invited to, asking a server administrator to confirm the TOS (by running `/aceitar_tos` or clicking the interactive buttons).
+3.  **Audit Webhook:** The bot owner receives a notification in the development server with the options: `REMOVE BOT` or `CONFIRM SERVER`.
+    - *This allows you to securely monitor who is using your instance.*
 
 ## 🛡️ 2. AutoMod Hierarchy (Automated Blocking)
 

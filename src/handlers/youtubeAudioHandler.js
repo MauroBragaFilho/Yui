@@ -77,19 +77,19 @@ function formatVideoSuccessMessage(videoData, showDetails = false) {
         const isShorts = (metadata.webpage_url || '').includes('/shorts/') || (metadata.title || '').toLowerCase().includes('shorts');
         providerName = isShorts ? 'YouTube Shorts' : 'YouTube';
     }
-    let msg = `🎬 **Vídeo baixado do ${providerName}**:`;
+    let msg = `🎬 Vídeo baixado do ${providerName}:`;
     if (showDetails) {
         const author = metadata.uploader || metadata.creator || metadata.channel || metadata.artist;
         const description = metadata.description;
         if (author) {
-            msg += `\n👤 **By**: ${author}`;
+            msg += `\n👤 By: ${author}`;
         }
         if (description && description.trim().length > 0) {
             let cleanDesc = description.trim();
             if (cleanDesc.length > 150) {
                 cleanDesc = cleanDesc.substring(0, 150) + '...';
             }
-            msg += `\n📝 **Descrição**: *${cleanDesc}*`;
+            msg += `\n📝 Descrição: ${cleanDesc}`;
         }
     }
     return msg;

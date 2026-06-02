@@ -70,10 +70,18 @@ Generates images using various diffusion models.
 
 ### `/baixar_musica`
 
-Converts YouTube videos to MP3.
+Extracts and converts video audio into MP3 format.
 
-- **URL:** The video link.
-- **Advanced:** Uses `yt-dlp` to extract audio with the best possible quality and cleans up temporary files after sending.
+- **URL:** The link to the video (YouTube, Instagram Reels, or TikTok).
+- **Advanced:** Uses `yt-dlp` to download the best audio stream and `ffmpeg` to cleanly convert it to MP3, deleting local temporary files afterward.
+
+### `/baixar_video`
+
+Downloads videos and sends them in MP4 format in the Discord chat.
+
+- **URL:** The link to the video (YouTube Shorts, Instagram Reels, or TikTok).
+- **descricao (Boolean):** If true, displays the uploader and description of the original video in the message. Default: `false`.
+- **Advanced:** Automatically detects the server's upload size limit and applies FFMPEG compression if the video exceeds the Discord threshold. Utilizes a global asynchronous compression queue.
 
 ### `/anime_origem`
 
@@ -90,7 +98,7 @@ Converts fiat and cryptocurrencies in real-time.
 - **Value:** Numeric amount to be converted.
 - **From:** Origin code (e.g., USD, EUR, BTC).
 - **To:** Destination code (e.g., BRL).
-- **Advanced:** Uses the official exchange rate API to give the exact current quote. Integrated into the AI (you can just ask via chat).
+- **Advanced:** Uses a real-time exchange rate API with daily local caching (JSON) and smart fallback for less common currencies. Fully integrated into the AI chat interface.
 
 ---
 
@@ -98,10 +106,10 @@ Converts fiat and cryptocurrencies in real-time.
 
 ### `/buscar_jogo`
 
-Search for game torrents/magnets.
+Searches for game torrents/magnets comprehensively.
 
 - **Name:** Game title.
-- **Advanced:** Searches the FitGirl and DODI Repacks databases.
+- **Advanced:** Refined search across the FitGirl and DODI Repacks databases. Now includes a paginator with buttons to navigate results in sets of 5 items directly on Discord.
 
 ---
 
@@ -154,6 +162,19 @@ Configures whether Hikari should respond to `@everyone` and `@here` mentions on 
 
 - **Active:** Yes to respond, No to ignore.
 - **Advanced:** Useful for preventing the AI from intruding on global server announcements, or for allowing it to interact when the whole server is called.
+
+### `/aceitar_tos` (Admin)
+
+Accepts Hikari's Terms of Service (TOS) to release and authorize the usage of all bot features in this server.
+
+- **Advanced:** This command unlocks the server. All channels and commands remain completely locked until the TOS is accepted by an administrator.
+
+### `/chat_updates` (Admin)
+
+Configures the channel where the bot will send updates and new release announcements for the Hikari system.
+
+- **Channel (Optional):** The text channel to be configured (if left blank, defaults to the current channel).
+- **Advanced:** New servers automatically register the channel where the TOS was accepted as the updates chat. Old servers register the last active channel.
 
 ### `/adm_banir` / `/adm_desbanir` (Owner)
 

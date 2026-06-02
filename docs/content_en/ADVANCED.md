@@ -7,9 +7,10 @@ This guide is for developers and enthusiasts who wish to expand Hikari's brain u
 ## 📂 Summary
 
 1. [🧰 1. Understanding "Tools"](#-1-understanding-tools)
-2. [📂 2. How to create a new Tool?](#-2-how-to-create-a-new-tool)
-3. [🏗️ 3. Customizing the Soul (System Prompt)](#-3-customizing-the-soul-system-prompt)
-4. [💡 Development Tips](#-development-tips)
+2. [🤖 2. Enhanced Native Tools (MCP)](#-2-enhanced-native-tools-mcp)
+3. [📂 3. How to create a new Tool?](#-3-how-to-create-a-new-tool)
+4. [🏗️ 4. Customizing the Soul (System Prompt)](#-4-customizing-the-soul-system-prompt)
+5. [💡 Development Tips](#-development-tips)
 
 ---
 
@@ -24,7 +25,27 @@ Hikari doesn't know how to do everything by herself. She uses "Tools" to extend 
 
 ---
 
-## 📂 2. How to create a new Tool?
+## 🤖 2. Enhanced Native Tools (MCP)
+
+Hikari's MCP ecosystem has been robustly enhanced with specific native behaviors:
+
+### 1. Currency & Finance (`convert_currency`)
+- **Error Resilience:** The MCP has been upgraded to handle rate limits and financial API failures. If the main API fails, a fallback exchange rate is used.
+- **Daily Cache:** The system saves a daily conversion table in a local JSON file, preventing unnecessary requests for frequent currencies.
+
+### 2. Game Search (`search_game`)
+- **Linguistic Flexibility:** If the searched game name fails in the FitGirl/DODI database, the AI attempts to search for slightly different names or spelling variations.
+- **List Embed:** The tool can return an interactive list of found games, allowing the AI to present a selection for the user to choose from instead of directly sending the Torrent file.
+
+### 3. Image Generation (`image_gen`)
+- **Transparency on Limitations:** The AI is now instructed to refuse requests to edit existing images and make it clear that she does not possess native computer vision in real-time.
+
+### 4. Media Downloader (`download_video` & `download_audio`)
+- **Smart Direction:** The AI identifies the user's intent to download video or audio. If the request is ambiguous, the AI asks clarification questions in chat instead of blindly triggering the tool. The MCP does not start compression processes; that decision is handled by Discord limits and the user via buttons.
+
+---
+
+## 📂 3. How to create a new Tool?
 
 ### Step 1: Define in JSON
 Add a new object in `src/data/mcp_tools.json`:
@@ -44,7 +65,7 @@ In the `src/handlers/llmHandler.js` file, add the execution logic inside the `pr
 
 ---
 
-## 🏗️ 3. Customizing the Soul (System Prompt)
+## 🏗️ 4. Customizing the Soul (System Prompt)
 
 Hikari's personality is not just text; it's a set of safety and behavior guidelines.
 - **Location:** `src/config/index.js` -> `systemPrompt` field.

@@ -43,13 +43,17 @@ Hikari has an aggressive fallback engine to ensure the user receives their art, 
 
 ---
 
-## 🎵 3. Audio and YouTube Processing
+## 🎵 3. Media Processing (Audio, Video, and Compression)
 
-We implemented a clean download system via `youtubeAudioHandler.js`.
+We implemented a complete system for downloading and manipulating media via `youtubeAudioHandler.js`.
 
-- **Strategy:** The bot uses the `yt-dlp` binary to extract only the best audio stream (`bestaudio`).
-- **Conversion:** The audio is converted via `ffmpeg` to MP3 with an optimized bitrate for Discord.
-- **Automatic Cleanup:** After sending the file, the handler automatically cleans up the local file from the `temp_audio` folder (or the corresponding audio folder) to avoid disk saturation.
+- **Multiplatform Support:** The bot supports downloading audio and video from popular platforms such as YouTube (general for audio, Shorts-only for video), Instagram Reels, and TikTok (including subdomains like `vt.tiktok.com`).
+- **Smart Audio Download:** Extracts only the best audio stream (`bestaudio`) via `yt-dlp` and dynamically converts it to MP3 using `ffmpeg`.
+- **Video Download with Metadata:** When downloading videos, Hikari can extract the original uploader and description for rich chat display, configurable via command parameters.
+- **Smart Compression:** If the video file exceeds the server's upload limit (dynamically detected: 25MB default, 50MB for Boost Level 2, and 100MB for Boost Level 3), the user will be prompted to try compressing the video.
+- **Global Queue & Host Protection:** The FFMPEG compression process runs in a global queue (only one compression at a time) to preserve VPS resources. There is an active RAM monitor: if memory usage exceeds 95%, the compression process is killed immediately to prevent host crashes.
+- **Usage Limits:** There is a strict limit of 1 active download/process per user at a time to prevent abuse.
+- **Automatic Cleanup:** All temporary files are deleted after sending. Large videos waiting for compression expire and are deleted after 6 hours.
 
 ---
 
@@ -57,8 +61,9 @@ We implemented a clean download system via `youtubeAudioHandler.js`.
 
 - 💡 **Chat Summary (`/chat_resumo`):** The AI reads the last N messages and creates a semantic mapping of who said what and about which topics. Excellent for managing busy channels.
 - 💡 **Trace.moe Integration:** The `/anime_origem` function allows you to find animes just by sending a frame. It returns the title, episode, and approximate timestamp.
-- 💡 **Game Search and Steam Prices:** Hikari not only searches for Magnet links in FitGirl/DODI databases but can also natively consult **Steam**! Just ask naturally, like "Is Elden Ring on sale on Steam?", and she will return updated data, prices, and a synopsis, all directly from the chat.
-- 💡 **Currency and Crypto Converter:** Convert any value between real currencies (BRL, USD, EUR) or crypto (BTC, ETH) just by asking "how much is bitcoin today?". She uses real-time financial APIs to ensure mathematical accuracy.
+- 💡 **Game Search and Steam Prices:** Hikari not only searches for Magnet links in databases but can also natively consult **Steam**! Just ask naturally, like "Is Elden Ring on sale on Steam?", and she will return updated data, prices, and a synopsis, as well as add a fun comment.
+- 💡 **Currency and Crypto Converter:** Convert any value between real currencies (BRL, USD, EUR) or crypto (BTC, ETH) just by asking "how much is bitcoin today?". She uses financial APIs with daily local caching and automatic fallback.
+- 💡 **Computer Vision & Editing:** Hikari has clear guidelines warning users that she cannot edit existing images and does not possess native computer vision in real-time.
 
 ---
 

@@ -16,10 +16,10 @@ A Hikari opera sob uma filosofia de "Sanidade como Serviço". Este documento exp
 ## ⚖️ 1. O Fluxo de Termos de Serviço (TOS)
 
 Ao ser adicionada a uma guilda, se `REQUIRE_TOS` estiver ativo:
-1.  **Bloqueio de Comandos:** Todos os comandos de IA retornam um aviso de "TOS Pendente".
-2.  **Aviso para Administrador:** A Hikari envia um embed interativo detectando quem adicionou o bot.
-3.  **Webhook de Auditoria:** O Dono do bot recebe uma notificação com as opções: `REMOVER BOT` ou `CONFIRMAR SERVER`. 
-    - *Isso permite que você monitore quem está usando sua instância.*
+1.  **Bloqueio Total do Servidor:** Todos os comandos, chats e interações da Hikari no servidor são completamente bloqueados, respondendo com um aviso de necessidade de aceitação do TOS.
+2.  **Aviso para Administrador:** A Hikari envia um embed interativo no primeiro canal útil ou no canal que foi convidada, solicitando a confirmação do TOS por um administrador do servidor (executando `/aceitar_tos` ou clicando nos botões interativos).
+3.  **Webhook de Auditoria:** O Dono do bot recebe uma notificação no servidor de desenvolvimento com as opções: `REMOVER BOT` ou `CONFIRMAR SERVER`.
+    - *Isso permite que você monitore quem está usando sua instância de forma segura.*
 
 ## 🛡️ 2. Hierarquia do AutoMod (Automated Blocking)
 
