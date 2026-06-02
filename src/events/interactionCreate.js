@@ -20,7 +20,9 @@ const {
     getProviderSettings,
     setChannelPersona,
     setChannelChatter,
-    setServerEveryoneMention
+    setServerEveryoneMention,
+    setServerUpdateChannel,
+    setServerLastChannel
 } = require('../handlers/llmHandler');
 const { generateImage } = require('../handlers/imageHandler');
 const { downloadYouTubeAudio, sanitizeFilenameForDiscord } = require('../handlers/youtubeAudioHandler');
@@ -470,6 +472,11 @@ module.exports = {
         }
         if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
         if (interaction.isCommand()) {
+            if (interaction.guildId && interaction.channelId) {
+                setServerLastChannel(interaction.guildId, interaction.channelId);
+                const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
+                await checkAndInitializeUpdateChannel(interaction.guild, interaction.channel);
+            }
             const sub = interaction.options.getSubcommand(false);
             const cmdLog = `[LOG] Slash: /${interaction.commandName}${sub ? ' ' + sub : ''} | Usuário: ${interaction.user.tag} (${interaction.user.id}) | Local: {${interaction.guild?.name || 'DM'} - ${interaction.guildId || 'N/A'}}`;
             console.log(cmdLog);
@@ -679,6 +686,21 @@ module.exports = {
                 content: `🔔 **Marcações Everyone/Here**: Hikari ${ativo ? '✅ **AGORA VAI**' : '❌ **NÃO VAI MAIS**'} responder a marcações de @everyone e @here neste servidor.`, 
                 ephemeral: false 
             });
+        } else if (commandName === 'chat_updates') {
+            const hasPermission = !interaction.guild || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) || config.isOwner(interaction.user.id);
+            if (!hasPermission) return interaction.reply({ content: '❌ Acesso restrito (Requer gerenciar canais).', ephemeral: true });
+            const canal = interaction.options.getChannel('canal') || interaction.channel;
+            if (!canal.isTextBased()) {
+                return interaction.reply({ content: '❌ Por favor, selecione um canal de texto.', ephemeral: true });
+            }
+            setServerUpdateChannel(interaction.guildId, canal.id);
+            const embed = new EmbedBuilder()
+                .setColor(0x9B59B6)
+                .setTitle('📢 Canal de Updates Definido')
+                .setDescription(`Este canal <#${canal.id}> foi configurado para receber as novidades e atualizações da Hikari.`)
+                .setFooter({ text: `Servidor: ${interaction.guild?.name} • Hikari by yGuilhermy` })
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed] });
         } else if (commandName === 'ajuda') {
             try {
                 const helpDataPath = path.join(__dirname, '../data/help.json');

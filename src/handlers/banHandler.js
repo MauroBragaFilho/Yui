@@ -72,7 +72,7 @@ function removeBan(type, id) {
 }
 const forbiddenKeywords = [
     'nsfw', 'porn', 'hentai', 'gore', 'sexo', 'puta', 'caralho', 'buceta', 'pinto', 'pênis', 'vagina', '18+', 'pornografia', 'pornô',
-    'estupro', 'pedofilia', 'bestialidade', 'necrofilia', 'zoofilia',
+    'estupro', 'pedofilia', 'bestialidade', 'necrofilia', 'zoofilia', "porno", "pornhub", "redtube", "rule34", "r34", "lolicon", "shotacon",
     'suicídio', 'auto-mutilação', 'autoflagelação',
     'terrorismo', 'nazismo', 'hitler', 'suástica', 'extremismo', '1488',
     'xvideos', 'pornhub', 'redtube', 'rule34', 'r34', 'lolicon', 'shotacon',

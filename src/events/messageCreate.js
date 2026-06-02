@@ -40,6 +40,12 @@ module.exports = {
         const nameRegex = new RegExp(`\\b${botName}\\b`, 'i');
         const hasHikariName = nameRegex.test(message.content);
         if (isMention || hasHikariName) {
+            if (message.guildId && message.channelId) {
+                const { setServerLastChannel } = require('../handlers/llmHandler');
+                setServerLastChannel(message.guildId, message.channelId);
+                const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
+                await checkAndInitializeUpdateChannel(message.guild, message.channel);
+            }
             try {
                 let currentUserPrompt = message.content;
                 if (isMention) {
@@ -104,6 +110,12 @@ INSTRUÇÃO: Responda diretamente à mensagem atual considerando o contexto.`;
                     }
                 }
                 if (Math.random() < chance) {
+                    if (message.guildId && message.channelId) {
+                        const { setServerLastChannel } = require('../handlers/llmHandler');
+                        setServerLastChannel(message.guildId, message.channelId);
+                        const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
+                        await checkAndInitializeUpdateChannel(message.guild, message.channel);
+                    }
                     try {
                         const currentUserPrompt = resolveMentions(message.content, client);
                         const history = [];
@@ -129,6 +141,12 @@ INSTRUÇÃO: Entre na conversa espontaneamente.`;
         }
         const prefix = config.prefix;
         if (message.content.startsWith(prefix)) {
+            if (message.guildId && message.channelId) {
+                const { setServerLastChannel } = require('../handlers/llmHandler');
+                setServerLastChannel(message.guildId, message.channelId);
+                const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
+                await checkAndInitializeUpdateChannel(message.guild, message.channel);
+            }
             const args = message.content.slice(prefix.length).trim().split(/ +/);
             const commandName = args.shift().toLowerCase();
             if (commandName === 'draw') {

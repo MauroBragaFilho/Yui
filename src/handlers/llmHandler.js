@@ -227,6 +227,19 @@ function setServerEveryoneMention(guildId, active) {
     saveServerSettings();
 }
 
+function setServerUpdateChannel(guildId, channelId) {
+    if (!serverSettings[guildId]) serverSettings[guildId] = {};
+    serverSettings[guildId].updateChannelId = channelId;
+    saveServerSettings();
+}
+
+function setServerLastChannel(guildId, channelId) {
+    if (!guildId) return;
+    if (!serverSettings[guildId]) serverSettings[guildId] = {};
+    serverSettings[guildId].lastChannelId = channelId;
+    saveServerSettings();
+}
+
 loadServerSettings();
 function getChannelSettings(channelId) {
     return channelSettings[channelId] || {};
@@ -1778,4 +1791,6 @@ module.exports = {
     resetServerTools,
     getServerSettings,
     setServerEveryoneMention,
+    setServerUpdateChannel,
+    setServerLastChannel,
 };

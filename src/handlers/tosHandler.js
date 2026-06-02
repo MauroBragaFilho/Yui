@@ -132,11 +132,18 @@ async function handleTosInteraction(interaction) {
             console.log('[TOS-DEBUG] Salvando aceitação síncrona...');
             saveAcceptedServer(guild.name, guild.id, guild.ownerId, interaction.user.id);
             console.log('[TOS-DEBUG] Salvo com sucesso.');
+            const { setServerUpdateChannel } = require('./llmHandler');
+            setServerUpdateChannel(guild.id, interaction.channelId);
             await interaction.editReply({
                 content: `✅ **Termos de Uso aceitos por <@${interaction.user.id}>!** A Hikari agora está liberada para este servidor. ✨`,
                 embeds: [],
                 components: []
             }).catch(err => console.error('[TOS-DEBUG] Erro no editReply (Accept):', err.message));
+            const updatesEmbed = new EmbedBuilder()
+                .setColor(0x9B59B6)
+                .setTitle('📢 Canal de Updates Configurado')
+                .setDescription(`Este canal foi salvo para receber as novidades e atualizações da Hikari.\n\nCaso queira alterar o canal de atualizações, utilize o comando:\n\`/chat_updates [canal]\``);
+            await interaction.channel.send({ embeds: [updatesEmbed] }).catch(() => {});
             console.log(`[TOS-DEBUG] Servidor ${guild.id} aceitou.`);
             const buffered = getBufferedCommand(guild.id);
             if (buffered) {
@@ -266,9 +273,24 @@ Basta clicar no botão **"Aceitar Termos"** abaixo. Somente usuários com permis
         }
     }
 }
+async function checkAndInitializeUpdateChannel(guild, channel) {
+    if (!guild || !channel) return;
+    if (!isServerAccepted(guild.id)) return;
+    const { getServerSettings, setServerUpdateChannel } = require('./llmHandler');
+    const settings = getServerSettings(guild.id);
+    if (!settings.updateChannelId) {
+        setServerUpdateChannel(guild.id, channel.id);
+        const embed = new EmbedBuilder()
+            .setColor(0x9B59B6)
+            .setTitle('📢 Central de Updates Ativada!')
+            .setDescription('Olá! Apresentamos a nova função de avisos de atualizações da Hikari. Este canal foi configurado automaticamente como o canal de updates do servidor.\n\nA partir de agora, novas atualizações da Hikari serão enviadas aqui. Caso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\`');
+        await channel.send({ embeds: [embed] }).catch(() => {});
+    }
+}
 module.exports = {
     isServerAccepted,
     sendTermsOfService,
     handleTosInteraction,
-    reportNewGuild
+    reportNewGuild,
+    checkAndInitializeUpdateChannel
 };

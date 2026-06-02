@@ -3,7 +3,8 @@ const {
     ApplicationIntegrationType,
     InteractionContextType,
     PermissionFlagsBits,
-    Routes
+    Routes,
+    ChannelType
 } = require('discord.js');
 const setGlobalContext = (builder) => {
     return builder
@@ -152,6 +153,17 @@ const commands = [
                     .setMinValue(10)
                     .setMaxValue(100)
                     .setRequired(false))
+    ),
+    setGlobalContext(
+        new SlashCommandBuilder()
+            .setName('chat_updates')
+            .setDescription('Configura o canal para receber avisos de atualizações da Hikari. (Admin)')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+            .addChannelOption(option =>
+                option.setName('canal')
+                    .setDescription('O canal de texto para os updates. (Deixe vazio para o canal atual)')
+                    .setRequired(false)
+                    .addChannelTypes(ChannelType.GuildText))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
