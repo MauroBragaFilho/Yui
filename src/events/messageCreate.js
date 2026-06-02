@@ -218,6 +218,7 @@ INSTRUÇÃO: Entre na conversa espontaneamente.`;
                 }
             } else if (commandName === 'yt_video') {
                 const videoUrl = args[0];
+                const showDetails = args[1] === 'true' || args[1] === '--desc' || args[1] === '--details';
                 if (!videoUrl) return message.reply('Forneça a URL.');
                 const userId = message.author.id;
                 if (!canBypass(userId) && isUserBusy(userId)) return message.reply('⏳ Você já tem um download em andamento.');
@@ -231,7 +232,7 @@ INSTRUÇÃO: Entre na conversa espontaneamente.`;
                         const displayFileName = sanitizeFilenameForDiscord(videoData.metadata.title || 'video');
                         const attachment = new AttachmentBuilder(videoData.filePath, { name: `${displayFileName}.mp4` });
                         const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
-                        await processingMessage.edit({ content: formatVideoSuccessMessage(videoData), files: [attachment] });
+                        await processingMessage.edit({ content: formatVideoSuccessMessage(videoData, showDetails), files: [attachment] });
                         try { if (fs.existsSync(videoData.filePath)) fs.unlinkSync(videoData.filePath); } catch (e) {}
                     } else {
                         const fileId = storeVideoForCompression(videoData.filePath);

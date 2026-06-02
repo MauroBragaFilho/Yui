@@ -36,13 +36,17 @@
       "name": "download_video",
       "description": "Use APENAS se o usuário fornecer um LINK URL (YouTube Shorts, Instagram Reels ou TikTok) E pedir para 'baixar vídeo', 'download video', 'salvar vídeo' ou variantes. APENAS YouTube Shorts é suportado para vídeos do YouTube (NÃO vídeos normais do YouTube). EXTRAIA A URL EXATA. NUNCA invente links. Se não houver link, não use esta tool. Se o pedido for ambíguo (não especifica áudio ou vídeo), PERGUNTE ao usuário qual formato ele quer antes de chamar qualquer tool.",
       "textual_triggers": "Gatilhos: \"baixa esse vídeo\", \"download do reel\", \"salva esse tiktok\", \"quero o vídeo desse shorts\".",
-      "textual_args": "{ \"url\": \"URL do video (YouTube Shorts/Instagram Reels/TikTok)\" }",
+      "textual_args": "{ \"url\": \"URL do video (YouTube Shorts/Instagram Reels/TikTok)\", \"include_description\": false }",
       "parameters": {
         "type": "object",
         "properties": {
           "url": {
             "type": "string",
             "description": "URL do vídeo (YouTube Shorts, Instagram Reels ou TikTok)"
+          },
+          "include_description": {
+            "type": "boolean",
+            "description": "Se definido como true, a resposta de sucesso incluirá o autor e a descrição do vídeo. (Padrão: false)"
           }
         },
         "required": [
@@ -99,7 +103,7 @@
     "type": "function",
     "function": {
       "name": "search_web",
-      "description": "Use APENAS para buscar informações ATUAIS, notícias recentes (2024-2026), cotações, previsões do tempo, ou fatos que você não sabe. Gatilhos: 'pesquise sobre X', 'quem é Y', 'notícias de hoje', 'preço do dolar'.",
+      "description": "Use APENAS para buscar informações ATUAIS, notícias recentes (2024-2026), cotações, previsões do tempo, ou fatos que você não sabe (para pesquisas). Gatilhos: 'pesquise sobre X', 'quem é Y', 'notícias de hoje', 'preço do dolar'.",
       "textual_triggers": "Gatilhos: \"pesquise sobre X\", \"quem foi Y\", \"informações sobre o jogo Z\", \"notícias de hoje\".",
       "textual_args": "{ \"query\": \"termo de busca otimizado\" }",
       "parameters": {

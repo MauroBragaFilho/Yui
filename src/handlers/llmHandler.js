@@ -1345,7 +1345,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             if (videoData.fileSize <= attachmentLimit) {
                                 const displayFileName = sanitizeFilenameForDiscord(videoData.metadata.title || 'video');
                                 const attachment = new AttachmentBuilder(videoData.filePath, { name: `${displayFileName}.mp4` });
-                                await unifiedReply(formatVideoSuccessMessage(videoData), [attachment]);
+                                const showDetails = toolData.args.include_description === true || toolData.args.descricao === true;
+                                await unifiedReply(formatVideoSuccessMessage(videoData, showDetails), [attachment]);
                                 try { if (fs.existsSync(videoData.filePath)) fs.unlinkSync(videoData.filePath); } catch (e) {}
                             } else {
                                 const fileId = storeVideoForCompression(videoData.filePath);

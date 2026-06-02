@@ -15,7 +15,7 @@ const YOUTUBE_MUSIC_REGEX = /^(?:https?:\/\/)?(?:www\.)?music\.youtube\.com\/wat
 const YOUTUBE_PLAYLIST_REGEX = /(?:youtube\.com|youtu\.be)\/playlist\?list=|youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11,}&list=([a-zA-Z0-9_-]+)|music\.youtube\.com\/playlist\?list=|music\.youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11,}&list=/;
 const YOUTUBE_SHORTS_REGEX = /^(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/shorts\/([a-zA-Z0-9_-]{11,})(?:\S+)?$/;
 const INSTAGRAM_REGEX = /^(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:reel|reels)\/([a-zA-Z0-9_-]+)/;
-const TIKTOK_REGEX = /^(?:https?:\/\/)?(?:(?:www|vm)\.)?tiktok\.com\/.+/;
+const TIKTOK_REGEX = /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)?tiktok\.com\/.+/;
 
 const activeUserProcesses = new Set();
 let isCompressing = false;
@@ -65,9 +65,8 @@ function logCompressionAction(context, status, extra = '') {
     console.log(`[LOG] Compressão (Botão) | Usuário: ${userStr} | Local: ${localStr} | Status: ${status}${extraStr}`);
 }
 
-function formatVideoSuccessMessage(videoData) {
+function formatVideoSuccessMessage(videoData, showDetails = false) {
     const metadata = videoData.metadata || {};
-    const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
     let providerName = 'Vídeo';
     const extractor = (metadata.extractor_key || '').toLowerCase();
     if (extractor.includes('instagram')) {
@@ -78,19 +77,20 @@ function formatVideoSuccessMessage(videoData) {
         const isShorts = (metadata.webpage_url || '').includes('/shorts/') || (metadata.title || '').toLowerCase().includes('shorts');
         providerName = isShorts ? 'YouTube Shorts' : 'YouTube';
     }
-    const title = metadata.title || 'Sem título';
-    const author = metadata.uploader || metadata.creator || metadata.channel || metadata.artist;
-    const description = metadata.description;
-    let msg = `🎬 **Vídeo baixado do ${providerName}**: \`${title}\` (${sizeMB} MB)`;
-    if (author) {
-        msg += `\n👤 **By**: ${author}`;
-    }
-    if (description && description.trim().length > 0) {
-        let cleanDesc = description.trim();
-        if (cleanDesc.length > 150) {
-            cleanDesc = cleanDesc.substring(0, 150) + '...';
+    let msg = `🎬 **Vídeo baixado do ${providerName}**:`;
+    if (showDetails) {
+        const author = metadata.uploader || metadata.creator || metadata.channel || metadata.artist;
+        const description = metadata.description;
+        if (author) {
+            msg += `\n👤 **By**: ${author}`;
         }
-        msg += `\n📝 **Descrição**: *${cleanDesc}*`;
+        if (description && description.trim().length > 0) {
+            let cleanDesc = description.trim();
+            if (cleanDesc.length > 150) {
+                cleanDesc = cleanDesc.substring(0, 150) + '...';
+            }
+            msg += `\n📝 **Descrição**: *${cleanDesc}*`;
+        }
     }
     return msg;
 }

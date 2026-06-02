@@ -113,6 +113,10 @@ const commands = [
                 option.setName('url')
                     .setDescription('A URL do vídeo (YouTube Shorts, Instagram Reels ou TikTok).')
                     .setRequired(true))
+            .addBooleanOption(option =>
+                option.setName('descricao')
+                    .setDescription('Exibir a descrição e autor do vídeo? (Padrão: Não)')
+                    .setRequired(false))
     ),
     setGlobalContext(
         new SlashCommandBuilder()

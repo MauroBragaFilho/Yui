@@ -885,6 +885,7 @@ module.exports = {
             }
         } else if (commandName === 'baixar_video') {
             const videoUrl = interaction.options.getString('url');
+            const showDetails = interaction.options.getBoolean('descricao') || false;
             const userId = interaction.user.id;
             if (!canBypass(userId) && isUserBusy(userId)) {
                 return interaction.reply({ content: '⏳ Você já tem um download em andamento. Aguarde ele terminar.', ephemeral: true });
@@ -899,7 +900,7 @@ module.exports = {
                     const displayFileName = sanitizeFilenameForDiscord(videoData.metadata.title || 'video');
                     const attachment = new AttachmentBuilder(videoData.filePath, { name: `${displayFileName}.mp4` });
                     const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
-                    await interaction.editReply({ content: formatVideoSuccessMessage(videoData), files: [attachment] });
+                    await interaction.editReply({ content: formatVideoSuccessMessage(videoData, showDetails), files: [attachment] });
                     try { if (fs.existsSync(videoData.filePath)) fs.unlinkSync(videoData.filePath); } catch (e) {}
                 } else {
                     const fileId = storeVideoForCompression(videoData.filePath);
