@@ -43,6 +43,19 @@
           "game_name": {
             "type": "string",
             "description": "Nome do Jogo"
+          },
+          "direct": {
+            "type": "boolean",
+            "description": "Defina como true se o usuário pediu um jogo específico e você tem certeza do nome (ex: 'baixe o GTA V', 'download de Elden Ring'). Defina como false se o usuário pediu termos genéricos, fez perguntas abertas ou citou franquias/lista (ex: 'quais jogos de lego você tem', 'mostre a lista de GTA')."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "any",
+              "fitgirl",
+              "dodi"
+            ],
+            "description": "Filtro opcional para a fonte do download."
           }
         },
         "required": [

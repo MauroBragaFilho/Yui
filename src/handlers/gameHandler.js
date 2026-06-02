@@ -1,11 +1,32 @@
-const { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, AttachmentBuilder, EmbedBuilder, ComponentType } = require('discord.js');
+const { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, AttachmentBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+
 const SOURCES = [
     { name: 'FitGirl', url: path.join(__dirname, '../data/fitgirl.json'), emoji: '💃' },
     { name: 'DODI', url: path.join(__dirname, '../data/dodi.json'), emoji: '🦆' }
 ];
+
+const aliases = {
+    'gta v': 'grand theft auto v',
+    'gta 5': 'grand theft auto v',
+    'rdr2': 'red dead redemption 2',
+    'rdr 2': 'red dead redemption 2',
+    'cod': 'call of duty'
+};
+
+function normalizeString(str) {
+    if (!str) return '';
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[:\-\/\(\)\[\]\?!.,]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function cleanMagnet(magnetLink) {
     try {
         const urlParams = new URLSearchParams(magnetLink.replace('magnet:?', ''));
@@ -16,6 +37,7 @@ function cleanMagnet(magnetLink) {
         return { magnet: magnetLink, hash: null };
     }
 }
+
 async function fetchTorrentFile(hash) {
     if (!hash) return null;
     try {
@@ -26,11 +48,26 @@ async function fetchTorrentFile(hash) {
         return null;
     }
 }
-async function searchGames(gameName) {
+
+async function searchGames(gameName, provider = 'any') {
     let fitgirlMatches = [];
     let dodiMatches = [];
-    const normalizedName = gameName.toLowerCase();
-    await Promise.all(SOURCES.map(async (source) => {
+    
+    let query = normalizeString(gameName);
+    for (const [key, value] of Object.entries(aliases)) {
+        const regex = new RegExp(`\\b${key}\\b`, 'g');
+        query = query.replace(regex, value);
+    }
+    
+    const searchWords = query.split(' ').filter(w => w.length > 0);
+    if (searchWords.length === 0) return [];
+
+    const activeSources = SOURCES.filter(s => {
+        if (!provider || provider === 'any') return true;
+        return s.name.toLowerCase() === provider.toLowerCase();
+    });
+
+    await Promise.all(activeSources.map(async (source) => {
         try {
             let data;
             if (source.url.startsWith('http')) {
@@ -42,9 +79,10 @@ async function searchGames(gameName) {
                 data = JSON.parse(rawData);
             }
             const games = data.downloads;
-            const found = games.filter(game =>
-                game.title.toLowerCase().includes(normalizedName)
-            ).map(game => {
+            const found = games.filter(game => {
+                const normTitle = normalizeString(game.title);
+                return searchWords.every(word => normTitle.includes(word));
+            }).map(game => {
                 const originalMagnet = game.uris.find(u => u.startsWith('magnet:?'));
                 if (!originalMagnet) return null;
                 const cleanData = cleanMagnet(originalMagnet);
@@ -58,20 +96,24 @@ async function searchGames(gameName) {
                     hash: cleanData.hash
                 };
             }).filter(item => item !== null);
+            
             if (source.name === 'FitGirl') fitgirlMatches = found;
             if (source.name === 'DODI') dodiMatches = found;
         } catch (err) {
             console.error(`Erro ao buscar em ${source.name}:`, err.message);
         }
     }));
+
     const finalResults = [];
-    if (fitgirlMatches.length > 0) finalResults.push(fitgirlMatches.shift());
-    if (dodiMatches.length > 0) finalResults.push(dodiMatches.shift());
-    const leftovers = [...fitgirlMatches, ...dodiMatches];
-    const slotsRemaining = 5 - finalResults.length;
-    if (slotsRemaining > 0) finalResults.push(...leftovers.slice(0, slotsRemaining));
-    return finalResults;
+    const maxLength = Math.max(fitgirlMatches.length, dodiMatches.length);
+    for (let i = 0; i < maxLength; i++) {
+        if (i < fitgirlMatches.length) finalResults.push(fitgirlMatches[i]);
+        if (i < dodiMatches.length) finalResults.push(dodiMatches[i]);
+        if (finalResults.length >= 25) break;
+    }
+    return finalResults.slice(0, 25);
 }
+
 async function getTorrentOrMagnet(game) {
     const torrentData = await fetchTorrentFile(game.hash);
     if (torrentData) {
@@ -79,84 +121,141 @@ async function getTorrentOrMagnet(game) {
             type: 'file',
             buffer: Buffer.from(torrentData),
             fileName: `${game.title.substring(0, 20).replace(/[^a-z0-9]/gi, '_')}.torrent`,
-            message: `✅ **Arquivo .torrent encontrado!**\n\n⚠️ **Necessário qBittorrent**\nBasta baixar o arquivo anexo e dar duplo clique para iniciar.`,
-            color: '#00FF00'
+            message: `✅ **Arquivo .torrent carregado com sucesso!**\n\n📖 **Guia Rápido de Instalação:**\n1️⃣ Baixe o arquivo \`.torrent\` anexado acima.\n2️⃣ Dê dois cliques para abri-lo no seu cliente torrent (recomendamos o **qBittorrent**).\n3️⃣ Escolha o local de destino e clique em **OK** para começar a baixar.`,
+            color: '#10B981'
         };
     } else {
         return {
             type: 'magnet',
             buffer: Buffer.from(game.magnet, 'utf-8'),
             fileName: 'link_magnetico.txt',
-            message: `⚠️ **Arquivo .torrent não encontrado (Cache Miss).**\nEnviei um arquivo de texto com o Magnet Link.\n\n⚠️ **Necessário qBittorrent**\nCopie o conteúdo do arquivo e cole no seu gerenciador de torrents.`,
-            color: '#FFA500'
+            message: `⚠️ **Arquivo .torrent não encontrado (Cache Miss)**\nO arquivo foi enviado em formato de texto \`.txt\` com o link direto.\n\n📖 **Guia Rápido de Magnet Link:**\n1️⃣ Copie o código contido no campo abaixo ou abra o arquivo \`.txt\` anexo.\n2️⃣ No seu cliente torrent (ex: **qBittorrent**), clique no botão de adicionar link (ícone de link/corrente).\n3️⃣ Cole o código copiado e confirme para iniciar o download.`,
+            color: '#F59E0B'
         };
     }
 }
+
+function createPaginationComponents(page, totalPages, itemsInPage, startIndex) {
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('select_game')
+        .setPlaceholder('📂 Escolha o arquivo para baixar...')
+        .addOptions(
+            itemsInPage.map((game, index) => {
+                const safeTitle = game.title.length > 90 ? game.title.substring(0, 90) + '...' : game.title;
+                return new StringSelectMenuOptionBuilder()
+                    .setLabel(`${startIndex + index + 1}. ${safeTitle}`)
+                    .setDescription(`${game.provider} - ${game.fileSize}`)
+                    .setValue((startIndex + index).toString())
+                    .setEmoji(game.emoji);
+            })
+        );
+    const rowMenu = new ActionRowBuilder().addComponents(selectMenu);
+
+    const prevButton = new ButtonBuilder()
+        .setCustomId('game_prev')
+        .setLabel('⬅️ Anterior')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page === 0);
+
+    const nextButton = new ButtonBuilder()
+        .setCustomId('game_next')
+        .setLabel('➡️ Próximo')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page === totalPages - 1);
+
+    const rowButtons = new ActionRowBuilder().addComponents(prevButton, nextButton);
+    
+    const components = [rowMenu];
+    if (totalPages > 1) {
+        components.push(rowButtons);
+    }
+    return components;
+}
+
 async function executeGameCommand(interaction) {
     const gameName = interaction.options.getString('nome');
-    console.log(`[LOG] Slash: /game | Usuário: ${interaction.user.tag} (${interaction.user.id}) | Local: {${interaction.guild?.name || 'DM'} - ${interaction.guildId || 'N/A'}} | Jogo: "${gameName}"`);
+    const provider = interaction.options.getString('fonte') || 'any';
+    console.log(`[LOG] Slash: /buscar_jogo | Usuário: ${interaction.user.tag} (${interaction.user.id}) | Jogo: "${gameName}" | Fonte: "${provider}"`);
+    
     const interactionResponse = await interaction.deferReply({ ephemeral: false });
     try {
-        const finalResults = await searchGames(gameName);
+        const finalResults = await searchGames(gameName, provider);
         if (finalResults.length === 0) {
             return interaction.editReply({ content: `❌ Nada encontrado para "**${gameName}**".` });
         }
-        const optionsEmbed = new EmbedBuilder()
-            .setTitle(`🔎 Resultados para: "${gameName}"`)
-            .setDescription('Selecione uma das opções no menu abaixo para receber o arquivo de download.')
-            .setColor('#5865F2')
-            .setFooter({ text: 'Hikari Torrent Search • by yGuilhermy' });
-        finalResults.forEach((game, index) => {
-            const date = new Date(game.uploadDate).toLocaleDateString('pt-BR');
-            const safeTitle = game.title.length > 80 ? game.title.substring(0, 77) + '...' : game.title;
-            optionsEmbed.addFields({
-                name: `${index + 1}️⃣ ${game.emoji} ${safeTitle}`,
-                value: `📦 **Tamanho:** ${game.fileSize} | 📅 **Data:** ${date}\n\u200b`
+        
+        const pageSize = 5;
+        const totalPages = Math.ceil(finalResults.length / pageSize);
+        let currentPage = 0;
+        
+        const renderPage = (page) => {
+            const startIndex = page * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, finalResults.length);
+            const pageItems = finalResults.slice(startIndex, endIndex);
+            
+            let description = 'Selecione uma das opções no menu abaixo para receber o arquivo de download.\n\n';
+            pageItems.forEach((game, index) => {
+                const date = new Date(game.uploadDate).toLocaleDateString('pt-BR');
+                const safeTitle = game.title.length > 70 ? game.title.substring(0, 67) + '...' : game.title;
+                const displayIndex = startIndex + index + 1;
+                description += `**#${displayIndex}** ${game.emoji} **${safeTitle}**\n`;
+                description += `\`📦 ${game.fileSize}\`  •  \`📅 ${date}\`  •  \`${game.provider}\`\n\n`;
             });
-        });
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('select_game')
-            .setPlaceholder('📂 Escolha o arquivo para baixar...')
-            .addOptions(
-                finalResults.map((game, index) => {
-                    const safeTitle = game.title.length > 90 ? game.title.substring(0, 90) + '...' : game.title;
-                    return new StringSelectMenuOptionBuilder()
-                        .setLabel(`${index + 1}. ${safeTitle}`)
-                        .setDescription(`${game.provider} - ${game.fileSize}`)
-                        .setValue(index.toString())
-                        .setEmoji(game.emoji);
-                })
-            );
-        const row = new ActionRowBuilder().addComponents(selectMenu);
-        await interaction.editReply({ embeds: [optionsEmbed], components: [row] });
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🔍 Resultados para: "${gameName}" (Página ${page + 1}/${totalPages})`)
+                .setDescription(description)
+                .setColor('#8F55FD')
+                .setFooter({ text: 'Hikari Torrent • by yGuilhermy' });
+            
+            const components = createPaginationComponents(page, totalPages, pageItems, startIndex);
+            return { embeds: [embed], components };
+        };
+        
+        await interaction.editReply(renderPage(currentPage));
+        
         const collector = interactionResponse.createMessageComponentCollector({
-            componentType: ComponentType.StringSelect,
-            time: 60000
+            time: 120000
         });
+        
         collector.on('collect', async i => {
             if (i.user.id !== interaction.user.id) {
-                return i.reply({ content: '❌ Faça sua própria busca com /game.', ephemeral: true });
+                return i.reply({ content: '❌ Faça sua própria busca com /buscar_jogo.', ephemeral: true });
             }
-            await i.update({ content: '🔄 **Processando...** Buscando arquivo...', components: [], embeds: [] });
-            const selectedIndex = parseInt(i.values[0]);
-            const selectedGame = finalResults[selectedIndex];
-            console.log(`[LOG] Seleção Game: ${selectedGame.title} | Usuário: ${i.user.tag} (${i.user.id}) | Local: {${i.guild?.name || 'DM'} - ${i.guildId || 'N/A'}}`);
-            const result = await getTorrentOrMagnet(selectedGame);
-            const attachment = new AttachmentBuilder(result.buffer, { name: result.fileName });
-            const successEmbed = new EmbedBuilder()
-                .setTitle(`🚀 Download Pronto: ${selectedGame.title}`)
-                .setDescription(result.message)
-                .setColor(result.color)
-                .addFields({ name: 'Backup Magnet', value: `\`\`\`${selectedGame.magnet}\`\`\`` })
-                .setFooter({ text: 'Hikari Torrent Search • by yGuilhermy' });
-            await i.editReply({ content: '', embeds: [successEmbed], files: [attachment] });
+            
+            if (i.customId === 'game_prev') {
+                currentPage--;
+                await i.update(renderPage(currentPage));
+            } else if (i.customId === 'game_next') {
+                currentPage++;
+                await i.update(renderPage(currentPage));
+            } else if (i.customId === 'select_game') {
+                await i.update({ content: '🔄 **Processando...** Buscando arquivo...', components: [], embeds: [] });
+                const selectedIndex = parseInt(i.values[0]);
+                const selectedGame = finalResults[selectedIndex];
+                console.log(`[LOG] Seleção Game: ${selectedGame.title} | Usuário: ${i.user.tag} (${i.user.id})`);
+                const result = await getTorrentOrMagnet(selectedGame);
+                const attachment = new AttachmentBuilder(result.buffer, { name: result.fileName });
+                const successEmbed = new EmbedBuilder()
+                    .setTitle(`🚀 Download Pronto: ${selectedGame.title}`)
+                    .setDescription(result.message)
+                    .setColor(result.color)
+                    .addFields({ name: '🔗 Magnet Link (Backup)', value: `\`\`\`${selectedGame.magnet}\`\`\`` })
+                    .setFooter({ text: 'Hikari Torrent Search • by yGuilhermy' });
+                await i.editReply({ content: '', embeds: [successEmbed], files: [attachment] });
+                collector.stop();
+            }
         });
-        collector.on('end', collected => {
-            if (collected.size === 0) interaction.editReply({ content: '⏱️ Tempo esgotado.', components: [], embeds: [] }).catch(() => { });
+        
+        collector.on('end', (collected, reason) => {
+            if (reason === 'time') {
+                interaction.deleteReply().catch(() => {});
+            }
         });
     } catch (error) {
         console.error('Erro no gameHandler:', error);
         await interaction.editReply('Ocorreu um erro interno ao processar a busca.');
     }
 }
-module.exports = { executeGameCommand, searchGames, getTorrentOrMagnet };
+
+module.exports = { executeGameCommand, searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString };

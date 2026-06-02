@@ -49,6 +49,15 @@ const commands = [
                 option.setName('nome')
                     .setDescription('Nome do jogo para buscar')
                     .setRequired(true))
+            .addStringOption(option =>
+                option.setName('fonte')
+                    .setDescription('Filtrar por fonte específica (opcional)')
+                    .setRequired(false)
+                    .addChoices(
+                        { name: 'Qualquer uma', value: 'any' },
+                        { name: 'DODI Repacks', value: 'dodi' },
+                        { name: 'FitGirl Repacks', value: 'fitgirl' }
+                    ))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
