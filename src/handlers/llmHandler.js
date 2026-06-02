@@ -333,7 +333,6 @@ function stripThinking(text) {
     return clean;
 }
 
-const { isServerAccepted, sendTermsOfService, handleTosInteraction, reportNewGuild } = require('./tosHandler');
 const { checkBan, addBan, removeBan, getBans, checkAutoBan, getAutoBlock, getAutoBlockMode, forbiddenKeywords } = require('./banHandler');
 async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interaction) {
     const webhookUrl = config.avisosWebhookUrl;
@@ -1211,11 +1210,6 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 .setEmoji('🚀');
             const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
             return await unifiedReply(null, [], [banRow], [banEmbed]);
-        }
-        if (guildId && !isServerAccepted(guildId)) {
-            console.log(`[TOS] Servidor ${guildName} (${guildId}) ainda não aceitou os termos.`);
-            await sendTermsOfService(interaction);
-            return;
         }
         await unifiedReply('🧠 **Processando...**');
         const startTime = Date.now();

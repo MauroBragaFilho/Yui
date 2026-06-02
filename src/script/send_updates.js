@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const config = require('../config');
+const config = require('./src/config');
 
 const ACCEPTED_FILE = path.join(__dirname, 'src/data/accepted_servers.json');
 const SETTINGS_FILE = path.join(__dirname, 'src/data/server_settings.json');
@@ -17,7 +17,7 @@ const serverSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
 const updateEmbed = new EmbedBuilder()
     .setColor(0x9B59B6)
     .setTitle('🚀 Nova Versão da Hikari Disponível!')
-    .setDescription('Modificações da última atualização:\n\n- <placeholder :D >.')
+    .setDescription('Modificações da última atualização:\n\n- Placeholder.')
     .setFooter({ text: 'Hikari Updates • by yGuilhermy' })
     .setTimestamp();
 

@@ -472,6 +472,15 @@ module.exports = {
         }
         if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
         if (interaction.isCommand()) {
+            if (interaction.guildId) {
+                const { isServerAccepted } = require('../handlers/tosHandler');
+                if (!isServerAccepted(interaction.guildId) && interaction.commandName !== 'aceitar_tos') {
+                    return interaction.reply({
+                        content: '❌ **Acesso Bloqueado!** Este servidor ainda não aceitou os **Termos de Uso da Hikari**. Peça para um administrador liberar o bot executando o comando \`/aceitar_tos\`.',
+                        ephemeral: true
+                    });
+                }
+            }
             if (interaction.guildId && interaction.channelId) {
                 setServerLastChannel(interaction.guildId, interaction.channelId);
                 const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
@@ -701,6 +710,17 @@ module.exports = {
                 .setFooter({ text: `Servidor: ${interaction.guild?.name} • Hikari by yGuilhermy` })
                 .setTimestamp();
             await interaction.reply({ embeds: [embed] });
+        } else if (commandName === 'aceitar_tos') {
+            const hasPermission = !interaction.guild || (interaction.member && (
+                interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+                interaction.member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+                interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)
+            )) || config.isOwner(interaction.user.id);
+            if (!hasPermission) {
+                return interaction.reply({ content: '❌ Apenas administradores do servidor podem executar este comando.', ephemeral: true });
+            }
+            const { sendTermsOfService } = require('../handlers/tosHandler');
+            await sendTermsOfService(interaction);
         } else if (commandName === 'ajuda') {
             try {
                 const helpDataPath = path.join(__dirname, '../data/help.json');

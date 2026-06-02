@@ -167,6 +167,12 @@ const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
+            .setName('aceitar_tos')
+            .setDescription('Envia o painel com os Termos de Uso da Hikari para aceitação da administração. (Admin)')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+    ),
+    setGlobalContext(
+        new SlashCommandBuilder()
             .setName('anime_origem')
             .setDescription('Descobre o nome do anime através de uma imagem (screenshot).')
             .addAttachmentOption(option =>

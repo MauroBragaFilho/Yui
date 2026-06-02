@@ -33,6 +33,25 @@ module.exports = {
             const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
             return message.reply({ embeds: [banEmbed], components: [banRow] }).catch(() => {});
         }
+        if (message.guildId) {
+            const { isServerAccepted } = require('../handlers/tosHandler');
+            if (!isServerAccepted(message.guildId)) {
+                const prefix = config.prefix;
+                const isPrefix = message.content.startsWith(prefix);
+                const serverSettings = getServerSettings(message.guildId);
+                const respondToEveryone = serverSettings.respondToEveryone || false;
+                const isMention = message.mentions.has(client.user, { ignoreEveryone: true }) || (respondToEveryone && message.mentions.everyone);
+                const botName = config.botName || 'Hikari';
+                const nameRegex = new RegExp(`\\b${botName}\\b`, 'i');
+                const hasHikariName = nameRegex.test(message.content);
+                if (isMention || hasHikariName || isPrefix) {
+                    return message.reply({
+                        content: '❌ **Acesso Bloqueado!** Este servidor ainda não aceitou os **Termos de Uso da Hikari**. Peça para um administrador liberar o bot executando o comando \`/aceitar_tos\`.'
+                    }).catch(() => {});
+                }
+                return;
+            }
+        }
         const serverSettings = getServerSettings(message.guildId);
         const respondToEveryone = serverSettings.respondToEveryone || false;
         const isMention = message.mentions.has(client.user, { ignoreEveryone: true }) || (respondToEveryone && message.mentions.everyone);
