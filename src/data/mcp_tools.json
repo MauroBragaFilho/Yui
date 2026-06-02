@@ -1,22 +1,48 @@
 [
   {
     "meta": {
-      "label": "🎵 Download de Áudio (YouTube)",
-      "description": "Baixa o áudio de vídeos do YouTube em MP3",
+      "label": "🎵 Download de Áudio (YouTube/Instagram/TikTok)",
+      "description": "Baixa o áudio de vídeos do YouTube, Instagram Reels ou TikTok em MP3",
       "disableable": true
     },
     "type": "function",
     "function": {
       "name": "download_audio",
-      "description": "Use APENAS se o usuário fornecer um LINK URL (YouTube) E pedir para 'baixar', 'download', 'mp3' ou 'tocar' ou variantes. EXTRAIA A URL EXATA. NUNCA invente links. Se não houver link, não use esta tool.",
-      "textual_triggers": "Gatilhos: \"baixe essa musica\", \"download do vídeo\", \"quero o mp3\", \"link do audio\".",
-      "textual_args": "{ \"url\": \"URL do video\" }",
+      "description": "Use APENAS se o usuário fornecer um LINK URL (YouTube, Instagram Reels ou TikTok) E pedir para 'baixar áudio', 'download mp3', 'musica' ou variantes. EXTRAIA A URL EXATA. NUNCA invente links. Se não houver link, não use esta tool. Se o pedido for ambíguo (não especifica áudio ou vídeo), PERGUNTE ao usuário qual formato ele quer antes de chamar qualquer tool.",
+      "textual_triggers": "Gatilhos: \"baixe essa musica\", \"download do audio\", \"quero o mp3\", \"link do audio\", \"baixa o áudio desse reel\".",
+      "textual_args": "{ \"url\": \"URL do video (YouTube/Instagram/TikTok)\" }",
       "parameters": {
         "type": "object",
         "properties": {
           "url": {
             "type": "string",
-            "description": "URL do vídeo do YouTube"
+            "description": "URL do vídeo (YouTube, Instagram Reels ou TikTok)"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    }
+  },
+  {
+    "meta": {
+      "label": "🎬 Download de Vídeo (YouTube Shorts/Instagram/TikTok)",
+      "description": "Baixa vídeos do YouTube Shorts, Instagram Reels ou TikTok em MP4",
+      "disableable": true
+    },
+    "type": "function",
+    "function": {
+      "name": "download_video",
+      "description": "Use APENAS se o usuário fornecer um LINK URL (YouTube Shorts, Instagram Reels ou TikTok) E pedir para 'baixar vídeo', 'download video', 'salvar vídeo' ou variantes. APENAS YouTube Shorts é suportado para vídeos do YouTube (NÃO vídeos normais do YouTube). EXTRAIA A URL EXATA. NUNCA invente links. Se não houver link, não use esta tool. Se o pedido for ambíguo (não especifica áudio ou vídeo), PERGUNTE ao usuário qual formato ele quer antes de chamar qualquer tool.",
+      "textual_triggers": "Gatilhos: \"baixa esse vídeo\", \"download do reel\", \"salva esse tiktok\", \"quero o vídeo desse shorts\".",
+      "textual_args": "{ \"url\": \"URL do video (YouTube Shorts/Instagram Reels/TikTok)\" }",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL do vídeo (YouTube Shorts, Instagram Reels ou TikTok)"
           }
         },
         "required": [

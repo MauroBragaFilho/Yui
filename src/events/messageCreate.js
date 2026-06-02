@@ -4,7 +4,17 @@ const { checkBan } = require('../handlers/banHandler');
 const { resolveMentions } = require('../utils/mentions');
 const { addToQueue, getChannelSettings, setChannelPersona, setChannelChatter, getServerSettings } = require('../handlers/llmHandler');
 const { generateImage } = require('../handlers/imageHandler');
-const { downloadYouTubeAudio, sanitizeFilenameForDiscord } = require('../handlers/youtubeAudioHandler');
+const {
+    downloadAudio,
+    downloadVideo,
+    sanitizeFilenameForDiscord,
+    isUserBusy,
+    lockUser,
+    unlockUser,
+    canBypass,
+    storeVideoForCompression,
+    formatVideoSuccessMessage
+} = require('../handlers/youtubeAudioHandler');
 const config = require('../config');
 module.exports = {
     name: 'messageCreate',
@@ -185,22 +195,64 @@ INSTRUÇÃO: Entre na conversa espontaneamente.`;
             } else if (commandName === 'yt_audio') {
                 const videoUrl = args[0];
                 if (!videoUrl) return message.reply('Forneça a URL.');
-                const processingMessage = await message.reply('Baixando...');
+                const userId = message.author.id;
+                if (!canBypass(userId) && isUserBusy(userId)) return message.reply('⏳ Você já tem um download em andamento.');
+                const processingMessage = await message.reply('🎧 Baixando áudio...');
+                lockUser(userId);
                 let downloadedAudioInfo = null;
                 try {
-                    downloadedAudioInfo = await downloadYouTubeAudio(videoUrl);
+                    downloadedAudioInfo = await downloadAudio(videoUrl, { source: 'Prefixo', user: message.author, guild: message.guild });
                     if (downloadedAudioInfo?.filePath) {
                         const attachment = new AttachmentBuilder(downloadedAudioInfo.filePath, { name: `${sanitizeFilenameForDiscord(downloadedAudioInfo.metadata.title)}.mp3` });
-                        await processingMessage.edit({ content: `Pronto: \`${downloadedAudioInfo.metadata.title}\``, files: [attachment] });
+                        await processingMessage.edit({ content: `🎵 Pronto: \`${downloadedAudioInfo.metadata.title}\``, files: [attachment] });
                     } else {
                         await processingMessage.edit('Falhou.');
                     }
                 } catch (error) {
-                    await processingMessage.edit(`Erro: ${error.message}`);
+                    await processingMessage.edit(`❌ Erro: ${error.message}`);
                 } finally {
+                    unlockUser(userId);
                     if (downloadedAudioInfo?.filePath && fs.existsSync(downloadedAudioInfo.filePath)) {
                         fs.unlink(downloadedAudioInfo.filePath, () => {});
                     }
+                }
+            } else if (commandName === 'yt_video') {
+                const videoUrl = args[0];
+                if (!videoUrl) return message.reply('Forneça a URL.');
+                const userId = message.author.id;
+                if (!canBypass(userId) && isUserBusy(userId)) return message.reply('⏳ Você já tem um download em andamento.');
+                const processingMessage = await message.reply('🎬 Baixando vídeo...');
+                lockUser(userId);
+                try {
+                    const videoData = await downloadVideo(videoUrl, { source: 'Prefixo', user: message.author, guild: message.guild });
+                    const guild = message.guild;
+                    const attachmentLimit = guild ? guild.premiumTier === 3 ? 100 * 1024 * 1024 : guild.premiumTier === 2 ? 50 * 1024 * 1024 : 25 * 1024 * 1024 : 25 * 1024 * 1024;
+                    if (videoData.fileSize <= attachmentLimit) {
+                        const displayFileName = sanitizeFilenameForDiscord(videoData.metadata.title || 'video');
+                        const attachment = new AttachmentBuilder(videoData.filePath, { name: `${displayFileName}.mp4` });
+                        const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
+                        await processingMessage.edit({ content: formatVideoSuccessMessage(videoData), files: [attachment] });
+                        try { if (fs.existsSync(videoData.filePath)) fs.unlinkSync(videoData.filePath); } catch (e) {}
+                    } else {
+                        const fileId = storeVideoForCompression(videoData.filePath);
+                        const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
+                        const limitMB = (attachmentLimit / (1024 * 1024)).toFixed(0);
+                        const { EmbedBuilder: EB, ActionRowBuilder: AR, ButtonBuilder: BB, ButtonStyle: BS } = require('discord.js');
+                        const compressEmbed = new EB()
+                            .setColor(0xF39C12)
+                            .setTitle('📦 Vídeo Grande Demais')
+                            .setDescription(`O vídeo tem **${sizeMB} MB**, mas o limite é **${limitMB} MB**.\nClique no botão para tentar comprimir.\n\n⏰ *Disponível por 6 horas.*`)
+                            .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                            .setTimestamp();
+                        const row = new AR().addComponents(
+                            new BB().setCustomId(`compress_video_${fileId}`).setLabel('🔄 Tentar Compressão').setStyle(BS.Primary)
+                        );
+                        await processingMessage.edit({ content: '', embeds: [compressEmbed], components: [row] });
+                    }
+                } catch (error) {
+                    await processingMessage.edit(`❌ Erro: ${error.message}`);
+                } finally {
+                    unlockUser(userId);
                 }
             }
         }

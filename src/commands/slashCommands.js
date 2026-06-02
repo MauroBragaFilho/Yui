@@ -99,10 +99,19 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('baixar_musica')
-            .setDescription('Baixa o áudio de um vídeo do YouTube em MP3.')
+            .setDescription('Baixa o áudio de um vídeo (YouTube, Instagram Reels, TikTok) em MP3.')
             .addStringOption(option =>
                 option.setName('url')
-                    .setDescription('A URL do vídeo do YouTube.')
+                    .setDescription('A URL do vídeo (YouTube, Instagram Reels ou TikTok).')
+                    .setRequired(true))
+    ),
+    setGlobalContext(
+        new SlashCommandBuilder()
+            .setName('baixar_video')
+            .setDescription('Baixa um vídeo (YouTube Shorts, Instagram Reels, TikTok) em MP4.')
+            .addStringOption(option =>
+                option.setName('url')
+                    .setDescription('A URL do vídeo (YouTube Shorts, Instagram Reels ou TikTok).')
                     .setRequired(true))
     ),
     setGlobalContext(

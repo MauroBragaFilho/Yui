@@ -25,7 +25,23 @@ const {
     setServerLastChannel
 } = require('../handlers/llmHandler');
 const { generateImage } = require('../handlers/imageHandler');
-const { downloadYouTubeAudio, sanitizeFilenameForDiscord } = require('../handlers/youtubeAudioHandler');
+const {
+    downloadAudio,
+    downloadVideo,
+    sanitizeFilenameForDiscord,
+    isUserBusy,
+    lockUser,
+    unlockUser,
+    canBypass,
+    storeVideoForCompression,
+    getPendingVideo,
+    removePendingVideo,
+    enqueueCompression,
+    isCompressionActive,
+    getMemoryUsagePercent,
+    logCompressionAction,
+    formatVideoSuccessMessage
+} = require('../handlers/youtubeAudioHandler');
 const { executeGameCommand } = require('../handlers/gameHandler');
 const { handleSauceCommand } = require('../handlers/sauceHandler');
 const { getSteamGameInfo } = require('../handlers/steamHandler');
@@ -482,6 +498,53 @@ module.exports = {
                     return await interaction.update({ embeds: [embed], components: [menuRow, btnRow] });
                 }
             }
+            if (cid.startsWith('compress_video_')) {
+                const fileId = cid.replace('compress_video_', '');
+                const pending = getPendingVideo(fileId);
+                if (!pending) {
+                    return interaction.reply({ content: '⏰ Este vídeo já expirou (limite de 6 horas). Faça o download novamente.', ephemeral: true });
+                }
+                const guild = interaction.guild;
+                const attachmentLimit = guild ? guild.premiumTier === 3 ? 100 * 1024 * 1024 : guild.premiumTier === 2 ? 50 * 1024 * 1024 : 25 * 1024 * 1024 : 25 * 1024 * 1024;
+                const isQueue = isCompressionActive();
+                const progressEmbed = new EmbedBuilder()
+                    .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                    .setTimestamp();
+                if (isQueue) {
+                    progressEmbed.setColor(0xF1C40F)
+                        .setTitle('⏳ Compressão na Fila')
+                        .setDescription('Já existe uma compressão de vídeo em andamento no bot. Seu vídeo foi adicionado à fila de espera e será processado automaticamente assim que a atual terminar!\n\nPor favor, aguarde...');
+                } else {
+                    progressEmbed.setColor(0x3498DB)
+                        .setTitle('🔄 Comprimindo Vídeo...')
+                        .setDescription('Iniciando a compressão do vídeo para reduzir o tamanho do arquivo. Isso pode levar alguns minutos. Não se preocupe, estou trabalhando nisso!');
+                }
+                await interaction.update({ embeds: [progressEmbed], components: [] });
+                logCompressionAction({ user: interaction.user, guild: interaction.guild }, isQueue ? 'Fila' : 'Iniciado');
+                try {
+                    const result = await enqueueCompression(pending.filePath, attachmentLimit, interaction.user.id);
+                    const attachment = new AttachmentBuilder(result.filePath, { name: 'video_compressed.mp4' });
+                    const sizeMB = (result.fileSize / (1024 * 1024)).toFixed(1);
+                    await interaction.editReply({ content: `✅ **Vídeo comprimido com sucesso!** (${sizeMB} MB)`, embeds: [], files: [attachment], components: [] });
+                    logCompressionAction({ user: interaction.user, guild: interaction.guild }, 'Sucesso', `Tamanho: ${sizeMB} MB`);
+                    try { if (fs.existsSync(result.filePath)) fs.unlinkSync(result.filePath); } catch (e) {}
+                    removePendingVideo(fileId);
+                } catch (compressError) {
+                    const errorEmbed = new EmbedBuilder()
+                        .setColor(0xE74C3C)
+                        .setTitle('❌ Falha na Compressão')
+                        .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                        .setTimestamp();
+                    if (compressError.message === 'MEMORY_ERROR') {
+                        errorEmbed.setDescription(`⚠️ Ocorreu um erro de falta de memória no servidor da host ao tentar comprimir o vídeo. Por favor, entre em contato com <@${config.ownerId}>.`);
+                    } else {
+                        errorEmbed.setDescription(`❌ Ocorreu um erro ao comprimir o vídeo: ${compressError.message}`);
+                    }
+                    await interaction.editReply({ embeds: [errorEmbed], components: [] });
+                    logCompressionAction({ user: interaction.user, guild: interaction.guild }, 'Erro', `Detalhe: ${compressError.message}`);
+                }
+                return;
+            }
             await handleTosInteraction(interaction);
             await handleBanInteraction(interaction, client);
             return;
@@ -794,25 +857,70 @@ module.exports = {
             }
         } else if (commandName === 'baixar_musica') {
             const videoUrl = interaction.options.getString('url');
+            const userId = interaction.user.id;
+            if (!canBypass(userId) && isUserBusy(userId)) {
+                return interaction.reply({ content: '⏳ Você já tem um download em andamento. Aguarde ele terminar.', ephemeral: true });
+            }
             await interaction.deferReply({ ephemeral: false });
+            lockUser(userId);
             let downloadedAudioInfo = null;
             try {
-                downloadedAudioInfo = await downloadYouTubeAudio(videoUrl);
+                downloadedAudioInfo = await downloadAudio(videoUrl, { source: 'Slash', user: interaction.user, guild: interaction.guild });
                 if (downloadedAudioInfo && downloadedAudioInfo.filePath) {
                     const { filePath, metadata } = downloadedAudioInfo;
                     const displayFileName = sanitizeFilenameForDiscord(metadata.title || 'audio');
                     const attachment = new AttachmentBuilder(filePath, { name: `${displayFileName}.mp3` });
-                    await interaction.editReply({ content: `Áudio baixado: \`${metadata.title}\``, files: [attachment] });
+                    await interaction.editReply({ content: `🎵 Áudio baixado: \`${metadata.title}\``, files: [attachment] });
                 } else {
                     await interaction.editReply('Não consegui baixar o áudio.');
                 }
             } catch (error) {
-                console.error('yt_audio:', error);
-                await interaction.editReply(`Erro: ${error.message}`);
+                console.error('[BaixarMusica]', error);
+                await interaction.editReply(`❌ Erro: ${error.message}`);
             } finally {
+                unlockUser(userId);
                 if (downloadedAudioInfo && downloadedAudioInfo.filePath && fs.existsSync(downloadedAudioInfo.filePath)) {
-                    fs.unlink(downloadedAudioInfo.filePath, (err) => { if (err) console.error(err); });
+                    fs.unlink(downloadedAudioInfo.filePath, () => {});
                 }
+            }
+        } else if (commandName === 'baixar_video') {
+            const videoUrl = interaction.options.getString('url');
+            const userId = interaction.user.id;
+            if (!canBypass(userId) && isUserBusy(userId)) {
+                return interaction.reply({ content: '⏳ Você já tem um download em andamento. Aguarde ele terminar.', ephemeral: true });
+            }
+            await interaction.deferReply({ ephemeral: false });
+            lockUser(userId);
+            try {
+                const videoData = await downloadVideo(videoUrl, { source: 'Slash', user: interaction.user, guild: interaction.guild });
+                const guild = interaction.guild;
+                const attachmentLimit = guild ? guild.premiumTier === 3 ? 100 * 1024 * 1024 : guild.premiumTier === 2 ? 50 * 1024 * 1024 : 25 * 1024 * 1024 : 25 * 1024 * 1024;
+                if (videoData.fileSize <= attachmentLimit) {
+                    const displayFileName = sanitizeFilenameForDiscord(videoData.metadata.title || 'video');
+                    const attachment = new AttachmentBuilder(videoData.filePath, { name: `${displayFileName}.mp4` });
+                    const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
+                    await interaction.editReply({ content: formatVideoSuccessMessage(videoData), files: [attachment] });
+                    try { if (fs.existsSync(videoData.filePath)) fs.unlinkSync(videoData.filePath); } catch (e) {}
+                } else {
+                    const fileId = storeVideoForCompression(videoData.filePath);
+                    const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
+                    const limitMB = (attachmentLimit / (1024 * 1024)).toFixed(0);
+                    const compressEmbed = new EmbedBuilder()
+                        .setColor(0xF39C12)
+                        .setTitle('📦 Vídeo Grande Demais')
+                        .setDescription(`O vídeo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor é **${limitMB} MB**.\n\nClique no botão abaixo para tentar comprimir o vídeo automaticamente.\n\n⏰ *O arquivo ficará disponível por 6 horas.*`)
+                        .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                        .setTimestamp();
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`compress_video_${fileId}`).setLabel('🔄 Tentar Compressão').setStyle(ButtonStyle.Primary)
+                    );
+                    await interaction.editReply({ embeds: [compressEmbed], components: [row] });
+                }
+            } catch (error) {
+                console.error('[BaixarVideo]', error);
+                await interaction.editReply(`❌ Erro: ${error.message}`);
+            } finally {
+                unlockUser(userId);
             }
         } else if (commandName === 'buscar_jogo') {
             await executeGameCommand(interaction);

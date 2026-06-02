@@ -4,7 +4,17 @@ const fs = require('fs');
 const path = require('path');
 const { smartSearch } = require('./searchManager');
 const { AttachmentBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, WebhookClient, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { downloadYouTubeAudio, sanitizeFilenameForDiscord } = require('./youtubeAudioHandler');
+const {
+    downloadAudio,
+    downloadVideo,
+    sanitizeFilenameForDiscord,
+    isUserBusy,
+    lockUser,
+    unlockUser,
+    canBypass,
+    storeVideoForCompression,
+    formatVideoSuccessMessage
+} = require('./youtubeAudioHandler');
 const { searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString } = require('./gameHandler');
 const { generateImage } = require('./imageHandler');
 const { getSteamGameInfo } = require('./steamHandler');
@@ -117,6 +127,7 @@ function buildToolsDefinition(guildId, userId = null) {
     }
     const examplesMap = {
         download_audio:  'User: "Baixe pra mim https://youtu.be/..."\nResponse: { "thought": "User quer baixar audio.", "tool": "download_audio", "args": { "url": "https://youtu.be/..." } }',
+        download_video:  'User: "Baixa esse vídeo https://www.instagram.com/reel/..."\nResponse: { "thought": "User quer baixar vídeo.", "tool": "download_video", "args": { "url": "https://www.instagram.com/reel/..." } }',
         search_game:     'User: "Arruma o torrent do GTA V"\nResponse: { "thought": "User quer jogo GTA V.", "tool": "search_game", "args": { "game_name": "Grand Theft Auto V" } }',
         search_web:      'User: "Pesquise sobre Hytale"\nResponse: { "thought": "User quer info externa (Web).", "tool": "search_web", "args": { "query": "Hytale game information news" } }',
         show_bot_menu:   'User: "Hikari, abra o menu interativo de ajuda por favor"\nResponse: { "thought": "User pediu explicitamente para abrir o menu visual de ajuda.", "tool": "show_bot_menu", "args": { "context": "geral" } }',
@@ -1288,28 +1299,78 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         console.log(`[AI THOUGHT] ${toolData.thought}`);
                     }
                     if (toolData.tool === 'download_audio') {
+                        const audioUserId = userId;
+                        if (!canBypass(audioUserId) && isUserBusy(audioUserId)) {
+                            await unifiedReply('⏳ Você já tem um download em andamento. Aguarde.');
+                            return;
+                        }
+                        lockUser(audioUserId);
                         try {
                             if (type === 'mention' && interaction.suppressEmbeds) {
-                                try {
-                                    await interaction.suppressEmbeds(true);
-                                } catch (e) {
-                                    console.warn('Não foi possível remover embed da mensagem do usuário:', e.message);
-                                }
+                                try { await interaction.suppressEmbeds(true); } catch (e) {}
                             }
                             await unifiedReply(`🎧 **(Tool Use)** Baixando Áudio...\n*Pensamento: ${toolData.thought || 'Detectado link de música'}*`);
-                            const audioData = await downloadYouTubeAudio(toolData.args.url);
+                            const audioData = await downloadAudio(toolData.args.url, { source: 'MCP', userId, userTag, guildName: interaction.guild?.name || 'DM' });
                             if (audioData && audioData.filePath) {
                                 const { filePath, metadata } = audioData;
                                 const displayFileName = sanitizeFilenameForDiscord(metadata.title || 'audio');
                                 const attachment = new AttachmentBuilder(filePath, { name: `${displayFileName}.mp3` });
                                 await unifiedReply(`✅ Áudio: \`${metadata.title}\``, [attachment]);
-                                if (fs.existsSync(filePath)) fs.unlink(filePath, () => { });
+                                if (fs.existsSync(filePath)) fs.unlink(filePath, () => {});
                             }
                         } catch (audioError) {
                             console.error('[DownloadAudio] Erro:', audioError.message);
                             await unifiedReply(`❌ Erro ao baixar o áudio: ${audioError.message}`);
+                        } finally {
+                            unlockUser(audioUserId);
                         }
                         savePromptToHistory(prompt, userTag, userId, `[TOOL: DOWNLOAD_AUDIO]`, interaction);
+                        return;
+                    }
+                    if (toolData.tool === 'download_video') {
+                        const videoUserId = userId;
+                        if (!canBypass(videoUserId) && isUserBusy(videoUserId)) {
+                            await unifiedReply('⏳ Você já tem um download em andamento. Aguarde.');
+                            return;
+                        }
+                        lockUser(videoUserId);
+                        try {
+                            if (type === 'mention' && interaction.suppressEmbeds) {
+                                try { await interaction.suppressEmbeds(true); } catch (e) {}
+                            }
+                            await unifiedReply(`🎬 **(Tool Use)** Baixando Vídeo...\n*Pensamento: ${toolData.thought || 'Detectado link de vídeo'}*`);
+                            const videoData = await downloadVideo(toolData.args.url, { source: 'MCP', userId, userTag, guildName: interaction.guild?.name || 'DM' });
+                            const guild = interaction.guild || interaction?.guild;
+                            const attachmentLimit = guild ? guild.premiumTier === 3 ? 100 * 1024 * 1024 : guild.premiumTier === 2 ? 50 * 1024 * 1024 : 25 * 1024 * 1024 : 25 * 1024 * 1024;
+                            if (videoData.fileSize <= attachmentLimit) {
+                                const displayFileName = sanitizeFilenameForDiscord(videoData.metadata.title || 'video');
+                                const attachment = new AttachmentBuilder(videoData.filePath, { name: `${displayFileName}.mp4` });
+                                await unifiedReply(formatVideoSuccessMessage(videoData), [attachment]);
+                                try { if (fs.existsSync(videoData.filePath)) fs.unlinkSync(videoData.filePath); } catch (e) {}
+                            } else {
+                                const fileId = storeVideoForCompression(videoData.filePath);
+                                const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
+                                const limitMB = (attachmentLimit / (1024 * 1024)).toFixed(0);
+                                const compressEmbed = new EmbedBuilder()
+                                    .setColor(0xF39C12)
+                                    .setTitle('📦 Vídeo Grande Demais')
+                                    .setDescription(`O vídeo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor é **${limitMB} MB**.\n\nClique no botão abaixo para tentar comprimir o vídeo automaticamente.\n\n⏰ *O arquivo ficará disponível por 6 horas.*`)
+                                    .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                                    .setTimestamp();
+                                const row = new ActionRowBuilder().addComponents(
+                                    new ButtonBuilder().setCustomId(`compress_video_${fileId}`).setLabel('🔄 Tentar Compressão').setStyle(ButtonStyle.Primary)
+                                );
+                                const payload = { content: '', embeds: [compressEmbed], components: [row] };
+                                if (type === 'mention') await replyMessage.edit(payload);
+                                else await interaction.editReply(payload);
+                            }
+                        } catch (videoError) {
+                            console.error('[DownloadVideo] Erro:', videoError.message);
+                            await unifiedReply(`❌ Erro ao baixar o vídeo: ${videoError.message}`);
+                        } finally {
+                            unlockUser(videoUserId);
+                        }
+                        savePromptToHistory(prompt, userTag, userId, `[TOOL: DOWNLOAD_VIDEO]`, interaction);
                         return;
                     }
                     if (toolData.tool === 'search_game') {
