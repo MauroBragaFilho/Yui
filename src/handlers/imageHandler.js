@@ -46,7 +46,7 @@ async function tryGradioSDXL(prompt, negativePrompt, width, height) {
     return { imageUrl, actualSeed, modelName: 'SDXL-Flash (Gradio)' };
 }
 async function tryHuggingFace(prompt, negativePrompt, width, height) {
-    const hfToken = process.env.HF_TOKEN;
+    const hfToken = config.hfToken;
     if (!hfToken) throw new Error('HF_TOKEN não configurado');
     console.log('[Image 2/5] Tentando HuggingFace (FLUX.1-schnell)...');
     const model  = 'black-forest-labs/FLUX.1-schnell';
@@ -88,7 +88,7 @@ async function tryHuggingFace(prompt, negativePrompt, width, height) {
     return { imageUrl: null, localFilePath: filePath, actualSeed: seed, modelName: 'FLUX.1-schnell (HuggingFace)' };
 }
 async function tryStableHorde(prompt, negativePrompt, width, height) {
-    const apiKey = process.env.HORDE_IMAGE_API_KEY || process.env.HORDE_API_KEY || '0000000000';
+    const apiKey = config.hordeImageApiKey;
     console.log('[Image 3/5] Tentando Stable Horde...');
     const submitRes = await fetch('https://stablehorde.net/api/v2/generate/async', {
         method: 'POST',
@@ -158,7 +158,7 @@ async function tryStableHorde(prompt, negativePrompt, width, height) {
     throw new Error('Stable Horde Timeout (120s)');
 }
 async function tryTogetherAI(prompt, negativePrompt, width, height) {
-    const apiKey = process.env.TOGETHER_API_KEY;
+    const apiKey = config.togetherApiKey;
     if (!apiKey) throw new Error('TOGETHER_API_KEY não configurado');
     console.log('[Image 4/5] Tentando Together AI (FLUX.1-schnell)...');
     const response = await fetch('https://api.together.xyz/v1/images/generations', {

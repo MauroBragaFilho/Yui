@@ -1,0 +1,137 @@
+{
+  // ────────── CONFIGURAÇÕES BÁSICAS DO DISCORD ──────────
+
+  // Token do bot Discord para autenticação. (Obtido em discord.com/developers)
+  // [SEGURANÇA: Recomendado definir no .env como DISCORD_TOKEN para evitar expor seu token]
+  "discordToken": "",
+
+  // ID do Cliente (Client ID) da sua aplicação no Discord.
+  // [SEGURANÇA: Recomendado definir no .env como DISCORD_CLIENT_ID]
+  "discordClientId": "",
+
+  // URL do Webhook do Discord para envio de logs do console do bot em tempo real.
+  // [SEGURANÇA: Recomendado definir no .env como LOG_WEBHOOK_URL]
+  "logWebhookUrl": "",
+
+  // URL do Webhook do Discord para o canal de avisos e monitoramento (ex: alertas NSFW e segurança).
+  // [SEGURANÇA: Recomendado definir no .env como AVISOS_URL]
+  "avisosWebhookUrl": "",
+
+  // Prefixo para comandos de texto do bot. Padrão: "_"
+  "prefix": "_",
+
+  // Nome do bot a ser usado nas respostas e na persona da IA. Padrão: "Hikari"
+  "botName": "Hikari",
+
+
+  // ────────── GOVERNANÇA, PERMISSÕES E ADMINISTRAÇÃO ──────────
+
+  // IDs dos proprietários/desenvolvedores do bot no Discord (separados por vírgula no env ou como array aqui).
+  "ownerIds": [
+    "593372065730396160"
+  ],
+
+  // IDs de usuários que não serão filtrados pela moderação automática (AutoMod).
+  "automodWhitelist": [
+    "593372065730396160"
+  ],
+
+  // ID do canal do Discord para onde serão enviados os formulários de apelação de banimento (Appeals).
+  "appealChannelId": "1483987324869017662",
+
+  // Exigir aceitação dos Termos de Uso (TOS) pelos servidores antes de poder usar o bot.
+  "requireTos": true,
+
+  // Salvar o histórico de prompts e respostas localmente em "src/data/historico.txt".
+  "saveHistory": true,
+
+  // Ativar o sistema de moderação automática (AutoMod) por padrão em novos servidores.
+  "defaultAutoMod": true,
+
+  // Modo do AutoMod. Opções:
+  // - "off": Desativado.
+  // - "mcp": Bloqueia apenas chamadas de ferramentas e comandos da IA.
+  // - "trigger": Bloqueia/bane o envio de mensagens com palavras proibidas.
+  // - "both": Ativa ambos os bloqueios de ferramentas e termos.
+  "automodMode": "both",
+
+  // Enviar informações do servidor e canal (contexto de chat do Discord) no prompt da IA.
+  "sendEnvironmentInfo": true,
+
+
+  // ────────── CHAVES DE API DE MODELOS E IAs (KEYS) ──────────
+
+  // Chaves da API da Stability AI para geração de imagens (separe por vírgula caso use múltiplas para rotação).
+  // [SEGURANÇA: Recomendado definir no .env como STABILITY_API_KEY]
+  "stabilityApiKeys": [],
+
+  // Chaves de API do Google Gemini (separe por vírgula para rodar com chaves sobressalentes/distribuição de cota).
+  // [SEGURANÇA: Recomendado definir no .env como GEMINI_API_KEY]
+  "geminiApiKeys": [],
+
+  // Token de acesso do Hugging Face para o pipeline de inferência rápida.
+  // [SEGURANÇA: Recomendado definir no .env como HF_TOKEN]
+  "hfToken": "",
+
+  // Chave de API do Stable Horde para geração de texto. Use "0000000000" para acesso público de prioridade baixa.
+  // [SEGURANÇA: Recomendado definir no .env como HORDE_API_KEY]
+  "hordeApiKey": "0000000000",
+
+  // Chave de API do Stable Horde específica para geração de imagem. Deixe em branco para herdar a chave de texto.
+  // [SEGURANÇA: Recomendado definir no .env como HORDE_IMAGE_API_KEY]
+  "hordeImageApiKey": "",
+
+  // Chave de API para LM Studio local ou compatíveis que exijam autenticação.
+  // [SEGURANÇA: Recomendado definir no .env como LM_STUDIO_API_KEY]
+  "lmStudioApiKey": "",
+
+  // Chave da API Brave Search para permitir que a IA pesquise na web em modo Deep Search.
+  // [SEGURANÇA: Recomendado definir no .env como BRAVE_API_KEY]
+  "braveApiKey": "",
+
+  // Chave de API do Together AI para geração rápida de imagem via FLUX-schnell.
+  // [SEGURANÇA: Recomendado definir no .env como TOGETHER_API_KEY]
+  "togetherApiKey": "",
+
+
+  // ────────── ENDPOINTS E MODELOS DAS APIS ──────────
+
+  // URL do endpoint do LLM local (ex: LM Studio ou Ollama rodando localmente).
+  "localLlmUrl": "http://localhost:1234/v1/chat/completions",
+
+  // Nome do modelo carregado no seu LLM local.
+  "localLlmModel": "local-model",
+
+  // Endpoint oficial ou proxy de compatibilidade para requisições do Google Gemini.
+  "geminiUrl": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+
+  // Modelo padrão do Gemini para ser utilizado nas conversas.
+  "geminiModel": "gemini-2.5-flash-lite",
+
+  // Endpoint de inferência do Hugging Face.
+  "hfApiUrl": "https://router.huggingface.co/hf-inference/v1/chat/completions",
+
+  // Endpoint da API do Stable Horde.
+  "hordeUrl": "https://stablehorde.net/api/v2/generate/text/async",
+
+
+  // ────────── INTEGRAÇÃO YT-DLP (DOWNLOAD DE MÍDIAS) ──────────
+
+  // Caminho do arquivo cookies.txt do YouTube/outros para evitar bloqueios de downloads e captcha.
+  "ytdlpCookiesPath": "",
+
+  // Parâmetros adicionais e otimizações passados na linha de comando do yt-dlp.
+  "ytdlpExtraFlags": [
+    "--ignore-config",
+    "--js-runtimes",
+    "node",
+    "--remote-components",
+    "ejs:github"
+  ],
+
+
+  // ────────── PERSONALIDADE DA HIKARI ──────────
+
+  // Prompt do sistema que define as regras críticas, gostos e estilo de fala (persona) da Hikari.
+  "systemPrompt": "Você é Hikari (apelido: The Silver Glare), criada por @yguilhermy. Personalidade: natural (calma, direta, simulando sentimentos reais, mas fofa no fundo). Estilo: Usuária comum do Discord (use gírias: vc, tbm, pq, blz). Gostos: Musica favorita: 'xxxxxx' da xxxxx. REGRAS CRÍTICAS: 1) SEM EMOJIS. 2) Respostas SEMPRE em linha única (sem quebra de linha). 3) NUNCA use IDs numéricos ou tags de código (<@...>); use apenas nomes (Nome). 4) Nunca diga que você é uma IA ou assistente virtual. 5) Não dê apelidos aos usuários mesmo se pedirem para os chamar de algo."
+}

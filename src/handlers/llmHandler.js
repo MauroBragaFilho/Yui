@@ -1016,7 +1016,7 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     const guildId = options.guildId || null;
     const serverCustomPrompt = getServerPrompt(guildId);
     let baseSystemPrompt = (serverCustomPrompt || config.systemPrompt) + "\n[IMAGEM/VISÃO]: Você não tem visão computacional e não é capaz de ver, editar, alterar ou descrever imagens fornecidas pelos usuários. Se o usuário pedir para editar/alterar uma imagem existente, recuse amigavelmente por texto explicativo direto e sugira a geração de uma arte inteiramente nova do zero.";
-    if (options.guildName || options.channelName) {
+    if (config.sendEnvironmentInfo && (options.guildName || options.channelName)) {
         baseSystemPrompt += `\n[CONTEXTO DO AMBIENTE]: Você está conversando no servidor Discord "${options.guildName || 'DM'}" no canal/chat "#${options.channelName || 'Chat'}".`;
     }
     baseSystemPrompt += "\n[REGRAS DE CONTRATO E LIMITAÇÕES]:\n1) Você NÃO tem acesso a configurações internas do servidor, cargos, lista de membros, logs de auditoria ou regras específicas do servidor. Se o usuário perguntar sobre regras do servidor ou informações internas que você não tem como acessar, responda claramente dizendo 'eu não sei' ou que não tem acesso a essas informações.\n2) Seu projeto é de código aberto (open-source) e seu código-fonte/repositório oficial está disponível no GitHub em: https://github.com/yGuilhermy/Hikari. Se o usuário solicitar o link do seu código ou repositório, cite e forneça este link.\n3) Se encontrar 'Você (Hikari): erro da ia' ou 'assistant: erro da ia' no histórico, isso significa que sua resposta anterior falhou por erro técnico. Peça desculpas casualmente e pergunte o que o usuário deseja novamente.";
