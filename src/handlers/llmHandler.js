@@ -840,7 +840,7 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
             if (apiKeys.length > 1) {
                 console.log(`[Gemini] Usando chave ${i + 1}/${apiKeys.length}...`);
             }
-            const response = await axios.post(config.geminiUrl, {
+            const payload = {
                 model: config.geminiModel,
                 messages: [
                     { role: 'system', content: systemPrompt },
@@ -849,18 +849,43 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
                 ],
                 temperature: providerSettings.gemini.temperature,
                 max_tokens: providerSettings.gemini.max_tokens,
-            }, {
+            };
+            if (!options.disableTools) {
+                payload.tools = buildToolsPayload(options.guildId || null, options.userId || null);
+            }
+            const response = await axios.post(config.geminiUrl, payload, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${currentKey}`
                 },
                 timeout: providerSettings.gemini.timeout
             });
-            if (response.data?.choices?.[0]?.message?.content) {
-                return {
-                    text: response.data.choices[0].message.content,
-                    modelName: `Gemini ${config.geminiModel} (K#${i + 1})`
-                };
+            const choice = response.data?.choices?.[0];
+            if (choice) {
+                const msg = choice.message;
+                if (msg.tool_calls && msg.tool_calls.length > 0) {
+                    const firstTool = msg.tool_calls[0].function;
+                    let args = {};
+                    try {
+                        args = JSON.parse(firstTool.arguments);
+                    } catch (e) {
+                        console.warn("[Gemini MCP] JSON Args Warning:", e.message);
+                    }
+                    const formattedResponse = JSON.stringify({
+                        thought: "Action triggered by Gemini MCP 2.0",
+                        tool: firstTool.name,
+                        args: args
+                    });
+                    return {
+                        text: formattedResponse,
+                        modelName: `Gemini ${config.geminiModel} (K#${i + 1})`
+                    };
+                } else if (msg.content) {
+                    return {
+                        text: msg.content,
+                        modelName: `Gemini ${config.geminiModel} (K#${i + 1})`
+                    };
+                }
             }
         } catch (error) {
             const status = error.response ? error.response.status : 'Unknown';
@@ -991,6 +1016,10 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     const guildId = options.guildId || null;
     const serverCustomPrompt = getServerPrompt(guildId);
     let baseSystemPrompt = (serverCustomPrompt || config.systemPrompt) + "\n[IMAGEM/VISÃO]: Você não tem visão computacional e não é capaz de ver, editar, alterar ou descrever imagens fornecidas pelos usuários. Se o usuário pedir para editar/alterar uma imagem existente, recuse amigavelmente por texto explicativo direto e sugira a geração de uma arte inteiramente nova do zero.";
+    if (options.guildName || options.channelName) {
+        baseSystemPrompt += `\n[CONTEXTO DO AMBIENTE]: Você está conversando no servidor Discord "${options.guildName || 'DM'}" no canal/chat "#${options.channelName || 'Chat'}".`;
+    }
+    baseSystemPrompt += "\n[REGRAS DE CONTRATO E LIMITAÇÕES]:\n1) Você NÃO tem acesso a configurações internas do servidor, cargos, lista de membros, logs de auditoria ou regras específicas do servidor. Se o usuário perguntar sobre regras do servidor ou informações internas que você não tem como acessar, responda claramente dizendo 'eu não sei' ou que não tem acesso a essas informações.\n2) Seu projeto é de código aberto (open-source) e seu código-fonte/repositório oficial está disponível no GitHub em: https://github.com/yGuilhermy/Hikari. Se o usuário solicitar o link do seu código ou repositório, cite e forneça este link.\n3) Se encontrar 'Você (Hikari): erro da ia' ou 'assistant: erro da ia' no histórico, isso significa que sua resposta anterior falhou por erro técnico. Peça desculpas casualmente e pergunte o que o usuário deseja novamente.";
     if (channelId) {
         const settings = channelSettings[channelId];
         const channelPersona = (typeof settings === 'string') ? settings : settings?.instruction;
@@ -1029,13 +1058,14 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
                     console.warn(`Erro ao atualizar mensagem de processamento para ${providerKey}:`, e.message);
                 }
             }
-            const isLocalMCP = (provider.func === tryLocal && config.lmStudioApiKey);
+            const useNativeMCP = (provider.func === tryLocal && config.lmStudioApiKey) || (provider.func === tryGemini);
             let effectiveSystemPrompt = baseSystemPrompt;
             if (!options.disableTools) {
-                if (!isLocalMCP) {
-                    effectiveSystemPrompt += buildToolsDefinition(guildId, options.userId || null);
-                } else {
+                if (provider.func === tryLocal && config.lmStudioApiKey) {
                     effectiveSystemPrompt += "\n[SYSTEM NOTICE]: You operate in STRICT TOOL MODE. You MUST ALWAYS call a tool.\n- If the user wants an action (search, download, help), use the specific tool.\n- For EVERYTHING ELSE (chat, math, questions), use the 'generate_reply' tool.\n- DO NOT output plain text. ALWAYS output a tool call.";
+                } else if (provider.func === tryGemini) {
+                } else {
+                    effectiveSystemPrompt += buildToolsDefinition(guildId, options.userId || null);
                 }
             }
             let finalPrompt = prompt;
@@ -1236,6 +1266,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 ...options,
                 allowSearch: false,
                 userId,
+                guildName,
+                channelName,
                 onProviderAttempt: async (providerKey) => {
                     if (getShowModelThinking()) {
                         await unifiedReply(`-# 🧠 **Processando...**\n-# 🧠 (${providerKey}) Processando...`);
@@ -1888,6 +1920,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
         }
     } catch (error) {
         console.error('Erro ao processar fila:', error.response ? error.response.data : error.message);
+        addToHistory(channelId, 'assistant', 'erro da ia');
         await unifiedReply('⚠️ Desculpe, tive um erro ao processar seu pedido. Tente novamente.');
     } finally {
         setTimeout(processQueue, 1000);

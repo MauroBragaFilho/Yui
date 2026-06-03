@@ -20,6 +20,7 @@ module.exports = {
     saveHistory:     process.env.SAVE_HISTORY !== 'false',
     defaultAutoMod:  process.env.DEFAULT_AUTOMOD !== 'false',
     automodMode:     ['off', 'mcp', 'trigger', 'both'].includes(process.env.AUTOMOD_MODE) ? process.env.AUTOMOD_MODE : 'both',
+    sendEnvironmentInfo: process.env.SEND_ENVIRONMENT_INFO !== 'false',
 
     // ────────── PROVEDORES DE IA (KEYS) ──────────
     stabilityApiKeys: (process.env.STABILITY_API_KEY || '').split(',').map(k => k.trim()).filter(k => k),

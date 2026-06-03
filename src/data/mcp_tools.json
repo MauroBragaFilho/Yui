@@ -8,7 +8,7 @@
     "type": "function",
     "function": {
       "name": "download_audio",
-      "description": "Use APENAS se o usuário fornecer um LINK URL (YouTube, Instagram Reels ou TikTok) E pedir para 'baixar áudio', 'download mp3', 'musica' ou variantes. EXTRAIA A URL EXATA. NUNCA invente links. Se não houver link, não use esta tool. Se o pedido for ambíguo (não especifica áudio ou vídeo), PERGUNTE ao usuário qual formato ele quer antes de chamar qualquer tool.",
+      "description": "Executa o download de arquivos de áudio (.mp3) a partir de links externos de plataformas como YouTube, Instagram Reels ou TikTok. CRÍTICO: Esta ferramenta só deve ser chamada se o usuário fornecer um link URL explícito e solicitar áudio, mp3, som ou música. Nunca invente ou gere URLs. Se o pedido não contiver um link válido, recuse ou peça o link. Se houver ambiguidade no pedido (sem especificar se quer áudio ou vídeo), pergunte ao usuário antes de chamar a ferramenta.",
       "textual_triggers": "Gatilhos: \"baixe essa musica\", \"download do audio\", \"quero o mp3\", \"link do audio\", \"baixa o áudio desse reel\".",
       "textual_args": "{ \"url\": \"URL do video (YouTube/Instagram/TikTok)\" }",
       "parameters": {
@@ -34,7 +34,7 @@
     "type": "function",
     "function": {
       "name": "download_video",
-      "description": "Use APENAS se o usuário fornecer um LINK URL (YouTube Shorts, Instagram Reels ou TikTok) E pedir para 'baixar vídeo', 'download video', 'salvar vídeo' ou variantes. APENAS YouTube Shorts é suportado para vídeos do YouTube (NÃO vídeos normais do YouTube). EXTRAIA A URL EXATA. NUNCA invente links. Se não houver link, não use esta tool. Se o pedido for ambíguo (não especifica áudio ou vídeo), PERGUNTE ao usuário qual formato ele quer antes de chamar qualquer tool.",
+      "description": "Executa o download de arquivos de vídeo (.mp4) a partir de links de plataformas como YouTube Shorts, Instagram Reels ou TikTok. IMPORTANTE: Para vídeos do YouTube, apenas o formato 'Shorts' é suportado (vídeos normais longos do YouTube falharão). CRÍTICO: Exige que o usuário tenha enviado uma URL válida no prompt. NUNCA invente ou alucine URLs.",
       "textual_triggers": "Gatilhos: \"baixa esse vídeo\", \"download do reel\", \"salva esse tiktok\", \"quero o vídeo desse shorts\".",
       "textual_args": "{ \"url\": \"URL do video (YouTube Shorts/Instagram Reels/TikTok)\", \"include_description\": false }",
       "parameters": {
@@ -64,7 +64,7 @@
     "type": "function",
     "function": {
       "name": "search_game",
-      "description": "Use APENAS se o usuário pedir explicitamente para BAIXAR (Download/Torrent)/procurar/arrumar/trazer/pegar/mandar um jogo pirata. NÃO use para buscar informações sobre jogos. Ignore caso for mobile e avise que é apenas para PC. Corrija para o nome correto do jogo antes de usar a tool, usando nomes base. Exemplo: Se o usuário pedir 'quero baixar o jogo GTA V', use 'Grand Theft Auto V' como game_name. ou 'quero minecraft mais recente', use 'minecraft' como game_name",
+      "description": "Realiza uma busca em bases de dados torrent por jogos de computador (PC) para disponibilizar links magnet/arquivos torrent de download. CRÍTICO: Esta ferramenta é exclusiva para downloads de jogos de PC. Se o usuário solicitar jogos de console (PlayStation, Xbox, Nintendo) ou dispositivos móveis (Android/iOS), NÃO use esta ferramenta e explique que a Hikari só suporta download de jogos de computador. Normalize o nome do jogo antes de passar como parâmetro.",
       "textual_triggers": "Gatilhos: \"quero baixar o jogo X\", \"me arruma o torrent de Y\", \"crack do jogo Z\".",
       "textual_args": "{ \"game_name\": \"Nome do Jogo\" }",
       "parameters": {
@@ -103,7 +103,7 @@
     "type": "function",
     "function": {
       "name": "search_web",
-      "description": "Use APENAS para buscar informações ATUAIS, notícias recentes (2024-2026), cotações, previsões do tempo, ou fatos que você não sabe (para pesquisas). Gatilhos: 'pesquise sobre X', 'quem é Y', 'notícias de hoje', 'preço do dolar'.",
+      "description": "Realiza uma pesquisa em tempo real na internet usando mecanismos de busca (Brave/DDG/Bing) para obter fatos recentes, notícias atuais (2024-2026), cotações de mercado ou informações que você não possui em sua base de conhecimento. CRÍTICO: NUNCA chame esta ferramenta para responder a cumprimentos, saudações (como 'Oi', 'Olá', 'Bom dia'), agradecimentos, conversas informais ou perguntas básicas que você já sabe responder. Se o usuário estiver apenas jogando conversa fora, use 'generate_reply'.",
       "textual_triggers": "Gatilhos: \"pesquise sobre X\", \"quem foi Y\", \"informações sobre o jogo Z\", \"notícias de hoje\".",
       "textual_args": "{ \"query\": \"termo de busca otimizado\" }",
       "parameters": {
@@ -129,7 +129,7 @@
     "type": "function",
     "function": {
       "name": "generate_reply",
-      "description": "Use APENAS para responder perguntas de conhecimento geral, matemática, conselhos, piadas, ou quando não houver necessidade de download/busca externa.",
+      "description": "Gera uma resposta de conversação textual direta para o usuário. Esta é a ferramenta padrão e obrigatória para qualquer interação comum que não exija downloads, buscas externas de torrents, consultas de API específicas ou moderação. CRÍTICO: Use esta ferramenta para responder saudações, interações casuais, piadas, conselhos, cálculos matemáticos simples, esclarecimentos gerais e qualquer conversa cotidiana do Discord.",
       "textual_triggers": null,
       "textual_args": "{ \"content\": \"texto da resposta\" }",
       "parameters": {
@@ -155,7 +155,7 @@
     "type": "function",
     "function": {
       "name": "show_bot_menu",
-      "description": "NUNCA use esta ferramenta, exceto se o usuário pedir explicitamente para abrir o menu visual de ajuda ou painel interativo de comandos na tela do Discord, como 'abrir menu de ajuda interativo' ou 'mostrar painel físico de comandos' (NÃO use se o usuário estiver apenas conversando, perguntando algo comum ou pedindo ajuda por texto)",
+      "description": "Exibe um painel interativo visual (menu de ajuda/help) no Discord com botões e seletores. CRÍTICO: Esta ferramenta só deve ser chamada se o usuário pedir explicitamente para 'abrir o menu de ajuda', 'mostrar painel de comandos' ou termos visuais equivalentes. NUNCA chame esta ferramenta se o usuário apenas fizer perguntas sobre comandos ou pedir ajuda textual comum.",
       "textual_triggers": "Gatilhos: \"abrir menu de ajuda interativo\", \"mostrar painel de comandos do discord\"",
       "textual_args": "{ \"context\": \"geral\" | \"regras\" | \"sobre\"}",
       "parameters": {
@@ -186,7 +186,7 @@
     "type": "function",
     "function": {
       "name": "generate_image",
-      "description": "Use QUANDO o usuário pedir para GERAR, CRIAR, DESENHAR ou IMAGINAR uma imagem, ilustração ou arte. Você não tem visão computacional e não é capaz de editar ou ver imagens fornecidas pelos usuários. Se o usuário pedir para alterar, editar ou descrever uma imagem existente, NÃO chame a ferramenta generate_image. Responda em texto puro explicando suas limitações. Gatilhos: 'gera uma imagem de', 'desenhe', 'crie uma foto de', 'cria uma arte de', 'imagine', 'me mostra como ficaria'. SEMPRE inclua um negative_prompt robusto bloqueando conteúdo NSFW, adulto, gore e violento para manter a resposta family-friendly.",
+      "description": "Gera ilustrações, imagens ou artes digitais a partir de uma descrição textual detalhada (prompt). CRÍTICO: Você não tem visão computacional e é incapaz de ler, editar, alterar ou descrever imagens enviadas pelos usuários. Se o usuário pedir para editar uma imagem existente ou alterá-la, NÃO use esta ferramenta. Responda em texto informando que só pode gerar imagens novas do zero. Sempre passe um negative_prompt robusto que bloqueie conteúdo adulto, NSFW, gore ou violento.",
       "textual_triggers": "Gatilhos: \"gera uma imagem de X\", \"desenhe Y\", \"crie uma foto de Z\", \"me mostre como seria\".",
       "textual_args": "{ \"prompt\": \"descrição detalhada da imagem\", \"negative_prompt\": \"nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing\" }",
       "parameters": {
@@ -194,7 +194,7 @@
         "properties": {
           "prompt": {
             "type": "string",
-            "description": "Descrição detalhada da imagem a ser gerada. Seja específico sobre estilo, cores, composição."
+            "description": "Descrição detalhada da imagem a ser gerada. Seja específico sobre estilo, cores, composition."
           },
           "negative_prompt": {
             "type": "string",
@@ -225,7 +225,7 @@
     "type": "function",
     "function": {
       "name": "check_steam",
-      "description": "Use APENAS quando o usuário quiser saber o preço, se está em promoção, a sinopse, pontuação ou informações gerais de um jogo na Steam. Não use se o foco for apenas baixar o jogo pirata e ele já souber o que é.",
+      "description": "Consulta a API da loja Steam para buscar preços atuais, promoções ativas, sinopse, pontuação Metacritic e metadados de jogos. CRÍTICO: Use esta ferramenta apenas se o usuário estiver interessado em comprar o jogo de forma legítima, saber o preço oficial, detalhes de lançamento ou se está em promoção. Se o usuário quiser baixar o jogo pirata/torrent, use 'search_game' em vez desta.",
       "textual_triggers": "Gatilhos: \"qual o preço de x\", \"x está em promoção?\", \"sobre o que é o jogo x na steam\", \"como tá o jogo x na loja\"",
       "textual_args": "{ \"game\": \"Nome do jogo\" }",
       "parameters": {
@@ -251,7 +251,7 @@
     "type": "function",
     "function": {
       "name": "convert_currency",
-      "description": "CRÍTICO: Use APENAS esta ferramenta quando o usuário perguntar o preço, valor ou cotação de moedas (Dólar, Euro, Bitcoin, etc) ou pedir conversões. NUNCA use search_web para ver valor de moeda. Se o usuário NÃO disser para qual moeda converter (ex: 'qual o valor do bitcoin?'), ASSUMA que o destino ('to') é BRL (Real). Você deve prover o valor numérico, a moeda de origem ('from') e a de destino ('to') nos formatos exatos ou abreviações (USD, BRL, EUR, BTC, etc).",
+      "description": "Realiza a conversão de valores monetários entre diferentes moedas (como Dólar, Euro, Real, Bitcoin) usando cotações financeiras em tempo real. CRÍTICO: Sempre use esta ferramenta para perguntas sobre cotação de moedas ou conversões de valores. NUNCA use 'search_web' para obter cotações de moedas. Se a moeda de destino ('to') não for especificada, assuma por padrão 'BRL' (Real brasileiro).",
       "textual_triggers": "Gatilhos: \"quanto é X dolares em reais\", \"converte 50 euros para real\", \"qual o preço do bitcoin\", \"valor do dolar\"",
       "textual_args": "{ \"amount\": 1, \"from\": \"BTC\", \"to\": \"BRL\" }",
       "parameters": {
@@ -288,7 +288,7 @@
     "type": "function",
     "function": {
       "name": "ia_automod",
-      "description": "Use APENAS quando, analisando TODO o contexto da conversa no chat, você identificar comportamento abusivo, xingamentos, ofensas ou assédio direcionado a você (Hikari), ou se o usuário estiver tentando fazer você gerar conteúdo proibido. Aplique o banimento caso o usuário esteja sendo altamente tóxico, insultando você ativamente ou forçando violações. O banimento é definitivo e suspenderá o usuário globalmente de usar a Hikari.",
+      "description": "Dispositivo automático de segurança para moderação de canal. Analisa a interação em busca de assédio severo, xingamentos direcionados à Hikari ou insistência em burlar filtros de segurança para gerar conteúdo proibido. CRÍTICO: Esta ferramenta é de uso exclusivo para banir usuários tóxicos que violam os Termos de Uso. O banimento é definitivo e global. Não use para moderação comum de membros do servidor.",
       "textual_triggers": null,
       "textual_args": "{ \"reason\": \"motivo objetivo e claro do banimento\", \"severity\": \"low\" | \"medium\" | \"high\" }",
       "parameters": {
