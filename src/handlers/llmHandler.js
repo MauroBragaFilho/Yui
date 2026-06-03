@@ -21,6 +21,7 @@ const { getSteamGameInfo } = require('./steamHandler');
 const { convertCurrency } = require('./currencyHandler');
 require('dotenv').config();
 const config = require('../config');
+const geminiCooldowns = {};
 const mcpToolsPath = path.join(__dirname, '../data/mcp_tools.json');
 const TERMS_FILE = path.join(__dirname, '../data/accepted_servers.json');
 let ALL_MCP_TOOLS = [];
@@ -827,74 +828,91 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
     console.log(`[IA] 2/5 Tentando Google Gemini...`);
     const apiKeys = config.geminiApiKeys;
     if (apiKeys.length === 0) throw new Error('Nenhuma chave Gemini configurada.');
+    const modelsToTry = [config.geminiModel];
+    if (config.geminiModelFallback && config.geminiModelFallback !== config.geminiModel) {
+        modelsToTry.push(config.geminiModelFallback);
+    }
     let lastError = null;
-    for (let i = 0; i < apiKeys.length; i++) {
-        const currentKey = apiKeys[i];
-        try {
-            if (options.onProviderAttempt) {
-                try {
-                    await options.onProviderAttempt(`gemini ${i + 1}/${apiKeys.length}`);
-                } catch (e) {
-                }
+    for (const modelName of modelsToTry) {
+        for (let i = 0; i < apiKeys.length; i++) {
+            const currentKey = apiKeys[i];
+            if (geminiCooldowns[currentKey] && geminiCooldowns[currentKey][modelName] && Date.now() < geminiCooldowns[currentKey][modelName]) {
+                console.log(`[Gemini] Ignorando chave ${i + 1}/${apiKeys.length} para o modelo ${modelName} (cooldown ativo).`);
+                continue;
             }
-            if (apiKeys.length > 1) {
-                console.log(`[Gemini] Usando chave ${i + 1}/${apiKeys.length}...`);
-            }
-            const payload = {
-                model: config.geminiModel,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    ...options.history || [],
-                    { role: 'user', content: prompt }
-                ],
-                temperature: providerSettings.gemini.temperature,
-                max_tokens: providerSettings.gemini.max_tokens,
-            };
-            if (!options.disableTools) {
-                payload.tools = buildToolsPayload(options.guildId || null, options.userId || null);
-            }
-            const response = await axios.post(config.geminiUrl, payload, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${currentKey}`
-                },
-                timeout: providerSettings.gemini.timeout
-            });
-            const choice = response.data?.choices?.[0];
-            if (choice) {
-                const msg = choice.message;
-                if (msg.tool_calls && msg.tool_calls.length > 0) {
-                    const firstTool = msg.tool_calls[0].function;
-                    let args = {};
+            try {
+                if (options.onProviderAttempt) {
                     try {
-                        args = JSON.parse(firstTool.arguments);
+                        await options.onProviderAttempt(`gemini (${modelName}) ${i + 1}/${apiKeys.length}`);
                     } catch (e) {
-                        console.warn("[Gemini MCP] JSON Args Warning:", e.message);
                     }
-                    const formattedResponse = JSON.stringify({
-                        thought: "Action triggered by Gemini MCP 2.0",
-                        tool: firstTool.name,
-                        args: args
-                    });
-                    return {
-                        text: formattedResponse,
-                        modelName: `Gemini ${config.geminiModel} (K#${i + 1})`
-                    };
-                } else if (msg.content) {
-                    return {
-                        text: msg.content,
-                        modelName: `Gemini ${config.geminiModel} (K#${i + 1})`
-                    };
                 }
+                if (apiKeys.length > 1) {
+                    console.log(`[Gemini] Usando chave ${i + 1}/${apiKeys.length} com modelo ${modelName}...`);
+                }
+                const payload = {
+                    model: modelName,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        ...options.history || [],
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: providerSettings.gemini.temperature,
+                    max_tokens: providerSettings.gemini.max_tokens,
+                };
+                if (!options.disableTools) {
+                    payload.tools = buildToolsPayload(options.guildId || null, options.userId || null);
+                }
+                const response = await axios.post(config.geminiUrl, payload, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentKey}`
+                    },
+                    timeout: providerSettings.gemini.timeout
+                });
+                const choice = response.data?.choices?.[0];
+                if (choice) {
+                    const msg = choice.message;
+                    if (msg.tool_calls && msg.tool_calls.length > 0) {
+                        const firstTool = msg.tool_calls[0].function;
+                        let args = {};
+                        try {
+                            args = JSON.parse(firstTool.arguments);
+                        } catch (e) {
+                            console.warn("[Gemini MCP] JSON Args Warning:", e.message);
+                        }
+                        const formattedResponse = JSON.stringify({
+                            thought: "Action triggered by Gemini MCP 2.0",
+                            tool: firstTool.name,
+                            args: args
+                        });
+                        return {
+                            text: formattedResponse,
+                            modelName: `Gemini ${modelName} (K#${i + 1})`
+                        };
+                    } else if (msg.content) {
+                        return {
+                            text: msg.content,
+                            modelName: `Gemini ${modelName} (K#${i + 1})`
+                        };
+                    }
+                }
+            } catch (error) {
+                const status = error.response ? error.response.status : 'Unknown';
+                const msg = error.response?.data?.error?.message || error.message;
+                console.warn(`[Gemini] Falha na chave ${i + 1} com o modelo ${modelName} (Status: ${status}): ${msg}`);
+                if (status === 429) {
+                    if (!geminiCooldowns[currentKey]) {
+                        geminiCooldowns[currentKey] = {};
+                    }
+                    geminiCooldowns[currentKey][modelName] = Date.now() + 120000;
+                    console.log(`[Gemini] Chave ${i + 1} em cooldown de 2 minutos para o modelo ${modelName}.`);
+                }
+                lastError = new Error(`Chave ${i + 1} (${modelName}): ${msg}`);
             }
-        } catch (error) {
-            const status = error.response ? error.response.status : 'Unknown';
-            const msg = error.response?.data?.error?.message || error.message;
-            console.warn(`[Gemini] Falha na chave ${i + 1} (Status: ${status}): ${msg}`);
-            lastError = new Error(`Chave ${i + 1}: ${msg}`);
         }
     }
-    throw new Error(`Todas as chaves Gemini falharam. Último erro: ${lastError ? lastError.message : 'Nenhuma chave válida'}`);
+    throw new Error(`Todas as chaves Gemini falharam em todos os modelos. Último erro: ${lastError ? lastError.message : 'Nenhuma chave válida'}`);
 }
 async function tryPollinations(prompt, systemPrompt) {
     console.log(`[IA] 3/5 Tentando Pollinations...`);

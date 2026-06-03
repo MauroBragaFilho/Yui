@@ -108,6 +108,9 @@
   // Modelo padrão do Gemini para ser utilizado nas conversas.
   "geminiModel": "gemini-2.5-flash-lite",
 
+  // Modelo secundário do Gemini (usado se todas as chaves falharem no principal).
+  "geminiModelFallback": "gemini-2.5-flash",
+
   // Endpoint de inferência do Hugging Face.
   "hfApiUrl": "https://router.huggingface.co/hf-inference/v1/chat/completions",
 
