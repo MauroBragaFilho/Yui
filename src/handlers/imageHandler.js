@@ -123,7 +123,7 @@ async function tryStableHorde(prompt, negativePrompt, width, height) {
     const { id } = await submitRes.json();
     if (!id) throw new Error('Stable Horde não retornou ID de job');
     console.log(`[Image 3/5] Stable Horde job ID: ${id} — aguardando geração...`);
-    for (let attempt = 0; attempt < 24; attempt++) {
+    for (let attempt = 0; attempt < 60; attempt++) {
         await new Promise(r => setTimeout(r, 5000));
         const checkRes = await fetch(`https://stablehorde.net/api/v2/generate/check/${id}`);
         if (!checkRes.ok) continue;
@@ -161,14 +161,14 @@ async function tryTogetherAI(prompt, negativePrompt, width, height) {
     const apiKey = config.togetherApiKey;
     if (!apiKey) throw new Error('TOGETHER_API_KEY não configurado');
     console.log('[Image 4/5] Tentando Together AI (FLUX.1-schnell)...');
-    const response = await fetch('https://api.together.xyz/v1/images/generations', {
+    const response = await fetch('https://api.together.ai/v1/images/generations', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            model:  'black-forest-labs/FLUX.1-schnell-Free',
+            model:  'black-forest-labs/FLUX.1-schnell',
             prompt: `${prompt}, safe for work, family friendly`,
             negative_prompt: negativePrompt,
             width:  Math.min(width,  1440),

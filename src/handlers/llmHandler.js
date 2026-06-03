@@ -888,12 +888,12 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
                         });
                         return {
                             text: formattedResponse,
-                            modelName: `Gemini ${modelName} (K#${i + 1})`
+                            modelName: 'Gemini'
                         };
                     } else if (msg.content) {
                         return {
                             text: msg.content,
-                            modelName: `Gemini ${modelName} (K#${i + 1})`
+                            modelName: 'Gemini'
                         };
                     }
                 }
@@ -955,8 +955,9 @@ async function tryHuggingFace(prompt, systemPrompt, options = {}) {
         headers['Authorization'] = `Bearer ${config.hfToken}`;
     }
     try {
+        const modelName = config.hfModel || "Qwen/Qwen2.5-72B-Instruct";
         const response = await axios.post(config.hfApiUrl, {
-            model: "mistralai/Mistral-7B-Instruct-v0.3",
+            model: modelName,
             messages: [
                 { role: 'system', content: systemPrompt },
                 ...options.history || [],
@@ -969,7 +970,7 @@ async function tryHuggingFace(prompt, systemPrompt, options = {}) {
         if (response.data?.choices?.[0]?.message?.content) {
             return {
                 text: response.data.choices[0].message.content,
-                modelName: 'HuggingFace (Mistral 7B via Router)'
+                modelName: `HuggingFace (${modelName.split('/').pop()} via Router)`
             };
         }
     } catch (error) {
@@ -1008,8 +1009,8 @@ async function tryKoboldHorde(prompt, systemPrompt) {
     const jobId = response.data.id;
     if (!jobId) throw new Error('Horde não aceitou o job (Sem ID)');
     let attempts = 0;
-    while (attempts < 25) {
-        await new Promise(r => setTimeout(r, 2000));
+    while (attempts < 60) {
+        await new Promise(r => setTimeout(r, 3000));
         const statusCheck = await axios.get(`https://stablehorde.net/api/v2/generate/text/status/${jobId}`, {
             headers: hordeHeaders
         });

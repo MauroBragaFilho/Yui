@@ -111,8 +111,8 @@
   // Modelo secundário do Gemini (usado se todas as chaves falharem no principal).
   "geminiModelFallback": "gemini-2.5-flash",
 
-  // Endpoint de inferência do Hugging Face.
-  "hfApiUrl": "https://router.huggingface.co/hf-inference/v1/chat/completions",
+  "hfApiUrl": "https://router.huggingface.co/v1/chat/completions",
+  "hfModel": "Qwen/Qwen2.5-72B-Instruct",
 
   // Endpoint da API do Stable Horde.
   "hordeUrl": "https://stablehorde.net/api/v2/generate/text/async",
