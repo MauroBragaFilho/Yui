@@ -137,7 +137,7 @@ async function handleBanInteraction(interaction, client) {
         const appealChannel = client.channels.cache.get(config.appealChannelId);
         if (appealChannel) {
             const embed = new EmbedBuilder()
-                .setColor(0xF1C40F)
+                .setColor(0xF59E0B)
                 .setTitle('⚖️ Novo Pedido de Appeal (Desbanimento)')
                 .addFields(
                     { name: 'Tipo do Bloqueio', value: type.toUpperCase(), inline: true },
@@ -169,7 +169,7 @@ async function handleBanInteraction(interaction, client) {
         const requestorId = parts[3];
         removeBan(type, targetId);
         const embed = EmbedBuilder.from(interaction.message.embeds[0])
-            .setColor(0x2ECC71)
+            .setColor(0x10B981)
             .setTitle('✅ Apelação Aceita')
             .addFields({ name: 'Veredito', value: 'Bloqueio removido pelo Administrador.' });
         await interaction.update({ embeds: [embed], components: [] });
@@ -180,7 +180,7 @@ async function handleBanInteraction(interaction, client) {
     } else if (cid.startsWith('keepban_')) {
         if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Somente dono!', ephemeral: true });
         const embed = EmbedBuilder.from(interaction.message.embeds[0])
-            .setColor(0xE74C3C)
+            .setColor(0xE11D48)
             .setTitle('❌ Apelação Negada')
             .addFields({ name: 'Veredito', value: 'Bloqueio MANTIDO pelo Administrador.' });
         await interaction.update({ embeds: [embed], components: [] });

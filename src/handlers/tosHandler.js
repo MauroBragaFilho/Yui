@@ -74,7 +74,7 @@ async function sendTermsOfService(interaction, requestData = null) {
         ? "⚠️ **Aviso de Atualização:** Identificamos que a Hikari já faz parte deste servidor há algum tempo. Implementamos novas diretrizes de segurança e privacidade. **Para continuar utilizando os serviços da Hikari, é obrigatório que a administração aceite os termos abaixo.**\n\n"
         : "";
     const embed = new EmbedBuilder()
-        .setColor(0x9B59B6)
+        .setColor(0x7C3AED)
         .setTitle('⚖️ Termos de Uso e Responsabilidade — Hikari')
         .setDescription(legacyNotice + rulesText + "\n\n**Para continuar usando a Hikari neste servidor, um Administrador ou Gerente deve aceitar os termos abaixo.**")
         .setFooter({ text: 'Lembre-se de usar o "/ajuda" para ver todos os comandos! • by yGuilhermy' })
@@ -140,7 +140,7 @@ async function handleTosInteraction(interaction) {
                 components: []
             }).catch(err => console.error('[TOS-DEBUG] Erro no editReply (Accept):', err.message));
             const updatesEmbed = new EmbedBuilder()
-                .setColor(0x9B59B6)
+                .setColor(0x7C3AED)
                 .setTitle('📢 Canal de Updates Configurado')
                 .setDescription(`Este canal foi salvo para receber as novidades e atualizações da Hikari.\n\nCaso queira alterar o canal de atualizações, utilize o comando:\n\`/chat_updates [canal]\``);
             await interaction.channel.send({ embeds: [updatesEmbed] }).catch(() => {});
@@ -191,7 +191,7 @@ async function reportNewGuild(guild) {
             } catch (e) {}
             const autoBanTrigger = checkAutoBan(null, guild.name, guild.id, null, null, null);
             const logEmbed = new EmbedBuilder()
-                .setColor(autoBanTrigger ? 0xF1C40F : 0x2ECC71)
+                .setColor(autoBanTrigger ? 0xF59E0B : 0x10B981)
                 .setTitle(autoBanTrigger ? '⚠️ Hikari Adicionada (Nome Suspeito)' : '📥 Hikari Adicionada a um Novo Servidor')
                 .setThumbnail(guild.iconURL())
                 .addFields(
@@ -240,7 +240,7 @@ async function reportNewGuild(guild) {
                 } catch (e) {}
             }
             const welcomeEmbed = new EmbedBuilder()
-                .setColor(0x9B59B6)
+                .setColor(0x7C3AED)
                 .setTitle('👋 Olá! Obrigada por me adicionar!')
                 .setDescription(`
 Olá! Eu sou a **Hikari**, sua assistente de IA multifuncional. ✨
@@ -281,7 +281,7 @@ async function checkAndInitializeUpdateChannel(guild, channel) {
     if (!settings.updateChannelId) {
         setServerUpdateChannel(guild.id, channel.id);
         const embed = new EmbedBuilder()
-            .setColor(0x9B59B6)
+            .setColor(0x7C3AED)
             .setTitle('📢 Central de Updates Ativada!')
             .setDescription('Olá! Apresentamos a nova função de avisos de atualizações da Hikari. Este canal foi configurado automaticamente como o canal de updates do servidor.\n\nA partir de agora, novas atualizações da Hikari serão enviadas aqui. Caso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\`');
         await channel.send({ embeds: [embed] }).catch(() => {});

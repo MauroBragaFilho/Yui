@@ -100,7 +100,7 @@ Aja como a Hikari (Otaku/Gamer).
         let description = extraInfo?.description ? extraInfo.description.replace(/<[^>]*>?/gm, '') : "Sem descrição";
         if (description.length > 300) description = description.substring(0, 300) + '...';
         const embed = new EmbedBuilder()
-            .setColor(isHentai ? '#FF0000' : '#0099FF')
+            .setColor(isHentai ? 0xE11D48 : 0x3B82F6)
             .setTitle(`🎬 ${animeName}`)
             .setDescription(description)
             .setImage(animeData.image)

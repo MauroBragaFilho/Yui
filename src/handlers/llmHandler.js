@@ -1153,7 +1153,7 @@ async function processQueue() {
                     addBan(autoBanTrigger.type, autoBanTrigger.id, autoBanTrigger.reason);
                     console.warn(`[AUTO-BAN] ${autoBanTrigger.type} bloqueado. Gatilho: ${autoBanTrigger.keyword}`);
                     const banEmbed = new EmbedBuilder()
-                        .setColor(0xFF0000)
+                        .setColor(0xE11D48)
                         .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
                         .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**
 
@@ -1193,7 +1193,7 @@ Você pode hospedar sua própria versão privada facilmente!
         if (banInfo) {
             console.warn(`[BAN] Uso bloqueado para ${banInfo.type} (ID: ${userId || guildId || channelId}). Motivo: ${banInfo.reason}`);
             const banEmbed = new EmbedBuilder()
-                .setColor(0xE74C3C)
+                .setColor(0xE11D48)
                 .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
                 .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Hikari** está permanentemente bloqueado para você.
 
@@ -1242,17 +1242,31 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     }
                 }
             });
-            if (rawResponse && (rawResponse.includes('[Tool Use:') || thoughtLeakRegex.test(rawResponse))) {
-                isBlocked = true;
-                console.error('[SECURITY BLOCK] Bloqueado vazamento de Tool Use/JSON Raw:', rawResponse);
+            isBlocked = false;
+            if (rawResponse) {
+                if (rawResponse.includes('[Tool Use:') || thoughtLeakRegex.test(rawResponse)) {
+                    isBlocked = true;
+                    console.error('[SECURITY BLOCK] Bloqueado vazamento de Tool Use/JSON Raw:', rawResponse);
+                } else {
+                    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        try {
+                            JSON.parse(jsonMatch[0]);
+                        } catch (e) {
+                            isBlocked = true;
+                            console.error('[PARSER ERROR] JSON malformado detectado na resposta da IA:', e.message);
+                        }
+                    }
+                }
+            }
+            if (isBlocked) {
                 if (attemptsLeft > 0) {
-                    console.log(`[RETRY] Tentando novamente devido ao bloqueio de segurança. Tentativas restantes: ${attemptsLeft}`);
+                    console.log(`[RETRY] Tentando novamente devido a erro de formato (MCP). Tentativas restantes: ${attemptsLeft}`);
                     attemptsLeft--;
                 } else {
                     break;
                 }
             } else {
-                isBlocked = false;
                 break;
             }
         } while (isBlocked);
@@ -1309,7 +1323,12 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             if (type === 'mention' && interaction.suppressEmbeds) {
                                 try { await interaction.suppressEmbeds(true); } catch (e) {}
                             }
-                            await unifiedReply(`🎧 **(Tool Use)** Baixando Áudio...\n*Pensamento: ${toolData.thought || 'Detectado link de música'}*`);
+                            const audioEmbed = new EmbedBuilder()
+                                .setColor(0x7C3AED)
+                                .setTitle('🎧 Executando Ação')
+                                .setDescription(`A Hikari está baixando o áudio solicitado.\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Detectado link de música'}*`)
+                                .setFooter({ text: 'Hikari Media • Tool Use: download_audio' });
+                            await unifiedReply(null, [], [], [audioEmbed]);
                             const audioData = await downloadAudio(toolData.args.url, { source: 'MCP', userId, userTag, guildName: interaction.guild?.name || 'DM' });
                             if (audioData && audioData.filePath) {
                                 const { filePath, metadata } = audioData;
@@ -1338,7 +1357,12 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             if (type === 'mention' && interaction.suppressEmbeds) {
                                 try { await interaction.suppressEmbeds(true); } catch (e) {}
                             }
-                            await unifiedReply(`🎬 **(Tool Use)** Baixando Vídeo...\n*Pensamento: ${toolData.thought || 'Detectado link de vídeo'}*`);
+                            const videoEmbed = new EmbedBuilder()
+                                .setColor(0x7C3AED)
+                                .setTitle('🎬 Executando Ação')
+                                .setDescription(`A Hikari está baixando o vídeo solicitado.\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Detectado link de vídeo'}*`)
+                                .setFooter({ text: 'Hikari Media • Tool Use: download_video' });
+                            await unifiedReply(null, [], [], [videoEmbed]);
                             const videoData = await downloadVideo(toolData.args.url, { source: 'MCP', userId, userTag, guildName: interaction.guild?.name || 'DM' });
                             const guild = interaction.guild || interaction?.guild;
                             const attachmentLimit = guild ? guild.premiumTier === 3 ? 100 * 1024 * 1024 : guild.premiumTier === 2 ? 50 * 1024 * 1024 : 25 * 1024 * 1024 : 25 * 1024 * 1024;
@@ -1353,7 +1377,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                 const sizeMB = (videoData.fileSize / (1024 * 1024)).toFixed(1);
                                 const limitMB = (attachmentLimit / (1024 * 1024)).toFixed(0);
                                 const compressEmbed = new EmbedBuilder()
-                                    .setColor(0xF39C12)
+                                    .setColor(0xF59E0B)
                                     .setTitle('📦 Vídeo Grande Demais')
                                     .setDescription(`O vídeo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor é **${limitMB} MB**.\n\nClique no botão abaixo para tentar comprimir o vídeo automaticamente.\n\n⏰ *O arquivo ficará disponível por 6 horas.*`)
                                     .setFooter({ text: 'Hikari Media • by yGuilhermy' })
@@ -1378,7 +1402,12 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         const gameName = toolData.args.game_name;
                         const direct = toolData.args.direct === true;
                         const provider = toolData.args.provider || 'any';
-                        await unifiedReply(`🎮 **(Tool Use)** Buscando jogo: **${gameName}**...\n*Pensamento: ${toolData.thought || 'Buscando torrent'}*`);
+                        const gameEmbed = new EmbedBuilder()
+                            .setColor(0x7C3AED)
+                            .setTitle('🎮 Executando Ação')
+                            .setDescription(`Buscando informações do jogo: **${gameName}**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Buscando torrent'}*`)
+                            .setFooter({ text: 'Hikari Game Search • Tool Use: search_game' });
+                        await unifiedReply(null, [], [], [gameEmbed]);
                         const results = await searchGames(gameName, provider);
                         addToHistory(channelId, 'user', prompt);
                         addToHistory(channelId, 'assistant', `[Tool Use: search_game args=${JSON.stringify(toolData.args)}]`);
@@ -1430,7 +1459,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                     const embed = new EmbedBuilder()
                                         .setTitle(titleText)
                                         .setDescription(description)
-                                        .setColor('#8F55FD')
+                                        .setColor(0x7C3AED)
                                         .setFooter({ text: 'Hikari Torrent Search • by yGuilhermy' });
                                     
                                     const components = createPaginationComponents(page, totalPages, pageItems, startIndex);
@@ -1510,7 +1539,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                     const specificItem = helpData.find(i => i.id === toolData.args.context);
                                     if (specificItem && specificItem.answer) {
                                         helpEmbed = new EmbedBuilder()
-                                            .setColor(0x9B59B6)
+                                            .setColor(0x7C3AED)
                                             .setTitle(specificItem.label)
                                             .setDescription(specificItem.answer)
                                             .setFooter({ text: 'Hikari • Menu de Ajuda • by yGuilhermy' })
@@ -1519,7 +1548,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                 }
                                 if (!helpEmbed) {
                                     helpEmbed = new EmbedBuilder()
-                                        .setColor(0x9B59B6)
+                                        .setColor(0x7C3AED)
                                         .setTitle('✨ Central de Ajuda — Hikari')
                                         .setDescription('Selecione um tópico no menu abaixo para ver as informações sobre aquela categoria.')
                                         .addFields(
@@ -1560,7 +1589,12 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 }
                 if (toolData.tool === 'search_web') {
                     const query = toolData.args.query;
-                    await unifiedReply(`🔎 **(Tool Use)** Pesquisando na web: **"${query}"**...\n*Pensamento: ${toolData.thought || 'Buscando informações'}*`);
+                    const searchEmbed = new EmbedBuilder()
+                        .setColor(0x7C3AED)
+                        .setTitle('🔎 Executando Ação')
+                        .setDescription(`Pesquisando na web por: **"${query}"**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Buscando informações'}*`)
+                        .setFooter({ text: 'Hikari Search • Tool Use: search_web' });
+                    await unifiedReply(null, [], [], [searchEmbed]);
                     const searchResults = await performWebSearch(query);
                     if (searchResults) {
                         const contextPrompt = `
@@ -1579,7 +1613,12 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                 }
                 if (toolData.tool === 'check_steam') {
                     const query = toolData.args.game;
-                    await unifiedReply(`🎮 **(Tool Use)** Buscando informaçoẽs sobre **"${query}"** na Steam...\n*Pensamento: ${toolData.thought || 'Consultando a Steam'}*`);
+                    const steamSearchEmbed = new EmbedBuilder()
+                        .setColor(0x7C3AED)
+                        .setTitle('🎮 Executando Ação')
+                        .setDescription(`Consultando dados sobre **"${query}"** na Steam\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Consultando a Steam'}*`)
+                        .setFooter({ text: 'Hikari Steam • Tool Use: check_steam' });
+                    await unifiedReply(null, [], [], [steamSearchEmbed]);
                     const steamInfo = await getSteamGameInfo(query);
                     
                     if (steamInfo.error) {
@@ -1589,7 +1628,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                         if (finalDesc.length > 3900) finalDesc = finalDesc.substring(0, 3900) + '...';
                         
                         const steamEmbed = new EmbedBuilder()
-                            .setColor(0x9B59B6)
+                                                            .setColor(0x7C3AED)
                             .setTitle(steamInfo.name)
                             .setURL(steamInfo.url)
                             .setDescription(finalDesc)
@@ -1640,7 +1679,12 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                 }
                 if (toolData.tool === 'convert_currency') {
                     const { amount, from, to } = toolData.args;
-                    await unifiedReply(`💱 **(Tool Use)** Convertendo **${amount} ${from}** para **${to}**...\n*Pensamento: ${toolData.thought || 'Consultando câmbio'}*`);
+                    const currencyEmbed = new EmbedBuilder()
+                        .setColor(0x7C3AED)
+                        .setTitle('💱 Executando Ação')
+                        .setDescription(`Convertendo **${amount} ${from}** para **${to}**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Consultando câmbio'}*`)
+                        .setFooter({ text: 'Hikari Finance • Tool Use: convert_currency' });
+                    await unifiedReply(null, [], [], [currencyEmbed]);
                     const convInfo = await convertCurrency(amount, from, to);
                     
                     if (convInfo.error) {
@@ -1650,7 +1694,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                         const resultFormatted = Number(convInfo.result).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         const rateFormatted = Number(convInfo.rate).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
                         const convEmbed = new EmbedBuilder()
-                            .setColor(0x2ECC71)
+                            .setColor(0x10B981)
                             .setTitle(`Conversão de Moedas: ${convInfo.name}`)
                             .setDescription(`**${amountFormatted} ${convInfo.from}** equivale a **${resultFormatted} ${convInfo.to}**`)
                             .addFields(
@@ -1718,7 +1762,12 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                         }
                         const width  = Math.min(toolData.args.width  || 1024, 1280);
                         const height = Math.min(toolData.args.height || 1024, 1280);
-                        await unifiedReply(`🎨 **(Tool Use)** Gerando imagem...\n*Prompt: "${imagePrompt.substring(0, 80)}${imagePrompt.length > 80 ? '...' : ''}"*`);
+                        const imageEmbed = new EmbedBuilder()
+                            .setColor(0x7C3AED)
+                            .setTitle('🎨 Executando Ação')
+                            .setDescription(`Gerando imagem com IA\n\n💬 **Prompt:**\n> *"${imagePrompt.substring(0, 100)}${imagePrompt.length > 100 ? '...' : ''}"*\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Criando ilustração'}*`)
+                            .setFooter({ text: 'Hikari Art • Tool Use: generate_image' });
+                        await unifiedReply(null, [], [], [imageEmbed]);
                         try {
                             const imageData = await generateImage(imagePrompt, imageNegative, width, height);
                             if (imageData && (imageData.imageUrl || imageData.localFilePath)) {
@@ -1748,7 +1797,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                     console.warn('[GenerateImage] Falha ao gerar comentário:', commentErr.message);
                                 }
                                 const imageEmbed = new EmbedBuilder()
-                                    .setColor(0x9B59B6)
+                                    .setColor(0x7C3AED)
                                     .setDescription('⚠️ **Aviso:** Eu apenas **gero** imagens novas a partir de texto. Eu **não edito** imagens e **não tenho visão computacional** para ver arquivos.')
                                     .addFields(
                                         { name: '🤖 Modelo', value: `\`${imageData.modelName || 'Desconhecido'}\``, inline: false },
@@ -1801,7 +1850,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 addBan('user', userId, reason || 'Violação dos Termos detectada pela IA Hikari.');
                                 console.warn(`[IA_AUTOMOD] Usuário ${userTag} (${userId}) banido pela IA. Severidade: ${severity}. Motivo: ${reason}`);
                                 const banEmbed = new EmbedBuilder()
-                                    .setColor(0xFF0000)
+                                    .setColor(0xE11D48)
                                     .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
                                     .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**\n\nO sistema de inteligência da Hikari analisou o contexto desta conversa e identificou uma conduta que viola gravemente os Termos de Uso.\n\n**DETALHES DO BANIMENTO:**\n- **ALVO PENALIZADO:** Seu perfil de usuário (Banido Globalmente)\n- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.\n\nO acesso aos serviços foi completamente revogado. Qualquer nova tentativa de burlar a segurança agravará a punição.\n\nSe você julga que isso é um erro, utilize o botão de apelação abaixo.\n\n---\n✨ **Dica:** Quer a Hikari sem filtros? Hospede sua própria versão!\n🚀 **GitHub:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
                                     .setFooter({ text: 'Hikari AI AutoMod • by yGuilhermy' })
@@ -1827,7 +1876,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
         }
         if (processedResponse && (processedResponse.includes('[Tool Use:') || thoughtLeakRegex.test(processedResponse))) {
             console.error('[SECURITY BLOCK] Bloqueado vazamento de Tool Use/JSON Raw:', processedResponse);
-            processedResponse = "⚠️ **Erro de Processamento:** A IA tentou usar uma ferramenta mas o formato saiu inválido. Tente novamente. ou use os comando /game ou /yt_music";
+            processedResponse = "⚠️ **Erro de Processamento:** A IA tentou usar uma ferramenta mas o formato do MCP saiu inválido, isso é normal, não é um bug. Tente novamente ou use os comandos /buscar_jogo, /baixar_musica ou /baixar_video";
         }
         if (processedResponse) {
             addToHistory(channelId, 'user', prompt);

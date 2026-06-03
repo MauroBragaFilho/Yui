@@ -50,7 +50,7 @@ const { generateResponse } = require('../handlers/llmHandler');
 
 async function buildBanListPayload(client, category, page = 0) {
     const currentBans = getBans();
-    const embed = new EmbedBuilder().setColor(0xE74C3C);
+    const embed = new EmbedBuilder().setColor(0xE11D48);
 
     if (category === 'home') {
         embed.setTitle('🚫 Central de Bloqueios • Hikari')
@@ -171,7 +171,7 @@ async function buildBanListPayload(client, category, page = 0) {
 
 async function buildBanDetailPayload(client, category, targetId) {
     const currentBans = getBans();
-    const embed = new EmbedBuilder().setColor(0xE74C3C);
+    const embed = new EmbedBuilder().setColor(0xE11D48);
 
     let banDb = null;
     let titleType = '';
@@ -301,8 +301,12 @@ module.exports = {
                                     (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline'));
                 if (!isTosAction) {
                     if (interaction.isRepliable()) {
+                        const blockEmbed = new EmbedBuilder()
+                            .setColor(0xE11D48)
+                            .setTitle('❌ Acesso Bloqueado')
+                            .setDescription('Este servidor ainda não aceitou os **Termos de Uso da Hikari**.\n\nSolicite a um administrador que libere o bot executando o comando `/aceitar_tos` neste canal.');
                         return interaction.reply({
-                            content: '❌ **Acesso Bloqueado!** Este servidor ainda não aceitou os **Termos de Uso da Hikari**. Peça para um administrador liberar o bot executando o comando \`/aceitar_tos\`.',
+                            embeds: [blockEmbed],
                             ephemeral: true
                         });
                     }
@@ -312,7 +316,13 @@ module.exports = {
         }
         if (interaction.isStringSelectMenu()) {
             if (interaction.customId.startsWith('banlist_select_')) {
-                if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
+                if (!config.isOwner(interaction.user.id)) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Acesso Negado')
+                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
                 const parts = interaction.customId.split('_');
                 const category = parts[2];
                 const targetId = interaction.values[0];
@@ -342,7 +352,7 @@ module.exports = {
                         const page = 0;
                         const command = selectedOption.commands[page];
                         const embed = new EmbedBuilder()
-                            .setColor(0x9B59B6)
+                            .setColor(0x7C3AED)
                             .setTitle(`🤖 Comandos (${page + 1}/${selectedOption.commands.length})`)
                             .setDescription('📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
                             .addFields({ name: command.title, value: command.content })
@@ -359,7 +369,7 @@ module.exports = {
                     }
 
                     const answerEmbed = new EmbedBuilder()
-                        .setColor(0x9B59B6)
+                        .setColor(0x7C3AED)
                         .setTitle(selectedOption.label)
                         .setDescription(selectedOption.answer + '\n\r\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
                         .setFooter({ text: 'Hikari • Menu de Ajuda • by yGuilhermy' })
@@ -382,8 +392,16 @@ module.exports = {
         }
         if (interaction.isButton()) {
             const cid = interaction.customId;
+            if (cid.startsWith('adm_') || cid.startsWith('banlist_')) {
+                if (!config.isOwner(interaction.user.id)) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Acesso Negado')
+                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
+            }
             if (cid.startsWith('adm_manageguild_')) {
-                if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
                 const parts = cid.split('_');
                 const action = parts[2];
                 const guildId = parts[3];
@@ -400,7 +418,6 @@ module.exports = {
                 }
                 return;
             } else if (cid.startsWith('adm_remoteban_')) {
-                if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
                 const parts = cid.split('_');
                 const type = parts[2];
                 const targetId = parts[3];
@@ -412,18 +429,15 @@ module.exports = {
                 }
                 return;
             } else if (cid === 'banlist_home') {
-                if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
                 const payload = await buildBanListPayload(client, 'home');
                 return await interaction.update(payload);
             } else if (cid.startsWith('banlist_view_')) {
-                if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
                 const parts = cid.split('_');
                 const category = parts[2];
                 const page = parseInt(parts[3] || '0');
                 const payload = await buildBanListPayload(client, category, page);
                 return await interaction.update(payload);
             } else if (cid.startsWith('banlist_detail_')) {
-                if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
                 const parts = cid.split('_');
                 const category = parts[2];
                 const targetId = parts[3];
@@ -433,14 +447,13 @@ module.exports = {
                 const payload = await buildBanDetailPayload(client, category, targetId);
                 return await interaction.update(payload);
             } else if (cid.startsWith('banlist_unban_')) {
-                if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
                 const parts = cid.split('_');
                 const category = parts[2];
                 const targetId = parts[3];
                 const apiType = category === 'users' ? 'user' : category === 'guilds' ? 'guild' : 'channel';
                 removeBan(apiType, targetId);
                 const embed = new EmbedBuilder()
-                    .setColor(0x2ECC71)
+                    .setColor(0x10B981)
                     .setTitle('🔓 Desbanido com Sucesso')
                     .setDescription(`O alvo com ID \`${targetId}\` (${apiType}) foi desbanido do sistema.`);
                 const row = new ActionRowBuilder().addComponents(
@@ -463,7 +476,7 @@ module.exports = {
                         .setEmoji('🚀');
                     const linkRow = new ActionRowBuilder().addComponents(githubButton);
                     const welcomeEmbed = new EmbedBuilder()
-                        .setColor(0x9B59B6)
+                        .setColor(0x7C3AED)
                         .setTitle('✨ Central de Ajuda — Hikari')
                         .setDescription('Bem-vindo(a)! Selecione um tópico no menu abaixo.\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
                         .addFields(helpData.map(item => ({ name: item.label, value: item.description || 'Sem descrição', inline: true })))
@@ -478,7 +491,7 @@ module.exports = {
                     const command = geral.commands[page];
                     
                     const embed = new EmbedBuilder()
-                        .setColor(0x9B59B6)
+                        .setColor(0x7C3AED)
                         .setTitle(`🤖 Comandos (${page + 1}/${geral.commands.length})`)
                         .setDescription('📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
                         .addFields({ name: command.title, value: command.content })
@@ -511,11 +524,11 @@ module.exports = {
                     .setFooter({ text: 'Hikari Media • by yGuilhermy' })
                     .setTimestamp();
                 if (isQueue) {
-                    progressEmbed.setColor(0xF1C40F)
+                    progressEmbed.setColor(0xF59E0B)
                         .setTitle('⏳ Compressão na Fila')
                         .setDescription('Já existe uma compressão de vídeo em andamento no bot. Seu vídeo foi adicionado à fila de espera e será processado automaticamente assim que a atual terminar!\n\nPor favor, aguarde...');
                 } else {
-                    progressEmbed.setColor(0x3498DB)
+                    progressEmbed.setColor(0x3B82F6)
                         .setTitle('🔄 Comprimindo Vídeo...')
                         .setDescription('Iniciando a compressão do vídeo para reduzir o tamanho do arquivo. Isso pode levar alguns minutos. Não se preocupe, estou trabalhando nisso!');
                 }
@@ -531,7 +544,7 @@ module.exports = {
                     removePendingVideo(fileId);
                 } catch (compressError) {
                     const errorEmbed = new EmbedBuilder()
-                        .setColor(0xE74C3C)
+                        .setColor(0xE11D48)
                         .setTitle('❌ Falha na Compressão')
                         .setFooter({ text: 'Hikari Media • by yGuilhermy' })
                         .setTimestamp();
@@ -562,7 +575,7 @@ module.exports = {
             const banInfo = checkBan(interaction.user.id, interaction.guildId, interaction.channelId);
             if (banInfo && interaction.commandName !== 'ajuda') {
                 const banEmbed = new EmbedBuilder()
-                    .setColor(0xE74C3C)
+                    .setColor(0xE11D48)
                     .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
                     .setDescription(`Sua tentativa de execução foi abortada. O acesso à **IA Hikari** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **Tipo:** ${banInfo.typeName || banInfo.type}\n- **Motivo do Banimento:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Hikari."}\n- **Status Atual:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.\n\nSe você acredita que isso é um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})] ✨`)
                     .setFooter({ text: 'Hikari Security & Moderation • by yGuilhermy' })
@@ -633,7 +646,11 @@ module.exports = {
             addToQueue(prompt, interaction, 'slash', { allowSearch: false, public: isPublic, guildId: interaction.guildId });
         } else if (commandName === 'ia_prompt') {
             if (!config.isOwner(interaction.user.id)) {
-                return interaction.reply({ content: `❌ Esse comando é exclusivo do meu criador <@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})]. ✨`, ephemeral: true });
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription(`Esse comando é exclusivo do meu criador <@${config.ownerId}>.`);
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
             const sub = interaction.options.getSubcommand();
             const guildId = interaction.guildId;
@@ -642,8 +659,8 @@ module.exports = {
                 setServerPrompt(guildId, newPrompt);
                 const preview = newPrompt.length > 300 ? newPrompt.substring(0, 300) + '...' : newPrompt;
                 const embed = new EmbedBuilder()
-                    .setColor(0x9B59B6)
-                    .setTitle('✅ System Prompt Atualizado')
+                    .setColor(0x10B981)
+                    .setTitle('✅ System Prompt Updated')
                     .setDescription('O system prompt deste servidor foi sobrescrito com sucesso.')
                     .addFields({ name: '📝 Novo Prompt (prévia)', value: `\`\`\`${preview}\`\`\`` })
                     .setFooter({ text: `Servidor: ${interaction.guild?.name || guildId} • by yGuilhermy` })
@@ -652,11 +669,15 @@ module.exports = {
             } else if (sub === 'reset') {
                 const current = getServerPrompt(guildId);
                 if (!current) {
-                    return interaction.reply({ content: 'ℹ️ Este servidor já usa o system prompt padrão do código. Nada para resetar.', ephemeral: true });
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xF59E0B)
+                        .setTitle('ℹ️ Nada a Resetar')
+                        .setDescription('Este servidor já utiliza o system prompt padrão da Hikari.');
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 resetServerPrompt(guildId);
                 const embed = new EmbedBuilder()
-                    .setColor(0xE74C3C)
+                    .setColor(0x10B981)
                     .setTitle('🔄 System Prompt Resetado')
                     .setDescription('O system prompt customizado foi removido. A Hikari voltou a usar o prompt padrão do código neste servidor.')
                     .setFooter({ text: `Servidor: ${interaction.guild?.name || guildId} • by yGuilhermy` })
@@ -666,7 +687,7 @@ module.exports = {
                 const current = getServerPrompt(guildId);
                 if (!current) {
                     const embed = new EmbedBuilder()
-                        .setColor(0x3498DB)
+                        .setColor(0x7C3AED)
                         .setTitle('🔍 System Prompt Atual')
                         .setDescription('Este servidor está usando o **prompt padrão do código**. Nenhum prompt customizado configurado.')
                         .setFooter({ text: `Servidor: ${interaction.guild?.name || guildId} • by yGuilhermy` })
@@ -675,7 +696,7 @@ module.exports = {
                 }
                 const preview = current.length > 900 ? current.substring(0, 900) + '\n[... truncado]' : current;
                 const embed = new EmbedBuilder()
-                    .setColor(0x27AE60)
+                    .setColor(0x7C3AED)
                     .setTitle('🔍 System Prompt Atual (Customizado)')
                     .setDescription(`\`\`\`${preview}\`\`\``)
                     .setFooter({ text: `Servidor: ${interaction.guild?.name || guildId} • Caracteres: ${current.length} • by yGuilhermy` })
@@ -684,7 +705,11 @@ module.exports = {
             }
         } else if (commandName === 'ia_ferramentas') {
             if (!config.isOwner(interaction.user.id)) {
-                return interaction.reply({ content: `❌ Esse comando é exclusivo do meu criador <@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})]. ✨`, ephemeral: true });
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription(`Esse comando é exclusivo do meu criador <@${config.ownerId}>.`);
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
             const sub = interaction.options.getSubcommand();
             const guildId = interaction.guildId;
@@ -694,12 +719,30 @@ module.exports = {
                 const estado = interaction.options.getString('estado');
                 const enabled = estado === 'on';
                 const tool = allTools.find(t => t.function.name === toolName);
-                if (!tool) return interaction.reply({ content: `❌ Tool \`${toolName}\` não encontrada.`, ephemeral: true });
-                if (!tool.meta.disableable && !enabled) return interaction.reply({ content: `🔒 A tool **${tool.meta.label}** não pode ser desabilitada.`, ephemeral: true });
+                if (!tool) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Ferramenta não Encontrada')
+                        .setDescription(`A ferramenta \`${toolName}\` não existe.`);
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
+                if (!tool.meta.disableable && !enabled) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('🔒 Acesso Restrito')
+                        .setDescription(`A ferramenta **${tool.meta.label}** não pode ser desabilitada.`);
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
                 const ok = setServerToolEnabled(guildId, toolName, enabled);
-                if (!ok) return interaction.reply({ content: `❌ Não foi possível alterar a tool \`${toolName}\`.`, ephemeral: true });
+                if (!ok) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Erro na Alteração')
+                        .setDescription(`Não foi possível alterar o status da ferramenta \`${toolName}\`.`);
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
                 const embed = new EmbedBuilder()
-                    .setColor(enabled ? 0x27AE60 : 0xE74C3C)
+                    .setColor(enabled ? 0x10B981 : 0xE11D48)
                     .setTitle(`${enabled ? '✅ Tool Ativada' : '❌ Tool Desativada'}`)
                     .addFields(
                         { name: 'Ferramenta', value: `${tool.meta.label}\n\`${toolName}\``, inline: true },
@@ -734,7 +777,7 @@ module.exports = {
                     return !disabled.includes(t.function.name);
                 }).length;
                 const embed = new EmbedBuilder()
-                    .setColor(0x3498DB)
+                    .setColor(0x7C3AED)
                     .setTitle('🔧 Ferramentas MCP — Status do Servidor')
                     .setDescription(`**${interaction.guild?.name || guildId}**\n\n✅ = Ativa | ❌ = Desativada | ⛔ = Inativa (AutoMod) | 🔒 = Não configurável\n\n🛡️ **Modo AutoMod do Servidor:** \`${_automodMode}\``)
                     .addFields(fields)
@@ -743,10 +786,16 @@ module.exports = {
                 await interaction.reply({ embeds: [embed], ephemeral: false });
             } else if (sub === 'reset') {
                 const disabled = getDisabledTools(guildId);
-                if (disabled.length === 0) return interaction.reply({ content: 'ℹ️ Nenhuma tool está desabilitada neste servidor.', ephemeral: true });
+                if (disabled.length === 0) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xF59E0B)
+                        .setTitle('ℹ️ Nada a Resetar')
+                        .setDescription('Nenhuma ferramenta está desabilitada neste servidor.');
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
                 resetServerTools(guildId);
                 const embed = new EmbedBuilder()
-                    .setColor(0x9B59B6)
+                    .setColor(0x10B981)
                     .setTitle('🔄 Tools Resetadas')
                     .setDescription(`Todas as **${disabled.length}** tools desabilitadas foram reativadas.`)
                     .addFields({ name: 'Tools reativadas', value: disabled.map(n => `\`${n}\``).join(', ') })
@@ -756,28 +805,51 @@ module.exports = {
             }
         } else if (commandName === 'ia_mention_todos') {
             const hasPermission = !interaction.guild || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) || config.isOwner(interaction.user.id);
-            if (!hasPermission) return interaction.reply({ content: '❌ Acesso restrito (Requer gerenciar servidor).', ephemeral: true });
-            
+            if (!hasPermission) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Você precisa da permissão de **Gerenciar Servidor** para alterar as menções.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const ativo = interaction.options.getBoolean('ativo');
             setServerEveryoneMention(interaction.guildId, ativo);
-            
-            await interaction.reply({ 
-                content: `🔔 **Marcações Everyone/Here**: Hikari ${ativo ? '✅ **AGORA VAI**' : '❌ **NÃO VAI MAIS**'} responder a marcações de @everyone e @here neste servidor.`, 
-                ephemeral: false 
-            });
+            const embed = new EmbedBuilder()
+                .setColor(0x10B981)
+                .setTitle('🔔 Configuração • Menções Globais')
+                .setDescription(`As preferências de marcações em massa foram atualizadas.`)
+                .addFields(
+                    { name: '📢 Reagir a @everyone / @here', value: ativo ? '✅ **Ativado**' : '❌ **Desativado**', inline: true }
+                )
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed], ephemeral: false });
         } else if (commandName === 'chat_updates') {
             const hasPermission = !interaction.guild || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) || config.isOwner(interaction.user.id);
-            if (!hasPermission) return interaction.reply({ content: '❌ Acesso restrito (Requer gerenciar canais).', ephemeral: true });
+            if (!hasPermission) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Você precisa da permissão de Gerenciar Canais para configurar o canal de updates.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const canal = interaction.options.getChannel('canal') || interaction.channel;
             if (!canal.isTextBased()) {
-                return interaction.reply({ content: '❌ Por favor, selecione um canal de texto.', ephemeral: true });
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Canal Inválido')
+                    .setDescription('Por favor, selecione um canal de texto.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
             setServerUpdateChannel(interaction.guildId, canal.id);
             const embed = new EmbedBuilder()
-                .setColor(0x9B59B6)
-                .setTitle('📢 Canal de Updates Definido')
-                .setDescription(`Este canal <#${canal.id}> foi configurado para receber as novidades e atualizações da Hikari.`)
-                .setFooter({ text: `Servidor: ${interaction.guild?.name} • Hikari by yGuilhermy` })
+                .setColor(0x7C3AED)
+                .setTitle('📢 Configuração • Canal de Updates')
+                .setDescription(`O canal para transmissão de atualizações foi configurado.`)
+                .addFields(
+                    { name: '📍 Canal Selecionado', value: `<#${canal.id}>`, inline: true },
+                    { name: '🛡️ Servidor', value: `\`${interaction.guild?.name || 'Desconhecido'}\``, inline: true }
+                )
+                .setFooter({ text: 'Central de Notificações • Hikari' })
                 .setTimestamp();
             await interaction.reply({ embeds: [embed] });
         } else if (commandName === 'aceitar_tos') {
@@ -787,14 +859,24 @@ module.exports = {
                 interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)
             )) || config.isOwner(interaction.user.id);
             if (!hasPermission) {
-                return interaction.reply({ content: '❌ Apenas administradores do servidor podem executar este comando.', ephemeral: true });
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Apenas administradores do servidor podem aceitar os Termos de Uso.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
             const { sendTermsOfService } = require('../handlers/tosHandler');
             await sendTermsOfService(interaction);
         } else if (commandName === 'ajuda') {
             try {
                 const helpDataPath = path.join(__dirname, '../data/help.json');
-                if (!fs.existsSync(helpDataPath)) return await interaction.reply({ content: 'Arquivo de ajuda não encontrado.', ephemeral: true });
+                if (!fs.existsSync(helpDataPath)) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Arquivo não Encontrado')
+                        .setDescription('O arquivo de ajuda não foi localizado no servidor.');
+                    return await interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
                 const helpData = JSON.parse(fs.readFileSync(helpDataPath, 'utf8'));
                 const menuOptions = helpData.map(item => ({ label: item.label, description: item.description || 'Clique para ver mais', value: item.id }));
                 const selectMenu = new StringSelectMenuBuilder().setCustomId('help_menu').setPlaceholder('Selecione um tópico de ajuda').addOptions(menuOptions);
@@ -806,7 +888,7 @@ module.exports = {
                     .setEmoji('🚀');
                 const linkRow = new ActionRowBuilder().addComponents(githubButton);
                 const welcomeEmbed = new EmbedBuilder()
-                    .setColor(0x9B59B6)
+                    .setColor(0x7C3AED)
                     .setTitle('✨ Central de Ajuda — Hikari')
                     .setDescription('Bem-vindo(a)! Selecione um tópico no menu abaixo.\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
                     .addFields(helpData.map(item => ({ name: item.label, value: item.description || 'Sem descrição', inline: true })))
@@ -815,7 +897,11 @@ module.exports = {
                 await interaction.reply({ embeds: [welcomeEmbed], components: [row, linkRow], ephemeral: false });
             } catch (error) {
                 console.error('Erro no comando help:', error);
-                await interaction.reply({ content: 'Erro ao criar o menu de ajuda.', ephemeral: true });
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Erro no Menu')
+                    .setDescription('Erro ao criar o menu de ajuda.');
+                await interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
         } else if (commandName === 'ia_imagem') {
             const prompt = interaction.options.getString('prompt');
@@ -828,7 +914,7 @@ module.exports = {
                 const imageData = await generateImage(prompt, negativePrompt, width, height, { provider, bypassSafety: true });
                 if (imageData) {
                     const drawEmbed = new EmbedBuilder()
-                        .setColor(0x3498DB)
+                        .setColor(0x7C3AED)
                         .setTitle('🎨 Imagem Gerada')
                         .setDescription('⚠️ **Aviso:** Eu apenas **gero** imagens novas a partir de texto. Eu **não edito** imagens e **não tenho visão computacional** para ver arquivos.')
                         .addFields(
@@ -849,17 +935,29 @@ module.exports = {
                     }
                     await interaction.editReply({ embeds: [drawEmbed], files });
                 } else {
-                    await interaction.editReply('❌ Desculpe, não consegui gerar a imagem.');
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Falha na Geração')
+                        .setDescription('Não consegui gerar a imagem.');
+                    await interaction.editReply({ embeds: [errEmbed] });
                 }
             } catch (error) {
                 console.error('Erro /draw:', error);
-                await interaction.editReply(`❌ Erro: ${error.message}`);
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Erro')
+                    .setDescription(error.message);
+                await interaction.editReply({ embeds: [errEmbed] });
             }
         } else if (commandName === 'baixar_musica') {
             const videoUrl = interaction.options.getString('url');
             const userId = interaction.user.id;
             if (!canBypass(userId) && isUserBusy(userId)) {
-                return interaction.reply({ content: '⏳ Você já tem um download em andamento. Aguarde ele terminar.', ephemeral: true });
+                const waitEmbed = new EmbedBuilder()
+                    .setColor(0xF59E0B)
+                    .setTitle('⏳ Download em Andamento')
+                    .setDescription('Você já tem um download em execução. Por favor, aguarde ele terminar.');
+                return interaction.reply({ embeds: [waitEmbed], ephemeral: true });
             }
             await interaction.deferReply({ ephemeral: false });
             lockUser(userId);
@@ -872,11 +970,19 @@ module.exports = {
                     const attachment = new AttachmentBuilder(filePath, { name: `${displayFileName}.mp3` });
                     await interaction.editReply({ content: `🎵 Áudio baixado: \`${metadata.title}\``, files: [attachment] });
                 } else {
-                    await interaction.editReply('Não consegui baixar o áudio.');
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Falha no Download')
+                        .setDescription('Não consegui baixar o áudio.');
+                    await interaction.editReply({ embeds: [errEmbed] });
                 }
             } catch (error) {
                 console.error('[BaixarMusica]', error);
-                await interaction.editReply(`❌ Erro: ${error.message}`);
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Erro')
+                    .setDescription(error.message);
+                await interaction.editReply({ embeds: [errEmbed] });
             } finally {
                 unlockUser(userId);
                 if (downloadedAudioInfo && downloadedAudioInfo.filePath && fs.existsSync(downloadedAudioInfo.filePath)) {
@@ -888,7 +994,11 @@ module.exports = {
             const showDetails = interaction.options.getBoolean('descricao') || false;
             const userId = interaction.user.id;
             if (!canBypass(userId) && isUserBusy(userId)) {
-                return interaction.reply({ content: '⏳ Você já tem um download em andamento. Aguarde ele terminar.', ephemeral: true });
+                const waitEmbed = new EmbedBuilder()
+                    .setColor(0xF59E0B)
+                    .setTitle('⏳ Download em Andamento')
+                    .setDescription('Você já tem um download em execução. Por favor, aguarde ele terminar.');
+                return interaction.reply({ embeds: [waitEmbed], ephemeral: true });
             }
             await interaction.deferReply({ ephemeral: false });
             lockUser(userId);
@@ -919,7 +1029,11 @@ module.exports = {
                 }
             } catch (error) {
                 console.error('[BaixarVideo]', error);
-                await interaction.editReply(`❌ Erro: ${error.message}`);
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Erro')
+                    .setDescription(error.message);
+                await interaction.editReply({ embeds: [errEmbed] });
             } finally {
                 unlockUser(userId);
             }
@@ -927,32 +1041,79 @@ module.exports = {
             await executeGameCommand(interaction);
         } else if (commandName === 'chat_humor') {
             const hasPermission = !interaction.guild || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) || config.isOwner(interaction.user.id);
-            if (!hasPermission) return interaction.reply({ content: 'Sem permissão.', ephemeral: true });
+            if (!hasPermission) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Você não tem permissão para gerenciar canais.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const reset = interaction.options.getBoolean('reset');
             if (reset) {
                 setChannelPersona(interaction.channelId, { reset: true });
-                await interaction.reply({ content: '🔄 Resetado.', ephemeral: false });
+                const successEmbed = new EmbedBuilder()
+                    .setColor(0x10B981)
+                    .setTitle('🔄 Restaurado • Humor & Instruções')
+                    .setDescription('As configurações de comportamento e humor deste canal foram redefinidas para os padrões de fábrica da Hikari.')
+                    .setTimestamp();
+                await interaction.reply({ embeds: [successEmbed], ephemeral: false });
             } else {
                 const instruction = interaction.options.getString('instrucao') || undefined;
                 const mood = interaction.options.getString('mood') || undefined;
-                if (!instruction && !mood) return interaction.reply({ content: '⚠️ Forneça instrução ou humor.', ephemeral: true });
+                if (!instruction && !mood) {
+                    const warnEmbed = new EmbedBuilder()
+                        .setColor(0xF59E0B)
+                        .setTitle('⚠️ Entrada Inválida')
+                        .setDescription('Você precisa fornecer pelo menos uma instrução ou um humor.');
+                    return interaction.reply({ embeds: [warnEmbed], ephemeral: true });
+                }
                 setChannelPersona(interaction.channelId, { instruction, mood });
-                await interaction.reply({ content: '✅ Atualizado!', ephemeral: false });
+                const successEmbed = new EmbedBuilder()
+                    .setColor(0x10B981)
+                    .setTitle('🎭 Personalidade • Canal Atualizado')
+                    .setDescription('O comportamento adaptativo da Hikari neste canal foi atualizado.')
+                    .addFields(
+                        { name: '🎭 Humor Selecionado', value: `\`${mood || 'Não alterado'}\``, inline: true },
+                        { name: '📝 Diretrizes de Prompt', value: instruction ? `\`\`\`\n${instruction.length > 500 ? instruction.substring(0, 500) + '...' : instruction}\`\`\`` : '*Não alterado*', inline: false }
+                    )
+                    .setTimestamp();
+                await interaction.reply({ embeds: [successEmbed], ephemeral: false });
             }
         } else if (commandName === 'chat_espontaneo') {
             const hasPermission = !interaction.guild || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) || config.isOwner(interaction.user.id);
-            if (!hasPermission) return interaction.reply({ content: '❌ Acesso restrito (Requer gerenciar canais).', ephemeral: true });
+            if (!hasPermission) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Você não tem permissão para gerenciar canais.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
 
             const percentage = interaction.options.getInteger('porcentagem');
             if (percentage !== null && !config.isOwner(interaction.user.id)) {
-                return interaction.reply({ content: '❌ Apenas o dono do bot pode definir a porcentagem personalizada.', ephemeral: true });
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Apenas o proprietário da Hikari pode ajustar a porcentagem exata de respostas espontâneas.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
 
             const state = interaction.options.getString('estado');
             const freq = interaction.options.getString('frequencia') || 'low';
             const isActive = state === 'on';
             setChannelChatter(interaction.channelId, { active: isActive, frequency: freq, percentage });
-            await interaction.reply({ content: `🗣️ **Chatter Mode**: ${isActive ? '✅ ATIVADO' : '🔴 DESATIVADO'}`, ephemeral: false });
+            const successEmbed = new EmbedBuilder()
+                .setColor(isActive ? 0x10B981 : 0xE11D48)
+                .setTitle('🗣️ Interação • Modo Espontâneo')
+                .setDescription('As preferências para intervenção espontânea de conversa da Hikari foram definidas.')
+                .addFields(
+                    { name: '⚡ Estado do Modo', value: isActive ? '🟢 **Ativo**' : '🔴 **Inativo**', inline: true },
+                    { name: '⏱️ Frequência Estipulada', value: `\`${freq === 'high' ? 'Alta' : freq === 'medium' ? 'Média' : 'Baixa'}\``, inline: true }
+                );
+            if (percentage !== null) {
+                successEmbed.addFields({ name: 'Porcentagem', value: `${percentage}%`, inline: true });
+            }
+            await interaction.reply({ embeds: [successEmbed], ephemeral: false });
         } else if (commandName === 'chat_resumo') {
             const amount = interaction.options.getInteger('quantidade') || 20;
             await interaction.deferReply();
@@ -970,67 +1131,164 @@ module.exports = {
                 addToQueue(summaryPrompt, interaction, 'slash', { allowSearch: false, disableTools: true });
             } catch (error) {
                 console.error('summary:', error);
-                await interaction.editReply('Erro ao resumir.');
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Erro no Resumo')
+                    .setDescription('Não foi possível obter o histórico de mensagens ou gerar o resumo deste canal.');
+                await interaction.editReply({ embeds: [errEmbed] });
             }
         } else if (commandName === 'anime_origem') {
             await handleSauceCommand(interaction);
         } else if (commandName === 'ia_config') {
-            if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
+            if (!config.isOwner(interaction.user.id)) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Comando restrito ao criador da Hikari.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const provider = interaction.options.getString('provider');
             const setting = interaction.options.getString('setting');
             const value = interaction.options.getNumber('value');
             if (provider) {
-                if (!setting || value === null) return interaction.reply({ content: '❌ Forneça config e valor.', ephemeral: true });
+                if (!setting || value === null) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Dados Insuficientes')
+                        .setDescription('Para configurar um provedor de IA, especifique a configuração e o valor.');
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
                 updateProviderSetting(provider, setting, value);
             }
-            await interaction.reply({ content: '✅ Configurações atualizadas.', ephemeral: true });
+            const successEmbed = new EmbedBuilder()
+                .setColor(0x10B981)
+                .setTitle('⚙️ Configurações • Parâmetros de IA')
+                .setDescription('As variáveis operacionais dos modelos de IA foram ajustadas com sucesso.');
+            if (provider) {
+                successEmbed.addFields(
+                    { name: 'Provedor', value: provider, inline: true },
+                    { name: 'Configuração', value: setting, inline: true },
+                    { name: 'Valor', value: String(value), inline: true }
+                );
+            }
+            await interaction.reply({ embeds: [successEmbed], ephemeral: true });
         } else if (commandName === 'ia_model_config') {
-            if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
+            if (!config.isOwner(interaction.user.id)) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Comando restrito ao criador da Hikari.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const mostrarModelo = interaction.options.getBoolean('mostrar_modelo');
             const mostrarModeloPensamento = interaction.options.getBoolean('mostrar_modelo_pensamento');
             const tentativasErro = interaction.options.getInteger('tentativas_erro');
             if (mostrarModelo !== null) updateShowModel(mostrarModelo);
             if (mostrarModeloPensamento !== null) updateShowModelThinking(mostrarModeloPensamento);
             if (tentativasErro !== null) updateErrorRetries(tentativasErro);
-            await interaction.reply({ content: '✅ Configurações de exibição do modelo e tentativas atualizadas.', ephemeral: true });
+            const successEmbed = new EmbedBuilder()
+                .setColor(0x10B981)
+                .setTitle('⚙️ Configurações • Depuração e Retentativas')
+                .setDescription('As diretrizes de exibição do modelo e tentativas de execução foram salvas.')
+                .addFields(
+                    { name: 'Exibir Modelo', value: mostrarModelo !== null ? (mostrarModelo ? 'Sim' : 'Não') : 'Não alterado', inline: true },
+                    { name: 'Exibir Pensamento', value: mostrarModeloPensamento !== null ? (mostrarModeloPensamento ? 'Sim' : 'Não') : 'Não alterado', inline: true },
+                    { name: 'Tentativas de Erro', value: tentativasErro !== null ? String(tentativasErro) : 'Não alterado', inline: true }
+                );
+            await interaction.reply({ embeds: [successEmbed], ephemeral: true });
         } else if (commandName === 'adm_banir') {
-            if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Negado.', ephemeral: true });
+            if (!config.isOwner(interaction.user.id)) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Comando restrito ao criador da Hikari.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const tipo = interaction.options.getString('tipo');
             const id = interaction.options.getString('id');
             const motivo = interaction.options.getString('motivo') || "Violação.";
             addBan(tipo, id, motivo);
-            await interaction.reply({ content: `✅ **${tipo}** \`${id}\` banido! Motivo: ${motivo}`, ephemeral: false });
+            const successEmbed = new EmbedBuilder()
+                .setColor(0xE11D48)
+                .setTitle('🔒 Restrição • Novo Bloqueio')
+                .setDescription('O identificador foi incluído na lista global de restrições de uso.')
+                .addFields(
+                    { name: 'Tipo de Bloqueio', value: tipo, inline: true },
+                    { name: 'Identificador (ID)', value: `\`${id}\``, inline: true },
+                    { name: 'Motivo', value: motivo }
+                )
+                .setTimestamp();
+            await interaction.reply({ embeds: [successEmbed], ephemeral: false });
         } else if (commandName === 'adm_desbanir') {
-            if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Negado.', ephemeral: true });
+            if (!config.isOwner(interaction.user.id)) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Comando restrito ao criador da Hikari.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const tipo = interaction.options.getString('tipo');
             const id = interaction.options.getString('id');
             removeBan(tipo, id);
-            await interaction.reply({ content: `✅ **${tipo}** \`${id}\` desbanido com sucesso!`, ephemeral: false });
+            const successEmbed = new EmbedBuilder()
+                .setColor(0x10B981)
+                .setTitle('🔓 Restrição • Bloqueio Revogado')
+                .setDescription('O identificador foi reabilitado para acesso aos serviços do bot.')
+                .addFields(
+                    { name: 'Tipo', value: tipo, inline: true },
+                    { name: 'Identificador (ID)', value: `\`${id}\``, inline: true }
+                )
+                .setTimestamp();
+            await interaction.reply({ embeds: [successEmbed], ephemeral: false });
         } else if (commandName === 'adm_lista_bans') {
-            if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Negado.', ephemeral: true });
+            if (!config.isOwner(interaction.user.id)) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Comando restrito ao criador da Hikari.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const payload = await buildBanListPayload(client, 'home');
             await interaction.reply({ ...payload, ephemeral: true });
         } else if (commandName === 'adm_automod') {
-            if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Restrito.', ephemeral: true });
+            if (!config.isOwner(interaction.user.id)) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Comando restrito ao criador da Hikari.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
             const guildId = interaction.options.getString('id');
             const modo = interaction.options.getString('modo');
             setAutoBlock(guildId, modo);
-            await interaction.reply({ content: `🛡️ AutoMod do servidor \`${guildId}\` atualizado para \`${modo}\`.`, ephemeral: true });
+            const successEmbed = new EmbedBuilder()
+                .setColor(0x10B981)
+                .setTitle('🛡️ Segurança • AutoMod do Servidor')
+                .setDescription('O nível de automoderação e monitoramento do servidor foi modificado.')
+                .addFields(
+                    { name: 'ID do Servidor', value: `\`${guildId}\``, inline: true },
+                    { name: 'Novo Modo', value: `\`${modo}\``, inline: true }
+                )
+                .setTimestamp();
+            await interaction.reply({ embeds: [successEmbed], ephemeral: true });
         } else if (commandName === 'steam_jogo') {
             const query = interaction.options.getString('nome');
             await interaction.deferReply();
-            
             try {
                 const steamInfo = await getSteamGameInfo(query);
                 if (steamInfo.error) {
-                    return await interaction.editReply(`❌ ${steamInfo.error}`);
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Erro na Steam')
+                        .setDescription(steamInfo.error);
+                    return await interaction.editReply({ embeds: [errEmbed] });
                 }
 
                 let finalDesc = steamInfo.description || "Sem sinopse válida.";
                 if (finalDesc.length > 3900) finalDesc = finalDesc.substring(0, 3900) + '...';
 
                 const steamEmbed = new EmbedBuilder()
-                    .setColor(0x9B59B6)
+                    .setColor(0x7C3AED)
                     .setTitle(steamInfo.name)
                     .setURL(steamInfo.url)
                     .setDescription(finalDesc)
@@ -1053,7 +1311,6 @@ module.exports = {
                 try {
                     const commentPrompt = `Eu acabei de consultar o jogo "${steamInfo.name}" na Steam via comando manual. O preço atual é ${steamInfo.price}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
                     const rawComment = await generateResponse(commentPrompt, interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true });
-                    
                     if (rawComment && !rawComment.includes('⚠️ SYSTEM ERROR')) {
                         let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
                         const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
@@ -1072,18 +1329,25 @@ module.exports = {
                 await interaction.editReply({ content: hikariComment || null, embeds: [steamEmbed] });
             } catch (error) {
                 console.error('Erro no comando steam_jogo:', error);
-                await interaction.editReply('❌ Erro ao processar a consulta da Steam.');
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Erro de Processamento')
+                    .setDescription('Erro ao processar a consulta da Steam.');
+                await interaction.editReply({ embeds: [errEmbed] });
             }
         } else if (commandName === 'converter_moeda') {
             const amount = interaction.options.getNumber('valor');
             const from = interaction.options.getString('de');
             const to = interaction.options.getString('para');
             await interaction.deferReply();
-            
             try {
                 const convInfo = await convertCurrency(amount, from, to);
                 if (convInfo.error) {
-                    return await interaction.editReply(`❌ ${convInfo.error}`);
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Erro na Conversão')
+                        .setDescription(convInfo.error);
+                    return await interaction.editReply({ embeds: [errEmbed] });
                 }
 
                 const amountFormatted = Number(convInfo.amount).toLocaleString('pt-BR');
@@ -1091,7 +1355,7 @@ module.exports = {
                 const rateFormatted = Number(convInfo.rate).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
                 
                 const convEmbed = new EmbedBuilder()
-                    .setColor(0x2ECC71)
+                    .setColor(0x10B981)
                     .setTitle(`Conversão de Moedas: ${convInfo.name}`)
                     .setDescription(`**${amountFormatted} ${convInfo.from}** equivale a **${resultFormatted} ${convInfo.to}**`)
                     .addFields(
@@ -1105,7 +1369,6 @@ module.exports = {
                 try {
                     const commentPrompt = `Eu acabei de converter ${convInfo.amount} ${convInfo.from} para ${convInfo.to} via comando manual. O resultado foi ${resultFormatted}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
                     const rawComment = await generateResponse(commentPrompt, interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true });
-                    
                     if (rawComment && !rawComment.includes('⚠️ SYSTEM ERROR')) {
                         let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
                         const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
@@ -1124,7 +1387,11 @@ module.exports = {
                 await interaction.editReply({ content: hikariComment || null, embeds: [convEmbed] });
             } catch (error) {
                 console.error('Erro no comando converter_moeda:', error);
-                await interaction.editReply('❌ Erro ao tentar converter essa moeda.');
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Erro de Processamento')
+                    .setDescription('Erro ao tentar converter essa moeda.');
+                await interaction.editReply({ embeds: [errEmbed] });
             }
         }
     },

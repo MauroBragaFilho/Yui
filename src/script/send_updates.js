@@ -16,7 +16,7 @@ const acceptedServers = JSON.parse(fs.readFileSync(ACCEPTED_FILE, 'utf8'));
 const serverSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
 
 const updateEmbed = new EmbedBuilder()
-    .setColor(0x9B59B6)
+    .setColor(0x7C3AED)
     .setTitle('🚀 Novo update da Hikari - Novas Features!')
     .setDescription('Modificações da última atualização:\n\n Placeholder aqui ó')
     .setFooter({ text: 'Hikari Updates • by yGuilhermy' })
@@ -117,7 +117,7 @@ client.once('ready', async () => {
                 serverSettings[target.guildId].updateChannelId = target.channel.id;
                 
                 const infoEmbed = new EmbedBuilder()
-                    .setColor(0x9B59B6)
+                    .setColor(0x7C3AED)
                     .setTitle('📢 Central de Updates Ativada!')
                     .setDescription('Olá! Apresentamos a nova função de avisos de atualizações da Hikari. Este canal foi configurado automaticamente como o canal de updates do servidor.\n\nA partir de agora, novas atualizações da Hikari serão enviadas aqui. Caso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\`');
                 
