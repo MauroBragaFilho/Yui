@@ -382,6 +382,11 @@ const commands = [
                     .setRequired(true)
                     .setAutocomplete(true))
     ),
+    setGlobalContext(
+        new SlashCommandBuilder()
+            .setName('bot_config')
+            .setDescription('Painel de configuração geral do bot. (Somente criador)')
+    ),
 ].map(command => command.toJSON());
 async function registerCommands(client, rest) {
     try {

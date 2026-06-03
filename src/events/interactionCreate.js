@@ -47,6 +47,7 @@ const { handleSauceCommand } = require('../handlers/sauceHandler');
 const { getSteamGameInfo } = require('../handlers/steamHandler');
 const { convertCurrency } = require('../handlers/currencyHandler');
 const { generateResponse } = require('../handlers/llmHandler');
+const { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect } = require('../handlers/configPanelHandler');
 
 async function buildBanListPayload(client, category, page = 0) {
     const currentBans = getBans();
@@ -314,7 +315,29 @@ module.exports = {
                 }
             }
         }
+        if (interaction.isModalSubmit()) {
+            if (interaction.customId.startsWith('cfgmodal_')) {
+                if (!config.isOwner(interaction.user.id)) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Acesso Negado')
+                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
+                return await handleConfigModal(interaction);
+            }
+        }
         if (interaction.isStringSelectMenu()) {
+            if (interaction.customId === 'cfgpanel_goto_select') {
+                if (!config.isOwner(interaction.user.id)) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Acesso Negado')
+                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
+                return await handleConfigSelect(interaction);
+            }
             if (interaction.customId.startsWith('banlist_select_')) {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
@@ -392,6 +415,16 @@ module.exports = {
         }
         if (interaction.isButton()) {
             const cid = interaction.customId;
+            if (cid.startsWith('cfgpanel_')) {
+                if (!config.isOwner(interaction.user.id)) {
+                    const errEmbed = new EmbedBuilder()
+                        .setColor(0xE11D48)
+                        .setTitle('❌ Acesso Negado')
+                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+                }
+                return await handleConfigButton(interaction);
+            }
             if (cid.startsWith('adm_') || cid.startsWith('banlist_')) {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
@@ -1393,6 +1426,15 @@ module.exports = {
                     .setDescription('Erro ao tentar converter essa moeda.');
                 await interaction.editReply({ embeds: [errEmbed] });
             }
+        } else if (commandName === 'bot_config') {
+            if (!config.isOwner(interaction.user.id)) {
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Acesso Negado')
+                    .setDescription('Comando restrito ao criador da Hikari.');
+                return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+            }
+            await handleConfigCommand(interaction);
         }
     },
 };
