@@ -326,6 +326,16 @@ function stripThinking(text) {
     if (!text) return text;
     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
     text = text.replace(/<think>[\s\S]*/gi, '');
+    const toolCodeMatch = text.match(/tool_code[\s\n]*(?:```(?:python)?[\s\n]*)?print\(default_api\.generate_reply\(content=['"]([\s\S]*?)['"]\)\)(?:[\s\n]*```)?/i);
+    if (toolCodeMatch) {
+        console.log('[StripThinking] Detectado e extraído tool_code generate_reply.');
+        return toolCodeMatch[1].trim();
+    }
+    const toolCodeGeneric = text.match(/tool_code[\s\n]*(?:```(?:python)?[\s\n]*)?print\(default_api\.(\w+)\(([\s\S]*?)\)\)(?:[\s\n]*```)?/i);
+    if (toolCodeGeneric) {
+        console.log('[StripThinking] Detectado tool_code genérico, removendo.');
+        return '';
+    }
     let clean = text.trim();
     if (/^(thought|thinking|pensamento|thinking\s+process)s?\b/i.test(clean)) {
         const labelMatch = clean.match(/(?:response|reply|resposta|fala|hikari|output|text)\s*:\s*([\s\S]+)$/i);
@@ -843,7 +853,7 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
             try {
                 if (options.onProviderAttempt) {
                     try {
-                        await options.onProviderAttempt(`gemini (${modelName}) ${i + 1}/${apiKeys.length}`);
+                        await options.onProviderAttempt(`gemini ${i + 1}/${apiKeys.length}`);
                     } catch (e) {
                     }
                 }
@@ -881,6 +891,12 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
                         } catch (e) {
                             console.warn("[Gemini MCP] JSON Args Warning:", e.message);
                         }
+                        if (firstTool.name === 'generate_reply' && args.content) {
+                            return {
+                                text: args.content,
+                                modelName: 'Gemini'
+                            };
+                        }
                         const formattedResponse = JSON.stringify({
                             thought: "Action triggered by Gemini MCP 2.0",
                             tool: firstTool.name,
@@ -891,8 +907,17 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
                             modelName: 'Gemini'
                         };
                     } else if (msg.content) {
+                        let content = msg.content;
+                        const toolCodeReply = content.match(/tool_code[\s\n]*(?:```(?:python)?[\s\n]*)?print\(default_api\.generate_reply\(content=['"]([\s\S]*?)['"]\)\)(?:[\s\n]*```)?/i);
+                        if (toolCodeReply) {
+                            console.warn('[Gemini] Interceptado tool_code vazando como texto. Extraindo conteúdo.');
+                            content = toolCodeReply[1];
+                        } else if (/tool_code[\s\n]*(?:```)?/i.test(content)) {
+                            console.warn('[Gemini] Detectado tool_code genérico no content. Descartando resposta.');
+                            throw new Error('Gemini retornou tool_code como texto (formato inválido)');
+                        }
                         return {
-                            text: msg.content,
+                            text: content,
                             modelName: 'Gemini'
                         };
                     }
@@ -1295,9 +1320,9 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             });
             isBlocked = false;
             if (rawResponse) {
-                if (rawResponse.includes('[Tool Use:') || thoughtLeakRegex.test(rawResponse)) {
+                if (rawResponse.includes('[Tool Use:') || thoughtLeakRegex.test(rawResponse) || /tool_code[\s\n]*(?:```)?/i.test(rawResponse) || /default_api\./i.test(rawResponse)) {
                     isBlocked = true;
-                    console.error('[SECURITY BLOCK] Bloqueado vazamento de Tool Use/JSON Raw:', rawResponse);
+                    console.error('[SECURITY BLOCK] Bloqueado vazamento de Tool Use/JSON Raw/tool_code:', rawResponse.substring(0, 200));
                 } else {
                     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
                     if (jsonMatch) {
