@@ -326,14 +326,47 @@ function stripThinking(text) {
     if (!text) return text;
     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
     text = text.replace(/<think>[\s\S]*/gi, '');
-    const toolCodeMatch = text.match(/tool_code[\s\n]*(?:```(?:python)?[\s\n]*)?print\(default_api\.generate_reply\(content=['"]([\s\S]*?)['"]\)\)(?:[\s\n]*```)?/i);
+    const toolCodeMatch = text.match(/tool_code[\s\n]*(?:```(?:python)?[\s\n]*)?print\(default_api\.generate_reply\(content=['"]([^]*?)[']\)\)(?:[\s\n]*```)?/i);
     if (toolCodeMatch) {
         console.log('[StripThinking] Detectado e extraído tool_code generate_reply.');
         return toolCodeMatch[1].trim();
     }
-    const toolCodeGeneric = text.match(/tool_code[\s\n]*(?:```(?:python)?[\s\n]*)?print\(default_api\.(\w+)\(([\s\S]*?)\)\)(?:[\s\n]*```)?/i);
+    const toolCodeGeneric = text.match(/tool_code[\s\n]*(?:```(?:python)?[\s\n]*)?print\(default_api\.(\w+)\(([^]*?)\)\)(?:[\s\n]*```)?/i);
     if (toolCodeGeneric) {
         console.log('[StripThinking] Detectado tool_code genérico, removendo.');
+        return '';
+    }
+    const mcpToolNames = ['search_game', 'search_web', 'generate_reply', 'download_audio', 'download_video', 'generate_image', 'check_steam', 'convert_currency', 'show_bot_menu', 'ia_automod', 'default_api'];
+    const toolMentionRegex = new RegExp('(?:`?' + mcpToolNames.join('`?|`?') + '`?)', 'i');
+    const thinkingIndicators = /(?:ferramenta|a resposta deve|a mais adequada|o melhor seria|esta pergunta|o usu[aá]rio|preciso (?:saber|analisar|verificar)|vou (?:usar|chamar|analisar)|devo (?:usar|chamar)|(?:é|seria|pode ser) (?:genéric[oa]|específic[oa]))/i;
+    if (toolMentionRegex.test(text) && thinkingIndicators.test(text)) {
+        console.log('[StripThinking] Detectado vazamento de raciocínio MCP no texto.');
+        const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+        if (paragraphs.length > 1) {
+            const cleanParagraphs = [];
+            for (let i = paragraphs.length - 1; i >= 0; i--) {
+                const p = paragraphs[i];
+                const hasToolRef = toolMentionRegex.test(p) && thinkingIndicators.test(p);
+                if (!hasToolRef) {
+                    cleanParagraphs.unshift(p);
+                } else {
+                    break;
+                }
+            }
+            if (cleanParagraphs.length > 0) {
+                const result = cleanParagraphs.join('\n\n').trim();
+                console.log(`[StripThinking] Extraído ${cleanParagraphs.length} parágrafos limpos de ${paragraphs.length} total.`);
+                return result;
+            }
+        }
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        for (let i = lines.length - 1; i >= 0; i--) {
+            if (!toolMentionRegex.test(lines[i]) && !thinkingIndicators.test(lines[i]) && lines[i].length > 10) {
+                console.log('[StripThinking] Extraída última linha limpa como resposta.');
+                return lines[i];
+            }
+        }
+        console.warn('[StripThinking] Não foi possível extrair resposta limpa do raciocínio MCP.');
         return '';
     }
     let clean = text.trim();
@@ -345,7 +378,7 @@ function stripThinking(text) {
         const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         if (lines.length > 1) {
             let lastLine = lines[lines.length - 1];
-            const concatMatch = lastLine.match(/^(?:i'll|i will|i should|i need to|let's|so i'll|therefore|i must)\s+[\s\S]+?[\.\!\?]\s*([A-Z\u00C0-\u00DC\d].*)$/i);
+            const concatMatch = lastLine.match(/^(?:i'll|i will|i should|i need to|let's|so i'll|therefore|i must)\s+[\s\S]+?[\.!\?]\s*([A-Z\u00C0-\u00DC\d].*)$/i);
             if (concatMatch) {
                 return concatMatch[1].trim();
             }
@@ -1108,6 +1141,7 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
                 if (provider.func === tryLocal && config.lmStudioApiKey) {
                     effectiveSystemPrompt += "\n[SYSTEM NOTICE]: You operate in STRICT TOOL MODE. You MUST ALWAYS call a tool.\n- If the user wants an action (search, download, help), use the specific tool.\n- For EVERYTHING ELSE (chat, math, questions), use the 'generate_reply' tool.\n- DO NOT output plain text. ALWAYS output a tool call.";
                 } else if (provider.func === tryGemini) {
+                    effectiveSystemPrompt += "\n[REGRAS CRÍTICAS DE FERRAMENTAS (TOOLS)]:\n1) Você tem ferramentas disponíveis via API. Use-as APENAS quando o usuário pedir uma AÇÃO REAL (download, busca web, gerar imagem, etc.).\n2) Para conversas normais (saudações, perguntas, piadas, conselhos), responda DIRETAMENTE com texto puro. NÃO chame nenhuma ferramenta para conversas comuns.\n3) NUNCA escreva 'tool_code', 'print()', 'default_api.' ou código Python na sua resposta. Essas são ferramentas internas invisíveis ao usuário.\n4) NUNCA mencione nomes de ferramentas (search_game, generate_reply, search_web, etc.) na sua resposta ao usuário. Esses são termos internos do sistema.\n5) NUNCA exponha seu raciocínio sobre qual ferramenta usar. Sua resposta deve conter APENAS a fala final para o usuário.\n6) Se for responder com texto, escreva APENAS o texto da resposta. Sem análise, sem justificativas internas, sem pensamentos.";
                 } else {
                     effectiveSystemPrompt += buildToolsDefinition(guildId, options.userId || null);
                 }
