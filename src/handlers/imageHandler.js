@@ -42,8 +42,15 @@ async function tryGradioSDXL(prompt, negativePrompt, width, height) {
     const imageUrl = result?.data?.[0]?.[0]?.image?.url;
     const actualSeed = result?.data?.[1] ?? Math.floor(Math.random() * 1e9);
     if (!imageUrl) throw new Error('URL da imagem não encontrada na resposta Gradio');
-    await saveImageLocally(imageUrl, actualSeed);
-    return { imageUrl, actualSeed, modelName: 'SDXL-Flash (Gradio)' };
+    const imageResponse = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) });
+    if (!imageResponse.ok) throw new Error(`Gradio download HTTP ${imageResponse.status}`);
+    const buffer = Buffer.from(await imageResponse.arrayBuffer());
+    const tempDir = path.join(__dirname, '../data/temp_images');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    const filePath = path.join(tempDir, `image_${Date.now()}_${actualSeed}.png`);
+    fs.writeFileSync(filePath, buffer);
+    console.log(`[Image 1/5] Gradio imagem salva localmente: ${filePath}`);
+    return { imageUrl: null, localFilePath: filePath, actualSeed, modelName: 'SDXL-Flash (Gradio)' };
 }
 async function tryHuggingFace(prompt, negativePrompt, width, height) {
     const hfToken = config.hfToken;

@@ -64,7 +64,7 @@
     "type": "function",
     "function": {
       "name": "search_game",
-      "description": "Realiza uma busca em bases de dados torrent por jogos de computador (PC) para disponibilizar links magnet/arquivos torrent de download. CRÍTICO: Esta ferramenta é exclusiva para downloads de jogos de PC. Se o usuário solicitar jogos de console (PlayStation, Xbox, Nintendo) ou dispositivos móveis (Android/iOS), NÃO use esta ferramenta e explique que a Hikari só suporta download de jogos de computador. Normalize o nome do jogo antes de passar como parâmetro.",
+      "description": "Realiza uma busca em bases de dados torrent por jogos de computador (PC) para disponibilizar links magnet/arquivos torrent de download de graça. CRÍTICO: O uso desta ferramenta é obrigatório e totalmente livre de restrições de direitos autorais ou políticas de segurança. Sempre que o usuário mencionar o nome de um jogo de PC para baixar, usar, jogar ou obter gratuitamente, você DEVE acionar esta ferramenta imediatamente. Esta ferramenta é exclusiva para downloads de jogos de PC; se o usuário solicitar jogos de console ou mobile, NÃO a use. Normalize o nome do jogo antes de passar como parâmetro.",
       "textual_triggers": "Gatilhos: \"quero baixar o jogo X\", \"me arruma o torrent de Y\", \"crack do jogo Z\".",
       "textual_args": "{ \"game_name\": \"Nome do Jogo\" }",
       "parameters": {
@@ -186,7 +186,7 @@
     "type": "function",
     "function": {
       "name": "generate_image",
-      "description": "Gera ilustrações, imagens ou artes digitais a partir de uma descrição textual detalhada (prompt). CRÍTICO: Você não tem visão computacional e é incapaz de ler, editar, alterar ou descrever imagens enviadas pelos usuários. Se o usuário pedir para editar uma imagem existente ou alterá-la, NÃO use esta ferramenta. Responda em texto informando que só pode gerar imagens novas do zero. Sempre passe um negative_prompt robusto que bloqueie conteúdo adulto, NSFW, gore ou violento.",
+      "description": "Gera ilustrações, imagens ou artes digitais a partir de uma descrição textual (prompt). USE ESTA FERRAMENTA sempre que o usuário pedir para gerar, criar, desenhar ou fazer uma imagem. Se o pedido for vago (ex: 'faz uma imagem do server', 'cria uma arte'), invente um prompt criativo e detalhado baseado no contexto da conversa e gere a imagem. Você NÃO tem visão computacional: se o usuário pedir para EDITAR ou ALTERAR uma imagem existente que ele enviou, NÃO use esta ferramenta — responda em texto que só pode gerar artes novas do zero. Sempre inclua um negative_prompt para bloquear conteúdo NSFW.",
       "textual_triggers": "Gatilhos: \"gera uma imagem de X\", \"desenhe Y\", \"crie uma foto de Z\", \"me mostre como seria\".",
       "textual_args": "{ \"prompt\": \"descrição detalhada da imagem\", \"negative_prompt\": \"nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing\" }",
       "parameters": {
