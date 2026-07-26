@@ -31,7 +31,7 @@ module.exports = {
             return message.reply({ embeds: [banEmbed], components: [banRow] }).catch(() => {});
         }
         if (message.guildId) {
-            const { isServerAccepted } = require('../handlers/tosHandler');
+            const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
             if (!isServerAccepted(message.guildId)) {
                 const serverSettings = getServerSettings(message.guildId);
                 const respondToEveryone = serverSettings.respondToEveryone || false;
@@ -39,10 +39,19 @@ module.exports = {
                 const botName = config.botName || 'Hikari';
                 const nameRegex = new RegExp(`\\b${botName}\\b`, 'i');
                 const hasHikariName = nameRegex.test(message.content);
-                if (isMention || hasHikariName) {
-                    return message.reply({
-                        content: '❌ **Acesso Bloqueado!** Este servidor ainda não aceitou os **Termos de Uso da Hikari**. Peça para um administrador liberar o bot executando o comando \`/aceitar_tos\`.'
-                    }).catch(() => {});
+                let isReplyToBot = false;
+                if (message.reference && message.reference.messageId) {
+                    try {
+                        const refMsg = message.channel.messages.cache.get(message.reference.messageId);
+                        if (refMsg && refMsg.author && refMsg.author.id === client.user.id) {
+                            isReplyToBot = true;
+                        }
+                    } catch (e) {}
+                }
+                const settings = getChannelSettings(message.channelId);
+                const isChatterActive = settings?.chatter?.active || false;
+                if (isMention || hasHikariName || isReplyToBot || isChatterActive) {
+                    await sendTermsOfService(message);
                 }
                 return;
             }
@@ -91,14 +100,14 @@ module.exports = {
                     }
                     history.push(`${authorName}: ${content}`);
                 }
-                const currentDate = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                const currentDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 let envInfo = '';
                 if (config.sendEnvironmentInfo) {
                     envInfo = `Servidor: ${message.guild?.name || 'DM'} | Canal: #${message.channel?.name || 'Chat'}\n`;
                 }
                 const finalPrompt = `
 --- CONTEXTO DO CHAT ---
-Data atual: ${currentDate}
+Data e hora atual: ${currentDate}
 ${envInfo}${history.join('\n')}
 --- FIM DO CONTEXTO ---
 --- MENSAGEM ATUAL ---
@@ -150,14 +159,14 @@ INSTRUÇÃO: Responda diretamente à mensagem atual considerando o contexto.`;
                             }
                             history.push(`${authorName}: ${content}`);
                         });
-                        const currentDate = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                        const currentDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         let envInfo = '';
                         if (config.sendEnvironmentInfo) {
                             envInfo = `Servidor: ${message.guild?.name || 'DM'} | Canal: #${message.channel?.name || 'Chat'}\n`;
                         }
                         const finalPrompt = `
 --- CONTEXTO DO CHAT ---
-Data atual: ${currentDate}
+Data e hora atual: ${currentDate}
 ${envInfo}${history.join('\n')}
 --- FIM DO CONTEXTO ---
 --- MENSAGEM ATUAL ---

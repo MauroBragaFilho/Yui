@@ -296,21 +296,12 @@ module.exports = {
     once: false,
     async execute(interaction, client) {
         if (interaction.guildId) {
-            const { isServerAccepted } = require('../handlers/tosHandler');
+            const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
             if (!isServerAccepted(interaction.guildId)) {
                 const isTosAction = (interaction.isCommand() && interaction.commandName === 'aceitar_tos') ||
                                     (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline'));
                 if (!isTosAction) {
-                    if (interaction.isRepliable()) {
-                        const blockEmbed = new EmbedBuilder()
-                            .setColor(0xE11D48)
-                            .setTitle('❌ Acesso Bloqueado')
-                            .setDescription('Este servidor ainda não aceitou os **Termos de Uso da Hikari**.\n\nSolicite a um administrador que libere o bot executando o comando `/aceitar_tos` neste canal.');
-                        return interaction.reply({
-                            embeds: [blockEmbed],
-                            ephemeral: true
-                        });
-                    }
+                    await sendTermsOfService(interaction);
                     return;
                 }
             }

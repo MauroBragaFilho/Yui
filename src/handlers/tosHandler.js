@@ -42,14 +42,14 @@ function getBufferedCommand(guildId) {
 function clearBufferedCommand(guildId) {
     commandBuffer.delete(guildId);
 }
-async function sendTermsOfService(interaction, requestData = null) {
-    const guild = interaction.guild;
-    const guildId = interaction.guildId;
-    if (!guild) return;
+async function sendTermsOfService(target, requestData = null) {
+    const guild = target.guild;
+    const guildId = target.guildId || (target.guild ? target.guild.id : null);
+    if (!guild || !guildId) return;
     if (requestData && !commandBuffer.has(guildId)) {
         commandBuffer.set(guildId, {
             prompt: requestData.prompt,
-            interaction: requestData.interaction,
+            interaction: requestData.interaction || requestData.message,
             type: requestData.type,
             options: requestData.options,
             userTag: requestData.userTag
@@ -59,7 +59,7 @@ async function sendTermsOfService(interaction, requestData = null) {
     const now = Date.now();
     const diffDays = (now - (guild.joinedTimestamp || now)) / (1000 * 60 * 60 * 24);
     const isLegacy = diffDays >= 7;
-            const helpDataPath = path.join(__dirname, '../data/help.json');
+    const helpDataPath = path.join(__dirname, '../data/help.json');
     let rulesText = "O servidor precisa aceitar as Regras & Termos de Uso da Hikari para continuar.";
     if (fs.existsSync(helpDataPath)) {
         try {
@@ -94,10 +94,10 @@ async function sendTermsOfService(interaction, requestData = null) {
             .setStyle(ButtonStyle.Link)
     );
     try {
-        if (interaction.deferred || interaction.replied) {
-            await interaction.editReply({ content: null, embeds: [embed], components: [row] });
-        } else {
-            await interaction.reply({ embeds: [embed], components: [row], failIfNotExists: false });
+        if (target.deferred || target.replied) {
+            await target.editReply({ content: null, embeds: [embed], components: [row] });
+        } else if (typeof target.reply === 'function') {
+            await target.reply({ embeds: [embed], components: [row], failIfNotExists: false });
         }
     } catch (err) {
         console.error('[TOS] Erro ao enviar mensagem de ToS:', err.message);

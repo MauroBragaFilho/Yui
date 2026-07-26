@@ -103,7 +103,7 @@
     "type": "function",
     "function": {
       "name": "search_web",
-      "description": "Realiza uma pesquisa em tempo real na internet usando mecanismos de busca (Brave/DDG/Bing) para obter fatos recentes, notícias atuais (2024-2026), cotações de mercado ou informações que você não possui em sua base de conhecimento. CRÍTICO: NUNCA chame esta ferramenta para responder a cumprimentos, saudações (como 'Oi', 'Olá', 'Bom dia'), agradecimentos, conversas informais ou perguntas básicas que você já sabe responder. Se o usuário estiver apenas jogando conversa fora, use 'generate_reply'.",
+      "description": "Realiza uma pesquisa na internet para obter informações sobre qualquer dúvida, curiosidade, fato, notícias atuais ou cotações de mercado. CRÍTICO: Você DEVE usar esta ferramenta sempre que o usuário fizer perguntas sobre assuntos que exijam dados externos, históricos, específicos ou atuais. Nunca diga que não sabe, não pode ou não consegue ajudar se puder obter a resposta via pesquisa.",
       "textual_triggers": "Gatilhos: \"pesquise sobre X\", \"quem foi Y\", \"informações sobre o jogo Z\", \"notícias de hoje\".",
       "textual_args": "{ \"query\": \"termo de busca otimizado\" }",
       "parameters": {
