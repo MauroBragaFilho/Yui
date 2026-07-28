@@ -3,6 +3,7 @@ const prism = require('prism-media');
 const { Readable } = require('stream');
 const { transcribeAudio } = require('../services/sttService');
 const { addToQueue } = require('./llmHandler');
+const { checkBan } = require('./banHandler');
 const activeConnections = new Map();
 const activeAudioStreams = new Set();
 
@@ -79,6 +80,13 @@ async function joinVoiceCall(member, textChannel, replyFn = null) {
 
     const voiceChannel = member.voice.channel;
     const guildId = voiceChannel.guild.id;
+
+    const banInfo = checkBan(member.id, guildId, textChannel?.id);
+    if (banInfo) {
+        console.log(`[VOICE] 🛑 Tentativa de conectar na voz negada (Banido: ${banInfo.typeName} - ${member.id})`);
+        await sendOrReply(`🛑 **Acesso Negado**: Você (${banInfo.typeName.toLowerCase()}) está banido da rede Hikari e não pode utilizar os serviços de voz.`, textChannel, replyFn);
+        return false;
+    }
 
     const { isToolDisabled } = require('./llmHandler');
     if (isToolDisabled(guildId, 'join_voice_call')) {
@@ -196,6 +204,12 @@ function setupVoiceReceiver(stateData, client) {
     const receiver = connection.receiver;
 
     receiver.speaking.on('start', (userId) => {
+        const banInfo = checkBan(userId, guildId, stateData.textChannelId);
+        if (banInfo) {
+            console.log(`[VOICE] 🛑 Entrada de voz ignorada do usuário banido ${userId}.`);
+            return;
+        }
+
         const streamKey = `${guildId}_${userId}`;
         if (activeAudioStreams.has(streamKey)) return;
         activeAudioStreams.add(streamKey);
@@ -245,6 +259,12 @@ function setupVoiceReceiver(stateData, client) {
 }
 
 async function processVoiceTranscription(userId, text, stateData, client) {
+    const banInfo = checkBan(userId, stateData.guildId, stateData.textChannelId);
+    if (banInfo) {
+        console.log(`[VOICE] 🛑 Transcrição de voz ignorada. Usuário ${userId} está banido.`);
+        return;
+    }
+
     const lowerText = text.toLowerCase();
 
     const triggerRegex = /\b(hikari|hikare|hikary|hikarii|hikarie|hikaris|hicari|hicare|hicary|hicarii|hicaris|hikario|hicario|hikaru|hicaru|hikar|hicar|ikari|ikare|ikary|ikarii|ikaris|icari|icare|icaro|icary|icarii|icaris|icara|icaras|icaros|ikario|icario|ikaru|icaru|ikar|icar|ricardo|ricard|ricardi|ricari|ricare|rikari|rikare|ricario|ricarto|recari|recaro|ricar|ricardin|ricardinho|ficari|ficare|vicari|vicare|ficardo|vicardo|dicari|dicare|kikari|kicari|ticari|ih\s*cari|e\s*cari|eh\s*cari|i\s*cari|re\s*cari|ri\s*cari|hi\s*cari|he\s*cari|a\s*cari|o\s*cari|ei\s*cari|oh\s*cari|oi\s*cari)\b/i;
