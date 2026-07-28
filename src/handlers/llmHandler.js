@@ -19,6 +19,7 @@ const { searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeSt
 const { generateImage } = require('./imageHandler');
 const { getSteamGameInfo } = require('./steamHandler');
 const { convertCurrency } = require('./currencyHandler');
+const { handleMusicSearchAndDownload } = require('./deezerMusicHandler');
 require('dotenv').config();
 const config = require('../config');
 const geminiCooldowns = {};
@@ -1556,6 +1557,46 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             unlockUser(audioUserId);
                         }
                         savePromptToHistory(prompt, userTag, userId, `[TOOL: DOWNLOAD_AUDIO]`, interaction);
+                        return;
+                    }
+                    if (toolData.tool === 'search_and_download_music') {
+                        const musicUserId = userId;
+                        if (!canBypass(musicUserId) && isUserBusy(musicUserId)) {
+                            await unifiedReply('⏳ Você já tem um download em andamento. Aguarde.');
+                            return;
+                        }
+                        lockUser(musicUserId);
+                        try {
+                            const musicEmbed = new EmbedBuilder()
+                                .setColor(0x9B59B6)
+                                .setTitle('🎵 Buscando Música')
+                                .setDescription(`Buscando no catalogo de musicas...\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Pesquisando faixa de música'}*`)
+                                .setFooter({ text: 'Sistema de Áudio | Base de dados do Deezer' });
+                            await unifiedReply(null, [], [], [musicEmbed]);
+
+                            const musicResult = await handleMusicSearchAndDownload(
+                                toolData.args.query,
+                                toolData.args.selected_index,
+                                { user: interaction.user, userId, userTag, guild: interaction.guild }
+                            );
+
+                            if (musicResult.error) {
+                                await unifiedReply(`❌ ${musicResult.error}`);
+                            } else if (musicResult.isAmbiguous) {
+                                await unifiedReply(musicResult.textList, [], musicResult.components, []);
+                            } else if (musicResult.success) {
+                                await unifiedReply(`✅ Música: \`${musicResult.track.title} - ${musicResult.track.artist}\``, [musicResult.attachment]);
+                                if (typeof musicResult.cleanup === 'function') {
+                                    musicResult.cleanup();
+                                }
+                            }
+                        } catch (musicError) {
+                            console.error('[SearchAndDownloadMusic] Erro:', musicError.message);
+                            await unifiedReply(`❌ Erro ao processar a música: ${musicError.message}`);
+                        } finally {
+                            unlockUser(musicUserId);
+                        }
+                        savePromptToHistory(prompt, userTag, userId, `[TOOL: SEARCH_AND_DOWNLOAD_MUSIC]`, interaction);
                         return;
                     }
                     if (toolData.tool === 'download_video') {

@@ -48,6 +48,7 @@ const { getSteamGameInfo } = require('../handlers/steamHandler');
 const { convertCurrency } = require('../handlers/currencyHandler');
 const { generateResponse } = require('../handlers/llmHandler');
 const { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect } = require('../handlers/configPanelHandler');
+const { handleMusicSearchAndDownload, clearSession } = require('../handlers/deezerMusicHandler');
 
 async function buildBanListPayload(client, category, page = 0) {
     const currentBans = getBans();
@@ -319,6 +320,33 @@ module.exports = {
             }
         }
         if (interaction.isStringSelectMenu()) {
+            if (interaction.customId.startsWith('music_select_')) {
+                const targetUserId = interaction.customId.replace('music_select_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ Esta seleção pertence a outro usuário.', ephemeral: true });
+                }
+                const selectedIndex = interaction.values[0];
+                await interaction.update({ content: '🔄 **Processando download da faixa selecionada...**', embeds: [], components: [] });
+                const result = await handleMusicSearchAndDownload(null, selectedIndex, {
+                    user: interaction.user,
+                    userId: interaction.user.id,
+                    userTag: interaction.user.tag,
+                    guild: interaction.guild
+                });
+                if (result.error) {
+                    return await interaction.editReply({ content: `❌ ${result.error}` });
+                }
+                if (result.success) {
+                    await interaction.editReply({
+                        content: `✅ Música baixada: \`${result.track.title} - ${result.track.artist}\``,
+                        files: [result.attachment]
+                    });
+                    if (typeof result.cleanup === 'function') {
+                        result.cleanup();
+                    }
+                }
+                return;
+            }
             if (interaction.customId === 'cfgpanel_goto_select') {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
@@ -406,6 +434,14 @@ module.exports = {
         }
         if (interaction.isButton()) {
             const cid = interaction.customId;
+            if (cid.startsWith('music_cancel_')) {
+                const targetUserId = cid.replace('music_cancel_', '');
+                if (interaction.user.id !== targetUserId) {
+                    return interaction.reply({ content: '❌ Esta ação pertence a outro usuário.', ephemeral: true });
+                }
+                clearSession(interaction.user.id);
+                return await interaction.update({ content: '❌ **Pesquisa de música cancelada.**', embeds: [], components: [] });
+            }
             if (cid.startsWith('cfgpanel_')) {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
@@ -1049,6 +1085,49 @@ module.exports = {
                 if (downloadedAudioInfo && downloadedAudioInfo.filePath && fs.existsSync(downloadedAudioInfo.filePath)) {
                     fs.unlink(downloadedAudioInfo.filePath, () => {});
                 }
+            }
+        } else if (commandName === 'baixar_musica_deezer') {
+            const query = interaction.options.getString('nome');
+            const userId = interaction.user.id;
+            if (!canBypass(userId) && isUserBusy(userId)) {
+                const waitEmbed = new EmbedBuilder()
+                    .setColor(0xF59E0B)
+                    .setTitle('⏳ Download em Andamento')
+                    .setDescription('Você já tem um download em execução. Por favor, aguarde ele terminar.');
+                return interaction.reply({ embeds: [waitEmbed], ephemeral: true });
+            }
+            await interaction.deferReply({ ephemeral: false });
+            lockUser(userId);
+            try {
+                const result = await handleMusicSearchAndDownload(query, null, {
+                    user: interaction.user,
+                    userId: interaction.user.id,
+                    userTag: interaction.user.tag,
+                    guild: interaction.guild
+                });
+
+                if (result.error) {
+                    await interaction.editReply({ content: `❌ ${result.error}` });
+                } else if (result.isAmbiguous) {
+                    await interaction.editReply({ content: '', embeds: [result.embed], components: result.components });
+                } else if (result.success) {
+                    await interaction.editReply({
+                        content: `✅ Música em alta qualidade baixada via Deezer: \`${result.track.title} - ${result.track.artist}\``,
+                        files: [result.attachment]
+                    });
+                    if (typeof result.cleanup === 'function') {
+                        result.cleanup();
+                    }
+                }
+            } catch (error) {
+                console.error('[BaixarMusicaDeezer]', error);
+                const errEmbed = new EmbedBuilder()
+                    .setColor(0xE11D48)
+                    .setTitle('❌ Erro')
+                    .setDescription(error.message);
+                await interaction.editReply({ embeds: [errEmbed] });
+            } finally {
+                unlockUser(userId);
             }
         } else if (commandName === 'baixar_video') {
             const videoUrl = interaction.options.getString('url');

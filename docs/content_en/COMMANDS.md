@@ -75,6 +75,13 @@ Extracts and converts video audio into MP3 format.
 - **URL:** The link to the video (YouTube, Instagram Reels, or TikTok).
 - **Advanced:** Uses `yt-dlp` to download the best audio stream and `ffmpeg` to cleanly convert it to MP3, deleting local temporary files afterward.
 
+### `/baixar_musica_deezer`
+
+Searches and downloads high quality music tracks directly from Deezer by song title or artist.
+
+- **nome:** The song name and/or artist you want to search and download.
+- **Advanced:** Uses Deezer REST API and `deemix` engine to download official studio audio in HQ MP3. Features a Match Confidence Score algorithm and presents an interactive select dropdown when ambiguous. Temporary MP3 files are automatically cleaned up right after sending.
+
 ### `/baixar_video`
 
 Downloads videos and sends them in MP4 format in the Discord chat.

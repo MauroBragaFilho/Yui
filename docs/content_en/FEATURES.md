@@ -49,6 +49,7 @@ We implemented a complete system for downloading and manipulating media via `you
 
 - **Multiplatform Support:** The bot supports downloading audio and video from popular platforms such as YouTube (general for audio, Shorts-only for video), Instagram Reels, and TikTok (including subdomains like `vt.tiktok.com`).
 - **Smart Audio Download:** Extracts only the best audio stream (`bestaudio`) via `yt-dlp` and dynamically converts it to MP3 using `ffmpeg`.
+- **Deezer HQ Music Engine (100% Deezer):** Dedicated module (`deezerMusicService.js` / `deezerMusicHandler.js`) to search and download studio-quality tracks in high quality (HQ MP3 / 320kbps) via `deemix`. Features a keyword confidence scoring algorithm and presents an interactive select dropdown with 5 options when search is ambiguous. All MP3 files are temporary and cleaned up immediately after sending.
 - **Video Download with Metadata:** When downloading videos, Hikari can extract the original uploader and description for rich chat display, configurable via command parameters.
 - **Smart Compression:** If the video file exceeds the server's upload limit (dynamically detected: 25MB default, 50MB for Boost Level 2, and 100MB for Boost Level 3), the user will be prompted to try compressing the video.
 - **Global Queue & Host Protection:** The FFMPEG compression process runs in a global queue (only one compression at a time) to preserve VPS resources. There is an active RAM monitor: if memory usage exceeds 95%, the compression process is killed immediately to prevent host crashes.

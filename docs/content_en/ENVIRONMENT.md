@@ -44,6 +44,9 @@ This guide explains each entry in the `.env` file and Hikari's internal settings
 - **`BRAVE_API_KEY`**: Used so the AI can search the internet in real-time.
   - 🔗 **Obtain from:** [Brave Search API](https://api.search.brave.com/app/dashboard)
 
+- **`DEEZER_ARL`** (or `DEEMIX_ARL`): Deezer account ARL authentication token to enable high quality music downloads via `deemix`.
+  - 🔗 **Obtain from:** The `arl` cookie in your browser developer tools on [Deezer.com](https://www.deezer.com).
+
 ---
 
 ## 🌍 Providers and URLs

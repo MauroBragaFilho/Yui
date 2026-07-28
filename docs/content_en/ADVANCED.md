@@ -40,8 +40,9 @@ Hikari's MCP ecosystem has been robustly enhanced with specific native behaviors
 ### 3. Image Generation (`image_gen`)
 - **Transparency on Limitations:** The AI is now instructed to refuse requests to edit existing images and make it clear that she does not possess native computer vision in real-time.
 
-### 4. Media Downloader (`download_video` & `download_audio`)
+### 4. Media Downloader (`download_video`, `download_audio` & `search_and_download_music`)
 - **Smart Direction:** The AI identifies the user's intent to download video or audio. If the request is ambiguous, the AI asks clarification questions in chat instead of blindly triggering the tool. The MCP does not start compression processes; that decision is handled by Discord limits and the user via buttons.
+- **Music Search & Download (`search_and_download_music`):** Allows the AI to search and download HQ MP3 tracks directly from Deezer via `deemix`. If confidence score is high (>=80%), it downloads immediately; if ambiguous, it presents a 5-track text list alongside an interactive selection dropdown menu for the user.
 
 ---
 

@@ -25,7 +25,7 @@ I'm not just a common chat bot! I'm an **Autonomous Agent** capable of interacti
 
 - **🧠 Advanced Brain**: Support for multiple models via **Gemini**, **LM Studio (Local)**, and **HuggingFace**. My personality is natural and adaptable!
 - **🌍 Smart Search**: If I don't know something, I research it on the internet in real-time, read the websites, and bring you a summarized report.
-- **🎵 Personal DJ**: Download and listen to your favorite YouTube songs directly on Discord.
+- **🎵 Personal DJ**: Download high-quality music tracks (Deezer HQ MP3) by song/artist name or extract audio from YouTube videos directly on Discord.
 - **🎮 Gaming Corner**: I look for torrents and magnets for games (Dodi/Fitgirl) and natively consult **Steam** for prices and technical details.
 - **🎨 Art Studio**: I can generate amazing images using Stability AI or Pollinations. Just ask!
 - **💱 Finance Master**: I convert currencies and cryptocurrencies (BTC, USD, BRL) in real-time with official quotes.

@@ -44,6 +44,9 @@ Este guia explica cada entrada do arquivo `.env` e as configurações internas d
 - **`BRAVE_API_KEY`**: Utilizada para que a IA possa pesquisar na internet em tempo real.
   - 🔗 **Obter em:** [Brave Search API](https://api.search.brave.com/app/dashboard)
 
+- **`DEEZER_ARL`** (ou `DEEMIX_ARL`): Token de autenticação ARL da sua conta Deezer para permitir o download de músicas em alta qualidade via `deemix`.
+  - 🔗 **Obter em:** Cookie `arl` nas ferramentas de desenvolvedor do navegador em [Deezer.com](https://www.deezer.com).
+
 ---
 
 ## 🌍 Provedores e URLs

@@ -107,6 +107,15 @@ const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
+            .setName('baixar_musica_deezer')
+            .setDescription('Baixa áudios de música em alta qualidade (Deezer HQ MP3) por nome ou artista.')
+            .addStringOption(option =>
+                option.setName('nome')
+                    .setDescription('O nome da música e/ou artista que você quer buscar e baixar.')
+                    .setRequired(true))
+    ),
+    setGlobalContext(
+        new SlashCommandBuilder()
             .setName('baixar_video')
             .setDescription('Baixa um vídeo (YouTube Shorts, Instagram Reels, TikTok) em MP4.')
             .addStringOption(option =>

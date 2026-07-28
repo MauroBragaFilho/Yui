@@ -91,6 +91,13 @@ Extrai e converte o áudio de vídeos em formato MP3.
 - **URL:** O link do vídeo (YouTube, Instagram Reels ou TikTok).
 - **Advanced:** Utiliza `yt-dlp` para baixar a melhor qualidade de áudio e `ffmpeg` para converter em MP3 de forma limpa, limpando os arquivos locais em seguida.
 
+### `/baixar_musica_deezer`
+
+Busca e baixa faixas de música de alta qualidade diretamente do catálogo Deezer pelo nome da música ou artista.
+
+- **Nome:** O nome da música e/ou artista que deseja pesquisar e baixar.
+- **Advanced:** Utiliza a API REST do Deezer e o motor `deemix` para baixar o áudio de estúdio oficial em MP3 HQ. Possui um algoritmo de pontuação de fidelidade (Match Confidence Score) e exibe um menu de seleção interativo caso haja ambiguidade. Os arquivos baixados são 100% temporários e removidos imediatamente após o envio.
+
 ### `/baixar_video`
 
 Baixa vídeos e envia em formato MP4 no chat do Discord.
