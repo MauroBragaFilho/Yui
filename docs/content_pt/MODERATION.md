@@ -39,6 +39,7 @@ O sistema de AutoMod analisa prompts e contextos em busca de padrões proibidos 
 O bloqueio do usuário pode ser ativado por dois métodos simultâneos:
 1. **Filtro de Gatilhos Rápido (Keyword Trigger):** Bloqueio imediato caso o prompt contenha termos sensíveis ou proibidos (ex: crimes graves, termos explícitos).
 2. **Análise Cognitiva da IA (AI AutoMod MCP):** O modelo avalia a intenção do chat de forma autônoma. Se identificar abusos verbais, assédio, xingamentos à Hikari ou tentativas persistentes de manipulação (jailbreak), a IA executará a ferramenta `ia_automod` de forma autônoma, aplicando o banimento global definitivo.
+3. **Moderação em Canais de Voz (Voice AutoMod):** As interações recebidas por voz em chamadas (`/entrar-call`) são transcritas e submetidas às mesmas regras de AutoMod. Além disso, usuários banidos são sumariamente ignorados e impedidos de acionar o bot por voz ou conectar a Hikari em canais de voz.
 
 ---
 
