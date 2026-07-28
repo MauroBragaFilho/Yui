@@ -32,6 +32,9 @@ cookies.txt
 # Scripts de uso unico
 enable_automod.js
 
+# Sistema de updates
+src/script/send_updates.js
+
 # Notas esquisofrenicas
 notas.md
 notas-tecnicas.md

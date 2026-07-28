@@ -18,6 +18,32 @@ function loadAcceptedServers() {
         }
     }
 }
+
+function findGeneralChannel(guild) {
+    if (!guild || !guild.channels) return null;
+    const excludeKeywords = ['bem-vindo', 'welcome', 'regras', 'rules', 'logs', 'boas-vindas', 'entradas', 'saidas', 'punicoes', 'bans', 'staff', 'afk', 'poketwo', 'comandos', 'bot-commands', 'anuncios', 'avisos'];
+    const keywords = ['geral', 'chat', 'bate-papo', 'bate_papo', 'batepapo', 'conversa', 'conversas', 'general', 'main', 'lounge', 'resenha', 'principal', 'chatzinho', 'comunidade', 'papo',];
+
+    const channels = Array.from(guild.channels.cache.values()).filter(c =>
+        c.isTextBased() &&
+        c.permissionsFor(guild.client.user)?.has(PermissionFlagsBits.SendMessages) &&
+        !excludeKeywords.some(ex => c.name.toLowerCase().includes(ex))
+    );
+    if (channels.length === 0) return null;
+
+    for (const kw of keywords) {
+        const found = channels.find(c => c.name.toLowerCase().includes(kw));
+        if (found) return found;
+    }
+
+    if (guild.systemChannel && guild.systemChannel.permissionsFor(guild.client.user)?.has(PermissionFlagsBits.SendMessages)) {
+        if (!excludeKeywords.some(ex => guild.systemChannel.name.toLowerCase().includes(ex))) {
+            return guild.systemChannel;
+        }
+    }
+
+    return channels[0] || null;
+}
 loadAcceptedServers();
 function isServerAccepted(guildId) {
     if (!config.requireTos) return true;
@@ -132,8 +158,16 @@ async function handleTosInteraction(interaction) {
             console.log('[TOS-DEBUG] Salvando aceitação síncrona...');
             saveAcceptedServer(guild.name, guild.id, guild.ownerId, interaction.user.id);
             console.log('[TOS-DEBUG] Salvo com sucesso.');
-            const { setServerUpdateChannel } = require('./llmHandler');
-            setServerUpdateChannel(guild.id, interaction.channelId);
+            const { setServerUpdateChannel, getServerSettings } = require('./llmHandler');
+            const settings = getServerSettings(guild.id);
+            let targetUpdateChannel = null;
+            if (settings && settings.updateChannelId) {
+                targetUpdateChannel = guild.channels.cache.get(settings.updateChannelId);
+            }
+            if (!targetUpdateChannel) {
+                targetUpdateChannel = findGeneralChannel(guild) || interaction.channel;
+                setServerUpdateChannel(guild.id, targetUpdateChannel.id);
+            }
             await interaction.editReply({
                 content: `✅ **Termos de Uso aceitos por <@${interaction.user.id}>!** A Hikari agora está liberada para este servidor. ✨`,
                 embeds: [],
@@ -141,9 +175,9 @@ async function handleTosInteraction(interaction) {
             }).catch(err => console.error('[TOS-DEBUG] Erro no editReply (Accept):', err.message));
             const updatesEmbed = new EmbedBuilder()
                 .setColor(0x7C3AED)
-                .setTitle('📢 Canal de Updates Configurado')
-                .setDescription(`Este canal foi salvo para receber as novidades e atualizações da Hikari.\n\nCaso queira alterar o canal de atualizações, utilize o comando:\n\`/chat_updates [canal]\``);
-            await interaction.channel.send({ embeds: [updatesEmbed] }).catch(() => {});
+                .setTitle('📢 Central de Updates Configurada')
+                .setDescription(`O canal <#${targetUpdateChannel.id}> foi registrado para receber as novidades e atualizações da Hikari.\n\nCaso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\``);
+            await targetUpdateChannel.send({ embeds: [updatesEmbed] }).catch(() => {});
             console.log(`[TOS-DEBUG] Servidor ${guild.id} aceitou.`);
             const buffered = getBufferedCommand(guild.id);
             if (buffered) {
@@ -274,17 +308,15 @@ Basta clicar no botão **"Aceitar Termos"** abaixo. Somente usuários com permis
     }
 }
 async function checkAndInitializeUpdateChannel(guild, channel) {
-    if (!guild || !channel) return;
+    if (!guild) return;
     if (!isServerAccepted(guild.id)) return;
     const { getServerSettings, setServerUpdateChannel } = require('./llmHandler');
     const settings = getServerSettings(guild.id);
     if (!settings.updateChannelId) {
-        setServerUpdateChannel(guild.id, channel.id);
-        const embed = new EmbedBuilder()
-            .setColor(0x7C3AED)
-            .setTitle('📢 Central de Updates Ativada!')
-            .setDescription('Olá! Apresentamos a nova função de avisos de atualizações da Hikari. Este canal foi configurado automaticamente como o canal de updates do servidor.\n\nA partir de agora, novas atualizações da Hikari serão enviadas aqui. Caso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\`');
-        await channel.send({ embeds: [embed] }).catch(() => {});
+        const target = findGeneralChannel(guild) || channel;
+        if (target && target.id) {
+            setServerUpdateChannel(guild.id, target.id);
+        }
     }
 }
 module.exports = {
