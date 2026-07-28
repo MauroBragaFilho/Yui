@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const { searchDeezerTracks, calculateConfidenceScore, downloadDeezerTrack, cleanupTempAudio } = require('../services/deezerMusicService');
+const { checkBan } = require('./banHandler');
 
 const musicSessions = new Map();
 
@@ -11,6 +12,10 @@ function formatDuration(seconds) {
 
 async function handleMusicSearchAndDownload(query, selectedIndex = null, context = {}) {
     const userId = context.user?.id || context.userId || 'default_user';
+    const banInfo = checkBan(userId, context.guild?.id || context.guildId, context.channel?.id || context.channelId);
+    if (banInfo) {
+        return { error: '🛑 ACESSO NEGADO: Você está banido do sistema.' };
+    }
 
     if (selectedIndex !== null && selectedIndex !== undefined) {
         const session = musicSessions.get(userId);

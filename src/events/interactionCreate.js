@@ -321,6 +321,10 @@ module.exports = {
         }
         if (interaction.isStringSelectMenu()) {
             if (interaction.customId.startsWith('music_select_')) {
+                const banInfo = checkBan(interaction.user.id, interaction.guildId, interaction.channelId);
+                if (banInfo) {
+                    return interaction.reply({ content: '🛑 **ACESSO NEGADO:** Você está banido do sistema e não pode interagir.', ephemeral: true });
+                }
                 const targetUserId = interaction.customId.replace('music_select_', '');
                 if (interaction.user.id !== targetUserId) {
                     return interaction.reply({ content: '❌ Esta seleção pertence a outro usuário.', ephemeral: true });
@@ -435,6 +439,10 @@ module.exports = {
         if (interaction.isButton()) {
             const cid = interaction.customId;
             if (cid.startsWith('music_cancel_')) {
+                const banInfo = checkBan(interaction.user.id, interaction.guildId, interaction.channelId);
+                if (banInfo) {
+                    return interaction.reply({ content: '🛑 **ACESSO NEGADO:** Você está banido do sistema e não pode interagir.', ephemeral: true });
+                }
                 const targetUserId = cid.replace('music_cancel_', '');
                 if (interaction.user.id !== targetUserId) {
                     return interaction.reply({ content: '❌ Esta ação pertence a outro usuário.', ephemeral: true });
