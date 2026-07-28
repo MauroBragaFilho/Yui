@@ -66,6 +66,22 @@ Gera imagens usando diversos modelos de difusão.
 
 ---
 
+## 🎙️ Voz & Calls
+
+### `/entrar-call`
+
+Conecta a Hikari ao seu canal de voz atual para atendimento inteligente por voz.
+
+- **Advanced:** A Hikari escuta os usuários no canal de voz e responde ao ouvir o gatilho "Hikari" (ou equivalências fonéticas). Suporta nativamente o protocolo DAVE (E2EE) de criptografia do Discord e filtro de silêncio por RMS de áudio.
+
+### `/sair-call`
+
+Desconecta a Hikari do canal de voz em que ela está conectada no servidor.
+
+- **Advanced:** Pode ser acionado via comando slash, voz ("Hikari, saia da call") ou via ferramenta MCP. Desconecta automaticamente em caso de inatividade quando todos os usuários saem da call.
+
+---
+
 ## 🎵 Multimídia & Utilidades
 
 ### `/baixar_musica`

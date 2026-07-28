@@ -314,5 +314,45 @@
         ]
       }
     }
+  },
+  {
+    "meta": {
+      "label": "🎙️ Entrar no Canal de Voz",
+      "description": "Faz a Hikari entrar no canal de voz do usuário para escutar e responder por voz.",
+      "disableable": true,
+      "defaultDisabled": true
+    },
+    "type": "function",
+    "function": {
+      "name": "join_voice_call",
+      "description": "Conecta a Hikari ao canal de voz onde o usuário está conectado no servidor para iniciar o modo de assistente de voz.",
+      "textual_triggers": "Gatilhos: \"entre na call\", \"entra na call\", \"entra na voz\", \"conecta na call\", \"vem pro canal de voz\", \"entra no voice\".",
+      "textual_args": "{}",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "meta": {
+      "label": "🚪 Sair do Canal de Voz",
+      "description": "Faz a Hikari sair do canal de voz em que está conectada.",
+      "disableable": true,
+      "defaultDisabled": true
+    },
+    "type": "function",
+    "function": {
+      "name": "leave_voice_call",
+      "description": "Desconecta a Hikari do canal de voz em que ela está conectada atualmente no servidor.",
+      "textual_triggers": "Gatilhos: \"saia da call\", \"sai da call\", \"saia da voz\", \"sair da voz\", \"desconecta da call\", \"sai do voice\".",
+      "textual_args": "{}",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
   }
 ]

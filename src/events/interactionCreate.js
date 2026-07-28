@@ -614,15 +614,22 @@ module.exports = {
                 const disabled = getDisabledTools(guildId);
                 const allTools = getAllMcpTools();
                 const choices = allTools
-                    .filter(t => t.meta.disableable)
-                    .filter(t => t.function.name.includes(focused) || t.meta.label.toLowerCase().includes(focused))
+                    .filter(t => t.meta.disableable && t.function.name !== 'leave_voice_call')
                     .map(t => {
+                        if (t.function.name === 'join_voice_call') {
+                            const isDisabled = disabled.includes('join_voice_call');
+                            return {
+                                name: `${isDisabled ? '❌' : '✅'} 🎙️ Assistente de Voz (Call)`,
+                                value: 'join_voice_call'
+                            };
+                        }
                         const isDisabled = disabled.includes(t.function.name);
                         return {
                             name: `${isDisabled ? '❌' : '✅'} ${t.meta.label}`,
                             value: t.function.name
                         };
                     })
+                    .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
                     .slice(0, 25);
                 return interaction.respond(choices);
             }
@@ -739,17 +746,32 @@ module.exports = {
             const guildId = interaction.guildId;
             const allTools = getAllMcpTools();
             if (sub === 'toggle') {
-                const toolName = interaction.options.getString('tool');
-                const estado = interaction.options.getString('estado');
-                const enabled = estado === 'on';
-                const tool = allTools.find(t => t.function.name === toolName);
+                const rawInput = interaction.options.getString('tool') || '';
+                let toolName = rawInput.trim();
+
+                if (toolName.toLowerCase().includes('voz') || toolName.toLowerCase().includes('voice') || toolName === 'voice_assistant') {
+                    toolName = 'join_voice_call';
+                }
+
+                let tool = allTools.find(t => t.function.name === toolName || t.meta.label === toolName);
+                if (!tool) {
+                    tool = allTools.find(t => rawInput.includes(t.function.name) || rawInput.includes(t.meta.label));
+                }
+                if (!tool && (rawInput.includes('Voz') || rawInput.includes('Call'))) {
+                    tool = allTools.find(t => t.function.name === 'join_voice_call');
+                }
+
                 if (!tool) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
                         .setTitle('❌ Ferramenta não Encontrada')
-                        .setDescription(`A ferramenta \`${toolName}\` não existe.`);
+                        .setDescription(`A ferramenta \`${rawInput}\` não foi encontrada.`);
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
+
+                toolName = tool.function.name;
+                const estado = interaction.options.getString('estado');
+                const enabled = estado === 'on';
                 if (!tool.meta.disableable && !enabled) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
@@ -765,11 +787,17 @@ module.exports = {
                         .setDescription(`Não foi possível alterar o status da ferramenta \`${toolName}\`.`);
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
+                const displayLabel = (toolName === 'join_voice_call' || toolName === 'leave_voice_call')
+                    ? '🎙️ Assistente de Voz (Call)'
+                    : tool.meta.label;
+                const displayValue = (toolName === 'join_voice_call' || toolName === 'leave_voice_call')
+                    ? 'voice_assistant (Entrar/Sair Call)'
+                    : toolName;
                 const embed = new EmbedBuilder()
                     .setColor(enabled ? 0x10B981 : 0xE11D48)
-                    .setTitle(`${enabled ? '✅ Tool Ativada' : '❌ Tool Desativada'}`)
+                    .setTitle(`${enabled ? '✅ Ferramenta Ativada' : '❌ Ferramenta Desativada'}`)
                     .addFields(
-                        { name: 'Ferramenta', value: `${tool.meta.label}\n\`${toolName}\``, inline: true },
+                        { name: 'Ferramenta', value: `${displayLabel}\n\`${displayValue}\``, inline: true },
                         { name: 'Servidor', value: interaction.guild?.name || guildId, inline: true },
                         { name: 'Novo Estado', value: enabled ? '✅ **ATIVA**' : '❌ **DESATIVADA**', inline: true }
                     )
@@ -783,12 +811,21 @@ module.exports = {
                 const _automodMode = _getMode(guildId);
                 const _automodActive = _automodMode !== 'off';
                 const _mcpEnabled = _automodActive && (_automodMode === 'mcp' || _automodMode === 'both');
-                const fields = allTools.map(t => {
+                const displayTools = allTools.filter(t => t.function.name !== 'leave_voice_call');
+                const fields = displayTools.map(t => {
                     const isGuard = !!(t.meta && t.meta.guardAutomod);
                     if (isGuard) {
                         const statusLabel = _mcpEnabled ? '✅' : '⛔';
                         const note = !_automodActive ? ' (AutoMod Desativado)' : (_automodMode === 'trigger') ? ' (Modo: trigger — IA inativa)' : '';
                         return { name: `${statusLabel} ${t.meta.label}`, value: `\`${t.function.name}\` 🔒${note}`, inline: true };
+                    }
+                    if (t.function.name === 'join_voice_call') {
+                        const isVoiceDisabled = disabled.includes('join_voice_call');
+                        return {
+                            name: `${isVoiceDisabled ? '❌' : '✅'} 🎙️ Assistente de Voz (Call)`,
+                            value: `\`voice_assistant\` (Entrar/Sair)`,
+                            inline: true
+                        };
                     }
                     return {
                         name: `${disabled.includes(t.function.name) ? '❌' : '✅'} ${t.meta.label}`,
@@ -796,7 +833,7 @@ module.exports = {
                         inline: true
                     };
                 });
-                const activeCnt = allTools.filter(t => {
+                const activeCnt = displayTools.filter(t => {
                     if (t.meta && t.meta.guardAutomod) return _mcpEnabled;
                     return !disabled.includes(t.function.name);
                 }).length;
@@ -805,7 +842,7 @@ module.exports = {
                     .setTitle('🔧 Ferramentas MCP — Status do Servidor')
                     .setDescription(`**${interaction.guild?.name || guildId}**\n\n✅ = Ativa | ❌ = Desativada | ⛔ = Inativa (AutoMod) | 🔒 = Não configurável\n\n🛡️ **Modo AutoMod do Servidor:** \`${_automodMode}\``)
                     .addFields(fields)
-                    .setFooter({ text: `${activeCnt}/${allTools.length} tools ativas • by yGuilhermy` })
+                    .setFooter({ text: `${activeCnt}/${displayTools.length} pacotes MCP ativos • by yGuilhermy` })
                     .setTimestamp();
                 await interaction.reply({ embeds: [embed], ephemeral: false });
             } else if (sub === 'reset') {
@@ -1426,6 +1463,24 @@ module.exports = {
                 return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
             await handleConfigCommand(interaction);
+        } else if (commandName === 'entrar-call') {
+            const { joinVoiceCall } = require('../handlers/voiceHandler');
+            await interaction.deferReply({ ephemeral: true });
+            const result = await joinVoiceCall(interaction.member, interaction.channel);
+            if (result) {
+                await interaction.editReply({ content: '✅ Processando entrada no canal de voz...' });
+            } else {
+                await interaction.editReply({ content: '❌ Não foi possível entrar no canal de voz.' });
+            }
+        } else if (commandName === 'sair-call') {
+            const { leaveVoiceCall } = require('../handlers/voiceHandler');
+            await interaction.deferReply({ ephemeral: true });
+            const result = await leaveVoiceCall(interaction.guildId, interaction.channel);
+            if (result) {
+                await interaction.editReply({ content: '✅ Saí do canal de voz.' });
+            } else {
+                await interaction.editReply({ content: '❌ Não estou em nenhum canal de voz neste servidor.' });
+            }
         }
     },
 };

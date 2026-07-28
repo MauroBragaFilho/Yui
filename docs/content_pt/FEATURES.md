@@ -57,6 +57,18 @@ Implementamos um sistema completo de download e manipulação de mídia via `you
 
 ---
 
+## 🎙️ 4. Assistente de Voz & Protocolo DAVE (Calls do Discord)
+
+O ecossistema de voz da Hikari permite que ela participe de chamadas de voz e atenda comandos dos usuários em tempo real.
+
+- **Conexão Nativa com Protocolo DAVE (E2EE)**: Utiliza a versão mais recente do `@discordjs/voice` com suporte nativo ao protocolo de criptografia ponta a ponta do Discord (DAVE protocol version 1).
+- **Filtro de Energia Corporal de Áudio (PCM RMS)**: Analisa a energia do sinal PCM do fluxo de áudio recebido. Áudios com RMS < 250 ou de membros mutados são descartados automaticamente para evitar uso desnecessário de cotas das APIs de STT.
+- **Dicionário STT & Matcher Fonético de 75+ Variações**: Incorpora injeção de prompt no Whisper ("Hikari") aliado a um sistema de expressões regulares que identifica 75+ grafias e fonemas derivados de sotaques ou ruídos (ex: "Ricardo", "Hicari", "Icari", "Ficari", "Vicari", "Ih cari").
+- **Ferramenta Unificada MCP (Assistente de Voz)**: O controle de chamada (`join_voice_call` e `leave_voice_call`) é integrado e gerenciado como um único item unificado no comando `/ia_ferramentas`.
+- **Desconexão por Inatividade**: Quando todos os usuários humanos deixam o canal de voz, a Hikari se desconecta automaticamente preservando conexões do servidor.
+
+---
+
 ## 💡 Dicas de Uso Avançado
 
 - 💡 **Resumo de Chat (`/chat_resumo`):** A IA lê as últimas N mensagens e cria um mapeamento semântico de quem falou o que e sobre quais tópicos. Excelente para gerenciar canais movimentados.

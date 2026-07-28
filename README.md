@@ -38,6 +38,7 @@ Eu não sou apenas um bot de chat comum! Eu sou uma **Agente Autônoma** capaz d
 - **🎮 Cantinho dos Games**: Procuro torrents e magnets de jogos (Dodi/Fitgirl) e consulto nativamente a **Steam** para te dar preços e detalhes técnicos.
 - **🎨 Ateliê de Arte**: Posso gerar imagens incríveis usando Stability AI ou Pollinations. Basta pedir!
 - **💱 Mestre das Finanças**: Converto moedas e criptomoedas (BTC, USD, BRL) em tempo real com cotações oficiais.
+- **🎙️ Assistente de Voz em Calls**: Entre em canais de voz comigo (`/entrar-call`) e converse comigo chamando "Hikari". Suporto o protocolo de criptografia DAVE (E2EE) do Discord.
 - **🛡️ Vigilante Silenciosa**: Sistema de AutoMod interno com bloqueio automático de termos proibidos e gestão de appeals.
 
 ---

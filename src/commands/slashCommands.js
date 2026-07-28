@@ -387,6 +387,16 @@ const commands = [
             .setName('bot_config')
             .setDescription('Painel de configuração geral do bot. (Somente criador)')
     ),
+    setGlobalContext(
+        new SlashCommandBuilder()
+            .setName('entrar-call')
+            .setDescription('Faz a Hikari entrar no seu canal de voz atual para escutar e responder por voz/chat.')
+    ),
+    setGlobalContext(
+        new SlashCommandBuilder()
+            .setName('sair-call')
+            .setDescription('Faz a Hikari sair do canal de voz atual.')
+    ),
 ].map(command => command.toJSON());
 async function registerCommands(client, rest) {
     try {
