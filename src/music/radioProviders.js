@@ -29,6 +29,10 @@ function isDeezerAlbum(str) {
     return /deezer\.com\/.*album/i.test(str);
 }
 
+function isSpotifyUrl(str) {
+    return /(?:spotify\.com|spoti\.fi)/i.test(str);
+}
+
 function isYouTubePlaylist(str) {
     return /(?:youtube\.com|youtu\.be|music\.youtube\.com)\/.*[?&]list=/i.test(str) || /\/playlist\?list=/i.test(str);
 }
@@ -314,12 +318,123 @@ function downloadTrackToDisk(track) {
     });
 }
 
+async function resolveSpotify(url) {
+    try {
+        const cleanUrl = extractUrl(url);
+        let embedUrl = cleanUrl;
+        if (!cleanUrl.includes('/embed/')) {
+            embedUrl = cleanUrl.replace('open.spotify.com/', 'open.spotify.com/embed/');
+        }
+
+        const res = await axios.get(embedUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            timeout: 7000
+        });
+
+        const match = res.data.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/);
+        if (match) {
+            const json = JSON.parse(match[1]);
+            const entity = json?.props?.pageProps?.state?.data?.entity;
+
+            if (entity) {
+                if (entity.type === 'track') {
+                    const title = entity.name || entity.title || '';
+                    const artist = entity.artists ? entity.artists.map(a => a.name).join(', ') : '';
+                    const query = `${title} ${artist}`.trim();
+
+                    const deezerRes = await searchDeezerTracks(query);
+                    if (deezerRes && deezerRes.length > 0) {
+                        const t = deezerRes[0];
+                        return {
+                            type: 'track',
+                            track: {
+                                id: String(t.id),
+                                title: t.title,
+                                artist: t.artist?.name || artist || 'Desconhecido',
+                                album: t.album?.title || '',
+                                duration: t.duration,
+                                cover: t.album?.cover_medium || entity.visualIdentity?.image?.[0]?.url || '',
+                                link: t.link,
+                                source: 'deezer'
+                            }
+                        };
+                    }
+                }
+
+                if ((entity.type === 'album' || entity.type === 'playlist') && Array.isArray(entity.trackList)) {
+                    const resolvedTracks = [];
+                    for (const item of entity.trackList) {
+                        const title = item.title || item.name;
+                        const artist = item.subtitle || (item.artists ? item.artists.map(a => a.name).join(', ') : '');
+                        const query = `${title} ${artist}`.trim();
+                        if (!query) continue;
+
+                        try {
+                            const deezerRes = await searchDeezerTracks(query);
+                            if (deezerRes && deezerRes.length > 0) {
+                                const t = deezerRes[0];
+                                resolvedTracks.push({
+                                    id: String(t.id),
+                                    title: t.title,
+                                    artist: t.artist?.name || artist || 'Desconhecido',
+                                    album: t.album?.title || '',
+                                    duration: t.duration,
+                                    cover: t.album?.cover_medium || '',
+                                    link: t.link,
+                                    source: 'deezer'
+                                });
+                            }
+                        } catch (_) {}
+                    }
+
+                    if (resolvedTracks.length > 0) {
+                        return { type: 'playlist', tracks: resolvedTracks };
+                    }
+                }
+            }
+        }
+    } catch (_) {}
+
+    try {
+        const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
+        const res = await axios.get(oembedUrl, { timeout: 5000 });
+        if (res.data && res.data.title) {
+            const title = res.data.title;
+            const deezerRes = await searchDeezerTracks(title);
+            if (deezerRes && deezerRes.length > 0) {
+                const t = deezerRes[0];
+                return {
+                    type: 'track',
+                    track: {
+                        id: String(t.id),
+                        title: t.title,
+                        artist: t.artist?.name || 'Desconhecido',
+                        album: t.album?.title || '',
+                        duration: t.duration,
+                        cover: t.album?.cover_medium || res.data.thumbnail_url || '',
+                        link: t.link,
+                        source: 'deezer'
+                    }
+                };
+            }
+        }
+    } catch (_) {}
+
+    return null;
+}
+
 async function resolveInput(input) {
     input = (input || '').trim();
     const cleanUrl = extractUrl(input);
     const hasHttp = /^https?:\/\//i.test(cleanUrl);
 
     if (hasHttp) {
+        if (isSpotifyUrl(cleanUrl)) {
+            const spotifyResult = await resolveSpotify(cleanUrl);
+            if (spotifyResult) return spotifyResult;
+        }
         if (isDeezerPlaylist(cleanUrl)) {
             const tracks = await resolveDeezerPlaylist(cleanUrl);
             if (tracks && tracks.length > 0) return { type: 'playlist', tracks };

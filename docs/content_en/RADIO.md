@@ -34,6 +34,9 @@ Media resolution (`radioProviders.js`) supports multiple formats with instant ex
   - Individual Videos (`youtube.com/watch?v=...`, `music.youtube.com/watch?v=...`).
   - Playlists (`youtube.com/playlist?list=...`, `music.youtube.com/playlist?list=...`): Extracted via NDJSON (Line-delimited JSON) adding all valid tracks to the queue.
   - Fast Metadata: Combines **YouTube oEmbed API** (~50ms) with `yt-dlp -j` parser to fetch title, channel/artist, and HD cover without failing on warning logs.
+- **Spotify**:
+  - Intelligent resolution of tracks (`open.spotify.com/track/...`), albums (`/album/...`), and playlists (`/playlist/...`).
+  - Extracts metadata from Spotify and automatically matches/streams high-quality audio from **Deezer**.
 - **Deezer**:
   - Songs (`deezer.com/.../track/ID`), Playlists (`deezer.com/.../playlist/ID`), and Albums (`deezer.com/.../album/ID`).
 - **Text Search**:
