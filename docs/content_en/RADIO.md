@@ -65,7 +65,7 @@ The visual Radio panel (`radioEmbed.js`) provides real-time interactive controls
   - `⏭️ Next` / `⏮️ Prev`: Navigates between queue/history tracks.
   - `🔀 Shuffle`: Toggles random queue order.
   - `🔁 Loop`: Cycles modes (Off ➔ Playlist ➔ Song).
-  - `🎙️ Voice`: Toggles voice listening.
+  - `🎙️ Voice`: Toggles voice listening. *(Disabled by default per server for token economy. If disabled, alerts the user to ask a Server Admin to enable `join_voice_call` via `/ia_ferramentas`).*
   - `📋 Queue`: Displays ephemeral menu with upcoming tracks.
   - `👋 Leave`: Stops radio mode and disconnects the bot.
 - **Ambiguous Cancel**: The `Cancel` button on ambiguous search selections removes components and clears pending state.

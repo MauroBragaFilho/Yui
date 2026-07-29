@@ -78,6 +78,16 @@ async function handleRadioButton(interaction, client) {
         return interaction.showModal(modal);
     }
 
+    if (cid === 'radio_voice_toggle') {
+        const { isToolDisabled } = require('../handlers/llmHandler');
+        if (isToolDisabled(guildId, 'join_voice_call')) {
+            return interaction.reply({
+                content: '⚠️ **Escuta de Voz Desativada no Servidor:** As ferramentas de voz do Rádio estão desativadas neste servidor por padrão para economia de recursos. Peça a um Administrador do servidor para ativá-las usando o comando `/ia_ferramentas`.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+    }
+
     await interaction.deferUpdate();
 
     const textChannel = interaction.channel;

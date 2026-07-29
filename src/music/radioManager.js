@@ -98,7 +98,11 @@ async function startRadioMode(member, textChannel, client) {
 
     await entersState(connection, VoiceConnectionStatus.Ready, 15000);
 
+    const { isToolDisabled } = require('../handlers/llmHandler');
     const session = createSession(guildId, voiceChannel.id, textChannel.id);
+    if (isToolDisabled(guildId, 'join_voice_call')) {
+        updateSession(guildId, { voiceListening: false });
+    }
     const { embeds, components } = buildRadioEmbed(session);
     const msg = await textChannel.send({ embeds, components });
     updateSession(guildId, { embedMessageId: msg.id });
@@ -126,6 +130,9 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
     const receiver = connection.receiver;
 
     receiver.speaking.on('start', (userId) => {
+        const { isToolDisabled } = require('../handlers/llmHandler');
+        if (isToolDisabled(guildId, 'join_voice_call')) return;
+
         const session = getSession(guildId);
         if (!session || !session.voiceListening) return;
 
