@@ -422,10 +422,14 @@ module.exports = {
                         return await interaction.update({ embeds: [embed], components: [menuRow, btnRow] });
                     }
 
+                    let helpDescription = selectedOption.answer + '\n\r\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)';
+                    if (helpDescription.length > 4000) {
+                        helpDescription = helpDescription.slice(0, 3950) + '\n\n*(Texto truncado para caber no limite do Discord)*';
+                    }
                     const answerEmbed = new EmbedBuilder()
                         .setColor(0x7C3AED)
                         .setTitle(selectedOption.label)
-                        .setDescription(selectedOption.answer + '\n\r\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
+                        .setDescription(helpDescription)
                         .setFooter({ text: 'Hikari • Menu de Ajuda • by yGuilhermy' })
                         .setTimestamp();
 

@@ -99,10 +99,14 @@ async function sendTermsOfService(target, requestData = null) {
     const legacyNotice = isLegacy
         ? "⚠️ **Aviso de Atualização:** Identificamos que a Hikari já faz parte deste servidor há algum tempo. Implementamos novas diretrizes de segurança e privacidade. **Para continuar utilizando os serviços da Hikari, é obrigatório que a administração aceite os termos abaixo.**\n\n"
         : "";
+    let tosDescription = legacyNotice + rulesText + "\n\n**Para continuar usando a Hikari neste servidor, um Administrador ou Gerente deve aceitar os termos abaixo.**";
+    if (tosDescription.length > 4000) {
+        tosDescription = tosDescription.slice(0, 3950) + "\n\n*(Texto truncado. Acesse o guia completo de regras no comando /ajuda)*";
+    }
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
         .setTitle('⚖️ Termos de Uso e Responsabilidade — Hikari')
-        .setDescription(legacyNotice + rulesText + "\n\n**Para continuar usando a Hikari neste servidor, um Administrador ou Gerente deve aceitar os termos abaixo.**")
+        .setDescription(tosDescription)
         .setFooter({ text: 'Lembre-se de usar o "/ajuda" para ver todos os comandos! • by yGuilhermy' })
         .setTimestamp();
     const row = new ActionRowBuilder().addComponents(
@@ -273,17 +277,24 @@ async function reportNewGuild(guild) {
                     if (rulesObj) rulesText = rulesObj.answer;
                 } catch (e) {}
             }
+            let welcomeDescription = `
+Olá! Eu sou a **Hikari**, sua assistente de IA multifuncional. ✨
+
+Para que eu possa começar a funcionar neste servidor, **é necessário que um Administrador aceite meus Termos de Uso**. Isso garante que todos estejam cientes das diretrizes de segurança e privacidade.
+
+**Regras & Termos:**
+${rulesText}
+
+**Como proceder?**
+Basta clicar no botão **"Aceitar Termos"** abaixo. Somente usuários com permissão de Administrador ou Gerenciar Servidor podem realizar esta ação.
+`;
+            if (welcomeDescription.length > 4000) {
+                welcomeDescription = welcomeDescription.slice(0, 3950) + "\n\n*(Texto truncado. Acesse os termos completos em /ajuda)*";
+            }
             const welcomeEmbed = new EmbedBuilder()
                 .setColor(0x7C3AED)
                 .setTitle('👋 Olá! Obrigada por me adicionar!')
-                .setDescription(`
-Olá! Eu sou a **Hikari**, sua assistente de IA multifuncional. ✨
-Para que eu possa começar a funcionar neste servidor, **é necessário que um Administrador aceite meus Termos de Uso**. Isso garante que todos estejam cientes das diretrizes de segurança e privacidade.
-**Regras & Termos:**
-${rulesText}
-**Como proceder?**
-Basta clicar no botão **"Aceitar Termos"** abaixo. Somente usuários com permissão de Administrador ou Gerenciar Servidor podem realizar esta ação.
-`)
+                .setDescription(welcomeDescription)
                 .setFooter({ text: 'Ao aceitar, os dados de ativação serão salvos para fins de transparência. • by yGuilhermy' })
                 .setTimestamp();
             const row = new ActionRowBuilder().addComponents(
