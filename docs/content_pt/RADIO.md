@@ -46,8 +46,16 @@ A resolução de mídia (`radioProviders.js`) suporta múltiplos formatos com ex
 
 ## 🎙️ 3. Controle por Voz e Reconhecimento (Whisper STT)
 
-- **Comandos de Voz em Tempo Real**: Ouvinte integrado que captura fala de usuários não mutados no canal, decodifica o áudio PCM WAV e envia para a API Whisper.
-- **Ferramentas MCP**: Os comandos de voz do rádio acionam nativamente as MCP Tools da Hikari (`radioMCPTools.json`).
+- **Comandos de Voz em Tempo Real**: Ouvinte integrado que captura fala de usuários não mutados no canal e decodifica o áudio PCM WAV para o Whisper API.
+- **Seletor de 3 Modos de Voz**:
+  1. `🔇 Voz: Off`: Escuta por voz completamente desativada.
+  2. `🧠 Voz: IA`: Transcreve o áudio e envia para o modelo de IA (LLM) da Hikari com suporte a ferramentas MCP (`radioMCPTools.json`).
+  3. `⚡ Voz: Direct`: Modo de ultra-baixa latência estilo Alexa. Identifica intenções e palavras-chave de forma local sem passar pelo modelo de IA.
+- **Algoritmo do Modo Direct (Keyword & Intent Engine)**:
+  - **Execução Instantânea**: Responde em menos de 50ms após o STT.
+  - **Captura em Frases Curtas e Longas**: Identifica intenções no meio da sentença (ex: *"Hikari, pare a música então cara"*).
+  - **Intenções Suportadas**: `Pausar`, `Retomar`, `Parar`, `Próxima`, `Anterior`, `Embaralhar`, `Repetir`, `Ver Fila`, `Info da Música`, `Remover Faixa` e `Busca/Adição de Músicas` (ex: *"Hikari, tocar Welcome to the Jungle"* ou *"Hikari, Welcome to the Jungle"*).
+  - **Notificação Temporária**: Envia no chat uma notificação mencionando o usuário (`<@userId> ⚡ **[Direct]** ...`) com exclusão automática em 4 segundos.
 - **Autoproteção de Rate Limit (429/492)**: Ao atingir o limite da API do Whisper, a escuta de voz é desativada temporariamente por **1 minuto**, com notificação automática no chat e reativação agendada.
 - **Monitoramento de Canal Vazio**: Encerra a sessão e desloga a chamada se não houver usuários humanos no canal por mais de 10 segundos.
 
@@ -65,7 +73,7 @@ O painel visual do Rádio (`radioEmbed.js`) fornece controles interativos em tem
   - `⏭️ Próxima` / `⏮️ Anterior`: Navega entre faixas da fila/histórico.
   - `🔀 Embaralhar`: Ativa/desativa ordem aleatória.
   - `🔁 Loop`: Alterna modos (Off ➔ Playlist ➔ Música).
-  - `🎙️ Voz`: Ativa ou desativa a escuta por voz. *(Desativada por padrão no servidor para economia de tokens. Caso desativada, exibe aviso para que um Administrador ative a ferramenta `radio_voice_stt` via `/ia_ferramentas`).*
+  - `⚡ Voz: Direct` / `🧠 Voz: IA` / `🔇 Voz: Off`: Alterna ciclicamente entre os três modos de escuta por voz (`OFF` ➔ `IA` ➔ `DIRECT` ➔ `OFF`). *(Desativada por padrão no servidor para economia de recursos. Caso desativada, exibe aviso para que um Administrador ative a ferramenta `radio_voice_stt` via `/ia_ferramentas`).*
   - `📋 Fila`: Exibe menu efêmero com as próximas músicas.
   - `👋 Sair`: Encerra o modo rádio e desconecta o bot.
 - **Cancelamento Ambíguo**: O botão `Cancelar` nas escolhas de busca ambígua remove os botões da tela e limpa a pendência.

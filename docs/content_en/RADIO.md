@@ -46,8 +46,16 @@ Media resolution (`radioProviders.js`) supports multiple formats with instant ex
 
 ## 🎙️ 3. Voice Control & Speech Recognition (Whisper STT)
 
-- **Real-Time Voice Commands**: Integrated listener captures speech from unmuted users in the channel, decodes PCM WAV audio, and sends it to the Whisper API.
-- **MCP Tools**: Radio voice commands natively trigger Hikari's MCP Tools (`radioMCPTools.json`).
+- **Real-Time Voice Commands**: Integrated listener captures speech from unmuted users in the channel and decodes PCM WAV audio for the Whisper API.
+- **3-Mode Voice Selector**:
+  1. `🔇 Voice: Off`: Voice listening completely disabled.
+  2. `🧠 Voice: AI`: Transcribes audio and sends it to Hikari's generative AI (LLM) model with MCP Tool integration (`radioMCPTools.json`).
+  3. `⚡ Voice: Direct`: Ultra-low latency Alexa-style mode. Recognizes intents and keywords locally without invoking AI models.
+- **Direct Mode Algorithm (Keyword & Intent Engine)**:
+  - **Instant Execution**: Responds in < 50ms post-STT transcription.
+  - **Mid-sentence Intent Extraction**: Identifies keywords anywhere in spoken phrases (e.g. *"Hikari stop the music then dude"*).
+  - **Supported Intents**: `Pause`, `Resume`, `Stop`, `Next`, `Previous`, `Shuffle`, `Loop`, `Show Queue`, `Song Info`, `Remove Track`, and `Search/Add Songs` (e.g. *"Hikari play Welcome to the Jungle"* or *"Hikari Welcome to the Jungle"*).
+  - **Temporary Notification**: Sends a chat notification tagging the user (`<@userId> ⚡ **[Direct]** ...`) auto-deleted after 4 seconds.
 - **Rate Limit Protection (429/492)**: Upon hitting Whisper API quota limits, voice listening is temporarily paused for **1 minute**, notifying the chat and auto-enabling afterward.
 - **Empty Channel Monitoring**: Closes session and disconnects call if no human users are present in the channel for over 10 seconds.
 
@@ -65,7 +73,7 @@ The visual Radio panel (`radioEmbed.js`) provides real-time interactive controls
   - `⏭️ Next` / `⏮️ Prev`: Navigates between queue/history tracks.
   - `🔀 Shuffle`: Toggles random queue order.
   - `🔁 Loop`: Cycles modes (Off ➔ Playlist ➔ Song).
-  - `🎙️ Voice`: Toggles voice listening. *(Disabled by default per server for token economy. If disabled, alerts the user to ask a Server Admin to enable `radio_voice_stt` via `/ia_ferramentas`).*
+  - `⚡ Voice: Direct` / `🧠 Voice: AI` / `🔇 Voice: Off`: Cycles through all 3 voice modes (`OFF` ➔ `IA` ➔ `DIRECT` ➔ `OFF`). *(Disabled by default per server for token economy. If disabled, alerts the user to ask a Server Admin to enable `radio_voice_stt` via `/ia_ferramentas`).*
   - `📋 Queue`: Displays ephemeral menu with upcoming tracks.
   - `👋 Leave`: Stops radio mode and disconnects the bot.
 - **Ambiguous Cancel**: The `Cancel` button on ambiguous search selections removes components and clears pending state.
