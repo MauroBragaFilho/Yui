@@ -381,5 +381,25 @@
         "required": []
       }
     }
+  },
+  {
+    "meta": {
+      "label": "🎙️ Reconhecimento de Voz do Rádio (STT)",
+      "description": "Ativa ou desativa a escuta e transcrição de comandos por voz no Modo Rádio para economia de tokens.",
+      "disableable": true,
+      "defaultDisabled": true
+    },
+    "type": "function",
+    "function": {
+      "name": "radio_voice_stt",
+      "description": "Sistema de escuta e transcrição de fala por inteligência artificial no Modo Rádio.",
+      "textual_triggers": "stt, radio_stt, escuta_radio, comandos_voz_radio",
+      "textual_args": "{}",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
   }
 ]

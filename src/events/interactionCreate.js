@@ -807,7 +807,9 @@ module.exports = {
                 const rawInput = interaction.options.getString('tool') || '';
                 let toolName = rawInput.trim();
 
-                if (toolName.toLowerCase().includes('voz') || toolName.toLowerCase().includes('voice') || toolName === 'voice_assistant') {
+                if (toolName.toLowerCase().includes('stt') || toolName === 'radio_voice_stt') {
+                    toolName = 'radio_voice_stt';
+                } else if ((toolName.toLowerCase().includes('voz') || toolName.toLowerCase().includes('voice') || toolName === 'voice_assistant') && !toolName.toLowerCase().includes('stt')) {
                     toolName = 'join_voice_call';
                 }
 

@@ -51,7 +51,7 @@ function buildRadioEmbed(session) {
     const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('radio_prev').setLabel('⏮️').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('radio_playpause').setEmoji(status === 'PLAYING' ? '⏸️' : '▶️').setLabel(status === 'PLAYING' ? 'Pausar' : 'Play').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('radio_stop').setLabel('⏹️ Parar').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('radio_stop').setLabel('⏹️').setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId('radio_next').setLabel('⏭️').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('radio_shuffle').setLabel('🔀 Shuffle').setStyle(session.shuffle ? ButtonStyle.Success : ButtonStyle.Secondary)
     );
@@ -65,7 +65,7 @@ function buildRadioEmbed(session) {
     );
 
     const row3 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('radio_leave').setLabel('🚪 Sair do Canal').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('radio_leave').setLabel('🚪 Sair').setStyle(ButtonStyle.Secondary)
     );
 
     return { embeds: [embed], components: [row1, row2, row3] };
