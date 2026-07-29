@@ -56,6 +56,7 @@ The visual Radio panel (`radioEmbed.js`) provides real-time interactive controls
 
 - **Available Controls**:
   - `➕ Add`: Interactive modal to paste links or search songs.
+  - `🗑️ Remove`: Interactive modal to remove a specific song from the playlist by position number (`#x`).
   - `⏯️ Play/Pause`: Toggles playback and pause.
   - `⏹️ Stop`: Completely stops playback, jumps to the end of the queue, and sets the radio status to "playing nothing".
   - `⏭️ Next` / `⏮️ Prev`: Navigates between queue/history tracks.

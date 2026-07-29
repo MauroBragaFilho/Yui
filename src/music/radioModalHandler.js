@@ -9,7 +9,7 @@ const {
     TextInputStyle,
     MessageFlags
 } = require('discord.js');
-const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, stopRadio } = require('./radioDatabase');
+const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, stopRadio, removeTrackFromPlaylist } = require('./radioDatabase');
 const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
 const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
 const { resolveInput } = require('./radioProviders');
@@ -52,6 +52,27 @@ async function handleRadioButton(interaction, client) {
             .setPlaceholder('Ex: Welcome to the Jungle | ou link Deezer/YouTube')
             .setRequired(true)
             .setMaxLength(300);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return interaction.showModal(modal);
+    }
+
+    if (cid === 'radio_remove') {
+        if (!session.playlist || session.playlist.length === 0) {
+            return interaction.reply({ content: '❌ A playlist do rádio está vazia.', flags: MessageFlags.Ephemeral });
+        }
+
+        const modal = new ModalBuilder()
+            .setCustomId('radio_remove_modal')
+            .setTitle('🗑️ Remover Música do Rádio');
+
+        const input = new TextInputBuilder()
+            .setCustomId('radio_remove_input')
+            .setLabel(`Número da faixa na lista (1 a ${session.playlist.length})`)
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Ex: 1, 2, 5...')
+            .setRequired(true)
+            .setMaxLength(10);
 
         modal.addComponents(new ActionRowBuilder().addComponents(input));
         return interaction.showModal(modal);
@@ -140,7 +161,7 @@ async function handleRadioButton(interaction, client) {
 }
 
 async function handleRadioModal(interaction, client) {
-    if (interaction.customId !== 'radio_add_modal') return false;
+    if (interaction.customId !== 'radio_add_modal' && interaction.customId !== 'radio_remove_modal') return false;
 
     const guildId = interaction.guildId;
     const session = getSession(guildId);
@@ -152,6 +173,38 @@ async function handleRadioModal(interaction, client) {
 
     if (!isUserInRadioChannel(interaction, session)) {
         await interaction.reply({ content: '❌ Você precisa estar no canal de voz do rádio.', flags: MessageFlags.Ephemeral });
+        return true;
+    }
+
+    if (interaction.customId === 'radio_remove_modal') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const valStr = interaction.fields.getTextInputValue('radio_remove_input')?.trim();
+        const pos = parseInt(valStr, 10);
+
+        if (isNaN(pos) || pos < 1 || pos > (session.playlist?.length || 0)) {
+            await interaction.editReply({ content: `❌ Posição inválida. Digite um número entre 1 e ${session.playlist?.length || 0}.` });
+            return true;
+        }
+
+        const result = removeTrackFromPlaylist(guildId, pos);
+        if (!result) {
+            await interaction.editReply({ content: '❌ Falha ao remover a faixa selecionada.' });
+            return true;
+        }
+
+        const textChannel = interaction.channel;
+        if (result.isCurrent) {
+            stopPlayer(guildId);
+            if (result.newCurrentTrack) {
+                await playTrack(guildId, result.newCurrentTrack, textChannel, client);
+            } else {
+                await updateEmbed(guildId, textChannel, client);
+            }
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+        }
+
+        await interaction.editReply({ content: `🗑️ Removida a faixa #${pos}: **${result.removedTrack.title}** - ${result.removedTrack.artist}` });
         return true;
     }
 

@@ -56,6 +56,7 @@ O painel visual do Rádio (`radioEmbed.js`) fornece controles interativos em tem
 
 - **Controles Disponíveis**:
   - `➕ Adicionar`: Modal interativo para colar links ou pesquisar músicas.
+  - `🗑️ Remover`: Modal interativo para remover uma música da lista especificando o número da posição (`#x`).
   - `⏯️ Play/Pause`: Alterna pausa e reprodução.
   - `⏹️ Parar`: Interrompe completamente a reprodução, avança o índice para o final e coloca o rádio em "tocando nada".
   - `⏭️ Próxima` / `⏮️ Anterior`: Navega entre faixas da fila/histórico.

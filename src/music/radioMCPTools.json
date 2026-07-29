@@ -107,6 +107,27 @@
   },
   {
     "meta": {
+      "label": "🗑️ Remover Faixa",
+      "description": "Remove uma música da fila/playlist pela posição #x"
+    },
+    "type": "function",
+    "function": {
+      "name": "radio_remove_track",
+      "description": "Remove uma faixa específica da lista do rádio pelo número de posição #x (ex: #1, #2, #5). Use sempre que o usuário pedir para remover, tirar, deletar ou apagar uma música da fila (ex: 'remove a música 2', 'tira a número 3 da fila', 'deleta a faixa 1', 'apaga a música 4').",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "number",
+            "description": "Número de posição da faixa na lista (1 = primeira, 2 = segunda, etc.)"
+          }
+        },
+        "required": ["position"]
+      }
+    }
+  },
+  {
+    "meta": {
       "label": "🔀 Modo Aleatório",
       "description": "Ativa ou desativa o shuffle da fila"
     },
@@ -177,7 +198,7 @@
     "type": "function",
     "function": {
       "name": "radio_unknown_command",
-      "description": "Ferramenta nula (no-op). Use sempre que a fala do usuário não for um comando de controle de rádio (ex: conversas casuais, perguntas gerais, frases aleatórias, ruídos).",
+      "description": "Ferramenta nula (no-op). Use sempre que a fala do usuário não for um comando de controle de rádio (ex: conversas casuais, perguntas gerais, frases aleatórias, ruídos, ou falar 'tocar' sem especificar o nome da música).",
       "parameters": {
         "type": "object",
         "properties": {},

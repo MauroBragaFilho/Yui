@@ -61,10 +61,14 @@ function buildRadioEmbed(session) {
         new ButtonBuilder().setCustomId('radio_voice_toggle').setLabel(session.voiceListening ? '🎙️ Voz: On' : '🔇 Voz: Off').setStyle(session.voiceListening ? ButtonStyle.Success : ButtonStyle.Danger),
         new ButtonBuilder().setCustomId('radio_queue').setLabel('📜 Ver Lista').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('radio_add').setLabel('➕ Adicionar').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('radio_leave').setLabel('🚪 Sair').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('radio_remove').setLabel('🗑️ Remover').setStyle(ButtonStyle.Danger)
     );
 
-    return { embeds: [embed], components: [row1, row2] };
+    const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('radio_leave').setLabel('🚪 Sair do Canal').setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [row1, row2, row3] };
 }
 
 function buildQueueEmbed(session) {

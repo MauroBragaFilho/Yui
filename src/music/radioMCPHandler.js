@@ -8,7 +8,8 @@ const {
     setLoopMode,
     toggleShuffle,
     destroySession,
-    stopRadio
+    stopRadio,
+    removeTrackFromPlaylist
 } = require('./radioDatabase');
 const {
     playTrack,
@@ -164,6 +165,29 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
             await playTrack(guildId, target, textChannel, client);
             await sendTempMessage(textChannel, `🔢 ${userMention} Pulando para a música **#${pos}**: **${target.title}**`);
         }
+        return null;
+    }
+
+    if (toolName === 'radio_remove_track') {
+        const pos = parseInt(toolArgs.position || 1, 10);
+        const result = removeTrackFromPlaylist(guildId, pos);
+        if (!result) {
+            await sendTempMessage(textChannel, `⚠️ ${userMention} A faixa **#${pos}** não foi encontrada na lista.`);
+            return null;
+        }
+
+        if (result.isCurrent) {
+            stopPlayer(guildId);
+            if (result.newCurrentTrack) {
+                await playTrack(guildId, result.newCurrentTrack, textChannel, client);
+            } else {
+                await updateEmbed(guildId, textChannel, client);
+            }
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+        }
+
+        await sendTempMessage(textChannel, `🗑️ ${userMention} Removida a faixa **#${pos}**: **${result.removedTrack.title}** - ${result.removedTrack.artist}`);
         return null;
     }
 

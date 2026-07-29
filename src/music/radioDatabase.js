@@ -199,6 +199,38 @@ function stopRadio(guildId) {
     return s;
 }
 
+function removeTrackFromPlaylist(guildId, position) {
+    const s = sessions.get(guildId);
+    if (!s || !Array.isArray(s.playlist) || s.playlist.length === 0) return null;
+
+    const targetIdx = position - 1;
+    if (targetIdx < 0 || targetIdx >= s.playlist.length) return null;
+
+    const isCurrent = (targetIdx === s.currentIndex && s.status === 'PLAYING');
+    const removedTrack = s.playlist.splice(targetIdx, 1)[0];
+
+    if (s.playlist.length === 0) {
+        s.currentIndex = -1;
+        s.status = 'STOPPED';
+    } else if (targetIdx < s.currentIndex) {
+        s.currentIndex--;
+    } else if (targetIdx === s.currentIndex) {
+        if (s.currentIndex >= s.playlist.length) {
+            s.currentIndex = s.playlist.length - 1;
+        }
+    }
+
+    _syncLegacyFields(s);
+    _save();
+
+    return {
+        removedTrack,
+        isCurrent,
+        remainingCount: s.playlist.length,
+        newCurrentTrack: s.currentTrack
+    };
+}
+
 module.exports = {
     createSession,
     getSession,
@@ -213,5 +245,6 @@ module.exports = {
     toggleShuffle,
     toggleVoiceListening,
     getAllSessions,
-    stopRadio
+    stopRadio,
+    removeTrackFromPlaylist
 };
