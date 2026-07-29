@@ -22,6 +22,10 @@ function _syncLegacyFields(session) {
     if (!session) return;
     if (!Array.isArray(session.playlist)) session.playlist = [];
     if (typeof session.currentIndex !== 'number') session.currentIndex = -1;
+    if (!session.voiceMode) {
+        session.voiceMode = session.voiceListening === false ? 'OFF' : 'IA';
+    }
+    session.voiceListening = (session.voiceMode !== 'OFF');
 
     session.currentTrack = (session.currentIndex >= 0 && session.currentIndex < session.playlist.length) 
         ? session.playlist[session.currentIndex] 
@@ -39,6 +43,7 @@ function createSession(guildId, voiceChannelId, textChannelId) {
         status: 'STOPPED',
         loopMode: 'OFF',
         shuffle: false,
+        voiceMode: 'DIRECT',
         voiceListening: true,
         currentIndex: -1,
         playlist: [],
@@ -177,8 +182,22 @@ function toggleVoiceListening(guildId) {
     const s = sessions.get(guildId);
     if (!s) return null;
     s.voiceListening = !s.voiceListening;
+    s.voiceMode = s.voiceListening ? 'IA' : 'OFF';
     _save();
     return s.voiceListening;
+}
+
+function cycleVoiceMode(guildId) {
+    const s = sessions.get(guildId);
+    if (!s) return null;
+    const modes = ['OFF', 'IA', 'DIRECT'];
+    const currentMode = s.voiceMode || (s.voiceListening ? 'IA' : 'OFF');
+    const currentIdx = modes.indexOf(currentMode);
+    const nextMode = modes[(currentIdx + 1) % modes.length];
+    s.voiceMode = nextMode;
+    s.voiceListening = (nextMode !== 'OFF');
+    _save();
+    return s.voiceMode;
 }
 
 function getAllSessions() {
@@ -244,6 +263,7 @@ module.exports = {
     setLoopMode,
     toggleShuffle,
     toggleVoiceListening,
+    cycleVoiceMode,
     getAllSessions,
     stopRadio,
     removeTrackFromPlaylist

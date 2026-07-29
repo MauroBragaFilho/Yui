@@ -13,10 +13,14 @@ const {
     destroySession,
     updateSession,
     nextTrack,
+    prevTrack,
     addTrackToQueue,
-    toggleVoiceListening
+    toggleVoiceListening,
+    setLoopMode,
+    toggleShuffle,
+    removeTrackFromPlaylist
 } = require('./radioDatabase');
-const { playTrack, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
+const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
 const { buildRadioEmbed } = require('./radioEmbed');
 const { resolveInput } = require('./radioProviders');
 
@@ -134,7 +138,8 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
         if (isToolDisabled(guildId, 'radio_voice_stt')) return;
 
         const session = getSession(guildId);
-        if (!session || !session.voiceListening) return;
+        const currentVoiceMode = session?.voiceMode || (session?.voiceListening ? 'IA' : 'OFF');
+        if (!session || currentVoiceMode === 'OFF') return;
 
         const streamKey = `${guildId}_${userId}`;
         if (activeStreams.has(streamKey)) return;
@@ -171,7 +176,7 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
 
             if (typeof result === 'object' && result.isRateLimit) {
                 console.warn(`[RadioVoice] ⚠️ Limite de API Whisper/Groq atingido (${result.status}). Desativando escuta por 1 minuto.`);
-                updateSession(guildId, { voiceListening: false });
+                updateSession(guildId, { voiceListening: false, voiceMode: 'OFF' });
                 await updateEmbed(guildId, textChannel, client);
 
                 if (textChannel) {
@@ -184,7 +189,7 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
                 setTimeout(async () => {
                     const currentSession = getSession(guildId);
                     if (currentSession) {
-                        updateSession(guildId, { voiceListening: true });
+                        updateSession(guildId, { voiceListening: true, voiceMode: 'DIRECT' });
                         await updateEmbed(guildId, textChannel, client);
                         if (textChannel) {
                             try {
@@ -243,11 +248,166 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
             }
 
             userLastVoiceCommand.set(userKey, now);
-            await processRadioVoiceCommand(prompt, userId, guildId, textChannel, client);
+            const activeMode = session.voiceMode || (session.voiceListening ? 'IA' : 'OFF');
+            if (activeMode === 'DIRECT') {
+                await processDirectRadioVoiceCommand(prompt, userId, guildId, textChannel, client);
+            } else {
+                await processRadioVoiceCommand(prompt, userId, guildId, textChannel, client);
+            }
         });
 
         decoder.on('error', () => activeStreams.delete(streamKey));
     });
+}
+
+async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChannel, client) {
+    const { parseRadioIntent } = require('./radioIntentEngine');
+    const intent = parseRadioIntent(prompt);
+    if (!intent) return;
+
+    const session = getSession(guildId);
+    if (!session) return;
+
+    const sendNotify = async (msgText) => {
+        if (!textChannel) return;
+        try {
+            const msg = await textChannel.send(`<@${userId}> ⚡ **[Direct]** ${msgText}`);
+            setTimeout(() => { msg?.delete?.().catch(() => {}); }, 4000);
+        } catch (_) {}
+    };
+
+    if (intent.type === 'PAUSE') {
+        if (session.status === 'PLAYING') {
+            await pausePlayer(guildId);
+            await updateEmbed(guildId, textChannel, client);
+            await sendNotify('Pausando a música.');
+        } else {
+            await sendNotify('O rádio já está pausado ou parado.');
+        }
+        return;
+    }
+
+    if (intent.type === 'RESUME') {
+        if (session.status === 'PAUSED') {
+            await resumePlayer(guildId);
+            await updateEmbed(guildId, textChannel, client);
+            await sendNotify('Retomando a música.');
+        } else if (session.status === 'STOPPED') {
+            const first = nextTrack(guildId);
+            if (first) await playTrack(guildId, first, textChannel, client);
+            await updateEmbed(guildId, textChannel, client);
+            await sendNotify('Iniciando reprodução.');
+        }
+        return;
+    }
+
+    if (intent.type === 'STOP') {
+        stopPlayer(guildId);
+        stopRadio(guildId);
+        await updateEmbed(guildId, textChannel, client);
+        await sendNotify('Parando o rádio.');
+        return;
+    }
+
+    if (intent.type === 'NEXT') {
+        const next = nextTrack(guildId);
+        if (next) {
+            await playTrack(guildId, next, textChannel, client);
+            await sendNotify(`Pulando para: **${next.title}**`);
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+            await sendNotify('Fim da fila do rádio.');
+        }
+        return;
+    }
+
+    if (intent.type === 'PREVIOUS') {
+        const prev = prevTrack(guildId);
+        if (prev) {
+            await playTrack(guildId, prev, textChannel, client);
+            await sendNotify(`Voltando para: **${prev.title}**`);
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+            await sendNotify('Nenhuma faixa anterior.');
+        }
+        return;
+    }
+
+    if (intent.type === 'SHUFFLE') {
+        const isShuffle = toggleShuffle(guildId);
+        await updateEmbed(guildId, textChannel, client);
+        await sendNotify(isShuffle ? 'Modo aleatório ativado!' : 'Modo aleatório desativado.');
+        return;
+    }
+
+    if (intent.type === 'LOOP') {
+        const mode = setLoopMode(guildId);
+        await updateEmbed(guildId, textChannel, client);
+        await sendNotify(`Modo de repetição: **${mode}**`);
+        return;
+    }
+
+    if (intent.type === 'REMOVE') {
+        const result = removeTrackFromPlaylist(guildId, intent.position);
+        if (result) {
+            if (result.isCurrent) {
+                if (result.newCurrentTrack) {
+                    await playTrack(guildId, result.newCurrentTrack, textChannel, client);
+                } else {
+                    stopPlayer(guildId);
+                    await updateEmbed(guildId, textChannel, client);
+                }
+            } else {
+                await updateEmbed(guildId, textChannel, client);
+            }
+            await sendNotify(`Música #${intent.position} (**${result.removedTrack.title}**) removida!`);
+        } else {
+            await sendNotify(`Não foi possível remover a música na posição #${intent.position}.`);
+        }
+        return;
+    }
+
+    if (intent.type === 'INFO') {
+        if (session.currentTrack) {
+            await sendNotify(`Tocando agora: **${session.currentTrack.title}** — *${session.currentTrack.artist}*`);
+        } else {
+            await sendNotify('Nenhuma música tocando no momento.');
+        }
+        return;
+    }
+
+    if (intent.type === 'QUEUE') {
+        const { buildQueueEmbed } = require('./radioEmbed');
+        const embed = buildQueueEmbed(session);
+        if (textChannel) {
+            try {
+                const msg = await textChannel.send({ content: `<@${userId}> 📜 **Fila do Rádio:**`, embeds: [embed] });
+                setTimeout(() => { msg?.delete?.().catch(() => {}); }, 10000);
+            } catch (_) {}
+        }
+        return;
+    }
+
+    if (intent.type === 'ADD') {
+        await sendNotify(`Buscando **"${intent.query}"**...`);
+        const result = await resolveInput(intent.query);
+        if (!result || !result.tracks || result.tracks.length === 0) {
+            await sendNotify(`Música não encontrada para **"${intent.query}"**.`);
+            return;
+        }
+
+        const trackToAdd = { ...result.tracks[0], addedBy: userId };
+        addTrackToQueue(guildId, trackToAdd);
+
+        if (session.status === 'STOPPED') {
+            const first = nextTrack(guildId);
+            if (first) await playTrack(guildId, first, textChannel, client);
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+        }
+        await sendNotify(`Adicionada à fila: **${trackToAdd.title}** — *${trackToAdd.artist}*`);
+        return;
+    }
 }
 
 async function processRadioVoiceCommand(prompt, userId, guildId, textChannel, client) {

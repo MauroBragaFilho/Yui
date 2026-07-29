@@ -9,7 +9,7 @@ const {
     TextInputStyle,
     MessageFlags
 } = require('discord.js');
-const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, stopRadio, removeTrackFromPlaylist } = require('./radioDatabase');
+const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, cycleVoiceMode, stopRadio, removeTrackFromPlaylist } = require('./radioDatabase');
 const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
 const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
 const { resolveInput } = require('./radioProviders');
@@ -154,7 +154,7 @@ async function handleRadioButton(interaction, client) {
     }
 
     if (cid === 'radio_voice_toggle') {
-        const isListening = toggleVoiceListening(guildId);
+        cycleVoiceMode(guildId);
         await updateEmbed(guildId, textChannel, client);
         return;
     }

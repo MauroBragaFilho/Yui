@@ -18,6 +18,18 @@ function loopButtonStyle(mode) {
     return ButtonStyle.Success;
 }
 
+function voiceModeLabel(mode) {
+    if (mode === 'DIRECT') return '⚡ Voz: Direct';
+    if (mode === 'IA') return '🧠 Voz: IA';
+    return '🔇 Voz: Off';
+}
+
+function voiceButtonStyle(mode) {
+    if (mode === 'DIRECT') return ButtonStyle.Success;
+    if (mode === 'IA') return ButtonStyle.Primary;
+    return ButtonStyle.Danger;
+}
+
 function buildRadioEmbed(session) {
     const track = session.currentTrack;
     const status = session.status;
@@ -26,6 +38,8 @@ function buildRadioEmbed(session) {
 
     const statusLabel = status === 'PLAYING' ? '▶️ Tocando' : status === 'PAUSED' ? '⏸️ Pausado' : '⏹️ Parado';
     const color = status === 'PLAYING' ? 0x1DB954 : status === 'PAUSED' ? 0xF59E0B : 0x6B7280;
+
+    const currentVoiceMode = session.voiceMode || (session.voiceListening ? 'IA' : 'OFF');
 
     const embed = new EmbedBuilder()
         .setColor(color)
@@ -58,7 +72,7 @@ function buildRadioEmbed(session) {
 
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('radio_loop').setLabel(loopLabel(session.loopMode)).setStyle(loopButtonStyle(session.loopMode)),
-        new ButtonBuilder().setCustomId('radio_voice_toggle').setLabel(session.voiceListening ? '🎙️ Voz: On' : '🔇 Voz: Off').setStyle(session.voiceListening ? ButtonStyle.Success : ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('radio_voice_toggle').setLabel(voiceModeLabel(currentVoiceMode)).setStyle(voiceButtonStyle(currentVoiceMode)),
         new ButtonBuilder().setCustomId('radio_queue').setLabel('📜 Ver Lista').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('radio_add').setLabel('➕ Adicionar').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('radio_remove').setLabel('🗑️ Remover').setStyle(ButtonStyle.Danger)
