@@ -9,7 +9,7 @@ const {
     TextInputStyle,
     MessageFlags
 } = require('discord.js');
-const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening } = require('./radioDatabase');
+const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, stopRadio } = require('./radioDatabase');
 const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
 const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
 const { resolveInput } = require('./radioProviders');
@@ -66,12 +66,28 @@ async function handleRadioButton(interaction, client) {
             await pausePlayer(guildId);
         } else if (session.status === 'PAUSED') {
             await resumePlayer(guildId);
+        } else if (session.status === 'STOPPED') {
+            if (typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
+                updateSession(guildId, { currentIndex: -1 });
+            }
+            const first = nextTrack(guildId);
+            if (first) await playTrack(guildId, first, textChannel, client);
         }
         await updateEmbed(guildId, textChannel, client);
         return;
     }
 
+    if (cid === 'radio_stop') {
+        stopPlayer(guildId);
+        stopRadio(guildId);
+        await updateEmbed(guildId, textChannel, client);
+        return;
+    }
+
     if (cid === 'radio_next') {
+        if (session.status === 'STOPPED' && typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
+            updateSession(guildId, { currentIndex: -1 });
+        }
         const next = nextTrack(guildId);
         if (next) {
             await playTrack(guildId, next, textChannel, client);
@@ -82,6 +98,9 @@ async function handleRadioButton(interaction, client) {
     }
 
     if (cid === 'radio_prev') {
+        if (session.status === 'STOPPED' && typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
+            updateSession(guildId, { currentIndex: session.playlist ? session.playlist.length : 0 });
+        }
         const prev = prevTrack(guildId);
         if (prev) {
             await playTrack(guildId, prev, textChannel, client);
@@ -172,7 +191,7 @@ async function handleRadioModal(interaction, client) {
         const row2 = new ActionRowBuilder().addComponents(cancelBtn);
 
         await interaction.editReply({
-            content: 'Encontrei várias opções. Qual delas você quer? (Seleção automática da 1ª opção em 20s)',
+            content: 'Encontrei várias opções. Qual delas você quer? (Seleção automática da 1ª opção em 10s)',
             embeds: [embed],
             components: [row1, row2]
         });

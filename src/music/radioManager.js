@@ -339,13 +339,13 @@ function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
         try {
             if (messageTarget && typeof messageTarget.edit === 'function') {
                 await messageTarget.edit({
-                    content: `⏱️ **Tempo esgotado (20s).** Selecionada automaticamente a 1ª opção: **${firstTrack.title}**`,
+                    content: `⏱️ **Tempo esgotado (10s).** Selecionada automaticamente a 1ª opção: **${firstTrack.title}**`,
                     embeds: [],
                     components: []
                 });
             } else if (messageTarget && typeof messageTarget.editReply === 'function') {
                 await messageTarget.editReply({
-                    content: `⏱️ **Tempo esgotado (20s).** Selecionada automaticamente a 1ª opção: **${firstTrack.title}**`,
+                    content: `⏱️ **Tempo esgotado (10s).** Selecionada automaticamente a 1ª opção: **${firstTrack.title}**`,
                     embeds: [],
                     components: []
                 });
@@ -361,7 +361,7 @@ function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
         } else {
             await updateEmbed(pending.guildId, pending.textChannel, pending.client);
         }
-    }, 20000);
+    }, 10000);
 }
 
 module.exports = {

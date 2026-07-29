@@ -7,7 +7,8 @@ const {
     skipToTrack,
     setLoopMode,
     toggleShuffle,
-    destroySession
+    destroySession,
+    stopRadio
 } = require('./radioDatabase');
 const {
     playTrack,
@@ -66,7 +67,7 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
                 const row1 = new ActionRowBuilder().addComponents(selectMenu);
                 const row2 = new ActionRowBuilder().addComponents(cancelBtn);
                 const ephemeralMsg = await textChannel.send({
-                    content: `${userMention} Encontrei várias opções para "${query}". Qual delas você quer? (Seleção automática da 1ª opção em 20s)`,
+                    content: `${userMention} Encontrei várias opções para "${query}". Qual delas você quer? (Seleção automática da 1ª opção em 10s)`,
                     embeds: [embed],
                     components: [row1, row2]
                 });
@@ -118,6 +119,14 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
             await updateEmbed(guildId, textChannel, client);
             await sendTempMessage(textChannel, `▶️ ${userMention} Continuando reprodução.`);
         }
+        return null;
+    }
+
+    if (toolName === 'radio_stop_music') {
+        stopPlayer(guildId);
+        stopRadio(guildId);
+        await updateEmbed(guildId, textChannel, client);
+        await sendTempMessage(textChannel, `⏹️ ${userMention} Reprodução parada.`);
         return null;
     }
 

@@ -185,6 +185,20 @@ function getAllSessions() {
     return Array.from(sessions.values());
 }
 
+function stopRadio(guildId) {
+    const s = sessions.get(guildId);
+    if (!s) return null;
+    s.status = 'STOPPED';
+    if (Array.isArray(s.playlist)) {
+        s.currentIndex = s.playlist.length;
+    } else {
+        s.currentIndex = -1;
+    }
+    _syncLegacyFields(s);
+    _save();
+    return s;
+}
+
 module.exports = {
     createSession,
     getSession,
@@ -198,5 +212,6 @@ module.exports = {
     setLoopMode,
     toggleShuffle,
     toggleVoiceListening,
-    getAllSessions
+    getAllSessions,
+    stopRadio
 };

@@ -7,7 +7,7 @@
     "type": "function",
     "function": {
       "name": "radio_play_music",
-      "description": "Busca e toca uma música ou playlist no rádio por nome, artista, gênero, estilo ou link (Deezer ou YouTube). Use sempre que o usuário pedir para tocar, colocar, reproduzir ou soltar qualquer música, som, artista ou gênero (ex: 'para tocar X', 'toca rock', 'coloca uma música', 'bota um som', 'toca Guns N Roses', 'solta o som', 'toca Welcome to the Jungle', 'toca alguma coisa', 'coloca música'). Se o usuário disser apenas 'toca' ou 'coloca som' sem nome, use query 'músicas populares'.",
+      "description": "Busca e toca uma música ou playlist no rádio por nome, artista, gênero, estilo ou link (Deezer ou YouTube). Use sempre que o usuário pedir para tocar, colocar, reproduzir ou soltar qualquer música, som, artista ou gênero (ex: 'para tocar X', 'toca rock', 'coloca uma música', 'bota um som', 'toca Guns N Roses', 'solta o som', 'toca Welcome to the Jungle', 'toca alguma coisa', 'coloca música'). ou se o usuario falar o nome da musica. Se o usuário disser apenas 'toca' ou 'coloca som' sem nome, use query 'músicas populares'.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -28,7 +28,23 @@
     "type": "function",
     "function": {
       "name": "radio_pause_resume",
-      "description": "Pausa ou retoma a reprodução do rádio. Use sempre que o usuário disser 'para', 'pare', 'parar', 'pause', 'pausar', 'pausa', 'desliga', 'stop', 'silêncio', 'continuar', 'retomar', 'play', 'tocar musica', 'despause', 'volta a tocar'.",
+      "description": "Pausa ou retoma a reprodução do rádio. Use quando o usuário disser 'pause', 'pausar', 'pausa', 'continuar', 'retomar', 'play', 'despause', 'volta a tocar'.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "meta": {
+      "label": "⏹️ Parar Música",
+      "description": "Para a reprodução completamente e deixa o rádio sem nenhuma faixa tocando"
+    },
+    "type": "function",
+    "function": {
+      "name": "radio_stop_music",
+      "description": "Para completamente a reprodução da música no rádio, cancelando o som e avançando a fila para o final ('tocando nada'). Use sempre que o usuário disser 'parar', 'para', 'pare', 'parar música', 'para de tocar', 'para a música', 'cancela a música', 'stop', 'para o som'.",
       "parameters": {
         "type": "object",
         "properties": {},
