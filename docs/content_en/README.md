@@ -78,6 +78,7 @@ For detailed guides, configuration tips, and technical details, check our offici
 
 - [🚀 **Installation Guide**](./GET_STARTED.md): Everything to get Hikari up and running.
 - [⚙️ **Configuration & Multi-Token**](./CONFIGURATION.md): How to use multiple keys and manage owners.
+- [📻 **Radio Mode & Streaming**](./RADIO.md): Comprehensive radio system, voice controls, and streaming.
 - [🛡️ **Security & AutoMod**](./MODERATION.md): Understand how bot protection works.
 - [✨ **Features List**](./FEATURES.md): What and how to ask tasks from Hikari.
 - [🎮 **Commands Guide**](./COMMANDS.md): Details for all Slash commands (/).

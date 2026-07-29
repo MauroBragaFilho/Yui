@@ -246,7 +246,18 @@ function setupVoiceReceiver(stateData, client) {
             const wavHeader = createWavHeader(pcmBuffer.length, 48000, 2, 16);
             const wavBuffer = Buffer.concat([wavHeader, pcmBuffer]);
 
-            const transcribedText = await transcribeAudio(wavBuffer);
+            const result = await transcribeAudio(wavBuffer);
+            if (result && typeof result === 'object' && result.isRateLimit) {
+                const textChannel = client.channels.cache.get(stateData.textChannelId);
+                if (textChannel) {
+                    try {
+                        const msg = await textChannel.send('⚠️ **Limite de requisições da API de voz (Whisper) atingido!** Aguarde um momento antes de falar novamente.');
+                        setTimeout(() => { msg?.delete?.().catch(() => {}); }, 15000);
+                    } catch (_) {}
+                }
+                return;
+            }
+            const transcribedText = typeof result === 'string' ? result : '';
             if (transcribedText) {
                 processVoiceTranscription(userId, transcribedText, stateData, client);
             }
@@ -265,7 +276,30 @@ async function processVoiceTranscription(userId, text, stateData, client) {
         return;
     }
 
+    try {
+        const { hasActiveSession } = require('../music/radioDatabase');
+        if (hasActiveSession(stateData.guildId)) {
+            return;
+        }
+    } catch (_) {}
+
     const lowerText = text.toLowerCase();
+
+    const STT_HALLUCINATIONS = [
+        'assistente virtual',
+        'legendas pela comunidade',
+        'subtítulos',
+        'obrigado por assistir',
+        'inscreva-se',
+        'curta e compartilhe',
+        'transcrição',
+        'amara.org'
+    ];
+
+    if (STT_HALLUCINATIONS.some(h => lowerText.includes(h))) {
+        console.log(`[VOICE] 🔇 Alucinação de STT/ruído ignorada: "${text}"`);
+        return;
+    }
 
     const triggerRegex = /\b(hikari|hikare|hikary|hikarii|hikarie|hikaris|hicari|hicare|hicary|hicarii|hicaris|hikario|hicario|hikaru|hicaru|hikar|hicar|ikari|ikare|ikary|ikarii|ikaris|icari|icare|icaro|icary|icarii|icaris|icara|icaras|icaros|ikario|icario|ikaru|icaru|ikar|icar|ricardo|ricard|ricardi|ricari|ricare|rikari|rikare|ricario|ricarto|recari|recaro|ricar|ricardin|ricardinho|ficari|ficare|vicari|vicare|ficardo|vicardo|dicari|dicare|kikari|kicari|ticari|ih\s*cari|e\s*cari|eh\s*cari|i\s*cari|re\s*cari|ri\s*cari|hi\s*cari|he\s*cari|a\s*cari|o\s*cari|ei\s*cari|oh\s*cari|oi\s*cari)\b/i;
     const triggerMatch = lowerText.match(triggerRegex);

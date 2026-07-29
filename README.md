@@ -90,6 +90,7 @@ Para guias detalhados, dicas de configuração e funcionamento técnico, consult
 
 - [🚀 **Guia de Instalação**](./docs/content_pt/GET_STARTED.md): Tudo para colocar a Hikari no ar.
 - [⚙️ **Configuração & Multi-Token**](./docs/content_pt/CONFIGURATION.md): Como usar várias chaves e gerenciar donos.
+- [📻 **Modo Rádio & Streaming**](./docs/content_pt/RADIO.md): Sistema completo de rádio, voz interativa e streaming.
 - [🛡️ **Segurança & AutoMod**](./docs/content_pt/MODERATION.md): Entenda como funciona a proteção do bot.
 - [✨ **Lista de Funcionalidades**](./docs/content_pt/FEATURES.md): O que e como pedir as coisas para a Hikari.
 - [🎮 **Guia de Comandos**](./docs/content_pt/COMMANDS.md): Detalhes de todos os comandos Slash (/).

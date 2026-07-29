@@ -36,6 +36,9 @@ async function transcribeAudio(audioBuffer, filename = 'speech.wav') {
     } catch (error) {
         if (error.response) {
             console.error(`[STT] ❌ Erro na API Groq: Status ${error.response.status}`, error.response.data);
+            if (error.response.status === 429 || error.response.status === 492 || error.response.data?.error?.code === 'rate_limit_exceeded') {
+                return { isRateLimit: true, status: error.response.status, message: error.response.data?.error?.message };
+            }
         } else {
             console.error(`[STT] ❌ Erro na requisição STT:`, error.message);
         }

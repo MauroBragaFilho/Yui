@@ -1,0 +1,268 @@
+const {
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    MessageFlags
+} = require('discord.js');
+const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening } = require('./radioDatabase');
+const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
+const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
+const { resolveInput } = require('./radioProviders');
+const { leaveRadioCall, radioAmbiguousSessions, scheduleAmbiguousAutoSelect } = require('./radioManager');
+const { setLoopMode, toggleShuffle, prevTrack, skipToTrack } = require('./radioDatabase');
+
+function isUserInRadioChannel(interaction, session) {
+    if (!session) return false;
+    const member = interaction.member;
+    if (!member?.voice?.channelId) return false;
+    return member.voice.channelId === session.voiceChannelId;
+}
+
+async function handleRadioButton(interaction, client) {
+    const cid = interaction.customId;
+    const guildId = interaction.guildId;
+    const session = getSession(guildId);
+
+    if (cid.startsWith('radio_ambiguous_cancel_')) {
+        return await handleAmbiguousSelect(interaction, client);
+    }
+
+    if (!session) {
+        return interaction.reply({ content: '❌ Nenhuma sessão de rádio ativa.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (!isUserInRadioChannel(interaction, session)) {
+        return interaction.reply({ content: '❌ Você precisa estar no canal de voz do rádio para usar os controles.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (cid === 'radio_add') {
+        const modal = new ModalBuilder()
+            .setCustomId('radio_add_modal')
+            .setTitle('➕ Adicionar ao Rádio');
+
+        const input = new TextInputBuilder()
+            .setCustomId('radio_add_input')
+            .setLabel('Nome da música, artista ou link')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Ex: Welcome to the Jungle | ou link Deezer/YouTube')
+            .setRequired(true)
+            .setMaxLength(300);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return interaction.showModal(modal);
+    }
+
+    await interaction.deferUpdate();
+
+    const textChannel = interaction.channel;
+
+    if (cid === 'radio_playpause') {
+        if (session.status === 'PLAYING') {
+            await pausePlayer(guildId);
+        } else if (session.status === 'PAUSED') {
+            await resumePlayer(guildId);
+        }
+        await updateEmbed(guildId, textChannel, client);
+        return;
+    }
+
+    if (cid === 'radio_next') {
+        const next = nextTrack(guildId);
+        if (next) {
+            await playTrack(guildId, next, textChannel, client);
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+        }
+        return;
+    }
+
+    if (cid === 'radio_prev') {
+        const prev = prevTrack(guildId);
+        if (prev) {
+            await playTrack(guildId, prev, textChannel, client);
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+        }
+        return;
+    }
+
+    if (cid === 'radio_shuffle') {
+        toggleShuffle(guildId);
+        await updateEmbed(guildId, textChannel, client);
+        return;
+    }
+
+    if (cid === 'radio_loop') {
+        setLoopMode(guildId);
+        await updateEmbed(guildId, textChannel, client);
+        return;
+    }
+
+    if (cid === 'radio_voice_toggle') {
+        const isListening = toggleVoiceListening(guildId);
+        await updateEmbed(guildId, textChannel, client);
+        return;
+    }
+
+    if (cid === 'radio_queue') {
+        const embed = buildQueueEmbed(session);
+        return interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    }
+
+    if (cid === 'radio_leave') {
+        await leaveRadioCall(guildId, textChannel);
+        return;
+    }
+}
+
+async function handleRadioModal(interaction, client) {
+    if (interaction.customId !== 'radio_add_modal') return false;
+
+    const guildId = interaction.guildId;
+    const session = getSession(guildId);
+
+    if (!session) {
+        await interaction.reply({ content: '❌ Nenhuma sessão de rádio ativa.', flags: MessageFlags.Ephemeral });
+        return true;
+    }
+
+    if (!isUserInRadioChannel(interaction, session)) {
+        await interaction.reply({ content: '❌ Você precisa estar no canal de voz do rádio.', flags: MessageFlags.Ephemeral });
+        return true;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const query = interaction.fields.getTextInputValue('radio_add_input').trim();
+    const textChannel = interaction.channel;
+    const userId = interaction.user.id;
+
+    const resolved = await resolveInput(query);
+
+    if (resolved.type === 'not_found') {
+        await interaction.editReply({ content: `❌ Não encontrei **"${query}"**.` });
+        return true;
+    }
+
+    if (resolved.type === 'ambiguous') {
+        const embed = buildAmbiguousEmbed(resolved.results);
+        const pendingKey = `radio_ambiguous_${guildId}_${userId}`;
+        radioAmbiguousSessions.set(pendingKey, { results: resolved.results, guildId, userId, textChannel, client });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`radio_ambiguous_select_${guildId}_${userId}`)
+            .setPlaceholder('Escolha a música...')
+            .addOptions(resolved.results.map((t, i) => ({
+                label: `${i + 1}. ${t.title.substring(0, 40)}`,
+                description: `${t.artist.substring(0, 45)}`,
+                value: String(i)
+            })));
+
+        const cancelBtn = new ButtonBuilder()
+            .setCustomId(`radio_ambiguous_cancel_${guildId}_${userId}`)
+            .setLabel('Cancelar')
+            .setStyle(ButtonStyle.Danger);
+
+        const row1 = new ActionRowBuilder().addComponents(selectMenu);
+        const row2 = new ActionRowBuilder().addComponents(cancelBtn);
+
+        await interaction.editReply({
+            content: 'Encontrei várias opções. Qual delas você quer? (Seleção automática da 1ª opção em 20s)',
+            embeds: [embed],
+            components: [row1, row2]
+        });
+
+        scheduleAmbiguousAutoSelect(pendingKey, interaction);
+        return true;
+    }
+
+    if (resolved.type === 'playlist') {
+        const tracks = resolved.tracks;
+        tracks.forEach(t => { t.addedBy = userId; addTrackToQueue(guildId, t); });
+
+        if (session.status === 'STOPPED') {
+            const first = nextTrack(guildId);
+            if (first) await playTrack(guildId, first, textChannel, client);
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+        }
+
+        await interaction.editReply({ content: `✅ **${tracks.length}** faixas adicionadas à fila!`, embeds: [], components: [] });
+        return true;
+    }
+
+    if (resolved.type === 'track') {
+        const track = { ...resolved.track, addedBy: userId };
+        const pos = addTrackToQueue(guildId, track);
+
+        if (session.status === 'STOPPED') {
+            const first = nextTrack(guildId);
+            if (first) await playTrack(guildId, first, textChannel, client);
+            await interaction.editReply({ content: `✅ Tocando **${track.title}** agora!`, embeds: [], components: [] });
+        } else {
+            await updateEmbed(guildId, textChannel, client);
+            await interaction.editReply({ content: `✅ **${track.title}** adicionada como **#${pos}** na fila!`, embeds: [], components: [] });
+        }
+        return true;
+    }
+
+    return true;
+}
+
+async function handleAmbiguousSelect(interaction, client) {
+    const cid = interaction.customId;
+    if (!cid.startsWith('radio_ambiguous_select_') && !cid.startsWith('radio_ambiguous_cancel_')) return false;
+
+    const parts = cid.split('_');
+    const guildId = parts[3];
+    const userId = parts[4];
+    const pendingKey = `radio_ambiguous_${guildId}_${userId}`;
+    const pending = radioAmbiguousSessions.get(pendingKey);
+
+    if (!pending) {
+        await interaction.reply({ content: '❌ Seleção expirada. Faça a busca novamente.', flags: MessageFlags.Ephemeral });
+        return true;
+    }
+
+    if (interaction.user.id !== userId) {
+        await interaction.reply({ content: '❌ Esta seleção pertence a outro usuário.', flags: MessageFlags.Ephemeral });
+        return true;
+    }
+
+    if (cid.startsWith('radio_ambiguous_cancel_')) {
+        radioAmbiguousSessions.delete(pendingKey);
+        await interaction.update({ content: '❌ Cancelado.', embeds: [], components: [] });
+        return true;
+    }
+
+    const selectedIdx = parseInt(interaction.values[0], 10);
+    const track = { ...pending.results[selectedIdx], addedBy: userId };
+
+    radioAmbiguousSessions.delete(pendingKey);
+    await interaction.update({ content: `✅ **${track.title}** selecionada!`, embeds: [], components: [] });
+
+    const session = getSession(guildId);
+    const textChannel = pending.textChannel;
+
+    const pos = addTrackToQueue(guildId, track);
+
+    if (!session || session.status === 'STOPPED') {
+        const first = nextTrack(guildId);
+        if (first) await playTrack(guildId, first, textChannel, client);
+    } else {
+        await updateEmbed(guildId, textChannel, client);
+    }
+
+    return true;
+}
+
+module.exports = {
+    handleRadioButton,
+    handleRadioModal,
+    handleAmbiguousSelect
+};

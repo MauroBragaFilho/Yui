@@ -406,6 +406,11 @@ const commands = [
             .setName('sair-call')
             .setDescription('Faz a Hikari sair do canal de voz atual.')
     ),
+    setGlobalContext(
+        new SlashCommandBuilder()
+            .setName('modo-radio')
+            .setDescription('Ativa o Modo Rádio de Música — controle por embed e por voz.')
+    ),
 ].map(command => command.toJSON());
 async function registerCommands(client, rest) {
     try {

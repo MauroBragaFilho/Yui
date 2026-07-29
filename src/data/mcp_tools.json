@@ -9,7 +9,7 @@
     "function": {
       "name": "search_and_download_music",
       "description": "Busca e baixa arquivos de música em alta qualidade (.mp3) utilizando o catálogo do Deezer. Use sempre que o usuário pedir para baixar uma música por nome/artista (sempre de uma corrigida de ortografia se necessario) (ex: 'baixa ai a musica welcome to the jungle' ou 'pesquise ai a musica') ou responder com o número da opção (ex: 'quero a 1', 'a 2'). Se a busca for ambígua, o sistema retornará a lista com as 5 opções para o usuário escolher.",
-      "textual_triggers": "Gatilhos: \"baixa a música X\", \"hikari baixa ai Y\", \"download da música Z\", \"quero a opção 1\", \"baixa a 2\".",
+      "textual_triggers": "Gatilhos: \"quero a musica\", \"quero baixar\", \"baixa a música X\", \"hikari baixa ai Y\", \"download da música Z\", \"quero a opção 1\", \"baixa a 2\".",
       "textual_args": "{ \"query\": \"Nome da música e artista\", \"selected_index\": 1 }",
       "parameters": {
         "type": "object",

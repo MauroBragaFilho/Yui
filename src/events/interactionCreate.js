@@ -49,6 +49,8 @@ const { convertCurrency } = require('../handlers/currencyHandler');
 const { generateResponse } = require('../handlers/llmHandler');
 const { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect } = require('../handlers/configPanelHandler');
 const { handleMusicSearchAndDownload, clearSession } = require('../handlers/deezerMusicHandler');
+const { handleRadioButton, handleRadioModal, handleAmbiguousSelect } = require('../music/radioModalHandler');
+const { startRadioMode } = require('../music/radioManager');
 
 async function buildBanListPayload(client, category, page = 0) {
     const currentBans = getBans();
@@ -308,6 +310,9 @@ module.exports = {
             }
         }
         if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'radio_add_modal') {
+                return await handleRadioModal(interaction, client);
+            }
             if (interaction.customId.startsWith('cfgmodal_')) {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
@@ -320,6 +325,9 @@ module.exports = {
             }
         }
         if (interaction.isStringSelectMenu()) {
+            if (interaction.customId.startsWith('radio_ambiguous_select_')) {
+                return await handleAmbiguousSelect(interaction, client);
+            }
             if (interaction.customId.startsWith('music_select_')) {
                 const banInfo = checkBan(interaction.user.id, interaction.guildId, interaction.channelId);
                 if (banInfo) {
@@ -438,6 +446,12 @@ module.exports = {
         }
         if (interaction.isButton()) {
             const cid = interaction.customId;
+            if (cid.startsWith('radio_')) {
+                if (cid.startsWith('radio_ambiguous_cancel_')) {
+                    return await handleAmbiguousSelect(interaction, client);
+                }
+                return await handleRadioButton(interaction, client);
+            }
             if (cid.startsWith('music_cancel_')) {
                 const banInfo = checkBan(interaction.user.id, interaction.guildId, interaction.channelId);
                 if (banInfo) {
@@ -1567,6 +1581,19 @@ module.exports = {
                 await interaction.editReply({ content: '✅ Saí do canal de voz.' });
             } else {
                 await interaction.editReply({ content: '❌ Não estou em nenhum canal de voz neste servidor.' });
+            }
+        } else if (commandName === 'modo-radio') {
+            await interaction.deferReply({ ephemeral: true });
+            try {
+                const result = await startRadioMode(interaction.member, interaction.channel, client);
+                if (result.success) {
+                    await interaction.editReply({ content: '📻 Modo Rádio ativado!' });
+                } else {
+                    await interaction.editReply({ content: result.error || '❌ Não foi possível ativar o Modo Rádio.' });
+                }
+            } catch (err) {
+                console.error('[ModoRadio]', err);
+                await interaction.editReply({ content: '❌ Erro ao iniciar o Modo Rádio.' });
             }
         }
     },
