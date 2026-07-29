@@ -302,6 +302,12 @@ async function leaveRadioCall(guildId, textChannel) {
     const session = getSession(guildId);
     if (session) {
         updateSession(guildId, { _leaving: true });
+        if (session.embedMessageId && textChannel) {
+            try {
+                const embedMsg = await textChannel.messages.fetch(session.embedMessageId);
+                await embedMsg?.delete?.().catch(() => {});
+            } catch (_) {}
+        }
     }
 
     stopPlayer(guildId);
@@ -314,7 +320,10 @@ async function leaveRadioCall(guildId, textChannel) {
     destroySession(guildId);
 
     if (textChannel) {
-        try { await textChannel.send('👋 Modo Rádio encerrado. Até logo!'); } catch (_) {}
+        try {
+            const msg = await textChannel.send('👋 Modo Rádio encerrado. Até logo!');
+            setTimeout(() => { msg?.delete?.().catch(() => {}); }, 5000);
+        } catch (_) {}
     }
 }
 
@@ -350,12 +359,14 @@ function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
                     embeds: [],
                     components: []
                 });
+                setTimeout(() => { messageTarget.delete().catch(() => {}); }, 5000);
             } else if (messageTarget && typeof messageTarget.editReply === 'function') {
                 await messageTarget.editReply({
                     content: `⏱️ **Tempo esgotado (10s).** Selecionada automaticamente a 1ª opção: **${firstTrack.title}**`,
                     embeds: [],
                     components: []
                 });
+                setTimeout(() => { messageTarget.deleteReply().catch(() => {}); }, 5000);
             }
         } catch (_) {}
 

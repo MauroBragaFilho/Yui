@@ -215,6 +215,7 @@ async function handleRadioModal(interaction, client) {
         }
 
         await interaction.editReply({ content: `🗑️ Removida a faixa #${pos}: **${result.removedTrack.title}** - ${result.removedTrack.artist}` });
+        setTimeout(() => { interaction.deleteReply().catch(() => {}); }, 5000);
         return true;
     }
 
@@ -228,6 +229,7 @@ async function handleRadioModal(interaction, client) {
 
     if (resolved.type === 'not_found') {
         await interaction.editReply({ content: `❌ Não encontrei **"${query}"**.` });
+        setTimeout(() => { interaction.deleteReply().catch(() => {}); }, 5000);
         return true;
     }
 
@@ -275,6 +277,7 @@ async function handleRadioModal(interaction, client) {
         }
 
         await interaction.editReply({ content: `✅ **${tracks.length}** faixas adicionadas à fila!`, embeds: [], components: [] });
+        setTimeout(() => { interaction.deleteReply().catch(() => {}); }, 5000);
         return true;
     }
 
@@ -290,6 +293,7 @@ async function handleRadioModal(interaction, client) {
             await updateEmbed(guildId, textChannel, client);
             await interaction.editReply({ content: `✅ **${track.title}** adicionada como **#${pos}** na fila!`, embeds: [], components: [] });
         }
+        setTimeout(() => { interaction.deleteReply().catch(() => {}); }, 5000);
         return true;
     }
 
@@ -319,6 +323,7 @@ async function handleAmbiguousSelect(interaction, client) {
     if (cid.startsWith('radio_ambiguous_cancel_')) {
         radioAmbiguousSessions.delete(pendingKey);
         await interaction.update({ content: '❌ Cancelado.', embeds: [], components: [] });
+        setTimeout(() => { interaction.deleteReply().catch(() => {}); }, 5000);
         return true;
     }
 
@@ -327,6 +332,7 @@ async function handleAmbiguousSelect(interaction, client) {
 
     radioAmbiguousSessions.delete(pendingKey);
     await interaction.update({ content: `✅ **${track.title}** selecionada!`, embeds: [], components: [] });
+    setTimeout(() => { interaction.deleteReply().catch(() => {}); }, 5000);
 
     const session = getSession(guildId);
     const textChannel = pending.textChannel;
