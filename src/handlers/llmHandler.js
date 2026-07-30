@@ -471,8 +471,8 @@ function stripThinking(text) {
         return '';
     }
     let clean = text.trim();
-    if (/^(thought|thinking|pensamento|thinking\s+process)s?\b/i.test(clean)) {
-        const labelMatch = clean.match(/(?:response|reply|resposta|fala|hikari|output|text)\s*:\s*([\s\S]+)$/i);
+    if (/\[?(?:thought|thinking|pensamento|pensamentos|thinking\s+process)s?\]?\s*:/i.test(clean)) {
+        const labelMatch = clean.match(/\[?(?:response|reply|resposta|fala|hikari|output|text)\]?\s*:\s*([\s\S]+)$/i);
         if (labelMatch) {
             return labelMatch[1].trim();
         }
@@ -483,7 +483,7 @@ function stripThinking(text) {
             if (concatMatch) {
                 return concatMatch[1].trim();
             }
-            return lastLine;
+            return lastLine.replace(/^\[?(?:fala|resposta|hikari)\]?\s*:\s*/i, '').trim();
         }
     }
     return clean;
@@ -1497,7 +1497,9 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             });
             isBlocked = false;
             if (rawResponse) {
-                const defaultApiMatch = rawResponse.match(/(?:<ctrl\d+>[\s\S]*?)?(?:print\()?\(?(?:default_api\.)?(\w+)(?:\(|\s+)+([^]*?)\)?$/i);
+                const defaultApiMatch = rawResponse.match(/(?:<ctrl\d+>[\s\S]*?)?(?:print\(|default_api\.)\(?(\w+)(?:\(|\s+)+([^]*?)\)?$/i) ||
+                                        rawResponse.match(/(?:<ctrl\d+>[\s\S]*?)?\(?(generate_reply)(?:\(|\s+)+([^]*?)\)?$/i) ||
+                                        rawResponse.match(/(?:<ctrl\d+>[\s\S]*?)?\(?(\w+)\(([^]*?)\)\)?$/i);
                 if (defaultApiMatch && !rawResponse.includes('{')) {
                     const extractedTool = defaultApiMatch[1];
                     let extractedArgs = {};
