@@ -80,13 +80,15 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
         if (resolved.type === 'playlist') {
             const tracks = resolved.tracks;
             if (!tracks || tracks.length === 0) return `${userMention} Playlist vazia ou não encontrada.`;
+            const firstNewPos = (session.playlist?.length || 0) + 1;
             tracks.forEach(t => {
                 t.addedBy = userId;
                 addTrackToQueue(guildId, t);
             });
             if (session.status === 'STOPPED') {
-                const firstTrack = nextTrack(guildId);
-                if (firstTrack) await playTrack(guildId, firstTrack, textChannel, client);
+                skipToTrack(guildId, firstNewPos);
+                const current = getSession(guildId)?.currentTrack;
+                if (current) await playTrack(guildId, current, textChannel, client);
             } else {
                 await updateEmbed(guildId, textChannel, client);
             }
@@ -99,8 +101,9 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
             const queuePos = addTrackToQueue(guildId, track);
 
             if (session.status === 'STOPPED') {
-                const first = nextTrack(guildId);
-                if (first) await playTrack(guildId, first, textChannel, client);
+                skipToTrack(guildId, queuePos);
+                const current = getSession(guildId)?.currentTrack;
+                if (current) await playTrack(guildId, current, textChannel, client);
                 await sendTempMessage(textChannel, `🎵 ${userMention} Tocando **${track.title}** - ${track.artist}`);
             } else {
                 await updateEmbed(guildId, textChannel, client);

@@ -267,11 +267,13 @@ async function handleRadioModal(interaction, client) {
 
     if (resolved.type === 'playlist') {
         const tracks = resolved.tracks;
+        const firstNewPos = (session.playlist?.length || 0) + 1;
         tracks.forEach(t => { t.addedBy = userId; addTrackToQueue(guildId, t); });
 
         if (session.status === 'STOPPED') {
-            const first = nextTrack(guildId);
-            if (first) await playTrack(guildId, first, textChannel, client);
+            skipToTrack(guildId, firstNewPos);
+            const current = getSession(guildId)?.currentTrack;
+            if (current) await playTrack(guildId, current, textChannel, client);
         } else {
             await updateEmbed(guildId, textChannel, client);
         }
@@ -286,8 +288,9 @@ async function handleRadioModal(interaction, client) {
         const pos = addTrackToQueue(guildId, track);
 
         if (session.status === 'STOPPED') {
-            const first = nextTrack(guildId);
-            if (first) await playTrack(guildId, first, textChannel, client);
+            skipToTrack(guildId, pos);
+            const current = getSession(guildId)?.currentTrack;
+            if (current) await playTrack(guildId, current, textChannel, client);
             await interaction.editReply({ content: `✅ Tocando **${track.title}** agora!`, embeds: [], components: [] });
         } else {
             await updateEmbed(guildId, textChannel, client);

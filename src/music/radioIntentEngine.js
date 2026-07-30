@@ -11,6 +11,10 @@ function parseRadioIntent(text) {
         return { type: 'STOP' };
     }
 
+    if (/\b(sair|saia|sai|sair da call|saia da call|sai da call|sair do canal|saia do canal|sai do canal|vaza|vazar|desconectar|desconecta|tchau|até logo|ate logo|sair da cal|saia da cal|sai da cal|sai daqui)\b/i.test(cleanText)) {
+        return { type: 'LEAVE' };
+    }
+
     if (/\b(próxima|proxima|passa|pula|skip|avançar|avancar|próxima música|proxima musica|passa essa|troca|muda música|muda musica|mudar música|mudar musica|passar)\b/i.test(cleanText)) {
         return { type: 'NEXT' };
     }
@@ -40,11 +44,12 @@ function parseRadioIntent(text) {
         return { type: 'REMOVE', position: parseInt(removeMatch[1], 10) };
     }
 
-    const addPrefixRegex = /(?:^|\b)(?:toca|tocar|bota|botar|coloca|colocar|coloque|adicione|adicionar|pesquisa|pesquisar|reproduzir|solta|soltar)\s+(?:a\s+música\s+|a\s+musica\s+|o\s+som\s+de\s+|a\s+faixa\s+)?(.+)$/i;
+    const addPrefixRegex = /(?:^|\b)(?:toca|tocar|bota|botar|bote|coloca|colocar|coloque|adicione|adicionar|pesquisa|pesquisar|reproduzir|solta|soltar)\s+(?:a\s+música\s+|a\s+musica\s+|o\s+som\s+de\s+|a\s+faixa\s+)?(.+)$/i;
     const addMatch = cleanText.match(addPrefixRegex);
     if (addMatch && addMatch[1]) {
         let query = addMatch[1].trim();
         query = query.replace(/\s+(?:então|cara|por favor|aí|ai|mano|bro|velho|tipo|assim).*$/i, '').trim();
+        query = query.replace(/[.,!?:;]+$/, '').trim();
         if (query.length >= 2) {
             return { type: 'ADD', query };
         }
@@ -52,10 +57,6 @@ function parseRadioIntent(text) {
 
     if (/\b(tocar|play|retomar|voltar a tocar|despausar|solta o som|continua|solta a música|solta a musica|despausar)\b/i.test(cleanText)) {
         return { type: 'RESUME' };
-    }
-
-    if (cleanText.length >= 3 && !/\b(hikari|ajuda|olá|ola|bom dia|boa tarde|boa noite|obrigado|obrigada|valeu|vlw)\b/i.test(cleanText)) {
-        return { type: 'ADD', query: cleanText };
     }
 
     return null;

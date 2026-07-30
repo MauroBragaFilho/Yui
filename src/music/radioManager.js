@@ -14,11 +14,13 @@ const {
     updateSession,
     nextTrack,
     prevTrack,
+    skipToTrack,
     addTrackToQueue,
     toggleVoiceListening,
     setLoopMode,
     toggleShuffle,
-    removeTrackFromPlaylist
+    removeTrackFromPlaylist,
+    stopRadio
 } = require('./radioDatabase');
 const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
 const { buildRadioEmbed } = require('./radioEmbed');
@@ -100,7 +102,12 @@ async function startRadioMode(member, textChannel, client) {
         selfMute: false
     });
 
-    await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+    try {
+        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+    } catch (err) {
+        try { connection.destroy(); } catch (_) {}
+        return { success: false, error: '❌ Não foi possível conectar ao canal de voz (tempo limite esgotado ou desconectado).' };
+    }
 
     const { isToolDisabled } = require('../handlers/llmHandler');
     const session = createSession(guildId, voiceChannel.id, textChannel.id);
@@ -212,11 +219,23 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
                 'assistente virtual',
                 'legendas pela comunidade',
                 'subtítulos',
+                'subtitulos',
                 'obrigado por assistir',
                 'inscreva-se',
                 'curta e compartilhe',
                 'transcrição',
-                'amara.org'
+                'transcricao',
+                'amara.org',
+                'fale com a hikari',
+                'fale com hikari',
+                'falar com a hikari',
+                'falar com hikari',
+                'conversar com a hikari',
+                'conversar com hikari',
+                'fale com a',
+                'falar com a',
+                'fale com o',
+                'falar com o'
             ];
 
             if (STT_HALLUCINATIONS.some(h => lower.includes(h))) {
@@ -271,7 +290,7 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
     const sendNotify = async (msgText) => {
         if (!textChannel) return;
         try {
-            const msg = await textChannel.send(`<@${userId}> ⚡ **[Direct]** ${msgText}`);
+            const msg = await textChannel.send(`<@${userId}> [⚡] ${msgText}`);
             setTimeout(() => { msg?.delete?.().catch(() => {}); }, 4000);
         } catch (_) {}
     };
@@ -306,6 +325,12 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
         stopRadio(guildId);
         await updateEmbed(guildId, textChannel, client);
         await sendNotify('Parando o rádio.');
+        return;
+    }
+
+    if (intent.type === 'LEAVE') {
+        await sendNotify('Saindo do canal de voz. Até logo!');
+        await leaveRadioCall(guildId, textChannel);
         return;
     }
 
@@ -391,17 +416,46 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
     if (intent.type === 'ADD') {
         await sendNotify(`Buscando **"${intent.query}"**...`);
         const result = await resolveInput(intent.query);
-        if (!result || !result.tracks || result.tracks.length === 0) {
+
+        if (!result || result.type === 'not_found') {
             await sendNotify(`Música não encontrada para **"${intent.query}"**.`);
             return;
         }
 
-        const trackToAdd = { ...result.tracks[0], addedBy: userId };
-        addTrackToQueue(guildId, trackToAdd);
+        let trackToAdd = null;
+
+        if (result.type === 'track') {
+            trackToAdd = { ...result.track, addedBy: userId };
+        } else if (result.type === 'ambiguous' && Array.isArray(result.results) && result.results.length > 0) {
+            trackToAdd = { ...result.results[0], addedBy: userId };
+        } else if (result.type === 'playlist' && Array.isArray(result.tracks) && result.tracks.length > 0) {
+            const firstNewPos = (session.playlist?.length || 0) + 1;
+            result.tracks.forEach(t => {
+                t.addedBy = userId;
+                addTrackToQueue(guildId, t);
+            });
+            if (session.status === 'STOPPED') {
+                skipToTrack(guildId, firstNewPos);
+                const current = getSession(guildId)?.currentTrack;
+                if (current) await playTrack(guildId, current, textChannel, client);
+            } else {
+                await updateEmbed(guildId, textChannel, client);
+            }
+            await sendNotify(`✅ **${result.tracks.length}** faixas adicionadas à fila!`);
+            return;
+        }
+
+        if (!trackToAdd) {
+            await sendNotify(`Música não encontrada para **"${intent.query}"**.`);
+            return;
+        }
+
+        const queuePos = addTrackToQueue(guildId, trackToAdd);
 
         if (session.status === 'STOPPED') {
-            const first = nextTrack(guildId);
-            if (first) await playTrack(guildId, first, textChannel, client);
+            skipToTrack(guildId, queuePos);
+            const current = getSession(guildId)?.currentTrack;
+            if (current) await playTrack(guildId, current, textChannel, client);
         } else {
             await updateEmbed(guildId, textChannel, client);
         }

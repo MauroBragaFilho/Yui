@@ -289,11 +289,23 @@ async function processVoiceTranscription(userId, text, stateData, client) {
         'assistente virtual',
         'legendas pela comunidade',
         'subtítulos',
+        'subtitulos',
         'obrigado por assistir',
         'inscreva-se',
         'curta e compartilhe',
         'transcrição',
-        'amara.org'
+        'transcricao',
+        'amara.org',
+        'fale com a hikari',
+        'fale com hikari',
+        'falar com a hikari',
+        'falar com hikari',
+        'conversar com a hikari',
+        'conversar com hikari',
+        'fale com a',
+        'falar com a',
+        'fale com o',
+        'falar com o'
     ];
 
     if (STT_HALLUCINATIONS.some(h => lowerText.includes(h))) {

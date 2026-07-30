@@ -57,6 +57,7 @@ async function playTrack(guildId, track, textChannel, client) {
     }
 
     updateSession(guildId, { status: 'PLAYING', currentTrack: track });
+    await updateEmbed(guildId, textChannel, client);
 
     let player = players.get(guildId);
     if (!player) {
@@ -184,19 +185,27 @@ async function updateEmbed(guildId, textChannel, client) {
     const session = getSession(guildId);
     if (!session) return;
 
+    let targetChannel = textChannel;
+    if (!targetChannel && session.textChannelId && client) {
+        targetChannel = client.channels?.cache?.get(session.textChannelId) || null;
+        if (!targetChannel && client.channels?.fetch) {
+            try { targetChannel = await client.channels.fetch(session.textChannelId); } catch (_) {}
+        }
+    }
+
     try {
         const { embeds, components } = buildRadioEmbed(session);
 
-        if (session.embedMessageId && textChannel) {
+        if (session.embedMessageId && targetChannel) {
             try {
-                const msg = await textChannel.messages.fetch(session.embedMessageId);
+                const msg = await targetChannel.messages.fetch(session.embedMessageId);
                 await msg.edit({ embeds, components });
                 return;
             } catch (_) {}
         }
 
-        if (textChannel) {
-            const msg = await textChannel.send({ embeds, components });
+        if (targetChannel) {
+            const msg = await targetChannel.send({ embeds, components });
             updateSession(guildId, { embedMessageId: msg.id });
         }
     } catch (err) {

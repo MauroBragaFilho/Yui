@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
@@ -299,13 +299,16 @@ module.exports = {
     once: false,
     async execute(interaction, client) {
         if (interaction.guildId) {
-            const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
-            if (!isServerAccepted(interaction.guildId)) {
-                const isTosAction = (interaction.isCommand() && interaction.commandName === 'aceitar_tos') ||
-                                    (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline'));
-                if (!isTosAction) {
-                    await sendTermsOfService(interaction);
-                    return;
+            const isWhitelisted = config.isAutomodWhitelisted(interaction.user.id) || config.isOwner(interaction.user.id);
+            if (!isWhitelisted) {
+                const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
+                if (!isServerAccepted(interaction.guildId)) {
+                    const isTosAction = (interaction.isCommand() && interaction.commandName === 'aceitar_tos') ||
+                                        (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline'));
+                    if (!isTosAction) {
+                        await sendTermsOfService(interaction);
+                        return;
+                    }
                 }
             }
         }
@@ -1589,7 +1592,7 @@ module.exports = {
                 await interaction.editReply({ content: '❌ Não estou em nenhum canal de voz neste servidor.' });
             }
         } else if (commandName === 'modo-radio') {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             try {
                 const result = await startRadioMode(interaction.member, interaction.channel, client);
                 if (result.success) {

@@ -208,11 +208,9 @@ function stopRadio(guildId) {
     const s = sessions.get(guildId);
     if (!s) return null;
     s.status = 'STOPPED';
-    if (Array.isArray(s.playlist)) {
-        s.currentIndex = s.playlist.length;
-    } else {
-        s.currentIndex = -1;
-    }
+    s.playlist = [];
+    s.currentIndex = -1;
+    s.currentTrack = null;
     _syncLegacyFields(s);
     _save();
     return s;

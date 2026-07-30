@@ -417,12 +417,12 @@ function stripThinking(text) {
         } catch (e) {}
     }
     let cleanVal = text.trim();
-    const genReplyRegex = /(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply\((?:content=)?(['"]{1,3})([\s\S]*?)\1\)?\)?(?:[\s\n]*```)?/i;
+    const genReplyRegex = /(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply(?:\(|\s+)+(?:content=)?(['"]{1,3})([\s\S]*?)\1\)?\)?(?:[\s\n]*```)?/i;
     const matchGenReply = cleanVal.match(genReplyRegex);
     if (matchGenReply) {
         return matchGenReply[2].trim();
     }
-    const prefixRegex = /^(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply\((?:content=)?(['"]{1,3})/i;
+    const prefixRegex = /^(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply(?:\(|\s+)+(?:content=)?(['"]{1,3})/i;
     const prefixMatch = cleanVal.match(prefixRegex);
     if (prefixMatch) {
         const quoteChar = prefixMatch[1];
@@ -1045,11 +1045,11 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
                     } else if (msg.content) {
                         let content = msg.content;
                         let cleanVal = content.trim();
-                        const genReplyMatch = cleanVal.match(/(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply\((?:content=)?(['"]{1,3})([\s\S]*?)\1/i);
+                        const genReplyMatch = cleanVal.match(/(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply(?:\(|\s+)+(?:content=)?(['"]{1,3})([\s\S]*?)\1/i);
                         if (genReplyMatch) {
                             content = genReplyMatch[2].trim();
                         } else {
-                            const prefixRegex = /^(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply\((?:content=)?(['"]{1,3})/i;
+                            const prefixRegex = /^(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply(?:\(|\s+)+(?:content=)?(['"]{1,3})/i;
                             const prefixMatch = cleanVal.match(prefixRegex);
                             if (prefixMatch) {
                                 const quoteChar = prefixMatch[1];
@@ -1497,7 +1497,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             });
             isBlocked = false;
             if (rawResponse) {
-                const defaultApiMatch = rawResponse.match(/(?:<ctrl\d+>[\s\S]*?)?(?:print\()?\(?(?:default_api\.)?(\w+)\(([^]*?)\)\)?/i);
+                const defaultApiMatch = rawResponse.match(/(?:<ctrl\d+>[\s\S]*?)?(?:print\()?\(?(?:default_api\.)?(\w+)(?:\(|\s+)+([^]*?)\)?$/i);
                 if (defaultApiMatch && !rawResponse.includes('{')) {
                     const extractedTool = defaultApiMatch[1];
                     let extractedArgs = {};
