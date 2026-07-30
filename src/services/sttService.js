@@ -4,12 +4,18 @@ require('dotenv').config();
 
 const STT_PROVIDERS_CONFIG = {
     GROQ: true,
-    GEMINI: true,
     WITAI: true,
+    GEMINI: true,
     HUGGINGFACE: true,
     OPENAI: true,
     LOCAL: true
 };
+
+function isPlaceholderKey(key) {
+    if (!key || typeof key !== 'string') return true;
+    const k = key.toLowerCase().trim();
+    return k.includes('sua_chave') || k.includes('suas_chave') || k.includes('seu_token') || k.includes('your_key') || k.includes('placeholder') || k.length < 10;
+}
 
 async function transcribeWithGroq(audioBuffer, apiKey, filename) {
     const formData = new FormData();
@@ -35,7 +41,9 @@ async function transcribeWithGroq(audioBuffer, apiKey, filename) {
 
 async function transcribeWithGemini(audioBuffer, apiKey) {
     const base64Audio = audioBuffer.toString('base64');
-    const model = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.5-flash';
+    const model = process.env.GEMINI_MODEL_FALLBACK && !process.env.GEMINI_MODEL_FALLBACK.includes('2.5')
+        ? process.env.GEMINI_MODEL_FALLBACK
+        : 'gemini-1.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const payload = {
@@ -67,43 +75,36 @@ async function transcribeWithGemini(audioBuffer, apiKey) {
 }
 
 async function transcribeWithWitAi(audioBuffer, token) {
-    const witToken = token || process.env.WITAI_TOKEN || process.env.WIT_AI_KEY;
-    if (!witToken) return null;
-
     const response = await axios.post('https://api.wit.ai/speech?v=20230215', audioBuffer, {
         headers: {
-            'Authorization': `Bearer ${witToken}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'audio/wav'
         },
         timeout: 10000
     });
 
-    if (typeof response.data === 'string') {
-        const lines = response.data.trim().split('\n');
-        for (let i = lines.length - 1; i >= 0; i--) {
+    const rawData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    const matches = rawData.match(/\{[\s\S]*?\}(?=\s*\{|$)/g);
+    if (matches && matches.length > 0) {
+        for (let i = matches.length - 1; i >= 0; i--) {
             try {
-                const parsed = JSON.parse(lines[i]);
-                if (parsed.text) return parsed.text.trim();
+                const parsed = JSON.parse(matches[i]);
+                if (parsed.text && parsed.text.trim()) {
+                    return parsed.text.trim();
+                }
             } catch (_) {}
         }
-    } else if (response.data && response.data.text) {
-        return response.data.text.trim();
     }
     return null;
 }
 
-async function transcribeWithHuggingFace(audioBuffer, token, filename) {
-    const formData = new FormData();
-    formData.append('file', audioBuffer, { filename, contentType: 'audio/wav' });
-    formData.append('model', 'openai/whisper-large-v3-turbo');
-    formData.append('language', 'pt');
+async function transcribeWithHuggingFace(audioBuffer, token) {
+    const endpoint = process.env.HF_STT_URL || 'https://router.huggingface.co/hf-inference/models/openai/whisper-large-v3-turbo';
 
-    const endpoint = process.env.HF_STT_URL || 'https://router.huggingface.co/openai/v1/audio/transcriptions';
-
-    const response = await axios.post(endpoint, formData, {
+    const response = await axios.post(endpoint, audioBuffer, {
         headers: {
-            ...formData.getHeaders(),
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'audio/wav'
         },
         timeout: 12000
     });
@@ -164,7 +165,7 @@ async function transcribeAudio(audioBuffer, filename = 'speech.wav') {
 
     const groqKeysRaw = process.env.GROQ_API_KEY || '';
     if (STT_PROVIDERS_CONFIG.GROQ && groqKeysRaw) {
-        const keys = groqKeysRaw.split(',').map(k => k.trim()).filter(Boolean);
+        const keys = groqKeysRaw.split(',').map(k => k.trim()).filter(k => !isPlaceholderKey(k));
         keys.forEach((k, idx) => {
             providers.push({
                 name: `Groq (Chave ${idx + 1})`,
@@ -173,32 +174,32 @@ async function transcribeAudio(audioBuffer, filename = 'speech.wav') {
         });
     }
 
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (STT_PROVIDERS_CONFIG.GEMINI && geminiKey) {
-        providers.push({
-            name: 'Gemini 2.5 Flash Audio (Google API)',
-            fn: () => transcribeWithGemini(audioBuffer, geminiKey)
-        });
-    }
-
     const witToken = process.env.WITAI_TOKEN || process.env.WIT_AI_KEY;
-    if (STT_PROVIDERS_CONFIG.WITAI && witToken) {
+    if (STT_PROVIDERS_CONFIG.WITAI && !isPlaceholderKey(witToken)) {
         providers.push({
             name: 'Discord Speech / Wit.ai',
             fn: () => transcribeWithWitAi(audioBuffer, witToken)
         });
     }
 
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (STT_PROVIDERS_CONFIG.GEMINI && !isPlaceholderKey(geminiKey)) {
+        providers.push({
+            name: 'Gemini Flash Audio (Google API)',
+            fn: () => transcribeWithGemini(audioBuffer, geminiKey)
+        });
+    }
+
     const hfToken = process.env.HF_TOKEN;
-    if (STT_PROVIDERS_CONFIG.HUGGINGFACE && hfToken) {
+    if (STT_PROVIDERS_CONFIG.HUGGINGFACE && !isPlaceholderKey(hfToken)) {
         providers.push({
             name: 'HuggingFace STT',
-            fn: () => transcribeWithHuggingFace(audioBuffer, hfToken, filename)
+            fn: () => transcribeWithHuggingFace(audioBuffer, hfToken)
         });
     }
 
     const openAiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_STT_KEY;
-    if (STT_PROVIDERS_CONFIG.OPENAI && openAiKey) {
+    if (STT_PROVIDERS_CONFIG.OPENAI && !isPlaceholderKey(openAiKey)) {
         providers.push({
             name: 'OpenAI Whisper',
             fn: () => transcribeWithOpenAI(audioBuffer, openAiKey, filename)
@@ -214,7 +215,7 @@ async function transcribeAudio(audioBuffer, filename = 'speech.wav') {
     }
 
     if (providers.length === 0) {
-        console.error('[STT] ❌ Nenhuma chave/provedor de STT ativo ou configurado');
+        console.error('[STT] ❌ Nenhuma chave/provedor de STT válido configurado no .env');
         return null;
     }
 
@@ -243,7 +244,7 @@ async function transcribeAudio(audioBuffer, filename = 'speech.wav') {
     }
 
     if (lastRateLimit) {
-        console.error('[STT] ❌ Todos os provedores de STT atingiram limite de requisições ou falharam.');
+        console.error('[STT] ❌ Todos os provedores de STT ativos atingiram limite de requisições.');
         return lastRateLimit;
     }
 
