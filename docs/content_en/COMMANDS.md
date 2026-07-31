@@ -133,63 +133,42 @@ Checks official information, price, and status in the Steam store.
 
 ## ⚙️ Configuration & Administration
 
+### `/config_servidor` (Server Admin)
+
+Unified public dashboard for server configuration.
+
+- **Personality & Humor:** Custom instructions (prompts) and emotional states per channel.
+- **Spontaneous Messages:** Controls toggle status and speech frequency.
+- **Updates Channel:** Configures the official channel for system updates.
+- **Mentions Response:** Toggles response to `@everyone` and `@here` mentions.
+- **MCP Tools:** Opens the interactive MCP Tool Manager with tool descriptions, status list, and toggle buttons.
+
+### `/config_criador` (Owner / Creator)
+
+Master Control Center for global Hikari network management (hidden/ephemeral for creator).
+
+- **Subcommands `painel` / `dashboard`:** Opens the Master Creator dashboard with button controls.
+- **Models:** Configures active LLM model and display settings.
+- **Ban / Unban / Bans List:** Manages global blacklist for users, servers, and channels.
+- **AutoMod:** Toggles automatic AI moderation mode (Off / Monitor / Strict).
+- **MCP Tools:** Server MCP tool management.
+- **Bot Config:** AI runtime settings.
+
+### `/ia_ferramentas` (Server Admin)
+
+Independent slash command for server admins to manage MCP tools.
+
+- **Action `list`:** Displays a public embed listing active and disabled tools on the server.
+- **Action `toggle`:** Toggles availability for a specific tool (`join_voice_call`, `search_game`, `generate_image`, etc.).
+- **Action `reset`:** Restores server tools to factory defaults.
+
+### `/aceitar_tos` (Server Admin)
+
+Displays and records acceptance of Hikari Terms of Service to unlock bot features on the server.
+
 ### `/ia_config` (Owner)
 
-Adjusts technical parameters of AI models.
-
-- **Provider:** Which AI to configure.
-- **Setting:** Choose between `Timeout`, `Temperature`, or `Max Tokens`.
-- **Value:** The new numeric value.
-
-### `/ia_model_config` (Owner)
-
-Configures the display of the model name in responses and in the AI's thinking/processing.
-
-- **Show Model:** Displays or hides the model name in the AI's response.
-- **Show Model Thought:** Displays or hides the name of the model that is processing the response in the thinking message.
-
-### `/ia_prompt` (Owner)
-
-Modifies the server's System Prompt.
-
-- **Set:** Defines a complete new prompt.
-- **Reset:** Returns to default.
-- **View:** Shows the current prompt.
-
-### `/ia_ferramentas` (Admin)
-
-Manages which tools (MCP) the AI can use on the server.
-
-- **Toggle:** Enables or disables tools like `web_search`, `image_gen`, etc.
-- **List:** Shows the status of all tools.
-
-### `/ia_mention_todos` (Admin)
-
-Configures whether Hikari should respond to `@everyone` and `@here` mentions on the server.
-
-- **Active:** Yes to respond, No to ignore.
-- **Advanced:** Useful for preventing the AI from intruding on global server announcements, or for allowing it to interact when the whole server is called.
-
-### `/aceitar_tos` (Admin)
-
-Accepts Hikari's Terms of Service (TOS) to release and authorize the usage of all bot features in this server.
-
-- **Advanced:** This command unlocks the server. All channels and commands remain completely locked until the TOS is accepted by an administrator.
-
-### `/chat_updates` (Admin)
-
-Configures the channel where the bot will send updates and new release announcements for the Hikari system.
-
-- **Channel (Optional):** The text channel to be configured (if left blank, defaults to the current channel).
-- **Advanced:** New servers automatically register the channel where the TOS was accepted as the updates chat. Old servers register the last active channel.
-
-### `/adm_banir` / `/adm_desbanir` (Owner)
-
-Hikari network global ban system.
-
-- **Type:** User, Server, or Channel.
-- **ID:** Target identifier.
-- **Reason:** Justification for the block.
+Low-level technical configuration for AI models (`Timeout`, `Temperature`, `Max Tokens`).
 
 ---
 

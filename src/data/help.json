@@ -5,32 +5,28 @@
     "description": "Explicação detalhada de cada funcionalidade por categoria",
     "commands": [
       {
-        "title": "🧠 Inteligência Artificial (IA)",
-        "content": "**• /ia_chat:** Converse com o cérebro da Hikari. Suporta visibilidade `Privada` e citações.\n**• /ia_ferramentas:** (Server-Admin) Ativa/Desativa o que a IA pode usar (Pesquisa, Imagens, Voz, etc).\n**• /ia_mention_todos:** (Server-Admin) Define se a Hikari responde a @everyone/@here.\n**• /ia_prompt:** (Dono) Sobrescreve o comportamento base do bot neste servidor.\n**• /ia_config:** (Dono) Ajusta Timeout, Temperatura e Max Tokens dos provedores.\n**• /ia_model_config:** (Dono) Configura a exibição do nome do modelo nas respostas e no pensamento."
+        "title": "🧠 Inteligência Artificial & Configurações",
+        "content": "**• /ia_chat:** Converse com o cérebro da Hikari. Suporta visibilidade `Privada` e citações.\n**• /config_servidor:** (Server-Admin) Painel interativo para configurar Humor, Espontâneo, Updates, Mentions e Ferramentas MCP.\n**• /ia_ferramentas:** (Server-Admin) Inspecione descrições, liste e altere status de ferramentas MCP do servidor.\n**• /aceitar_tos:** (Server-Admin) Exibe e aceita os Termos de Serviço da Hikari no servidor.\n**• /config_criador:** (Dono) Central de Controle Master do Criador (Modelos, Bans, AutoMod, MCP, Configurações de Bot).\n**• /ia_config:** (Dono) Ajusta Timeout, Temperatura e Max Tokens da IA."
       },
       {
         "title": "🎙️ Voz & Assistente de Call",
-        "content": "**• /entrar-call:** Conecta a Hikari ao seu canal de voz para atendimento inteligente ativado ao falar 'Hikari'.\n**• /sair-call:** Desconecta a Hikari do canal de voz em que ela está conectada."
+        "content": "**• /entrar-call:** Conecta a Hikari ao seu canal de voz para atendimento inteligente ativado ao falar 'Hikari'.\n**• /sair-call:** Desconecta a Hikari do canal de voz em que ela está conectada.\n**• /modo-radio:** Inicia o sistema de rádio de música no canal de voz."
       },
       {
         "title": "🎨 Arte & Criatividade",
-        "content": "**• /ia_imagem:** Gera artes usando SDXL, FLUX ou Pollinations. Aceita prompts negativos e resoluções personalizadas.\n**• /anime_origem:** Envia um print e eu te digo o nome do anime, o episódio e o minuto exato da cena."
+        "content": "**• /ia_imagem:** Gera artes usando SDXL. Aceita prompts negativos e resoluções personalizadas.\n**• /anime_origem:** Envia um print e a Hikari localiza o anime, o episódio e o minuto exato."
       },
       {
         "title": "🎵 Utilidades & Multimídia",
-        "content": "**• /baixar_musica:** Converte áudio de links (YouTube, Instagram, TikTok) para MP3.\n**• /baixar_musica_deezer:** Busca e baixa áudio de alta qualidade (MP3 HQ) diretamente do Deezer por nome/artista.\n**• /converter_moeda:** Cotação e conversão de moedas (USD, EUR, BRL) e Cripto (BTC, ETH) em tempo real.\n**• /chat_resumo:** Lê as últimas 10-100 mensagens e faz um resumo dos tópicos discutidos."
+        "content": "**• /baixar_musica:** Converte áudio de links (YouTube, Instagram, TikTok) para MP3.\n**• /baixar_musica_deezer:** Busca e baixa áudio de alta qualidade (MP3 HQ) diretamente do Deezer por nome/artista.\n**• /converter_moeda:** Cotação e conversão de moedas (USD, EUR, BRL) e Cripto (BTC, ETH) em tempo real.\n**• /chat_resumo:** Lê as últimas mensagens e faz um resumo dos tópicos discutidos."
       },
       {
         "title": "🎮 Games & Loja",
         "content": "**• /buscar_jogo:** Procura torrents/magnets nos bancos de dados da FitGirl e DODI Repacks.\n**• /steam_jogo:** Consulta preços oficiais, porcentagem de desconto, Metacritic e detalhes técnicos na Steam."
       },
       {
-        "title": "🎭 Personalidade & Canal",
-        "content": "**• /chat_humor:** (Admin) Muda o humor (Brava, Feliz) e as regras de fala da Hikari neste canal.\n**• /chat_espontaneo:** (Dono) Configura a chance da Hikari se intrometer nas conversas sozinha."
-      },
-      {
         "title": "🛡️ Administração & Segurança",
-        "content": "**• /adm_automod:** Ativa o filtro global de palavras proibidas no seu servidor.\n**• /adm_banir:** (Dono) Remove o acesso de usuários ou servidores da rede Hikari por violações.\n**• /adm_lista_bans:** Mostra o total de bloqueios ativos no sistema."
+        "content": "**• /config_servidor:** Painel gráfico completo para administradores configurarem o servidor.\n**• /config_criador:** Painel administrativo global e moderativo para o criador do bot."
       }
     ]
   },

@@ -6,6 +6,7 @@ const {
     Routes,
     ChannelType
 } = require('discord.js');
+
 const setGlobalContext = (builder) => {
     return builder
         .setIntegrationTypes([
@@ -18,6 +19,7 @@ const setGlobalContext = (builder) => {
             InteractionContextType.PrivateChannel
         ]);
 };
+
 const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
@@ -62,14 +64,14 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_imagem')
-            .setDescription('[User] Gera uma imagem nova a partir do texto. (Nota: Não edita imagens/fotos).')
+            .setDescription('[User] Gera uma imagem nova a partir do texto.')
             .addStringOption(option =>
                 option.setName('prompt')
                     .setDescription('A descrição da imagem que você quer gerar.')
                     .setRequired(true))
             .addStringOption(option =>
                 option.setName('negative_prompt')
-                    .setDescription('O que você NÃO quer na imagem (ex: deformed, blurry).')
+                    .setDescription('O que você NÃO quer na imagem.')
                     .setRequired(false))
             .addIntegerOption(option =>
                 option.setName('width')
@@ -85,94 +87,61 @@ const commands = [
                     .setRequired(false))
             .addStringOption(option =>
                 option.setName('provider')
-                    .setDescription('Escolha qual provedor de imagem usar (opcional)')
+                    .setDescription('Provedor de imagem')
                     .setRequired(false)
                     .addChoices(
-                        { name: 'Auto (Tentativa em Sequência)', value: 'auto' },
-                        { name: 'Gradio (SDXL-Flash)', value: 'gradio' },
-                        { name: 'HuggingFace (FLUX)', value: 'huggingface' },
-                        { name: 'Stable Horde (Diversos)', value: 'stablehorde' },
-                        { name: 'Together AI (FLUX)', value: 'together' },
-                        { name: 'Pollinations AI (Flux)', value: 'pollinations' }
+                        { name: 'Auto', value: 'auto' },
+                        { name: 'Gradio', value: 'gradio' },
+                        { name: 'HuggingFace', value: 'huggingface' },
+                        { name: 'Stable Horde', value: 'stablehorde' },
+                        { name: 'Together AI', value: 'together' },
+                        { name: 'Pollinations AI', value: 'pollinations' }
                     ))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('baixar_musica')
-            .setDescription('[User] Baixa o áudio de um vídeo (YouTube, Instagram Reels, TikTok) em MP3.')
+            .setDescription('[User] Baixa o áudio de um vídeo em MP3.')
             .addStringOption(option =>
                 option.setName('url')
-                    .setDescription('A URL do vídeo (YouTube, Instagram Reels ou TikTok).')
+                    .setDescription('A URL do vídeo.')
                     .setRequired(true))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('baixar_musica_deezer')
-            .setDescription('[User] Baixa áudios de música em alta qualidade (Deezer HQ MP3) por nome ou artista.')
+            .setDescription('[User] Baixa áudios de música em alta qualidade (Deezer).')
             .addStringOption(option =>
                 option.setName('nome')
-                    .setDescription('O nome da música e/ou artista que você quer buscar e baixar.')
+                    .setDescription('O nome da música e/ou artista.')
                     .setRequired(true))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('baixar_video')
-            .setDescription('[User] Baixa um vídeo (YouTube Shorts, Instagram Reels, TikTok) em MP4.')
+            .setDescription('[User] Baixa um vídeo em MP4.')
             .addStringOption(option =>
                 option.setName('url')
-                    .setDescription('A URL do vídeo (YouTube Shorts, Instagram Reels ou TikTok).')
+                    .setDescription('A URL do vídeo.')
                     .setRequired(true))
             .addBooleanOption(option =>
                 option.setName('descricao')
-                    .setDescription('Exibir a descrição e autor do vídeo? (Padrão: Não)')
+                    .setDescription('Exibir descrição?')
                     .setRequired(false))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('chat_humor')
-            .setDescription('[Server Admin] Configura a personalidade e humor da Hikari neste canal.')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-            .addStringOption(option =>
-                option.setName('instrucao')
-                    .setDescription('Nova instrução de personalidade (Opcional).')
-                    .setRequired(false))
-            .addStringOption(option =>
-                option.setName('mood')
-                    .setDescription('Novo humor/estado emocional (Opcional). Ex: "Estressada", "Apaixonada".')
-                    .setRequired(false))
-            .addBooleanOption(option =>
-                option.setName('reset')
-                    .setDescription('Se VERDADEIRO, reseta tudo para o padrão (ignora outros campos).')
-                    .setRequired(false))
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('chat_espontaneo')
-            .setDescription('[Server Admin] Configura a Hikari para falar sozinha de tempos em tempos.')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-            .addStringOption(option =>
-                option.setName('estado')
-                    .setDescription('Ativar ou Desativar?')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: '🟢 Ativado', value: 'on' },
-                        { name: '🔴 Desativado', value: 'off' }
-                    ))
-            .addStringOption(option =>
-                option.setName('frequencia')
-                    .setDescription('Com que frequência ela deve se intrometer? (Padrão: Baixa)')
-                    .setRequired(false)
-                    .addChoices(
-                        { name: '🐢 Baixa (Raro)', value: 'low' },
-                        { name: '🐇 Média (Ocasional)', value: 'medium' },
-                        { name: '🐆 Alta (Faladora)', value: 'high' }
-                    ))
-            .addIntegerOption(option =>
-                option.setName('porcentagem')
-                    .setDescription('Definir chance exata (0-100%). Substitui a frequência. 🔒 (Dono Apenas)')
-                    .setMinValue(0)
-                    .setMaxValue(100)
-                    .setRequired(false))
+            .setName('config_servidor')
+            .setDescription('[Server Admin] Central de configurações do servidor e canal.')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+            .addStringOption(opt => opt.setName('instrucao').setDescription('Nova instrução de comportamento para o canal.').setRequired(false))
+            .addStringOption(opt => opt.setName('mood').setDescription('Novo humor/estado emocional do canal.').setRequired(false))
+            .addBooleanOption(opt => opt.setName('reset_humor').setDescription('Restaurar humor e instruções para o padrão?').setRequired(false))
+            .addStringOption(opt => opt.setName('espontaneo_estado').setDescription('Ativar/Desativar falas espontâneas.').setRequired(false).addChoices({ name: '🟢 Ativado', value: 'on' }, { name: '🔴 Desativado', value: 'off' }))
+            .addStringOption(opt => opt.setName('espontaneo_frequencia').setDescription('Frequência das falas espontâneas.').setRequired(false).addChoices({ name: '🐢 Baixa', value: 'low' }, { name: '🐇 Média', value: 'medium' }, { name: '🐆 Alta', value: 'high' }))
+            .addIntegerOption(opt => opt.setName('espontaneo_porcentagem').setDescription('Porcentagem exata de respostas (0-100%).').setMinValue(0).setMaxValue(100).setRequired(false))
+            .addChannelOption(opt => opt.setName('canal_updates').setDescription('Canal de texto para receber avisos de atualizações.').addChannelTypes(ChannelType.GuildText).setRequired(false))
+            .addBooleanOption(opt => opt.setName('mencoes_ativo').setDescription('Responder a marcações de @everyone e @here?').setRequired(false))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
@@ -187,32 +156,49 @@ const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('chat_updates')
-            .setDescription('[Server Admin] Configura o canal para receber avisos de atualizações da Hikari.')
+            .setName('aceitar_tos')
+            .setDescription('[Server Admin] Envia o painel com os Termos de Uso da Hikari.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-            .addChannelOption(option =>
-                option.setName('canal')
-                    .setDescription('O canal de texto para os updates. (Deixe vazio para o canal atual)')
-                    .setRequired(false)
-                    .addChannelTypes(ChannelType.GuildText))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('aceitar_tos')
-            .setDescription('[Server Admin] Envia o painel com os Termos de Uso da Hikari para aceitação da administração.')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+            .setName('ia_ferramentas')
+            .setDescription('[Server Admin] Gerencie e ative/desative ferramentas (pesquisa, imagens, voz) neste servidor.')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+            .addStringOption(option =>
+                option.setName('acao')
+                    .setDescription('Ação desejada')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: '📜 Listar Status das Tools', value: 'list' },
+                        { name: '⚡ Alternar Tool (Ativar/Desativar)', value: 'toggle' },
+                        { name: '🔄 Restaurar Padrão do Servidor', value: 'reset' }
+                    ))
+            .addStringOption(option =>
+                option.setName('ferramenta')
+                    .setDescription('Ferramenta para alterar (opção Alternar).')
+                    .setAutocomplete(true)
+                    .setRequired(false))
+            .addStringOption(option =>
+                option.setName('estado')
+                    .setDescription('Defina se a ferramenta estará ativa ou desativa.')
+                    .setRequired(false)
+                    .addChoices(
+                        { name: '✅ Ativar', value: 'on' },
+                        { name: '❌ Desativar', value: 'off' }
+                    ))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('anime_origem')
-            .setDescription('[User] Descobre o nome do anime através de uma imagem (screenshot).')
+            .setDescription('[User] Descobre o nome do anime através de uma imagem.')
             .addAttachmentOption(option =>
                 option.setName('imagem')
                     .setDescription('Upload da imagem do anime.')
                     .setRequired(false))
             .addStringOption(option =>
                 option.setName('url')
-                    .setDescription('Ou a URL da imagem.')
+                    .setDescription('URL da imagem.')
                     .setRequired(false))
     ),
     setGlobalContext(
@@ -246,122 +232,58 @@ const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('ia_model_config')
-            .setDescription('[Creator] Configura a exibição do modelo nas respostas e pensamentos.')
-            .addBooleanOption(option =>
-                option.setName('mostrar_modelo')
-                    .setDescription('Mostrar ou não o nome do modelo nas respostas (Global).')
-                    .setRequired(false))
-            .addBooleanOption(option =>
-                option.setName('mostrar_modelo_pensamento')
-                    .setDescription('Mostrar ou não o modelo que está processando no pensamento (Global).')
-                    .setRequired(false))
-            .addIntegerOption(option =>
-                option.setName('tentativas_erro')
-                    .setDescription('Número de re-tentativas caso ocorra erro ou vazamento de ferramenta (Global).')
-                    .setMinValue(0)
-                    .setRequired(false))
-    ),
-
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('adm_banir')
-            .setDescription('[Creator] Bane um usuário, servidor ou canal da rede Hikari.')
-            .addStringOption(opt => opt.setName('tipo').setDescription('O que banir?').setRequired(true).addChoices({ name: 'Usuário', value: 'user' }, { name: 'Servidor', value: 'guild' }, { name: 'Canal', value: 'channel' }))
-            .addStringOption(opt => opt.setName('id').setDescription('O ID do alvo.').setRequired(true))
-            .addStringOption(opt => opt.setName('motivo').setDescription('Motivo do banimento.').setRequired(false))
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('adm_desbanir')
-            .setDescription('[Creator] Remove o banimento de um alvo.')
-            .addStringOption(opt => opt.setName('tipo').setDescription('O que desbanir?').setRequired(true).addChoices({ name: 'Usuário', value: 'user' }, { name: 'Servidor', value: 'guild' }, { name: 'Canal', value: 'channel' }))
-            .addStringOption(opt => opt.setName('id').setDescription('O ID do alvo.').setRequired(true))
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('adm_lista_bans')
-            .setDescription('[Creator] Lista os bloqueios ativos.')
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('adm_automod')
-            .setDescription('[Creator] Configura o modo do AutoMod em um servidor específico.')
-            .addStringOption(opt =>
-                opt.setName('id')
-                    .setDescription('ID do servidor para configurar.')
-                    .setRequired(true))
-            .addStringOption(opt =>
-                opt.setName('modo')
-                    .setDescription('Escolha o modo de funcionamento do AutoMod para este servidor.')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: '🔴 Desativado (off)', value: 'off' },
-                        { name: '🛡️ Somente Palavras Gatilho (trigger)', value: 'trigger' },
-                        { name: '🧠 Somente IA (mcp)', value: 'mcp' },
-                        { name: '⚡ Ambos: Gatilhos + IA (both)', value: 'both' }
-                    ))
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('ia_prompt')
-            .setDescription('[Creator] Sobrescreve o system prompt da Hikari neste servidor.')
+            .setName('config_criador')
+            .setDescription('[Creator] Central de controle master do criador.')
             .addSubcommand(sub =>
-                sub.setName('set')
-                    .setDescription('[Creator] Define um novo system prompt para este servidor.')
-                    .addStringOption(opt =>
-                        opt.setName('prompt')
-                            .setDescription('O novo system prompt completo.')
-                            .setRequired(true))
+                sub.setName('modelo')
+                    .setDescription('[Creator] Configura exibição do modelo nas respostas e pensamentos.')
+                    .addBooleanOption(opt => opt.setName('mostrar_nome').setDescription('Mostrar nome do modelo nas respostas?').setRequired(false))
+                    .addBooleanOption(opt => opt.setName('mostrar_pensamento').setDescription('Mostrar modelo durante o pensamento?').setRequired(false))
+                    .addIntegerOption(opt => opt.setName('retentativas').setDescription('Tentativas em caso de erro (0-10).').setMinValue(0).setMaxValue(10).setRequired(false))
             )
             .addSubcommand(sub =>
-                sub.setName('reset')
-                    .setDescription('[Creator] Remove o system prompt customizado e volta ao padrão do código.')
+                sub.setName('banir')
+                    .setDescription('[Creator] Bane usuário, servidor ou canal.')
+                    .addStringOption(opt => opt.setName('tipo').setDescription('O que banir?').setRequired(true).addChoices({ name: 'Usuário', value: 'user' }, { name: 'Servidor', value: 'guild' }, { name: 'Canal', value: 'channel' }))
+                    .addStringOption(opt => opt.setName('id').setDescription('ID do alvo.').setRequired(true))
+                    .addStringOption(opt => opt.setName('motivo').setDescription('Motivo do banimento.').setRequired(false))
             )
             .addSubcommand(sub =>
-                sub.setName('view')
-                    .setDescription('[Creator] Exibe o system prompt atual deste servidor.')
-            )
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('ia_ferramentas')
-            .setDescription('[Creator] Habilita ou desabilita ferramentas MCP da Hikari por servidor.')
-            .addSubcommand(sub =>
-                sub.setName('toggle')
-                    .setDescription('[Creator] Ativa ou desativa uma tool específica neste servidor.')
-                    .addStringOption(opt =>
-                        opt.setName('tool')
-                            .setDescription('Nome da ferramenta para configurar.')
-                            .setRequired(true)
-                            .setAutocomplete(true))
-                    .addStringOption(opt =>
-                        opt.setName('estado')
-                            .setDescription('Ativar ou desativar?')
-                            .setRequired(true)
-                            .addChoices(
-                                { name: '✅ Ativar', value: 'on' },
-                                { name: '❌ Desativar', value: 'off' }
-                            ))
+                sub.setName('desbanir')
+                    .setDescription('[Creator] Remove banimento de um alvo.')
+                    .addStringOption(opt => opt.setName('tipo').setDescription('O que desbanir?').setRequired(true).addChoices({ name: 'Usuário', value: 'user' }, { name: 'Servidor', value: 'guild' }, { name: 'Canal', value: 'channel' }))
+                    .addStringOption(opt => opt.setName('id').setDescription('ID do alvo.').setRequired(true))
             )
             .addSubcommand(sub =>
-                sub.setName('list')
-                    .setDescription('[Creator] Lista todas as tools e o status delas neste servidor.')
+                sub.setName('bans_lista')
+                    .setDescription('[Creator] Exibe a central de bloqueios ativos.')
             )
             .addSubcommand(sub =>
-                sub.setName('reset')
-                    .setDescription('[Creator] Reabilita todas as tools desabilitadas neste servidor.')
+                sub.setName('automod')
+                    .setDescription('[Creator] Configura o AutoMod em um servidor.')
+                    .addStringOption(opt => opt.setName('servidor_id').setDescription('ID do servidor.').setRequired(true))
+                    .addStringOption(opt => opt.setName('modo').setDescription('Modo do AutoMod.').setRequired(true).addChoices({ name: '🔴 Desativado (off)', value: 'off' }, { name: '🛡️ Gatilhos (trigger)', value: 'trigger' }, { name: '🧠 IA (mcp)', value: 'mcp' }, { name: '⚡ Ambos (both)', value: 'both' }))
             )
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('ia_mention_todos')
-            .setDescription('[Server Admin] Configura se a Hikari deve responder a marcações de @everyone e @here no servidor.')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-            .addBooleanOption(option =>
-                option.setName('ativo')
-                    .setDescription('Sim para responder a @everyone/@here, Não para ignorar.')
-                    .setRequired(true))
+            .addSubcommand(sub =>
+                sub.setName('ferramenta')
+                    .setDescription('[Creator] Gestor de ferramentas MCP por servidor.')
+                    .addStringOption(opt => opt.setName('acao').setDescription('Ação desejada').setRequired(true).addChoices({ name: 'Alterar Tool', value: 'toggle' }, { name: 'Listar Tools', value: 'list' }, { name: 'Resetar Servidor', value: 'reset' }))
+                    .addStringOption(opt => opt.setName('ferramenta').setDescription('Nome da ferramenta (para toggle).').setAutocomplete(true).setRequired(false))
+                    .addStringOption(opt => opt.setName('estado').setDescription('Estado (para toggle).').setRequired(false).addChoices({ name: '✅ Ativar', value: 'on' }, { name: '❌ Desativar', value: 'off' }))
+                    .addStringOption(opt => opt.setName('servidor_id').setDescription('ID do servidor target (opcional).').setRequired(false))
+            )
+            .addSubcommand(sub =>
+                sub.setName('bot_config')
+                    .setDescription('[Creator] Painel de configuração de runtime do bot.')
+            )
+            .addSubcommand(sub =>
+                sub.setName('painel')
+                    .setDescription('[Creator] Abre o painel interativo do criador.')
+            )
+            .addSubcommand(sub =>
+                sub.setName('dashboard')
+                    .setDescription('[Creator] Abre o painel interativo do criador.')
+            )
     ),
     setGlobalContext(
         new SlashCommandBuilder()
@@ -382,24 +304,19 @@ const commands = [
                     .setRequired(true))
             .addStringOption(option =>
                 option.setName('de')
-                    .setDescription('Código da moeda de origem (Ex: USD, BTC, EUR).')
+                    .setDescription('Código da moeda de origem.')
                     .setRequired(true)
                     .setAutocomplete(true))
             .addStringOption(option =>
                 option.setName('para')
-                    .setDescription('Código da moeda de destino (Ex: BRL).')
+                    .setDescription('Código da moeda de destino.')
                     .setRequired(true)
                     .setAutocomplete(true))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('bot_config')
-            .setDescription('[Creator] Painel de configuração geral do bot.')
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
             .setName('entrar-call')
-            .setDescription('[User] Faz a Hikari entrar no seu canal de voz atual para escutar e responder por voz/chat.')
+            .setDescription('[User] Faz a Hikari entrar no seu canal de voz atual.')
     ),
     setGlobalContext(
         new SlashCommandBuilder()
@@ -409,9 +326,10 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('modo-radio')
-            .setDescription('[User] Ativa o Modo Rádio de Música — controle por embed e por voz.')
+            .setDescription('[User] Ativa o Modo Rádio de Música.')
     ),
 ].map(command => command.toJSON());
+
 async function registerCommands(client, rest) {
     try {
         console.log('Iniciando o registro Global (User/Guild) dos comandos slash (/).');
@@ -424,4 +342,5 @@ async function registerCommands(client, rest) {
         console.error('Erro ao registrar comandos slash:', error);
     }
 }
+
 module.exports = { commands, registerCommands };

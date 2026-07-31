@@ -461,7 +461,7 @@ const CONFIG_PAGES = [
         persistence: 'json',
         configKey: 'systemPrompt',
         summary: 'Prompt base da personalidade da Hikari.',
-        description: 'O system prompt que define as regras, personalidade, estilo de fala e restrições da Hikari globalmente. Servidores podem sobrescrever via /ia_prompt. CUIDADO: alterar incorretamente pode quebrar a persona e o formato de resposta.',
+        description: 'O system prompt que define as regras, personalidade, estilo de fala e restrições da Hikari globalmente. CUIDADO: alterar incorretamente pode quebrar a persona e o formato de resposta.',
     },
 ];
 

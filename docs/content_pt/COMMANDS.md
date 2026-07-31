@@ -149,63 +149,42 @@ Consulta informações oficiais, preço e status na loja da Steam.
 
 ## ⚙️ Configuração & Administração
 
+### `/config_servidor` (Server Admin)
+
+Painel gráfico unificado e público no chat para administração do servidor.
+
+- **Personalidade & Humor:** Define instruções customizadas (prompts) e estados emocionais para a IA no canal.
+- **Mensagens Espontâneas:** Controla o status (ativado/desativado) e a frequência em que a IA se intromete nas conversas.
+- **Canal de Updates:** Define o canal oficial para receber comunicados de atualizações.
+- **Respostas a Mentions:** Configura se a IA deve responder quando o servidor for mencionado em `@everyone` ou `@here`.
+- **Ferramentas MCP:** Abre o Gerenciador Gráfico de Ferramentas MCP com lista de ativas/desativadas, descrições detalhadas e botões de ativar/desativar.
+
+### `/config_criador` (Dono / Criador)
+
+Central de Controle Master para gerenciamento global da rede Hikari (oculta e restrita ao criador).
+
+- **Subcomando `painel` / `dashboard`:** Abre o Dashboard Master por botões.
+- **Modelos:** Configura o modelo LLM ativo e exibição de modelo/pensamento.
+- **Banir / Desbanir / Lista de Bans:** Gerencia a lista negra global de usuários, servidores e canais banidos.
+- **AutoMod:** Alterna o modo de moderação automática (Off / Monitor / Strict).
+- **Ferramentas MCP:** Gerencia a ativação de ferramentas MCP por servidor.
+- **Bot Config:** Abre as configurações de Runtime da IA.
+
+### `/ia_ferramentas` (Server Admin)
+
+Comando independente para administradores de servidor gerenciarem as ferramentas da IA.
+
+- **Ação `list`:** Exibe um embed público com as ferramentas MCP ativas e desativadas no servidor.
+- **Ação `toggle`:** Alterna a disponibilidade de uma ferramenta específica (`join_voice_call`, `search_game`, `generate_image`, etc.).
+- **Ação `reset`:** Restaura as ferramentas do servidor para os padrões de fábrica.
+
+### `/aceitar_tos` (Server Admin)
+
+Exibe e registra o aceite dos Termos de Serviço da Hikari para liberar e autorizar as funções do bot no servidor.
+
 ### `/ia_config` (Dono)
 
-Ajusta parâmetros técnicos dos modelos de IA.
-
-- **Provider:** Qual IA configurar.
-- **Setting:** Escolha entre `Timeout`, `Temperatura` ou `Max Tokens`.
-- **Value:** O novo valor numérico.
-
-### `/ia_model_config` (Dono)
-
-Configura a exibição do nome do modelo nas respostas e no pensamento/processamento da IA.
-
-- **Mostrar Modelo:** Exibe ou oculta o nome do modelo na resposta da IA.
-- **Mostrar Modelo Pensamento:** Exibe ou oculta o nome do modelo que está processando a resposta no pensamento.
-
-### `/ia_prompt` (Dono)
-
-Modifica o System Prompt do servidor.
-
-- **Set:** Define um novo prompt completo.
-- **Reset:** Volta ao padrão.
-- **View:** Mostra o prompt atual.
-
-### `/ia_ferramentas` (Admin)
-
-Gerencia quais ferramentas (MCP) a IA pode usar no servidor.
-
-- **Toggle:** Ativa ou desativa ferramentas como `web_search`, `image_gen`, etc.
-- **List:** Mostra o status de todas as ferramentas.
-
-### `/ia_mention_todos` (Admin)
-
-Configura se a Hikari deve responder a marcações de `@everyone` e `@here` no servidor.
-
-- **Ativo:** Sim para responder, Não para ignorar.
-- **Advanced:** Útil para evitar que a IA se intrometa em avisos globais do servidor, ou para permitir que ela interaja quando o servidor todo for chamado.
-
-### `/aceitar_tos` (Admin)
-
-Aceita os Termos de Serviço da Hikari para liberar e autorizar a utilização de todas as funções do bot neste servidor.
-
-- **Advanced:** Este comando desbloqueia o servidor. Todos os chats e comandos permanecem sob bloqueio completo até que o TOS seja aceito por um administrador.
-
-### `/chat_updates` (Admin)
-
-Configura o canal onde o bot enviará anúncios de atualizações e novas versões do sistema Hikari.
-
-- **Canal (Opcional):** O canal de texto a ser configurado (se deixado em branco, utiliza o canal atual).
-- **Advanced:** Servidores novos registram automaticamente o canal onde o TOS foi aceito como chat de updates. Servidores antigos salvam o último chat utilizado.
-
-### `/adm_banir` / `/adm_desbanir` (Dono)
-
-Sistema de banimento global da rede Hikari.
-
-- **Tipo:** Usuário, Servidor ou Canal.
-- **ID:** Identificador do alvo.
-- **Motivo:** Justificativa do bloqueio.
+Ajusta parâmetros técnicos de baixo nível dos modelos de IA (`Timeout`, `Temperatura`, `Max Tokens`).
 
 ---
 
