@@ -125,7 +125,8 @@ async function sendServerAdminDashboard(interaction, isUpdate = false) {
     );
 
     const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('srvcfg_btn_mcp').setLabel('Ferramentas MCP').setStyle(ButtonStyle.Secondary).setEmoji('🔧')
+        new ButtonBuilder().setCustomId('srvcfg_btn_mcp').setLabel('Ferramentas MCP').setStyle(ButtonStyle.Secondary).setEmoji('🔧'),
+        new ButtonBuilder().setLabel('Apoiar projeto').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('💖')
     );
 
     if (isUpdate) {
