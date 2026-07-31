@@ -209,8 +209,8 @@ function buildToolsDefinition(guildId, userId = null) {
 }
 loadServerTools();
 const providerSettings = {
-    local:        { timeout: 10, temperature: 0.7, max_tokens: 1024, top_p: 0.9 },
-    gemini:       { timeout: 60000, temperature: 0.8, max_tokens: 2048, top_p: 1.0 },
+    local:        { timeout: 1, temperature: 0.7, max_tokens: 1024, top_p: 0.9 },
+    gemini:       { timeout: 60000, temperature: 0.7, max_tokens: 2048, top_p: 1.0 },
     pollinations: { timeout: 60000, temperature: 0.7, max_tokens: 1024 },
     hf:           { timeout: 60000, temperature: 0.7, max_tokens: 512 },
     horde:        { timeout: 60000, temperature: 0.7, max_tokens: 256 }
@@ -1522,6 +1522,18 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         args: extractedArgs
                     });
                 }
+                const toolUseMatch = rawResponse.match(/\[Tool Use:\s*(\w+)\s+args\s*=\s*(\{[\s\S]*?\})\s*\]/i);
+                if (toolUseMatch) {
+                    const tuTool = toolUseMatch[1];
+                    let tuArgs = {};
+                    try { tuArgs = JSON.parse(toolUseMatch[2]); } catch (e) {}
+                    rawResponse = JSON.stringify({
+                        thought: "Executando ação " + tuTool,
+                        tool: tuTool,
+                        args: tuArgs
+                    });
+                    console.log(`[Tool Use Parser] Convertido formato [Tool Use:] para JSON: ${tuTool}`);
+                }
                 const parsedJsonCheck = (() => {
                     const jm = rawResponse.match(/\{[\s\S]*\}/);
                     if (!jm) return null;
@@ -1763,7 +1775,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         const gameEmbed = new EmbedBuilder()
                             .setColor(0x7C3AED)
                             .setTitle('🎮 Executando Ação')
-                            .setDescription(`Buscando informações do jogo: **${gameName}**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Buscando torrent'}*`)
+                            .setDescription(`Buscando arquivo de download do jogo: **${gameName}**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Buscando torrent'}*`)
                             .setFooter({ text: 'Hikari Game Search • Tool Use: search_game' });
                         await unifiedReply(null, [], [], [gameEmbed]);
                         const results = await searchGames(gameName, provider);
@@ -2380,7 +2392,7 @@ function updateShowModel(value) {
 function getShowModel() {
     return globalShowModel;
 }
-let globalShowModelThinking = true;
+let globalShowModelThinking = false;
 function updateShowModelThinking(value) {
     globalShowModelThinking = value;
     console.log(`[CONFIG] show_model_thinking atualizado para ${value}`);

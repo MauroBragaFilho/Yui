@@ -22,7 +22,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_chat')
-            .setDescription('Faça uma pergunta ou pedido à IA.')
+            .setDescription('[User] Faça uma pergunta ou pedido à IA.')
             .addStringOption(option =>
                 option.setName('prompt')
                     .setDescription('Sua pergunta ou pedido para a IA.')
@@ -39,12 +39,12 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ajuda')
-            .setDescription('Mostra o menu de ajuda interativo.')
+            .setDescription('[User] Mostra o menu de ajuda interativo.')
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('buscar_jogo')
-            .setDescription('Busca jogos (FitGirl/DODI) e gera arquivo .torrent')
+            .setDescription('[User] Busca jogos (FitGirl/DODI) e gera arquivo .torrent')
             .addStringOption(option =>
                 option.setName('nome')
                     .setDescription('Nome do jogo para buscar')
@@ -62,7 +62,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_imagem')
-            .setDescription('Gera uma imagem nova a partir do texto. (Nota: Não edita imagens/fotos).')
+            .setDescription('[User] Gera uma imagem nova a partir do texto. (Nota: Não edita imagens/fotos).')
             .addStringOption(option =>
                 option.setName('prompt')
                     .setDescription('A descrição da imagem que você quer gerar.')
@@ -99,7 +99,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('baixar_musica')
-            .setDescription('Baixa o áudio de um vídeo (YouTube, Instagram Reels, TikTok) em MP3.')
+            .setDescription('[User] Baixa o áudio de um vídeo (YouTube, Instagram Reels, TikTok) em MP3.')
             .addStringOption(option =>
                 option.setName('url')
                     .setDescription('A URL do vídeo (YouTube, Instagram Reels ou TikTok).')
@@ -108,7 +108,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('baixar_musica_deezer')
-            .setDescription('Baixa áudios de música em alta qualidade (Deezer HQ MP3) por nome ou artista.')
+            .setDescription('[User] Baixa áudios de música em alta qualidade (Deezer HQ MP3) por nome ou artista.')
             .addStringOption(option =>
                 option.setName('nome')
                     .setDescription('O nome da música e/ou artista que você quer buscar e baixar.')
@@ -117,7 +117,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('baixar_video')
-            .setDescription('Baixa um vídeo (YouTube Shorts, Instagram Reels, TikTok) em MP4.')
+            .setDescription('[User] Baixa um vídeo (YouTube Shorts, Instagram Reels, TikTok) em MP4.')
             .addStringOption(option =>
                 option.setName('url')
                     .setDescription('A URL do vídeo (YouTube Shorts, Instagram Reels ou TikTok).')
@@ -130,7 +130,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('chat_humor')
-            .setDescription('Configura a personalidade e humor da Hikari neste canal. (Admin)')
+            .setDescription('[Server Admin] Configura a personalidade e humor da Hikari neste canal.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
             .addStringOption(option =>
                 option.setName('instrucao')
@@ -148,7 +148,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('chat_espontaneo')
-            .setDescription('Configura a Hikari para falar sozinha de tempos em tempos. (Admin/Dono)')
+            .setDescription('[Server Admin] Configura a Hikari para falar sozinha de tempos em tempos.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
             .addStringOption(option =>
                 option.setName('estado')
@@ -177,7 +177,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('chat_resumo')
-            .setDescription('Faz um resumo das últimas mensagens do chat.')
+            .setDescription('[User] Faz um resumo das últimas mensagens do chat.')
             .addIntegerOption(option =>
                 option.setName('quantidade')
                     .setDescription('Quantidade de mensagens para resumir (10-100).')
@@ -188,7 +188,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('chat_updates')
-            .setDescription('Configura o canal para receber avisos de atualizações da Hikari. (Admin)')
+            .setDescription('[Server Admin] Configura o canal para receber avisos de atualizações da Hikari.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
             .addChannelOption(option =>
                 option.setName('canal')
@@ -199,13 +199,13 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('aceitar_tos')
-            .setDescription('Envia o painel com os Termos de Uso da Hikari para aceitação da administração. (Admin)')
+            .setDescription('[Server Admin] Envia o painel com os Termos de Uso da Hikari para aceitação da administração.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('anime_origem')
-            .setDescription('Descobre o nome do anime através de uma imagem (screenshot).')
+            .setDescription('[User] Descobre o nome do anime através de uma imagem (screenshot).')
             .addAttachmentOption(option =>
                 option.setName('imagem')
                     .setDescription('Upload da imagem do anime.')
@@ -218,7 +218,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_config')
-            .setDescription('Configura timeouts e parâmetros dos modelos de IA. (Admin Only)')
+            .setDescription('[Creator] Configura timeouts e parâmetros dos modelos de IA.')
             .addStringOption(option =>
                 option.setName('provider')
                     .setDescription('Qual provedor configurar?')
@@ -247,7 +247,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_model_config')
-            .setDescription('Configura a exibição do modelo nas respostas e pensamentos. (Admin Only)')
+            .setDescription('[Creator] Configura a exibição do modelo nas respostas e pensamentos.')
             .addBooleanOption(option =>
                 option.setName('mostrar_modelo')
                     .setDescription('Mostrar ou não o nome do modelo nas respostas (Global).')
@@ -266,7 +266,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('adm_banir')
-            .setDescription('Bane um usuário, servidor ou canal da rede Hikari. (Admin Only)')
+            .setDescription('[Creator] Bane um usuário, servidor ou canal da rede Hikari.')
             .addStringOption(opt => opt.setName('tipo').setDescription('O que banir?').setRequired(true).addChoices({ name: 'Usuário', value: 'user' }, { name: 'Servidor', value: 'guild' }, { name: 'Canal', value: 'channel' }))
             .addStringOption(opt => opt.setName('id').setDescription('O ID do alvo.').setRequired(true))
             .addStringOption(opt => opt.setName('motivo').setDescription('Motivo do banimento.').setRequired(false))
@@ -274,19 +274,19 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('adm_desbanir')
-            .setDescription('Remove o banimento de um alvo. (Admin Only)')
+            .setDescription('[Creator] Remove o banimento de um alvo.')
             .addStringOption(opt => opt.setName('tipo').setDescription('O que desbanir?').setRequired(true).addChoices({ name: 'Usuário', value: 'user' }, { name: 'Servidor', value: 'guild' }, { name: 'Canal', value: 'channel' }))
             .addStringOption(opt => opt.setName('id').setDescription('O ID do alvo.').setRequired(true))
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('adm_lista_bans')
-            .setDescription('Lista os bloqueios ativos. (Admin Only)')
+            .setDescription('[Creator] Lista os bloqueios ativos.')
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('adm_automod')
-            .setDescription('Configura o modo do AutoMod em um servidor específico. (Admin Only)')
+            .setDescription('[Creator] Configura o modo do AutoMod em um servidor específico.')
             .addStringOption(opt =>
                 opt.setName('id')
                     .setDescription('ID do servidor para configurar.')
@@ -305,10 +305,10 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_prompt')
-            .setDescription('Sobrescreve o system prompt da Hikari neste servidor. (Somente criador)')
+            .setDescription('[Creator] Sobrescreve o system prompt da Hikari neste servidor.')
             .addSubcommand(sub =>
                 sub.setName('set')
-                    .setDescription('Define um novo system prompt para este servidor.')
+                    .setDescription('[Creator] Define um novo system prompt para este servidor.')
                     .addStringOption(opt =>
                         opt.setName('prompt')
                             .setDescription('O novo system prompt completo.')
@@ -316,20 +316,20 @@ const commands = [
             )
             .addSubcommand(sub =>
                 sub.setName('reset')
-                    .setDescription('Remove o system prompt customizado e volta ao padrão do código.')
+                    .setDescription('[Creator] Remove o system prompt customizado e volta ao padrão do código.')
             )
             .addSubcommand(sub =>
                 sub.setName('view')
-                    .setDescription('Exibe o system prompt atual deste servidor.')
+                    .setDescription('[Creator] Exibe o system prompt atual deste servidor.')
             )
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_ferramentas')
-            .setDescription('Habilita ou desabilita ferramentas MCP da Hikari por servidor. (Somente criador)')
+            .setDescription('[Creator] Habilita ou desabilita ferramentas MCP da Hikari por servidor.')
             .addSubcommand(sub =>
                 sub.setName('toggle')
-                    .setDescription('Ativa ou desativa uma tool específica neste servidor.')
+                    .setDescription('[Creator] Ativa ou desativa uma tool específica neste servidor.')
                     .addStringOption(opt =>
                         opt.setName('tool')
                             .setDescription('Nome da ferramenta para configurar.')
@@ -346,17 +346,17 @@ const commands = [
             )
             .addSubcommand(sub =>
                 sub.setName('list')
-                    .setDescription('Lista todas as tools e o status delas neste servidor.')
+                    .setDescription('[Creator] Lista todas as tools e o status delas neste servidor.')
             )
             .addSubcommand(sub =>
                 sub.setName('reset')
-                    .setDescription('Reabilita todas as tools desabilitadas neste servidor.')
+                    .setDescription('[Creator] Reabilita todas as tools desabilitadas neste servidor.')
             )
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ia_mention_todos')
-            .setDescription('Configura se a Hikari deve responder a marcações de @everyone e @here no servidor. (Server-Admin)')
+            .setDescription('[Server Admin] Configura se a Hikari deve responder a marcações de @everyone e @here no servidor.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
             .addBooleanOption(option =>
                 option.setName('ativo')
@@ -366,7 +366,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('steam_jogo')
-            .setDescription('Consulte o preço e informações de um jogo diretamente na Steam.')
+            .setDescription('[User] Consulte o preço e informações de um jogo diretamente na Steam.')
             .addStringOption(option =>
                 option.setName('nome')
                     .setDescription('O nome do jogo que você quer consultar.')
@@ -375,7 +375,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('converter_moeda')
-            .setDescription('Converte valores entre diferentes moedas e criptomoedas.')
+            .setDescription('[User] Converte valores entre diferentes moedas e criptomoedas.')
             .addNumberOption(option =>
                 option.setName('valor')
                     .setDescription('O valor numérico para converter.')
@@ -394,22 +394,22 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('bot_config')
-            .setDescription('Painel de configuração geral do bot. (Somente criador)')
+            .setDescription('[Creator] Painel de configuração geral do bot.')
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('entrar-call')
-            .setDescription('Faz a Hikari entrar no seu canal de voz atual para escutar e responder por voz/chat.')
+            .setDescription('[User] Faz a Hikari entrar no seu canal de voz atual para escutar e responder por voz/chat.')
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('sair-call')
-            .setDescription('Faz a Hikari sair do canal de voz atual.')
+            .setDescription('[User] Faz a Hikari sair do canal de voz atual.')
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('modo-radio')
-            .setDescription('Ativa o Modo Rádio de Música — controle por embed e por voz.')
+            .setDescription('[User] Ativa o Modo Rádio de Música — controle por embed e por voz.')
     ),
 ].map(command => command.toJSON());
 async function registerCommands(client, rest) {

@@ -52,6 +52,29 @@ const { handleMusicSearchAndDownload, clearSession } = require('../handlers/deez
 const { handleRadioButton, handleRadioModal, handleAmbiguousSelect } = require('../music/radioModalHandler');
 const { startRadioMode } = require('../music/radioManager');
 
+function getHelpRegrasPages(regrasAnswer) {
+    if (!regrasAnswer) return [];
+    const sections = regrasAnswer.split(/(?=###\s+)/g).filter(s => s.trim().length > 0);
+    if (sections.length >= 2) {
+        const categorySections = sections.filter(s => s.startsWith('###'));
+        if (categorySections.length > 0) {
+            return categorySections.map((sec, idx) => {
+                const lines = sec.trim().split('\n');
+                const firstLine = lines[0].replace(/^###\s+/, '').trim();
+                const body = lines.slice(1).join('\n').trim();
+                return {
+                    title: `⚖️ Regras & Termos (${idx + 1}/${categorySections.length}) • ${firstLine}`,
+                    content: `### ${firstLine}\n\n${body}`
+                };
+            });
+        }
+    }
+    return [{
+        title: '⚖️ Regras & Termos (1/1)',
+        content: regrasAnswer
+    }];
+}
+
 async function buildBanListPayload(client, category, page = 0) {
     const currentBans = getBans();
     const embed = new EmbedBuilder().setColor(0xE11D48);
@@ -304,8 +327,11 @@ module.exports = {
                 const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
                 if (!isServerAccepted(interaction.guildId)) {
                     const isTosAction = (interaction.isCommand() && interaction.commandName === 'aceitar_tos') ||
-                                        (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline'));
+                                        (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline' || interaction.customId.startsWith('tos_nav_')));
                     if (!isTosAction) {
+                        if (interaction.isAutocomplete()) {
+                            return interaction.respond([]).catch(() => {});
+                        }
                         await sendTermsOfService(interaction);
                         return;
                     }
@@ -425,7 +451,31 @@ module.exports = {
                         return await interaction.update({ embeds: [embed], components: [menuRow, btnRow] });
                     }
 
-                    let helpDescription = selectedOption.answer + '\n\r\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)';
+                    if (selectedOption.id === 'regras' && selectedOption.answer) {
+                        const pages = getHelpRegrasPages(selectedOption.answer);
+                        const page = 0;
+                        const currentPage = pages[page];
+                        let helpDescription = currentPage.content + '\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)';
+                        if (helpDescription.length > 4000) {
+                            helpDescription = helpDescription.slice(0, 3950) + '\n\n*(Texto truncado para caber no limite do Discord)*';
+                        }
+                        const answerEmbed = new EmbedBuilder()
+                            .setColor(0x7C3AED)
+                            .setTitle(currentPage.title)
+                            .setDescription(helpDescription)
+                            .setFooter({ text: `Página ${page + 1}/${pages.length} • Hikari Help • by yGuilhermy` })
+                            .setTimestamp();
+
+                        const btnRow = new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setCustomId(`help_regras_page_${page - 1}`).setLabel('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(true),
+                            new ButtonBuilder().setCustomId('help_back').setLabel('🏠 Voltar').setStyle(ButtonStyle.Primary),
+                            new ButtonBuilder().setCustomId(`help_regras_page_${page + 1}`).setLabel('➡️').setStyle(ButtonStyle.Secondary).setDisabled(pages.length <= 1)
+                        );
+
+                        return await interaction.update({ embeds: [answerEmbed], components: [menuRow, btnRow] });
+                    }
+
+                    let helpDescription = selectedOption.answer + '\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)';
                     if (helpDescription.length > 4000) {
                         helpDescription = helpDescription.slice(0, 3950) + '\n\n*(Texto truncado para caber no limite do Discord)*';
                     }
@@ -559,7 +609,7 @@ module.exports = {
                     const selectMenu = new StringSelectMenuBuilder().setCustomId('help_menu').setPlaceholder('Selecione um tópico de ajuda').addOptions(menuOptions);
                     const row = new ActionRowBuilder().addComponents(selectMenu);
                     const githubButton = new ButtonBuilder()
-                        .setLabel('Pagina do Projeto')
+                        .setLabel('Página do Projeto')
                         .setURL('https://github.com/yGuilhermy/Hikari')
                         .setStyle(ButtonStyle.Link)
                         .setEmoji('🚀');
@@ -594,6 +644,38 @@ module.exports = {
                     );
 
                     const menuOptions = helpData.map(item => ({ label: item.label, description: item.description, value: item.id, default: item.id === 'geral' }));
+                    const selectMenu = new StringSelectMenuBuilder().setCustomId('help_menu').setPlaceholder('Selecione um tópico de ajuda').addOptions(menuOptions);
+                    const menuRow = new ActionRowBuilder().addComponents(selectMenu);
+
+                    return await interaction.update({ embeds: [embed], components: [menuRow, btnRow] });
+                }
+
+                if (cid.startsWith('help_regras_page_')) {
+                    const rawPage = parseInt(cid.split('_')[3]);
+                    const regrasObj = helpData.find(i => i.id === 'regras');
+                    const pages = getHelpRegrasPages(regrasObj ? regrasObj.answer : '');
+                    const page = Math.max(0, Math.min(rawPage, pages.length - 1));
+                    const currentPage = pages[page];
+                    
+                    let helpDescription = currentPage.content + '\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)';
+                    if (helpDescription.length > 4000) {
+                        helpDescription = helpDescription.slice(0, 3950) + '\n\n*(Texto truncado para caber no limite do Discord)*';
+                    }
+
+                    const embed = new EmbedBuilder()
+                        .setColor(0x7C3AED)
+                        .setTitle(currentPage.title)
+                        .setDescription(helpDescription)
+                        .setFooter({ text: `Página ${page + 1}/${pages.length} • Hikari Help • by yGuilhermy` })
+                        .setTimestamp();
+
+                    const btnRow = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`help_regras_page_${page - 1}`).setLabel('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+                        new ButtonBuilder().setCustomId('help_back').setLabel('🏠 Voltar').setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId(`help_regras_page_${page + 1}`).setLabel('➡️').setStyle(ButtonStyle.Secondary).setDisabled(page === pages.length - 1)
+                    );
+
+                    const menuOptions = helpData.map(item => ({ label: item.label, description: item.description, value: item.id, default: item.id === 'regras' }));
                     const selectMenu = new StringSelectMenuBuilder().setCustomId('help_menu').setPlaceholder('Selecione um tópico de ajuda').addOptions(menuOptions);
                     const menuRow = new ActionRowBuilder().addComponents(selectMenu);
 
@@ -993,7 +1075,16 @@ module.exports = {
                     .setDescription('Apenas administradores do servidor podem aceitar os Termos de Uso.');
                 return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
-            const { sendTermsOfService } = require('../handlers/tosHandler');
+            const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
+            if (isServerAccepted(interaction.guildId)) {
+                const alreadyAcceptedEmbed = new EmbedBuilder()
+                    .setColor(0x10B981)
+                    .setTitle('✅ Termos de Uso Já Aceitos')
+                    .setDescription('Os Termos de Uso da Hikari já foram previamente aceitos e estão ativos neste servidor.')
+                    .setFooter({ text: 'Hikari ToS • by yGuilhermy' })
+                    .setTimestamp();
+                return interaction.reply({ embeds: [alreadyAcceptedEmbed], ephemeral: true });
+            }
             await sendTermsOfService(interaction);
         } else if (commandName === 'ajuda') {
             try {

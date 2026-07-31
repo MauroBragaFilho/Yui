@@ -385,7 +385,7 @@
   {
     "meta": {
       "label": "🎙️ Reconhecimento de Voz do Rádio (STT)",
-      "description": "Ativa ou desativa a escuta e transcrição de comandos por voz no Modo Rádio para economia de tokens.",
+      "description": "Ativa ou desativa a escuta e transcrição de comandos por voz no Modo Rádio",
       "disableable": true,
       "defaultDisabled": true
     },

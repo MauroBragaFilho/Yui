@@ -11,7 +11,18 @@ let acceptedServers = [];
 function loadAcceptedServers() {
     if (fs.existsSync(TERMS_FILE)) {
         try {
-            acceptedServers = JSON.parse(fs.readFileSync(TERMS_FILE, 'utf8'));
+            const raw = JSON.parse(fs.readFileSync(TERMS_FILE, 'utf8'));
+            if (Array.isArray(raw)) {
+                const map = new Map();
+                for (const item of raw) {
+                    if (item && item.guildId) {
+                        map.set(item.guildId, item);
+                    }
+                }
+                acceptedServers = Array.from(map.values());
+            } else {
+                acceptedServers = [];
+            }
         } catch (e) {
             console.error('Erro ao ler accepted_servers.json:', e);
             acceptedServers = [];
@@ -50,8 +61,8 @@ function isServerAccepted(guildId) {
     if (!guildId) return true;
     return acceptedServers.some(s => s.guildId === guildId);
 }
-const commandBuffer = new Map();
 function saveAcceptedServer(guildName, guildId, ownerId, userId) {
+    const existingIndex = acceptedServers.findIndex(s => s.guildId === guildId);
     const entry = {
         guildName,
         guildId,
@@ -59,82 +70,180 @@ function saveAcceptedServer(guildName, guildId, ownerId, userId) {
         authorizedBy: userId,
         timestamp: new Date().toISOString()
     };
-    acceptedServers.push(entry);
+    if (existingIndex !== -1) {
+        acceptedServers[existingIndex] = entry;
+    } else {
+        acceptedServers.push(entry);
+    }
     fs.writeFileSync(TERMS_FILE, JSON.stringify(acceptedServers, null, 2));
 }
-function getBufferedCommand(guildId) {
-    return commandBuffer.get(guildId);
-}
-function clearBufferedCommand(guildId) {
-    commandBuffer.delete(guildId);
-}
-async function sendTermsOfService(target, requestData = null) {
-    const guild = target.guild;
-    const guildId = target.guildId || (target.guild ? target.guild.id : null);
-    if (!guild || !guildId) return;
-    if (requestData && !commandBuffer.has(guildId)) {
-        commandBuffer.set(guildId, {
-            prompt: requestData.prompt,
-            interaction: requestData.interaction || requestData.message,
-            type: requestData.type,
-            options: requestData.options,
-            userTag: requestData.userTag
-        });
-        console.log(`[TOS] Comando de ${requestData.userTag} buffered para o servidor ${guild.name}.`);
+
+function removeAcceptedServer(guildId) {
+    if (!guildId) return;
+    const initialLen = acceptedServers.length;
+    acceptedServers = acceptedServers.filter(s => s.guildId !== guildId);
+    if (acceptedServers.length !== initialLen) {
+        fs.writeFileSync(TERMS_FILE, JSON.stringify(acceptedServers, null, 2));
     }
-    const now = Date.now();
-    const diffDays = (now - (guild.joinedTimestamp || now)) / (1000 * 60 * 60 * 24);
-    const isLegacy = diffDays >= 7;
+}
+const DEFAULT_TOS_PAGES = [
+    {
+        title: '🛡️ Categoria 1/5 • Moderação Automática (AutoMod)',
+        content: `### 🛡️ 1. O SISTEMA AUTOMOD (MODERAÇÃO AUTOMÁTICA)\nA Hikari possui um dos sistemas de segurança mais severos e avançados do Discord. Esse sistema monitora todas as interações no chat e em chamadas de voz através de dois mecanismos integrados e simultâneos:\n\n1️⃣ **FILTRO DE GATILHOS RÁPIDOS (Keyword Trigger):**\nQualquer mensagem ou comando que contenha termos explícitos altamente proibidos causará um bloqueio automático imediato.\n* *Exemplos de gatilhos:* Apologia a crimes graves, termos relacionados a automutilação, terrorismo, racismo/discurso de ódio extremo, ou tentativas de gerar pornografia/NSFW.\n* *Nota:* O sistema filtra de forma inteligente para evitar falsos positivos comuns, mas termos graves geram punições instantâneas.\n\n2️⃣ **ANÁLISE COGNITIVA DA IA (AI AutoMod MCP):**\nMesmo que você não use palavras ofensivas explícitas, a inteligência artificial analisa o **contexto** e a **intenção** da conversa.\n* **Intenção Maliciosa / Jailbreak:** Tentativas sutis de fazer a IA contornar suas diretrizes de segurança, gerar conteúdo impróprio disfarçado ou ensinar a cometer atos ilícitos.\n* **Abuso, Xingamentos e Toxicidade à IA:** A Hikari não aceita abusos verbais. Insultos direcionados ao bot, assédio moral, xingamentos constantes ou comportamento tóxico forçado acionarão a moderação. A IA identificará o ataque ao seu próprio sistema e usará a ferramenta de banimento de forma autônoma.`
+    },
+    {
+        title: '🎙️ Categoria 2/5 • Segurança em Calls de Voz',
+        content: `### 🎙️ 2. REGRAS E SEGURANÇA EM CANAIS DE VOZ (CALLS)\nO uso do Assistente de Voz (\`/entrar-call\`) está sujeito às mesmas diretrizes de segurança de texto:\n* **Transcrição e Monitoramento:** Todo áudio direcionado à Hikari ao falar o gatilho ('Hikari...') é transcrito e processado pelo sistema de AutoMod. Xingamentos, assédio por voz, ofensas ou tentativas de burlar filtros por áudio acarretam **BANIMENTO GLOBAL IMEDIATO**.\n* **Restrição Absoluta de Acesso:** Usuários, servidores ou canais com banimentos ativos estão estritamente proibidos de chamar a Hikari para chamadas de voz. O sistema de voz rejeita o comando \`/entrar-call\` e ignora 100% de qualquer sinal de voz originado de perfis banidos.`
+    },
+    {
+        title: '🚨 Categoria 3/5 • Diretrizes de Conteúdo',
+        content: `### 🚨 3. DIRETRIZES DE CONTEÚDO (PROIBIÇÕES CRÍTICAS)\nÉ expressamente proibido utilizar qualquer recurso da Hikari (texto ou voz) para fins de:\n* **NSFW & Pornografia:** Criação ou solicitação de descrições, contos ou imagens de cunho sexual.\n* **Violência & Ódio:** Promoção de discurso de ódio contra minorias, preconceito religioso, de gênero, sexual ou apologia à violência física real/tortura.\n* **Ataque e Ofensa ao Bot:** O usuário que abusar verbalmente da Hikari com palavras chulas ou xingamentos tóxicos (em texto ou voz) será **permanentemente bloqueado** e a IA o ignorará de forma absoluta.\n* **Exploração & Spam:** Floodar comandos, tentar derrubar os servidores de IA ou sobrecarregar a fila global.`
+    },
+    {
+        title: '🛑 Categoria 4/5 • Funcionamento do Banimento',
+        content: `### 🛑 4. COMO FUNCIONA O BANIMENTO\nQuando um banimento é aplicado (seja por palavra gatilho ou decisão autônoma da IA):\n1. **Bloqueio Global de Perfil:** O ID do seu usuário é banido globalmente. A Hikari passará a ignorar todas as suas interações, áudios de voz, marcações ou comandos em qualquer servidor onde ela esteja presente.\n2. **Notificação de Segurança:** Um alerta detalhado com a violação e a conversa correspondente é enviado ao canal central de auditoria dos administradores.\n3. **Bloqueio de Canal/Servidor:** Em casos graves onde a administração de um servidor permita abusos sistemáticos coletivos, o servidor inteiro pode ser banido da rede Hikari.`
+    },
+    {
+        title: '⚖️ Categoria 5/5 • Apelações & Recursos',
+        content: `### ⚖️ 5. APELAÇÕES & RECURSOS\nSe você acredita que o seu banimento foi injusto ou decorreu de um mal-entendido técnico da IA:\n* Você poderá submeter uma apelação clicando no botão **'Solicitar Apelação'** gerado na mensagem do banimento.\n* Sua apelação será avaliada manualmente pelo criador/desenvolvedor da Hikari.\n* *Importante:* Mentir na apelação ou tentar burlar o bloqueio através de contas secundárias resultará na rejeição imediata de qualquer recurso.`
+    }
+];
+
+function getTosPages() {
     const helpDataPath = path.join(__dirname, '../data/help.json');
-    let rulesText = "O servidor precisa aceitar as Regras & Termos de Uso da Hikari para continuar.";
     if (fs.existsSync(helpDataPath)) {
         try {
             const helpData = JSON.parse(fs.readFileSync(helpDataPath, 'utf8'));
             const rulesObj = helpData.find(i => i.id === 'regras');
-            if (rulesObj) rulesText = rulesObj.answer;
-        } catch (err) {
-            console.error('[TOS] Erro ao ler regras do help.json:', err.message);
+            if (rulesObj && rulesObj.answer) {
+                const rawText = rulesObj.answer;
+                const sections = rawText.split(/(?=###\s+)/g).filter(s => s.trim().length > 0);
+                if (sections.length >= 2) {
+                    const categorySections = sections.filter(s => s.startsWith('###'));
+                    if (categorySections.length > 0) {
+                        return categorySections.map((sec, idx) => {
+                            const lines = sec.trim().split('\n');
+                            const firstLine = lines[0].replace(/^###\s+/, '').trim();
+                            const body = lines.slice(1).join('\n').trim();
+                            return {
+                                title: `Categoria ${idx + 1}/${categorySections.length} • ${firstLine}`,
+                                content: `### ${firstLine}\n\n${body}`
+                            };
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[TOS] Erro ao parsear help.json:', e.message);
         }
     }
-    const legacyNotice = isLegacy
-        ? "⚠️ **Aviso de Atualização:** Identificamos que a Hikari já faz parte deste servidor há algum tempo. Implementamos novas diretrizes de segurança e privacidade. **Para continuar utilizando os serviços da Hikari, é obrigatório que a administração aceite os termos abaixo.**\n\n"
-        : "";
-    let tosDescription = legacyNotice + rulesText + "\n\n**Para continuar usando a Hikari neste servidor, um Administrador ou Gerente deve aceitar os termos abaixo.**";
-    if (tosDescription.length > 4000) {
-        tosDescription = tosDescription.slice(0, 3950) + "\n\n*(Texto truncado. Acesse o guia completo de regras no comando /ajuda)*";
+    return DEFAULT_TOS_PAGES;
+}
+
+function buildTosPagePayload(pageIndex = 0, maxVisited = 0, isLegacy = false) {
+    const pages = getTosPages();
+    const totalPages = pages.length;
+    const safePageIndex = Math.max(0, Math.min(pageIndex, totalPages - 1));
+    const safeMaxVisited = Math.max(maxVisited, safePageIndex);
+    const currentPage = pages[safePageIndex];
+    const isFullyUnlocked = safeMaxVisited >= totalPages - 1;
+
+    let description = "";
+    if (safePageIndex === 0 && isLegacy) {
+        description += "⚠️ **Aviso de Atualização:** Identificamos que a Hikari já faz parte deste servidor há algum tempo. Implementamos novas diretrizes de segurança e privacidade. **Para continuar utilizando os serviços da Hikari, é obrigatório que a administração aceite os termos abaixo.**\n\n";
     }
+
+    description += currentPage.content;
+
+    description += "\n\n" + (isFullyUnlocked
+        ? "✅ **Você leu todas as categorias dos Termos!** O botão **Aceitar Termos** está liberado abaixo."
+        : `📌 *Página ${safePageIndex + 1} de ${totalPages} • Passe por todas as categorias com o botão "Próximo ➡️" para liberar a aceitação.*`);
+
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
-        .setTitle('⚖️ Termos de Uso e Responsabilidade — Hikari')
-        .setDescription(tosDescription)
-        .setFooter({ text: 'Lembre-se de usar o "/ajuda" para ver todos os comandos! • by yGuilhermy' })
+        .setTitle(`⚖️ Termos de Uso — ${currentPage.title}`)
+        .setDescription(description)
+        .setFooter({ text: `Página ${safePageIndex + 1} de ${totalPages} • Hikari ToS • by yGuilhermy` })
         .setTimestamp();
-    const row = new ActionRowBuilder().addComponents(
+
+    const legFlag = isLegacy ? '1' : '0';
+    const prevIndex = safePageIndex - 1;
+    const nextIndex = safePageIndex + 1;
+
+    const rowNav = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId('tos_accept')
-            .setLabel('Aceitar Termos')
-            .setStyle(ButtonStyle.Success),
+            .setCustomId(`tos_nav_${prevIndex}_${safeMaxVisited}_${legFlag}`)
+            .setLabel('⬅️ Voltar')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(safePageIndex === 0),
         new ButtonBuilder()
-            .setCustomId('tos_decline')
-            .setLabel('Recusar e sair')
-            .setStyle(ButtonStyle.Danger),
+            .setCustomId(`tos_nav_${nextIndex}_${Math.max(safeMaxVisited, nextIndex)}_${legFlag}`)
+            .setLabel('Próximo ➡️')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(safePageIndex === totalPages - 1),
         new ButtonBuilder()
             .setLabel('Página do Projeto')
             .setURL('https://github.com/yGuilhermy/Hikari')
             .setStyle(ButtonStyle.Link)
+            .setEmoji('📂')
     );
+
+    const rowActions = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('tos_accept')
+            .setLabel('Aceitar Termos')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(!isFullyUnlocked)
+            .setEmoji('✅'),
+        new ButtonBuilder()
+            .setCustomId('tos_decline')
+            .setLabel('Recusar e Sair')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('❌')
+    );
+
+    return {
+        embeds: [embed],
+        components: [rowNav, rowActions]
+    };
+}
+
+async function sendTermsOfService(target) {
+    const guild = target.guild;
+    const guildId = target.guildId || (target.guild ? target.guild.id : null);
+    if (!guild || !guildId) return;
+    const now = Date.now();
+    const diffDays = (now - (guild.joinedTimestamp || now)) / (1000 * 60 * 60 * 24);
+    const isLegacy = diffDays >= 7;
+
+    const payload = buildTosPagePayload(0, 0, isLegacy);
     try {
         if (target.deferred || target.replied) {
-            await target.editReply({ content: null, embeds: [embed], components: [row] });
+            await target.editReply({ content: null, ...payload });
         } else if (typeof target.reply === 'function') {
-            await target.reply({ embeds: [embed], components: [row], failIfNotExists: false });
+            await target.reply({ ...payload, failIfNotExists: false });
         }
     } catch (err) {
         console.error('[TOS] Erro ao enviar mensagem de ToS:', err.message);
     }
 }
+
 async function handleTosInteraction(interaction) {
     if (!interaction.isButton()) return;
+    if (interaction.customId.startsWith('tos_nav_')) {
+        const parts = interaction.customId.split('_');
+        const targetPageIndex = parseInt(parts[2], 10) || 0;
+        const maxVisited = parseInt(parts[3], 10) || 0;
+        const isLegacy = parts[4] === '1';
+
+        const newMaxVisited = Math.max(maxVisited, targetPageIndex);
+        const payload = buildTosPagePayload(targetPageIndex, newMaxVisited, isLegacy);
+
+        await interaction.update(payload).catch(e => {
+            console.error('[TOS] Erro ao atualizar página do TOS:', e.message);
+        });
+        return;
+    }
     if (interaction.customId !== 'tos_accept' && interaction.customId !== 'tos_decline') return;
     try {
         console.log(`[TOS-DEBUG] Iniciando interação: ${interaction.customId} | Usuário: ${interaction.user.tag} | Guild: ${interaction.guild?.name || 'N/A'}`);
@@ -183,16 +292,10 @@ async function handleTosInteraction(interaction) {
                 .setDescription(`O canal <#${targetUpdateChannel.id}> foi registrado para receber as novidades e atualizações da Hikari.\n\nCaso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\``);
             await targetUpdateChannel.send({ embeds: [updatesEmbed] }).catch(() => {});
             console.log(`[TOS-DEBUG] Servidor ${guild.id} aceitou.`);
-            const buffered = getBufferedCommand(guild.id);
-            if (buffered) {
-                console.log(`[TOS-DEBUG] Re-executando comando bufferizado para ${guild.name}...`);
-                const { addToQueue } = require('./llmHandler');
-                clearBufferedCommand(guild.id);
-                addToQueue(buffered.prompt, buffered.interaction, buffered.type, buffered.options);
-                console.log('[TOS-DEBUG] Comando re-enviado para a fila.');
-            }
         } else {
-            console.log('[TOS-DEBUG] Iniciando recusa (Guild Leave)...');
+            if (interaction.guild) {
+                removeAcceptedServer(interaction.guild.id);
+            }
             await interaction.editReply({
                 content: '❌ Os termos foram recusados. Saindo do servidor...',
                 embeds: [],
@@ -208,6 +311,7 @@ async function handleTosInteraction(interaction) {
         console.error('[TOS-CRITICAL] Erro fatal em handleTosInteraction:', err);
     }
 }
+
 async function reportNewGuild(guild) {
     if (!guild) return;
     const logWebhookUrl = config.avisosWebhookUrl;
@@ -268,51 +372,8 @@ async function reportNewGuild(guild) {
     );
     if (targetChannel && config.requireTos) {
         try {
-                    const helpDataPath = path.join(__dirname, '../data/help.json');
-            let rulesText = "O servidor precisa aceitar as Regras & Termos de Uso da Hikari para continuar utilizando os serviços de IA.";
-            if (fs.existsSync(helpDataPath)) {
-                try {
-                    const helpData = JSON.parse(fs.readFileSync(helpDataPath, 'utf8'));
-                    const rulesObj = helpData.find(i => i.id === 'regras');
-                    if (rulesObj) rulesText = rulesObj.answer;
-                } catch (e) {}
-            }
-            let welcomeDescription = `
-Olá! Eu sou a **Hikari**, sua assistente de IA multifuncional. ✨
-
-Para que eu possa começar a funcionar neste servidor, **é necessário que um Administrador aceite meus Termos de Uso**. Isso garante que todos estejam cientes das diretrizes de segurança e privacidade.
-
-**Regras & Termos:**
-${rulesText}
-
-**Como proceder?**
-Basta clicar no botão **"Aceitar Termos"** abaixo. Somente usuários com permissão de Administrador ou Gerenciar Servidor podem realizar esta ação.
-`;
-            if (welcomeDescription.length > 4000) {
-                welcomeDescription = welcomeDescription.slice(0, 3950) + "\n\n*(Texto truncado. Acesse os termos completos em /ajuda)*";
-            }
-            const welcomeEmbed = new EmbedBuilder()
-                .setColor(0x7C3AED)
-                .setTitle('👋 Olá! Obrigada por me adicionar!')
-                .setDescription(welcomeDescription)
-                .setFooter({ text: 'Ao aceitar, os dados de ativação serão salvos para fins de transparência. • by yGuilhermy' })
-                .setTimestamp();
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('tos_accept')
-                    .setLabel('Aceitar Termos')
-                    .setStyle(ButtonStyle.Success),
-                new ButtonBuilder()
-                    .setCustomId('tos_decline')
-                    .setLabel('Recusar e Sair')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setLabel('Pagina do Projeto')
-                    .setURL('https://github.com/yGuilhermy/Hikari')
-                    .setStyle(ButtonStyle.Link)
-                    .setEmoji('📂')
-            );
-            await targetChannel.send({ embeds: [welcomeEmbed], components: [row] });
+            const payload = buildTosPagePayload(0, 0, false);
+            await targetChannel.send({ content: '👋 Olá! Obrigada por me adicionar! Por favor, leia os Termos de Uso abaixo:', ...payload });
         } catch (err) {
             console.error(`[REPORT] Erro ao enviar boas-vindas na guild ${guild.id}:`, err.message);
         }
@@ -335,5 +396,6 @@ module.exports = {
     sendTermsOfService,
     handleTosInteraction,
     reportNewGuild,
-    checkAndInitializeUpdateChannel
+    checkAndInitializeUpdateChannel,
+    removeAcceptedServer
 };
