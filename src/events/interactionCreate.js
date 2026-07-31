@@ -107,6 +107,10 @@ module.exports = {
                 const { handleMcpToolInteraction } = require('../handlers/mcpToolPanelHandler');
                 return await handleMcpToolInteraction(interaction);
             }
+            if (interaction.customId.startsWith('help_')) {
+                const { handleHelpInteraction } = require('../handlers/helpPanelHandler');
+                return await handleHelpInteraction(interaction);
+            }
         }
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'radio_add_modal') {
@@ -182,93 +186,7 @@ module.exports = {
                 const payload = await buildBanDetailPayload(client, category, targetId);
                 return await interaction.update(payload);
             }
-            if (interaction.customId === 'help_menu') {
-                const selectedValue = interaction.values[0];
-                console.log(`[LOG] Menu Ajuda: ${selectedValue} | Usuário: ${interaction.user.tag} (${interaction.user.id}) | Local: {${interaction.guild?.name || 'DM'} - ${interaction.guildId || 'N/A'}}`);
-                try {
-                    const helpDataPath = path.join(__dirname, '../data/help.json');
-                    const helpData = JSON.parse(fs.readFileSync(helpDataPath, 'utf8'));
-                    const selectedOption = helpData.find(item => item.id === selectedValue);
-                    const menuOptions = helpData.map(item => ({
-                        label: item.label,
-                        description: item.description || 'Clique para ver mais',
-                        value: item.id,
-                        default: item.id === selectedValue,
-                    }));
-                    const selectMenu = new StringSelectMenuBuilder()
-                        .setCustomId('help_menu')
-                        .setPlaceholder('Selecione um tópico de ajuda')
-                        .addOptions(menuOptions);
-                    const menuRow = new ActionRowBuilder().addComponents(selectMenu);
 
-                    if (selectedOption.id === 'geral' && selectedOption.commands) {
-                        const page = 0;
-                        const command = selectedOption.commands[page];
-                        const embed = new EmbedBuilder()
-                            .setColor(0x7C3AED)
-                            .setTitle(`🤖 Comandos (${page + 1}/${selectedOption.commands.length})`)
-                            .setDescription('📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
-                            .addFields({ name: command.title, value: command.content })
-                            .setFooter({ text: 'Use as setas para navegar • Hikari Help • by yGuilhermy' })
-                            .setTimestamp();
-
-                        const btnRow = new ActionRowBuilder().addComponents(
-                            new ButtonBuilder().setCustomId(`help_page_${page - 1}`).setLabel('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(true),
-                            new ButtonBuilder().setCustomId('help_back').setLabel('🏠 Voltar').setStyle(ButtonStyle.Primary),
-                            new ButtonBuilder().setCustomId(`help_page_${page + 1}`).setLabel('➡️').setStyle(ButtonStyle.Secondary).setDisabled(selectedOption.commands.length <= 1)
-                        );
-                        
-                        return await interaction.update({ embeds: [embed], components: [menuRow, btnRow] });
-                    }
-
-                    if (selectedOption.id === 'regras' && selectedOption.answer) {
-                        const pages = getHelpRegrasPages(selectedOption.answer);
-                        const page = 0;
-                        const currentPage = pages[page];
-                        let helpDescription = currentPage.content + '\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)';
-                        if (helpDescription.length > 4000) {
-                            helpDescription = helpDescription.slice(0, 3950) + '\n\n*(Texto truncado para caber no limite do Discord)*';
-                        }
-                        const answerEmbed = new EmbedBuilder()
-                            .setColor(0x7C3AED)
-                            .setTitle(currentPage.title)
-                            .setDescription(helpDescription)
-                            .setFooter({ text: `Página ${page + 1}/${pages.length} • Hikari Help • by yGuilhermy` })
-                            .setTimestamp();
-
-                        const btnRow = new ActionRowBuilder().addComponents(
-                            new ButtonBuilder().setCustomId(`help_regras_page_${page - 1}`).setLabel('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(true),
-                            new ButtonBuilder().setCustomId('help_back').setLabel('🏠 Voltar').setStyle(ButtonStyle.Primary),
-                            new ButtonBuilder().setCustomId(`help_regras_page_${page + 1}`).setLabel('➡️').setStyle(ButtonStyle.Secondary).setDisabled(pages.length <= 1)
-                        );
-
-                        return await interaction.update({ embeds: [answerEmbed], components: [menuRow, btnRow] });
-                    }
-
-                    let helpDescription = selectedOption.answer + '\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)';
-                    if (helpDescription.length > 4000) {
-                        helpDescription = helpDescription.slice(0, 3950) + '\n\n*(Texto truncado para caber no limite do Discord)*';
-                    }
-                    const answerEmbed = new EmbedBuilder()
-                        .setColor(0x7C3AED)
-                        .setTitle(selectedOption.label)
-                        .setDescription(helpDescription)
-                        .setFooter({ text: 'Hikari • Menu de Ajuda • by yGuilhermy' })
-                        .setTimestamp();
-
-                    const backRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('help_back').setLabel('🏠 Voltar ao Início').setStyle(ButtonStyle.Primary)
-                    );
-
-                    await interaction.update({
-                        embeds: [answerEmbed],
-                        components: [menuRow, backRow],
-                    });
-                } catch (error) {
-                    console.error('Erro ao processar menu de ajuda:', error);
-                    await interaction.reply({ content: 'Erro ao carregar a resposta.', ephemeral: true });
-                }
-            }
             return;
         }
         if (interaction.isButton()) {
@@ -370,88 +288,7 @@ module.exports = {
                 );
                 return await interaction.update({ embeds: [embed], components: [row] });
             }
-            if (cid.startsWith('help_')) {
-                const helpDataPath = path.join(__dirname, '../data/help.json');
-                const helpData = JSON.parse(fs.readFileSync(helpDataPath, 'utf8'));
-                
-                if (cid === 'help_back') {
-                    const menuOptions = helpData.map(item => ({ label: item.label, description: item.description, value: item.id }));
-                    const selectMenu = new StringSelectMenuBuilder().setCustomId('help_menu').setPlaceholder('Selecione um tópico de ajuda').addOptions(menuOptions);
-                    const row = new ActionRowBuilder().addComponents(selectMenu);
-                    const githubButton = new ButtonBuilder()
-                        .setLabel('Página do Projeto')
-                        .setURL('https://github.com/yGuilhermy/Hikari')
-                        .setStyle(ButtonStyle.Link)
-                        .setEmoji('🚀');
-                    const linkRow = new ActionRowBuilder().addComponents(githubButton);
-                    const welcomeEmbed = new EmbedBuilder()
-                        .setColor(0x7C3AED)
-                        .setTitle('✨ Central de Ajuda — Hikari')
-                        .setDescription('Bem-vindo(a)! Selecione um tópico no menu abaixo.\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
-                        .addFields(helpData.map(item => ({ name: item.label, value: item.description || 'Sem descrição', inline: true })))
-                        .setFooter({ text: 'Hikari • Menu de Ajuda • by yGuilhermy' })
-                        .setTimestamp();
-                    return await interaction.update({ embeds: [welcomeEmbed], components: [row, linkRow] });
-                }
 
-                if (cid.startsWith('help_page_')) {
-                    const page = parseInt(cid.split('_')[2]);
-                    const geral = helpData.find(i => i.id === 'geral');
-                    const command = geral.commands[page];
-                    
-                    const embed = new EmbedBuilder()
-                        .setColor(0x7C3AED)
-                        .setTitle(`🤖 Comandos (${page + 1}/${geral.commands.length})`)
-                        .setDescription('📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
-                        .addFields({ name: command.title, value: command.content })
-                        .setFooter({ text: 'Use as setas para navegar • Hikari Help • by yGuilhermy' })
-                        .setTimestamp();
-
-                    const btnRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`help_page_${page - 1}`).setLabel('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-                        new ButtonBuilder().setCustomId('help_back').setLabel('🏠 Voltar').setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId(`help_page_${page + 1}`).setLabel('➡️').setStyle(ButtonStyle.Secondary).setDisabled(page === geral.commands.length - 1)
-                    );
-
-                    const menuOptions = helpData.map(item => ({ label: item.label, description: item.description, value: item.id, default: item.id === 'geral' }));
-                    const selectMenu = new StringSelectMenuBuilder().setCustomId('help_menu').setPlaceholder('Selecione um tópico de ajuda').addOptions(menuOptions);
-                    const menuRow = new ActionRowBuilder().addComponents(selectMenu);
-
-                    return await interaction.update({ embeds: [embed], components: [menuRow, btnRow] });
-                }
-
-                if (cid.startsWith('help_regras_page_')) {
-                    const rawPage = parseInt(cid.split('_')[3]);
-                    const regrasObj = helpData.find(i => i.id === 'regras');
-                    const pages = getHelpRegrasPages(regrasObj ? regrasObj.answer : '');
-                    const page = Math.max(0, Math.min(rawPage, pages.length - 1));
-                    const currentPage = pages[page];
-                    
-                    let helpDescription = currentPage.content + '\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)';
-                    if (helpDescription.length > 4000) {
-                        helpDescription = helpDescription.slice(0, 3950) + '\n\n*(Texto truncado para caber no limite do Discord)*';
-                    }
-
-                    const embed = new EmbedBuilder()
-                        .setColor(0x7C3AED)
-                        .setTitle(currentPage.title)
-                        .setDescription(helpDescription)
-                        .setFooter({ text: `Página ${page + 1}/${pages.length} • Hikari Help • by yGuilhermy` })
-                        .setTimestamp();
-
-                    const btnRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`help_regras_page_${page - 1}`).setLabel('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-                        new ButtonBuilder().setCustomId('help_back').setLabel('🏠 Voltar').setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId(`help_regras_page_${page + 1}`).setLabel('➡️').setStyle(ButtonStyle.Secondary).setDisabled(page === pages.length - 1)
-                    );
-
-                    const menuOptions = helpData.map(item => ({ label: item.label, description: item.description, value: item.id, default: item.id === 'regras' }));
-                    const selectMenu = new StringSelectMenuBuilder().setCustomId('help_menu').setPlaceholder('Selecione um tópico de ajuda').addOptions(menuOptions);
-                    const menuRow = new ActionRowBuilder().addComponents(selectMenu);
-
-                    return await interaction.update({ embeds: [embed], components: [menuRow, btnRow] });
-                }
-            }
             if (cid.startsWith('compress_video_')) {
                 const fileId = cid.replace('compress_video_', '');
                 const pending = getPendingVideo(fileId);
@@ -629,41 +466,8 @@ module.exports = {
             }
             await sendTermsOfService(interaction);
         } else if (commandName === 'ajuda') {
-            try {
-                const helpDataPath = path.join(__dirname, '../data/help.json');
-                if (!fs.existsSync(helpDataPath)) {
-                    const errEmbed = new EmbedBuilder()
-                        .setColor(0xE11D48)
-                        .setTitle('❌ Arquivo não Encontrado')
-                        .setDescription('O arquivo de ajuda não foi localizado no servidor.');
-                    return await interaction.reply({ embeds: [errEmbed], ephemeral: true });
-                }
-                const helpData = JSON.parse(fs.readFileSync(helpDataPath, 'utf8'));
-                const menuOptions = helpData.map(item => ({ label: item.label, description: item.description || 'Clique para ver mais', value: item.id }));
-                const selectMenu = new StringSelectMenuBuilder().setCustomId('help_menu').setPlaceholder('Selecione um tópico de ajuda').addOptions(menuOptions);
-                const row = new ActionRowBuilder().addComponents(selectMenu);
-                const githubButton = new ButtonBuilder()
-                    .setLabel('Página do Projeto')
-                    .setURL('https://github.com/yGuilhermy/Hikari')
-                    .setStyle(ButtonStyle.Link)
-                    .setEmoji('🚀');
-                const linkRow = new ActionRowBuilder().addComponents(githubButton);
-                const welcomeEmbed = new EmbedBuilder()
-                    .setColor(0x7C3AED)
-                    .setTitle('✨ Central de Ajuda — Hikari')
-                    .setDescription('Bem-vindo(a)! Selecione um tópico no menu abaixo.\n\n📖 [Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)')
-                    .addFields(helpData.map(item => ({ name: item.label, value: item.description || 'Sem descrição', inline: true })))
-                    .setFooter({ text: 'Hikari • Menu de Ajuda • by yGuilhermy' })
-                    .setTimestamp();
-                await interaction.reply({ embeds: [welcomeEmbed], components: [row, linkRow], ephemeral: false });
-            } catch (error) {
-                console.error('Erro no comando help:', error);
-                const errEmbed = new EmbedBuilder()
-                    .setColor(0xE11D48)
-                    .setTitle('❌ Erro no Menu')
-                    .setDescription('Erro ao criar o menu de ajuda.');
-                await interaction.reply({ embeds: [errEmbed], ephemeral: true });
-            }
+            const { buildHelpHomePayload } = require('../handlers/helpPanelHandler');
+            return await interaction.reply({ ...buildHelpHomePayload(), ephemeral: false });
         } else if (commandName === 'ia_imagem') {
             const prompt = interaction.options.getString('prompt');
             const negativePrompt = interaction.options.getString('negative_prompt') || '';

@@ -79,7 +79,8 @@ function buildRadioEmbed(session) {
     );
 
     const row3 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('radio_leave').setLabel('🚪 Sair').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('radio_leave').setLabel('🚪 Sair').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setLabel('Apoie o projeto').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('💖')
     );
 
     return { embeds: [embed], components: [row1, row2, row3] };

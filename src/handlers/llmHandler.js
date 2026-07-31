@@ -1890,53 +1890,18 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     }
                     if (toolData.tool === 'show_bot_menu' || toolData.tool === 'get_help') {
                         try {
-                            const BANS_FILE = path.join(__dirname, '../data/bans.json');
-                            const helpPath = path.join(__dirname, '../data/help.json');
-                            if (fs.existsSync(helpPath)) {
-                                const helpData = JSON.parse(fs.readFileSync(helpPath, 'utf8'));
-                                const menuOptions = helpData.map(item => ({
-                                    label: item.label,
-                                    description: item.description || 'Clique para ver mais',
-                                    value: item.id,
-                                }));
-                                const selectMenu = new StringSelectMenuBuilder()
-                                    .setCustomId('help_menu')
-                                    .setPlaceholder('📚 Selecione um tópico de ajuda')
-                                    .addOptions(menuOptions);
-                                const row = new ActionRowBuilder().addComponents(selectMenu);
-                                let helpEmbed;
-                                if (toolData.args && toolData.args.context) {
-                                    const specificItem = helpData.find(i => i.id === toolData.args.context);
-                                    if (specificItem && specificItem.answer) {
-                                        helpEmbed = new EmbedBuilder()
-                                            .setColor(0x7C3AED)
-                                            .setTitle(specificItem.label)
-                                            .setDescription(specificItem.answer)
-                                            .setFooter({ text: 'Hikari • Menu de Ajuda • by yGuilhermy' })
-                                            .setTimestamp();
-                                    }
-                                }
-                                if (!helpEmbed) {
-                                    helpEmbed = new EmbedBuilder()
-                                        .setColor(0x7C3AED)
-                                        .setTitle('✨ Central de Ajuda — Hikari')
-                                        .setDescription('Selecione um tópico no menu abaixo para ver as informações sobre aquela categoria.')
-                                        .addFields(
-                                            helpData.map(item => ({
-                                                name: item.label,
-                                                value: item.description || 'Sem descrição',
-                                                inline: true,
-                                            }))
-                                        )
-                                        .setFooter({ text: 'Hikari • Menu de Ajuda • by yGuilhermy' })
-                                        .setTimestamp();
-                                }
-                                await unifiedReply('', [], [row], [helpEmbed]);
-                                savePromptToHistory(prompt, userTag, userId, `[TOOL: GET_HELP]`, interaction);
-                                return;
-                            } else {
-                                processedResponse = "⚠️ Arquivo de ajuda não encontrado.";
+                            const { buildHelpHomePayload, buildHelpCreatorPayload, buildHelpRulesPayload, buildHelpCommandListPayload } = require('./helpPanelHandler');
+                            let payload;
+                            if (toolData.args && toolData.args.context) {
+                                const ctx = toolData.args.context;
+                                if (ctx === 'sobre') payload = buildHelpCreatorPayload();
+                                else if (ctx === 'regras') payload = buildHelpRulesPayload();
+                                else if (ctx === 'comandos' || ctx === 'geral') payload = buildHelpCommandListPayload();
                             }
+                            if (!payload) payload = buildHelpHomePayload();
+                            await unifiedReply('', [], payload.components, payload.embeds);
+                            savePromptToHistory(prompt, userTag, userId, `[TOOL: GET_HELP]`, interaction);
+                            return;
                         } catch (err) {
                             processedResponse = `❌ Erro ao abrir ajuda: ${err.message}`;
                         }
@@ -2225,7 +2190,10 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 } else {
                                     throw new Error('Nenhuma imagem disponível para exibir');
                                 }
-                                const payload = { content: hikariComment, embeds: [imageEmbed], files: imageFiles };
+                                const supportBtnRow = new ActionRowBuilder().addComponents(
+                                    new ButtonBuilder().setLabel('Apoiar projeto').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('💖')
+                                );
+                                const payload = { content: hikariComment, embeds: [imageEmbed], files: imageFiles, components: [supportBtnRow] };
                                 if (type === 'mention') await replyMessage.edit(payload);
                                 else await interaction.editReply(payload);
                                 addToHistory(channelId, 'user', prompt);

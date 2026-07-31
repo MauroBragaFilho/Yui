@@ -110,33 +110,6 @@ const DEFAULT_TOS_PAGES = [
 ];
 
 function getTosPages() {
-    const helpDataPath = path.join(__dirname, '../data/help.json');
-    if (fs.existsSync(helpDataPath)) {
-        try {
-            const helpData = JSON.parse(fs.readFileSync(helpDataPath, 'utf8'));
-            const rulesObj = helpData.find(i => i.id === 'regras');
-            if (rulesObj && rulesObj.answer) {
-                const rawText = rulesObj.answer;
-                const sections = rawText.split(/(?=###\s+)/g).filter(s => s.trim().length > 0);
-                if (sections.length >= 2) {
-                    const categorySections = sections.filter(s => s.startsWith('###'));
-                    if (categorySections.length > 0) {
-                        return categorySections.map((sec, idx) => {
-                            const lines = sec.trim().split('\n');
-                            const firstLine = lines[0].replace(/^###\s+/, '').trim();
-                            const body = lines.slice(1).join('\n').trim();
-                            return {
-                                title: `Categoria ${idx + 1}/${categorySections.length} • ${firstLine}`,
-                                content: `### ${firstLine}\n\n${body}`
-                            };
-                        });
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('[TOS] Erro ao parsear help.json:', e.message);
-        }
-    }
     return DEFAULT_TOS_PAGES;
 }
 
@@ -199,7 +172,12 @@ function buildTosPagePayload(pageIndex = 0, maxVisited = 0, isLegacy = false) {
             .setCustomId('tos_decline')
             .setLabel('Recusar e Sair')
             .setStyle(ButtonStyle.Danger)
-            .setEmoji('❌')
+            .setEmoji('❌'),
+        new ButtonBuilder()
+            .setLabel('Apoiar desenvolvimento')
+            .setURL('https://bio.site/yGuilhermy')
+            .setStyle(ButtonStyle.Link)
+            .setEmoji('💖')
     );
 
     return {
@@ -397,5 +375,6 @@ module.exports = {
     handleTosInteraction,
     reportNewGuild,
     checkAndInitializeUpdateChannel,
-    removeAcceptedServer
+    removeAcceptedServer,
+    getTosPages
 };
