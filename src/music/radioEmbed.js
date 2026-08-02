@@ -36,8 +36,8 @@ function buildRadioEmbed(session) {
     const playlist = session.playlist || [];
     const currentPos = session.currentIndex >= 0 ? session.currentIndex + 1 : 0;
 
-    const statusLabel = status === 'PLAYING' ? '▶️ Tocando' : status === 'PAUSED' ? '⏸️ Pausado' : '⏹️ Parado';
-    const color = status === 'PLAYING' ? 0x1DB954 : status === 'PAUSED' ? 0xF59E0B : 0x6B7280;
+    const statusLabel = status === 'PLAYING' ? '▶️ Tocando' : status === 'BUFFERING' ? '⏳ Carregando...' : status === 'PAUSED' ? '⏸️ Pausado' : '⏹️ Parado';
+    const color = status === 'PLAYING' ? 0x1DB954 : status === 'BUFFERING' ? 0x3B82F6 : status === 'PAUSED' ? 0xF59E0B : 0x6B7280;
 
     const currentVoiceMode = session.voiceMode || (session.voiceListening ? 'IA' : 'OFF');
 

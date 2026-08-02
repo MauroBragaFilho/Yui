@@ -44,6 +44,8 @@ async function playChime(guildId) {
     } catch (_) {}
 }
 
+const { prefetchNextTrack } = require('./radioPrefetcher');
+
 async function playTrack(guildId, track, textChannel, client) {
     const conn = getVoiceConnection(guildId);
     if (!conn) return;
@@ -56,10 +58,14 @@ async function playTrack(guildId, track, textChannel, client) {
         activeStreams.delete(guildId);
     }
 
-    updateSession(guildId, { status: 'PLAYING', currentTrack: track });
+    let player = players.get(guildId);
+    if (player) {
+        try { player.stop(true); } catch (_) {}
+    }
+
+    updateSession(guildId, { status: 'BUFFERING', currentTrack: track });
     await updateEmbed(guildId, textChannel, client);
 
-    let player = players.get(guildId);
     if (!player) {
         player = createAudioPlayer();
         players.set(guildId, player);
@@ -88,22 +94,23 @@ async function playTrack(guildId, track, textChannel, client) {
             const resource = createAudioResource(progressiveStream, { inputType: StreamType.Raw });
             player.play(resource);
 
+            updateSession(guildId, { status: 'PLAYING', currentTrack: track });
             await updateEmbed(guildId, textChannel, client);
         } else {
-            const filePath = await downloadTrackToDisk(track);
-            updateSession(guildId, { currentTrack: { ...track, localPath: filePath } });
+            let filePath = track.localPath;
+            if (!filePath || !fs.existsSync(filePath)) {
+                filePath = await downloadTrackToDisk(track);
+            }
+
+            updateSession(guildId, { status: 'PLAYING', currentTrack: { ...track, localPath: filePath } });
 
             const resource = createAudioResource(filePath, { inlineVolume: false });
             player.play(resource);
 
             await updateEmbed(guildId, textChannel, client);
-
-            setTimeout(() => {
-                try {
-                    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-                } catch (_) {}
-            }, 300000);
         }
+
+        prefetchNextTrack(guildId).catch(() => {});
 
     } catch (err) {
         console.error(`[RadioPlayer] Falha ao tocar faixa "${track.title}":`, err.message);

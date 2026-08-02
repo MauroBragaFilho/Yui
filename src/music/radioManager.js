@@ -25,6 +25,7 @@ const {
 const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
 const { buildRadioEmbed } = require('./radioEmbed');
 const { resolveInput } = require('./radioProviders');
+const { prefetchNextTrack, cleanupSessionAudioFiles } = require('./radioPrefetcher');
 
 const radioAmbiguousSessions = new Map();
 const userLastVoiceCommand = new Map();
@@ -122,6 +123,13 @@ async function startRadioMode(member, textChannel, client) {
         const s = getSession(guildId);
         if (s && !s._leaving) {
             stopPlayer(guildId);
+            if (s.embedMessageId && textChannel) {
+                try {
+                    const embedMsg = await textChannel.messages.fetch(s.embedMessageId);
+                    await embedMsg?.delete?.().catch(() => {});
+                } catch (_) {}
+            }
+            cleanupSessionAudioFiles(s);
             destroySession(guildId);
         }
     });
@@ -434,12 +442,14 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
                 t.addedBy = userId;
                 addTrackToQueue(guildId, t);
             });
-            if (session.status === 'STOPPED') {
+            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+            if (!isPlayingOrActive) {
                 skipToTrack(guildId, firstNewPos);
                 const current = getSession(guildId)?.currentTrack;
                 if (current) await playTrack(guildId, current, textChannel, client);
             } else {
                 await updateEmbed(guildId, textChannel, client);
+                prefetchNextTrack(guildId).catch(() => {});
             }
             await sendNotify(`✅ **${result.tracks.length}** faixas adicionadas à fila!`);
             return;
@@ -451,13 +461,15 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
         }
 
         const queuePos = addTrackToQueue(guildId, trackToAdd);
+        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
 
-        if (session.status === 'STOPPED') {
+        if (!isPlayingOrActive) {
             skipToTrack(guildId, queuePos);
             const current = getSession(guildId)?.currentTrack;
             if (current) await playTrack(guildId, current, textChannel, client);
         } else {
             await updateEmbed(guildId, textChannel, client);
+            prefetchNextTrack(guildId).catch(() => {});
         }
         await sendNotify(`Adicionada à fila: **${trackToAdd.title}** — *${trackToAdd.artist}*`);
         return;
@@ -531,6 +543,9 @@ async function leaveRadioCall(guildId, textChannel) {
         try { conn.destroy(); } catch (_) {}
     }
 
+    if (session) {
+        cleanupSessionAudioFiles(session);
+    }
     destroySession(guildId);
 
     if (textChannel) {

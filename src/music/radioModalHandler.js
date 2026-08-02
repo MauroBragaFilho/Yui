@@ -15,6 +15,7 @@ const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
 const { resolveInput } = require('./radioProviders');
 const { leaveRadioCall, radioAmbiguousSessions, scheduleAmbiguousAutoSelect } = require('./radioManager');
 const { setLoopMode, toggleShuffle, prevTrack, skipToTrack } = require('./radioDatabase');
+const { prefetchNextTrack } = require('./radioPrefetcher');
 
 function isUserInRadioChannel(interaction, session) {
     if (!session) return false;
@@ -24,149 +25,140 @@ function isUserInRadioChannel(interaction, session) {
 }
 
 async function handleRadioButton(interaction, client) {
-    const cid = interaction.customId;
-    const guildId = interaction.guildId;
-    const session = getSession(guildId);
+    try {
+        const cid = interaction.customId;
+        const guildId = interaction.guildId;
+        const session = getSession(guildId);
 
-    if (cid.startsWith('radio_ambiguous_cancel_')) {
-        return await handleAmbiguousSelect(interaction, client);
-    }
-
-    if (!session) {
-        return interaction.reply({ content: '❌ Nenhuma sessão de rádio ativa.', flags: MessageFlags.Ephemeral });
-    }
-
-    if (!isUserInRadioChannel(interaction, session)) {
-        return interaction.reply({ content: '❌ Você precisa estar no canal de voz do rádio para usar os controles.', flags: MessageFlags.Ephemeral });
-    }
-
-    if (cid === 'radio_add') {
-        const modal = new ModalBuilder()
-            .setCustomId('radio_add_modal')
-            .setTitle('➕ Adicionar ao Rádio');
-
-        const input = new TextInputBuilder()
-            .setCustomId('radio_add_input')
-            .setLabel('Nome da música, artista ou link')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Ex: Welcome to the Jungle | ou link Deezer/YouTube')
-            .setRequired(true)
-            .setMaxLength(300);
-
-        modal.addComponents(new ActionRowBuilder().addComponents(input));
-        return interaction.showModal(modal);
-    }
-
-    if (cid === 'radio_remove') {
-        if (!session.playlist || session.playlist.length === 0) {
-            return interaction.reply({ content: '❌ A playlist do rádio está vazia.', flags: MessageFlags.Ephemeral });
+        if (cid.startsWith('radio_ambiguous_cancel_')) {
+            return await handleAmbiguousSelect(interaction, client);
         }
 
-        const modal = new ModalBuilder()
-            .setCustomId('radio_remove_modal')
-            .setTitle('🗑️ Remover Música do Rádio');
-
-        const input = new TextInputBuilder()
-            .setCustomId('radio_remove_input')
-            .setLabel(`Número da faixa na lista (1 a ${session.playlist.length})`)
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Ex: 1, 2, 5...')
-            .setRequired(true)
-            .setMaxLength(10);
-
-        modal.addComponents(new ActionRowBuilder().addComponents(input));
-        return interaction.showModal(modal);
-    }
-
-    if (cid === 'radio_voice_toggle') {
-        const { isToolDisabled } = require('../handlers/llmHandler');
-        if (isToolDisabled(guildId, 'radio_voice_stt')) {
-            return interaction.reply({
-                content: '⚠️ **Reconhecimento de Voz (STT) Desativado no Servidor:** A escuta por voz do Rádio está desativada neste servidor por padrão para economia de recursos. Peça a um Administrador do servidor para ativá-la usando o comando `/ia_ferramentas`.',
-                flags: MessageFlags.Ephemeral
-            });
+        if (!session) {
+            return await interaction.reply({ content: '❌ Nenhuma sessão de rádio ativa.', flags: MessageFlags.Ephemeral });
         }
-    }
 
-    await interaction.deferUpdate();
+        if (!isUserInRadioChannel(interaction, session)) {
+            return await interaction.reply({ content: '❌ Você precisa estar no canal de voz do rádio para usar os controles.', flags: MessageFlags.Ephemeral });
+        }
 
-    const textChannel = interaction.channel;
+        if (cid === 'radio_add') {
+            const modal = new ModalBuilder()
+                .setCustomId('radio_add_modal')
+                .setTitle('➕ Adicionar ao Rádio');
 
-    if (cid === 'radio_playpause') {
-        if (session.status === 'PLAYING') {
-            await pausePlayer(guildId);
-        } else if (session.status === 'PAUSED') {
-            await resumePlayer(guildId);
-        } else if (session.status === 'STOPPED') {
-            if (typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
+            const input = new TextInputBuilder()
+                .setCustomId('radio_add_input')
+                .setLabel('Nome da música, artista ou link')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Ex: Welcome to the Jungle | ou link Deezer/YouTube')
+                .setRequired(true)
+                .setMaxLength(300);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+            return await interaction.showModal(modal);
+        }
+
+        if (cid === 'radio_remove') {
+            if (!session.playlist || session.playlist.length === 0) {
+                return await interaction.reply({ content: '❌ A playlist do rádio está vazia.', flags: MessageFlags.Ephemeral });
+            }
+
+            const modal = new ModalBuilder()
+                .setCustomId('radio_remove_modal')
+                .setTitle('🗑️ Remover Música do Rádio');
+
+            const input = new TextInputBuilder()
+                .setCustomId('radio_remove_input')
+                .setLabel(`Número da faixa na lista (1 a ${session.playlist.length})`)
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Ex: 1, 2, 5...')
+                .setRequired(true)
+                .setMaxLength(10);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+            return await interaction.showModal(modal);
+        }
+
+        if (cid === 'radio_queue') {
+            const embed = buildQueueEmbed(session);
+            return await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        }
+
+        if (cid === 'radio_voice_toggle') {
+            const { isToolDisabled } = require('../handlers/llmHandler');
+            if (isToolDisabled(guildId, 'radio_voice_stt')) {
+                return await interaction.reply({
+                    content: '⚠️ **Reconhecimento de Voz (STT) Desativado no Servidor:** A escuta por voz do Rádio está desativada neste servidor por padrão para economia de recursos. Peça a um Administrador do servidor para ativá-la usando o comando `/ia_ferramentas`.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+        }
+
+        const textChannel = interaction.channel;
+
+        if (cid === 'radio_leave') {
+            await interaction.deferUpdate().catch(() => {});
+            await leaveRadioCall(guildId, textChannel, client);
+            return;
+        }
+
+        await interaction.deferUpdate().catch(() => {});
+
+        if (cid === 'radio_playpause') {
+            if (session.status === 'PLAYING') {
+                await pausePlayer(guildId);
+            } else if (session.status === 'PAUSED') {
+                await resumePlayer(guildId);
+            } else if (session.status === 'STOPPED') {
+                if (typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
+                    updateSession(guildId, { currentIndex: -1 });
+                }
+                const first = nextTrack(guildId);
+                if (first) await playTrack(guildId, first, textChannel, client);
+            }
+        } else if (cid === 'radio_stop') {
+            stopPlayer(guildId);
+            stopRadio(guildId);
+        } else if (cid === 'radio_next') {
+            if (session.status === 'STOPPED' && typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
                 updateSession(guildId, { currentIndex: -1 });
             }
-            const first = nextTrack(guildId);
-            if (first) await playTrack(guildId, first, textChannel, client);
+            const next = nextTrack(guildId);
+            if (next) {
+                await playTrack(guildId, next, textChannel, client);
+            }
+        } else if (cid === 'radio_prev') {
+            if (session.status === 'STOPPED' && typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
+                updateSession(guildId, { currentIndex: session.playlist ? session.playlist.length : 0 });
+            }
+            const prev = prevTrack(guildId);
+            if (prev) {
+                await playTrack(guildId, prev, textChannel, client);
+            }
+        } else if (cid === 'radio_shuffle') {
+            toggleShuffle(guildId);
+        } else if (cid === 'radio_loop') {
+            setLoopMode(guildId);
+        } else if (cid === 'radio_voice_toggle') {
+            cycleVoiceMode(guildId);
         }
-        await updateEmbed(guildId, textChannel, client);
-        return;
-    }
 
-    if (cid === 'radio_stop') {
-        stopPlayer(guildId);
-        stopRadio(guildId);
-        await updateEmbed(guildId, textChannel, client);
-        return;
-    }
-
-    if (cid === 'radio_next') {
-        if (session.status === 'STOPPED' && typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
-            updateSession(guildId, { currentIndex: -1 });
+        const updatedSession = getSession(guildId);
+        if (updatedSession) {
+            const { buildRadioEmbed } = require('./radioEmbed');
+            const { embeds, components } = buildRadioEmbed(updatedSession);
+            await interaction.editReply({ embeds, components }).catch(async () => {
+                await updateEmbed(guildId, textChannel, client);
+            });
         }
-        const next = nextTrack(guildId);
-        if (next) {
-            await playTrack(guildId, next, textChannel, client);
-        } else {
-            await updateEmbed(guildId, textChannel, client);
-        }
-        return;
-    }
-
-    if (cid === 'radio_prev') {
-        if (session.status === 'STOPPED' && typeof session.currentIndex === 'number' && session.currentIndex >= (session.playlist?.length || 0)) {
-            updateSession(guildId, { currentIndex: session.playlist ? session.playlist.length : 0 });
-        }
-        const prev = prevTrack(guildId);
-        if (prev) {
-            await playTrack(guildId, prev, textChannel, client);
-        } else {
-            await updateEmbed(guildId, textChannel, client);
-        }
-        return;
-    }
-
-    if (cid === 'radio_shuffle') {
-        toggleShuffle(guildId);
-        await updateEmbed(guildId, textChannel, client);
-        return;
-    }
-
-    if (cid === 'radio_loop') {
-        setLoopMode(guildId);
-        await updateEmbed(guildId, textChannel, client);
-        return;
-    }
-
-    if (cid === 'radio_voice_toggle') {
-        cycleVoiceMode(guildId);
-        await updateEmbed(guildId, textChannel, client);
-        return;
-    }
-
-    if (cid === 'radio_queue') {
-        const embed = buildQueueEmbed(session);
-        return interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
-    }
-
-    if (cid === 'radio_leave') {
-        await leaveRadioCall(guildId, textChannel);
-        return;
+    } catch (err) {
+        console.error('[RadioModalHandler] Erro ao tratar botão do rádio:', err);
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ Ocorreu um erro ao processar esta ação.', flags: MessageFlags.Ephemeral });
+            }
+        } catch (_) {}
     }
 }
 
@@ -270,12 +262,14 @@ async function handleRadioModal(interaction, client) {
         const firstNewPos = (session.playlist?.length || 0) + 1;
         tracks.forEach(t => { t.addedBy = userId; addTrackToQueue(guildId, t); });
 
-        if (session.status === 'STOPPED') {
+        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+        if (!isPlayingOrActive) {
             skipToTrack(guildId, firstNewPos);
             const current = getSession(guildId)?.currentTrack;
             if (current) await playTrack(guildId, current, textChannel, client);
         } else {
             await updateEmbed(guildId, textChannel, client);
+            prefetchNextTrack(guildId).catch(() => {});
         }
 
         await interaction.editReply({ content: `✅ **${tracks.length}** faixas adicionadas à fila!`, embeds: [], components: [] });
@@ -286,14 +280,16 @@ async function handleRadioModal(interaction, client) {
     if (resolved.type === 'track') {
         const track = { ...resolved.track, addedBy: userId };
         const pos = addTrackToQueue(guildId, track);
+        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
 
-        if (session.status === 'STOPPED') {
+        if (!isPlayingOrActive) {
             skipToTrack(guildId, pos);
             const current = getSession(guildId)?.currentTrack;
             if (current) await playTrack(guildId, current, textChannel, client);
             await interaction.editReply({ content: `✅ Tocando **${track.title}** agora!`, embeds: [], components: [] });
         } else {
             await updateEmbed(guildId, textChannel, client);
+            prefetchNextTrack(guildId).catch(() => {});
             await interaction.editReply({ content: `✅ **${track.title}** adicionada como **#${pos}** na fila!`, embeds: [], components: [] });
         }
         setTimeout(() => { interaction.deleteReply().catch(() => {}); }, 5000);
@@ -342,11 +338,13 @@ async function handleAmbiguousSelect(interaction, client) {
 
     const pos = addTrackToQueue(guildId, track);
 
-    if (!session || session.status === 'STOPPED') {
+    const isPlayingOrActive = session && (session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null);
+    if (!session || !isPlayingOrActive) {
         const first = nextTrack(guildId);
         if (first) await playTrack(guildId, first, textChannel, client);
     } else {
         await updateEmbed(guildId, textChannel, client);
+        prefetchNextTrack(guildId).catch(() => {});
     }
 
     return true;

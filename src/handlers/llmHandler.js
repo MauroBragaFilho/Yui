@@ -56,7 +56,9 @@ function saveServerTools() {
     }
 }
 function isToolDisabled(guildId, toolName) {
-    const tool = ALL_MCP_TOOLS.find(t => t.function.name === toolName);
+    let checkName = toolName;
+    if (checkName === 'get_help') checkName = 'show_bot_menu';
+    const tool = ALL_MCP_TOOLS.find(t => t.function.name === checkName);
     const isDefaultDisabled = !!(tool && tool.meta && tool.meta.defaultDisabled);
     if (!guildId) return isDefaultDisabled;
 
@@ -64,12 +66,12 @@ function isToolDisabled(guildId, toolName) {
     if (!cfg) return isDefaultDisabled;
 
     if (Array.isArray(cfg)) {
-        if (cfg.includes(toolName)) return true;
+        if (cfg.includes(checkName)) return true;
         return isDefaultDisabled;
     }
 
-    if (cfg.enabled && cfg.enabled.includes(toolName)) return false;
-    if (cfg.disabled && cfg.disabled.includes(toolName)) return true;
+    if (cfg.enabled && cfg.enabled.includes(checkName)) return false;
+    if (cfg.disabled && cfg.disabled.includes(checkName)) return true;
 
     return isDefaultDisabled;
 }
@@ -417,12 +419,12 @@ function stripThinking(text) {
         } catch (e) {}
     }
     let cleanVal = text.trim();
-    const genReplyRegex = /(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply(?:\(|\s+)+(?:content=)?(['"]{1,3})([\s\S]*?)\1\)?\)?(?:[\s\n]*```)?/i;
+    const genReplyRegex = /(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?(?:generate_reply|gerar_resposta|gerar\s+resposta)(?:\(|\s+)+(?:content=)?(['"]{1,3})([\s\S]*?)\1\)?\)?(?:[\s\n]*```)?/i;
     const matchGenReply = cleanVal.match(genReplyRegex);
     if (matchGenReply) {
         return matchGenReply[2].trim();
     }
-    const prefixRegex = /^(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?generate_reply(?:\(|\s+)+(?:content=)?(['"]{1,3})/i;
+    const prefixRegex = /^(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?(?:generate_reply|gerar_resposta|gerar\s+resposta)(?:\(|\s+)+(?:content=)?(['"]{1,3})/i;
     const prefixMatch = cleanVal.match(prefixRegex);
     if (prefixMatch) {
         const quoteChar = prefixMatch[1];
@@ -471,20 +473,29 @@ function stripThinking(text) {
         return '';
     }
     let clean = text.trim();
-    if (/\[?(?:thought|thinking|pensamento|pensamentos|thinking\s+process)s?\]?\s*:/i.test(clean)) {
-        const labelMatch = clean.match(/\[?(?:response|reply|resposta|fala|hikari|output|text)\]?\s*:\s*([\s\S]+)$/i);
+    if (/^[\(\[\*]*\s*(?:thought|thinking|pensamento|pensamentos|thinking\s+process|racioc[íi]nio|plan|planejamento)s?[\*\)\]]*\s*:?/i.test(clean)) {
+        const labelMatch = clean.match(/[\(\[\*]*\s*(?:response|reply|resposta|fala|hikari|output|text|speech|final\s+speech)\s*[\*\)\]]*\s*:\s*([\s\S]+)$/i);
         if (labelMatch) {
-            return labelMatch[1].trim();
-        }
-        const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        if (lines.length > 1) {
-            let lastLine = lines[lines.length - 1];
-            const concatMatch = lastLine.match(/^(?:i'll|i will|i should|i need to|let's|so i'll|therefore|i must)\s+[\s\S]+?[\.!\?]\s*([A-Z\u00C0-\u00DC\d].*)$/i);
-            if (concatMatch) {
-                return concatMatch[1].trim();
+            clean = labelMatch[1].replace(/^[\(\[\*]*\s*(?:fala|resposta|hikari|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
+        } else {
+            const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            if (lines.length > 1) {
+                let lastLine = lines[lines.length - 1];
+                lastLine = lastLine.replace(/^(?:looks good|lgtm|perfect|done|all set)[\.!\s]*/i, '');
+                lastLine = lastLine.replace(/^(?:let's go with|going with|using)\s+[^.]+[\.!\s]*/i, '');
+                const concatMatch = lastLine.match(/^(?:i'll|i will|i should|i need to|let's|so i'll|therefore|i must)\s+[\s\S]+?[\.!\?]\s*([A-Z\u00C0-\u00DC\d].*)$/i);
+                if (concatMatch) {
+                    clean = concatMatch[1].trim();
+                } else {
+                    clean = lastLine.replace(/^[\(\[\*]*\s*(?:fala|resposta|hikari|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
+                }
             }
-            return lastLine.replace(/^\[?(?:fala|resposta|hikari)\]?\s*:\s*/i, '').trim();
         }
+    }
+    clean = clean.replace(/^[\(\[\*]*\s*(?:gerar\s*resposta|gerar_resposta|resposta|fala|hikari|output|text|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
+    const quotedMatch = clean.match(/^(['"]{1,3})([\s\S]+?)\1/);
+    if (quotedMatch) {
+        clean = quotedMatch[2].trim();
     }
     return clean;
 }
@@ -1480,6 +1491,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         do {
             rawResponse = await generateResponse(prompt, channelId, {
                 ...options,
+                guildId: options.guildId || guildId,
                 allowSearch: false,
                 userId,
                 guildName,
@@ -1621,6 +1633,13 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     processedResponse = keys.thought_trace || "⚠️ O modelo não gerou uma resposta válida.";
                 }
                 if (toolData.tool && toolData.args) {
+                    const targetGuildId = options?.guildId || guildId;
+                    if (isToolDisabled(targetGuildId, toolData.tool)) {
+                        console.warn(`[MCP TOOL] Ferramenta '${toolData.tool}' está desativada no servidor ${targetGuildId}. Execução abortada.`);
+                        processedResponse = `⚠️ A ferramenta \`${toolData.tool}\` está desativada neste servidor.`;
+                        savePromptToHistory(prompt, userTag, userId, `[TOOL: BLOCKED - ${toolData.tool}]`, interaction);
+                        return;
+                    }
                     console.log(`[MCP TOOL] Detectado: ${toolData.tool} | Thought: ${toolData.thought}`);
                     if (toolData.thought) {
                         console.log(`[AI THOUGHT] ${toolData.thought}`);

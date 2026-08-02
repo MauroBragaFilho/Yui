@@ -20,6 +20,7 @@ const {
 } = require('./radioAudioPlayer');
 const { resolveInput } = require('./radioProviders');
 const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
+const { prefetchNextTrack } = require('./radioPrefetcher');
 
 async function sendTempMessage(textChannel, content, delayMs = 5000) {
     try {
@@ -85,12 +86,14 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
                 t.addedBy = userId;
                 addTrackToQueue(guildId, t);
             });
-            if (session.status === 'STOPPED') {
+            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+            if (!isPlayingOrActive) {
                 skipToTrack(guildId, firstNewPos);
                 const current = getSession(guildId)?.currentTrack;
                 if (current) await playTrack(guildId, current, textChannel, client);
             } else {
                 await updateEmbed(guildId, textChannel, client);
+                prefetchNextTrack(guildId).catch(() => {});
             }
             await sendTempMessage(textChannel, `🎶 ${userMention} Adicionei **${tracks.length}** faixas da playlist à fila.`);
             return null;
@@ -99,14 +102,16 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
         if (resolved.type === 'track') {
             const track = { ...resolved.track, addedBy: userId };
             const queuePos = addTrackToQueue(guildId, track);
+            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
 
-            if (session.status === 'STOPPED') {
+            if (!isPlayingOrActive) {
                 skipToTrack(guildId, queuePos);
                 const current = getSession(guildId)?.currentTrack;
                 if (current) await playTrack(guildId, current, textChannel, client);
                 await sendTempMessage(textChannel, `🎵 ${userMention} Tocando **${track.title}** - ${track.artist}`);
             } else {
                 await updateEmbed(guildId, textChannel, client);
+                prefetchNextTrack(guildId).catch(() => {});
                 await sendTempMessage(textChannel, `➕ ${userMention} Adicionado à fila (#${queuePos}): **${track.title}** - ${track.artist}`);
             }
             return null;
