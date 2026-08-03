@@ -113,7 +113,7 @@ async function startRadioMode(member, textChannel, client) {
     const { isToolDisabled } = require('../handlers/llmHandler');
     const session = createSession(guildId, voiceChannel.id, textChannel.id);
     if (isToolDisabled(guildId, 'radio_voice_stt')) {
-        updateSession(guildId, { voiceListening: false });
+        updateSession(guildId, { voiceListening: false, voiceMode: 'OFF' });
     }
     const { embeds, components } = buildRadioEmbed(session);
     const msg = await textChannel.send({ embeds, components });
@@ -423,7 +423,7 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
 
     if (intent.type === 'ADD') {
         await sendNotify(`Buscando **"${intent.query}"**...`);
-        const result = await resolveInput(intent.query);
+        const result = await resolveInput(intent.query, guildId);
 
         if (!result || result.type === 'not_found') {
             await sendNotify(`Música não encontrada para **"${intent.query}"**.`);
@@ -442,7 +442,7 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
                 t.addedBy = userId;
                 addTrackToQueue(guildId, t);
             });
-            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
             if (!isPlayingOrActive) {
                 skipToTrack(guildId, firstNewPos);
                 const current = getSession(guildId)?.currentTrack;
@@ -461,7 +461,7 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
         }
 
         const queuePos = addTrackToQueue(guildId, trackToAdd);
-        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
 
         if (!isPlayingOrActive) {
             skipToTrack(guildId, queuePos);
@@ -573,7 +573,7 @@ function monitorEmptyChannel(guildId, voiceChannel, textChannel) {
 }
 
 function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
-    setTimeout(async () => {
+    const timer = setTimeout(async () => {
         const pending = radioAmbiguousSessions.get(pendingKey);
         if (!pending) return;
 
@@ -609,6 +609,11 @@ function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
             await updateEmbed(pending.guildId, pending.textChannel, pending.client);
         }
     }, 10000);
+
+    const pendingObj = radioAmbiguousSessions.get(pendingKey);
+    if (pendingObj) {
+        pendingObj.timer = timer;
+    }
 }
 
 module.exports = {

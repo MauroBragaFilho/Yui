@@ -141,7 +141,7 @@ async function handleTrackEnd(guildId, textChannel, client) {
         }
 
         const session = getSession(guildId);
-        if (!session || session.status === 'STOPPED') return;
+        if (!session || session._leaving || session.status === 'STOPPED') return;
 
         const next = nextTrack(guildId);
         if (next) {
@@ -188,19 +188,24 @@ function stopPlayer(guildId) {
 }
 
 
+const embedUpdateLocksMap = new Map();
+
 async function updateEmbed(guildId, textChannel, client) {
     const session = getSession(guildId);
-    if (!session) return;
+    if (!session || session._leaving) return;
 
-    let targetChannel = textChannel;
-    if (!targetChannel && session.textChannelId && client) {
-        targetChannel = client.channels?.cache?.get(session.textChannelId) || null;
-        if (!targetChannel && client.channels?.fetch) {
-            try { targetChannel = await client.channels.fetch(session.textChannelId); } catch (_) {}
-        }
-    }
+    if (embedUpdateLocksMap.get(guildId)) return;
+    embedUpdateLocksMap.set(guildId, true);
 
     try {
+        let targetChannel = textChannel;
+        if (!targetChannel && session.textChannelId && client) {
+            targetChannel = client.channels?.cache?.get(session.textChannelId) || null;
+            if (!targetChannel && client.channels?.fetch) {
+                try { targetChannel = await client.channels.fetch(session.textChannelId); } catch (_) {}
+            }
+        }
+
         const { embeds, components } = buildRadioEmbed(session);
 
         if (session.embedMessageId && targetChannel) {
@@ -217,6 +222,8 @@ async function updateEmbed(guildId, textChannel, client) {
         }
     } catch (err) {
         console.error('[RadioPlayer] Falha ao atualizar embed:', err.message);
+    } finally {
+        embedUpdateLocksMap.delete(guildId);
     }
 }
 

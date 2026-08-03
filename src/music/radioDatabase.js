@@ -3,12 +3,44 @@ const path = require('path');
 
 const DATA_DIR = path.join(__dirname, 'data');
 const SESSION_FILE = path.join(DATA_DIR, 'radio_sessions.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'radio_guild_settings.json');
 
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 const sessions = new Map();
+let guildSettingsMap = new Map();
+
+function _loadGuildSettings() {
+    try {
+        if (fs.existsSync(SETTINGS_FILE)) {
+            const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+            guildSettingsMap = new Map(Object.entries(data));
+        }
+    } catch (_) {}
+}
+
+function _saveGuildSettings() {
+    try {
+        const obj = {};
+        guildSettingsMap.forEach((v, k) => { obj[k] = v; });
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(obj, null, 2));
+    } catch (_) {}
+}
+
+_loadGuildSettings();
+
+function getGuildSavedSettings(guildId) {
+    return guildSettingsMap.get(guildId) || null;
+}
+
+function saveGuildSavedSettings(guildId, patch) {
+    const current = guildSettingsMap.get(guildId) || {};
+    const updated = { ...current, ...patch };
+    guildSettingsMap.set(guildId, updated);
+    _saveGuildSettings();
+}
 
 function _save() {
     try {
@@ -22,19 +54,25 @@ function _syncLegacyFields(session) {
     if (!session) return;
     if (!Array.isArray(session.playlist)) session.playlist = [];
     if (typeof session.currentIndex !== 'number') session.currentIndex = -1;
-    if (!session.voiceMode) {
+    if (!session.voiceMode || session.voiceListening === false) {
         session.voiceMode = session.voiceListening === false ? 'OFF' : 'IA';
     }
     session.voiceListening = (session.voiceMode !== 'OFF');
+    if (!session.streamMode) session.streamMode = 'HYBRID';
 
-    session.currentTrack = (session.currentIndex >= 0 && session.currentIndex < session.playlist.length) 
-        ? session.playlist[session.currentIndex] 
-        : null;
+    if (session.status === 'STOPPED') {
+        session.currentTrack = null;
+    } else {
+        session.currentTrack = (session.currentIndex >= 0 && session.currentIndex < session.playlist.length) 
+            ? session.playlist[session.currentIndex] 
+            : null;
+    }
     session.history = session.playlist.slice(0, Math.max(0, session.currentIndex));
     session.queue = session.playlist.slice(Math.max(0, session.currentIndex + 1));
 }
 
 function createSession(guildId, voiceChannelId, textChannelId) {
+    const saved = getGuildSavedSettings(guildId) || {};
     const session = {
         guildId,
         voiceChannelId,
@@ -43,8 +81,9 @@ function createSession(guildId, voiceChannelId, textChannelId) {
         status: 'STOPPED',
         loopMode: 'OFF',
         shuffle: false,
-        voiceMode: 'DIRECT',
-        voiceListening: true,
+        voiceMode: saved.voiceMode || 'DIRECT',
+        voiceListening: saved.voiceMode ? (saved.voiceMode !== 'OFF') : true,
+        streamMode: saved.streamMode || 'HYBRID',
         currentIndex: -1,
         playlist: [],
         listeners: []
@@ -66,6 +105,12 @@ function updateSession(guildId, patch) {
     if (!s) return null;
     Object.assign(s, patch);
     _syncLegacyFields(s);
+    if (patch.voiceMode !== undefined || patch.streamMode !== undefined) {
+        saveGuildSavedSettings(guildId, {
+            ...(patch.voiceMode !== undefined && { voiceMode: patch.voiceMode }),
+            ...(patch.streamMode !== undefined && { streamMode: patch.streamMode })
+        });
+    }
     _save();
     return s;
 }
@@ -183,6 +228,7 @@ function toggleVoiceListening(guildId) {
     if (!s) return null;
     s.voiceListening = !s.voiceListening;
     s.voiceMode = s.voiceListening ? 'IA' : 'OFF';
+    saveGuildSavedSettings(guildId, { voiceMode: s.voiceMode });
     _save();
     return s.voiceListening;
 }
@@ -196,6 +242,7 @@ function cycleVoiceMode(guildId) {
     const nextMode = modes[(currentIdx + 1) % modes.length];
     s.voiceMode = nextMode;
     s.voiceListening = (nextMode !== 'OFF');
+    saveGuildSavedSettings(guildId, { voiceMode: s.voiceMode });
     _save();
     return s.voiceMode;
 }
@@ -219,24 +266,23 @@ function stopRadio(guildId) {
 function removeTrackFromPlaylist(guildId, position) {
     const s = sessions.get(guildId);
     if (!s || !Array.isArray(s.playlist) || s.playlist.length === 0) return null;
+    const idx = position - 1;
+    if (idx < 0 || idx >= s.playlist.length) return null;
 
-    const targetIdx = position - 1;
-    if (targetIdx < 0 || targetIdx >= s.playlist.length) return null;
-
-    const isCurrent = (targetIdx === s.currentIndex && s.status === 'PLAYING');
-    const removedTrack = s.playlist.splice(targetIdx, 1)[0];
+    const removedTrack = s.playlist.splice(idx, 1)[0];
+    const isCurrent = (idx === s.currentIndex);
 
     if (s.playlist.length === 0) {
         s.currentIndex = -1;
+        s.currentTrack = null;
         s.status = 'STOPPED';
-    } else if (targetIdx < s.currentIndex) {
-        s.currentIndex--;
-    } else if (targetIdx === s.currentIndex) {
+    } else if (idx < s.currentIndex) {
+        s.currentIndex -= 1;
+    } else if (idx === s.currentIndex) {
         if (s.currentIndex >= s.playlist.length) {
             s.currentIndex = s.playlist.length - 1;
         }
     }
-
     _syncLegacyFields(s);
     _save();
 
@@ -246,6 +292,15 @@ function removeTrackFromPlaylist(guildId, position) {
         remainingCount: s.playlist.length,
         newCurrentTrack: s.currentTrack
     };
+}
+
+function toggleStreamMode(guildId) {
+    const s = sessions.get(guildId);
+    if (!s) return null;
+    s.streamMode = s.streamMode === 'FAST' ? 'HYBRID' : 'FAST';
+    saveGuildSavedSettings(guildId, { streamMode: s.streamMode });
+    _save();
+    return s.streamMode;
 }
 
 module.exports = {
@@ -262,6 +317,7 @@ module.exports = {
     toggleShuffle,
     toggleVoiceListening,
     cycleVoiceMode,
+    toggleStreamMode,
     getAllSessions,
     stopRadio,
     removeTrackFromPlaylist

@@ -255,11 +255,16 @@ async function searchByName(query) {
     };
 }
 
-function downloadTrackToDisk(track) {
+function downloadTrackToDisk(track, context = null) {
     return new Promise(async (resolve, reject) => {
         if (!track || !track.source) {
             return reject(new Error('Objeto de faixa inválido ou fonte ausente'));
         }
+
+        const logContext = context || {
+            source: 'Modo Rádio',
+            userId: track.addedBy || 'Desconhecido'
+        };
 
         const arl = process.env.DEEZER_ARL || process.env.DEEMIX_ARL || '';
         const scriptPath = path.join(__dirname, '../services/download_deezer.py');
@@ -268,7 +273,28 @@ function downloadTrackToDisk(track) {
         if (track.source === 'deezer') {
             const link = track.link || `https://www.deezer.com/track/${track.id}`;
             const cmd = `${pythonBin} "${scriptPath}" "${link}" "${TEMP_RADIO_DIR}" "${arl}"`;
+
+            let resolved = false;
+            const checkInterval = setInterval(() => {
+                try {
+                    const files = fs.readdirSync(TEMP_RADIO_DIR)
+                        .filter(f => f.includes(track.id))
+                        .map(f => path.join(TEMP_RADIO_DIR, f));
+                    if (files.length > 0) {
+                        const stat = fs.statSync(files[0]);
+                        if (stat.size >= 256 * 1024) {
+                            resolved = true;
+                            clearInterval(checkInterval);
+                            return resolve(files[0]);
+                        }
+                    }
+                } catch (_) {}
+            }, 150);
+
             exec(cmd, { maxBuffer: 10 * 1024 * 1024, timeout: 60000 }, (error, stdout) => {
+                clearInterval(checkInterval);
+                if (resolved) return;
+
                 const match = stdout?.match(/DOWNLOADED_FILE:(.+)/);
                 if (match && match[1]) {
                     const p = match[1].trim();
@@ -286,7 +312,7 @@ function downloadTrackToDisk(track) {
             }
 
             try {
-                const result = await downloadAudio(track.link);
+                const result = await downloadAudio(track.link, logContext);
                 if (result && result.filePath && fs.existsSync(result.filePath)) {
                     return resolve(result.filePath);
                 }
@@ -425,10 +451,71 @@ async function resolveSpotify(url) {
     return null;
 }
 
-async function resolveInput(input) {
+async function convertYouTubeTrackToDeezer(ytTrack) {
+    if (!ytTrack || !ytTrack.title || ytTrack.title === 'Vídeo do YouTube') return ytTrack;
+
+    const rawTitle = ytTrack.title
+        .replace(/\(official audio.*?\)/gi, '')
+        .replace(/\[official audio.*?\]/gi, '')
+        .replace(/\(official video.*?\)/gi, '')
+        .replace(/\[official video.*?\]/gi, '')
+        .replace(/\(lyric video.*?\)/gi, '')
+        .replace(/\[lyric video.*?\]/gi, '')
+        .replace(/\(clipe oficial.*?\)/gi, '')
+        .replace(/\[clipe oficial.*?\]/gi, '')
+        .replace(/\(vídeo oficial.*?\)/gi, '')
+        .replace(/\[vídeo oficial.*?\]/gi, '')
+        .replace(/\(audio.*?\)/gi, '')
+        .replace(/\[audio.*?\]/gi, '')
+        .trim();
+
+    const artistStr = (ytTrack.artist && ytTrack.artist !== 'YouTube') ? ytTrack.artist : '';
+    const query = `${rawTitle} ${artistStr}`.trim();
+
+    try {
+        let deezerRes = await searchDeezerTracks(query);
+        if (!deezerRes || deezerRes.length === 0) {
+            deezerRes = await searchDeezerTracks(rawTitle);
+        }
+
+        if (deezerRes && deezerRes.length > 0) {
+            for (const candidate of deezerRes) {
+                const score = calculateConfidenceScore(query, candidate);
+                const titleScore = calculateConfidenceScore(rawTitle, candidate);
+                const bestScore = Math.max(score, titleScore);
+
+                const durationDiff = (ytTrack.duration && candidate.duration) 
+                    ? Math.abs(ytTrack.duration - candidate.duration) 
+                    : 0;
+
+                const isDurationOk = !ytTrack.duration || !candidate.duration || durationDiff <= 45;
+
+                if (bestScore >= 50 && isDurationOk) {
+                    return {
+                        id: String(candidate.id),
+                        title: candidate.title,
+                        artist: candidate.artist,
+                        album: candidate.album || '',
+                        duration: candidate.duration,
+                        cover: candidate.cover,
+                        link: candidate.link,
+                        source: 'deezer'
+                    };
+                }
+            }
+        }
+    } catch (_) {}
+    return ytTrack;
+}
+
+async function resolveInput(input, guildId = null) {
     input = (input || '').trim();
     const cleanUrl = extractUrl(input);
     const hasHttp = /^https?:\/\//i.test(cleanUrl);
+
+    const { getSession } = require('./radioDatabase');
+    const session = guildId ? getSession(guildId) : null;
+    const isFast = session?.streamMode === 'FAST';
 
     if (hasHttp) {
         if (isSpotifyUrl(cleanUrl)) {
@@ -449,11 +536,23 @@ async function resolveInput(input) {
         }
         if (isYouTubePlaylist(cleanUrl)) {
             const tracks = await resolveYouTubePlaylist(cleanUrl);
-            if (tracks && tracks.length > 0) return { type: 'playlist', tracks };
+            if (tracks && tracks.length > 0) {
+                if (isFast) {
+                    const converted = await Promise.all(tracks.map(t => convertYouTubeTrackToDeezer(t)));
+                    return { type: 'playlist', tracks: converted };
+                }
+                return { type: 'playlist', tracks };
+            }
         }
         if (isYouTubeUrl(cleanUrl)) {
             const track = await resolveYouTubeTrack(cleanUrl);
-            if (track) return { type: 'track', track };
+            if (track) {
+                if (isFast) {
+                    const converted = await convertYouTubeTrackToDeezer(track);
+                    return { type: 'track', track: converted };
+                }
+                return { type: 'track', track };
+            }
         }
     }
 

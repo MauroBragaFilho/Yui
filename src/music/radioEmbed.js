@@ -46,20 +46,24 @@ function buildRadioEmbed(session) {
         .setTitle('📻 Modo Rádio — Hikari')
         .setFooter({ text: 'Hikari Radio • Use os botões abaixo para controlar' });
 
+    const isFast = session.streamMode === 'FAST';
+    const streamModeText = isFast ? '⚡ Rápido (Converte YT ➔ Deezer)' : '⚖️ Híbrido (Padrão)';
+
     if (track) {
         embed.setDescription(`**${statusLabel}** (Faixa #${currentPos} de ${playlist.length})`)
             .addFields(
-                { name: '🎵 Faixa Atual', value: `**#${currentPos}. ${track.title}**\n👤 ${track.artist}`, inline: true },
+                { name: '🎵 Faixa Atual', value: `**#${currentPos}. ${track.title}** - ${track.artist}\n\n`, inline: false },
                 { name: '⏱️ Duração', value: formatDuration(track.duration), inline: true },
                 { name: '📂 Álbum', value: track.album || '—', inline: true },
                 { name: '📋 Playlist Total', value: `${playlist.length} faixa(s)`, inline: true },
                 { name: '🎲 Shuffle', value: session.shuffle ? '✅ Ativo' : '❌ Off', inline: true },
-                { name: '🔁 Loop', value: loopLabel(session.loopMode), inline: true }
+                { name: '🔁 Loop', value: loopLabel(session.loopMode), inline: true },
+                { name: '🚀 Busca', value: streamModeText, inline: true }
             );
         if (track.cover) embed.setThumbnail(track.cover);
         if (track.addedBy) embed.addFields({ name: '➕ Adicionada por', value: `<@${track.addedBy}>`, inline: true });
     } else {
-        embed.setDescription(`**${statusLabel}**\n\nNenhuma faixa tocando. Playlist com ${playlist.length} música(s). Use ➕ para adicionar!`);
+        embed.setDescription(`**${statusLabel}**\n\nNenhuma faixa tocando. Playlist com ${playlist.length} música(s). Use ➕ para adicionar!\n🚀 **Modo de Busca:** ${streamModeText}`);
     }
 
     const row1 = new ActionRowBuilder().addComponents(
@@ -79,6 +83,7 @@ function buildRadioEmbed(session) {
     );
 
     const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('radio_stream_mode').setLabel(isFast ? '⚡ Rápido' : '⚖️ Híbrido').setStyle(isFast ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('radio_leave').setLabel('🚪 Sair').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setLabel('Apoie o projeto').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('💖')
     );

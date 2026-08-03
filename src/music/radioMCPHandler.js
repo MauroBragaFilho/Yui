@@ -41,7 +41,7 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
         const query = toolArgs.query || '';
         if (!query) return `❌ Nenhuma música informada.`;
 
-        const resolved = await resolveInput(query);
+        const resolved = await resolveInput(query, guildId);
 
         if (resolved.type === 'not_found') {
             return `${userMention} Não encontrei **"${query}"** no Deezer nem no YouTube.`;
@@ -86,7 +86,7 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
                 t.addedBy = userId;
                 addTrackToQueue(guildId, t);
             });
-            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
             if (!isPlayingOrActive) {
                 skipToTrack(guildId, firstNewPos);
                 const current = getSession(guildId)?.currentTrack;
@@ -102,7 +102,7 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
         if (resolved.type === 'track') {
             const track = { ...resolved.track, addedBy: userId };
             const queuePos = addTrackToQueue(guildId, track);
-            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
 
             if (!isPlayingOrActive) {
                 skipToTrack(guildId, queuePos);

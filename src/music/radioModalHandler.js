@@ -9,7 +9,7 @@ const {
     TextInputStyle,
     MessageFlags
 } = require('discord.js');
-const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, cycleVoiceMode, stopRadio, removeTrackFromPlaylist } = require('./radioDatabase');
+const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, cycleVoiceMode, toggleStreamMode, stopRadio, removeTrackFromPlaylist } = require('./radioDatabase');
 const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
 const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
 const { resolveInput } = require('./radioProviders');
@@ -142,6 +142,8 @@ async function handleRadioButton(interaction, client) {
             setLoopMode(guildId);
         } else if (cid === 'radio_voice_toggle') {
             cycleVoiceMode(guildId);
+        } else if (cid === 'radio_stream_mode') {
+            toggleStreamMode(guildId);
         }
 
         const updatedSession = getSession(guildId);
@@ -217,7 +219,7 @@ async function handleRadioModal(interaction, client) {
     const textChannel = interaction.channel;
     const userId = interaction.user.id;
 
-    const resolved = await resolveInput(query);
+    const resolved = await resolveInput(query, guildId);
 
     if (resolved.type === 'not_found') {
         await interaction.editReply({ content: `❌ Não encontrei **"${query}"**.` });
@@ -262,7 +264,7 @@ async function handleRadioModal(interaction, client) {
         const firstNewPos = (session.playlist?.length || 0) + 1;
         tracks.forEach(t => { t.addedBy = userId; addTrackToQueue(guildId, t); });
 
-        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
         if (!isPlayingOrActive) {
             skipToTrack(guildId, firstNewPos);
             const current = getSession(guildId)?.currentTrack;
@@ -280,7 +282,7 @@ async function handleRadioModal(interaction, client) {
     if (resolved.type === 'track') {
         const track = { ...resolved.track, addedBy: userId };
         const pos = addTrackToQueue(guildId, track);
-        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null;
+        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
 
         if (!isPlayingOrActive) {
             skipToTrack(guildId, pos);
@@ -319,6 +321,10 @@ async function handleAmbiguousSelect(interaction, client) {
         return true;
     }
 
+    if (pending.timer) {
+        try { clearTimeout(pending.timer); } catch (_) {}
+    }
+
     if (cid.startsWith('radio_ambiguous_cancel_')) {
         radioAmbiguousSessions.delete(pendingKey);
         await interaction.update({ content: '❌ Cancelado.', embeds: [], components: [] });
@@ -338,10 +344,11 @@ async function handleAmbiguousSelect(interaction, client) {
 
     const pos = addTrackToQueue(guildId, track);
 
-    const isPlayingOrActive = session && (session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED' || session.currentTrack != null);
+    const isPlayingOrActive = session && (session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED');
     if (!session || !isPlayingOrActive) {
-        const first = nextTrack(guildId);
-        if (first) await playTrack(guildId, first, textChannel, client);
+        skipToTrack(guildId, pos);
+        const current = getSession(guildId)?.currentTrack;
+        if (current) await playTrack(guildId, current, textChannel, client);
     } else {
         await updateEmbed(guildId, textChannel, client);
         prefetchNextTrack(guildId).catch(() => {});

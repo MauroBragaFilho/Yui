@@ -113,7 +113,7 @@ module.exports = {
             }
         }
         if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'radio_add_modal') {
+            if (interaction.customId.startsWith('radio_')) {
                 return await handleRadioModal(interaction, client);
             }
             if (interaction.customId.startsWith('cfgmodal_')) {

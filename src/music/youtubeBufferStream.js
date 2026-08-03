@@ -9,7 +9,7 @@ const CHANNELS = 2;
 const BYTES_PER_SAMPLE = 2;
 const BYTES_PER_SECOND = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE;
 
-const DEFAULT_MIN_INITIAL_SEC = 4;
+const DEFAULT_MIN_INITIAL_SEC = 1;
 const DEFAULT_MAX_BUFFER_SEC = 20;
 const DEFAULT_RESUME_BUFFER_SEC = 10;
 
@@ -45,6 +45,8 @@ class YouTubeBufferStream extends Readable {
             '--no-playlist',
             '--no-warnings',
             '--no-update',
+            '--buffer-size', '16k',
+            '--concurrent-fragments', '4',
             ...cookieFlags,
             ...extraFlags,
             '-o', '-',
@@ -159,8 +161,27 @@ class YouTubeBufferStream extends Readable {
         if (callback) callback(err);
     }
 
-    waitUntilReady() {
-        return this.readyPromise;
+    waitUntilReady(timeoutMs = 30000) {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                if (this._rejectReady) {
+                    const rejectFn = this._rejectReady;
+                    this._rejectReady = null;
+                    this._resolveReady = null;
+                    rejectFn(new Error('Timeout de 30s aguardando stream do YouTube'));
+                }
+            }, timeoutMs);
+
+            this.readyPromise
+                .then((val) => {
+                    clearTimeout(timer);
+                    resolve(val);
+                })
+                .catch((err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                });
+        });
     }
 }
 
