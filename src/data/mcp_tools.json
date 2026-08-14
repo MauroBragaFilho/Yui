@@ -401,5 +401,28 @@
         "required": []
       }
     }
+  },
+  {
+    "meta": {
+      "label": "🎧 Identificar Música Tocando",
+      "description": "Detecta e baixa a música que o usuário está ouvindo no Spotify, YouTube Music ou Metrolist via Rich Presence",
+      "disableable": true
+    },
+    "type": "function",
+    "function": {
+      "name": "get_current_music",
+      "description": "Detecta e baixa a música que o usuário que enviou a mensagem está ouvindo no seu próprio status do Discord (Spotify, etc.). Use APENAS quando o usuário perguntar ou pedir explicitamente sobre o que ELE MESMO está escutando no status (ex: 'oq eu to escutando', 'baixa a música do meu status', 'qual musica eu to ouvindo'). NUNCA use se o usuário estiver apenas conversando, fazendo perguntas gerais, ou perguntando se você (Hikari) está ouvindo/escutando algo.",
+      "textual_triggers": "Gatilhos estritos: \"oq eu to escutando\", \"o que eu to ouvindo?\", \"qual musica eu to escutando?\", \"baixe a musica que eu to escutando\", \"baixa a musica do meu status\", \"baixa do meu spotify\".",
+      "textual_args": "{ \"download\": true }",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "download": {
+            "type": "boolean",
+            "description": "Se true (padrão), baixa automaticamente a música identificada."
+          }
+        }
+      }
+    }
   }
 ]

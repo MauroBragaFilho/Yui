@@ -124,6 +124,7 @@ Quer mudar minha alma? Tudo o que é importante está em `src/config/index.js`. 
 
 ### 📝 ToDo (Para mim mesmo)
 
+- [ ] Modernizar e corrigir codigos (atualmente)
 - [ ] Adicionar mais funcionalidades (MCPs)
 - [ ] Suporte ao Ollama (é facil, mas preguiça)
 - [ ] Adicionar mais modelos de IA (Fallbacks)

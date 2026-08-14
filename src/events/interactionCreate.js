@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, 
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { getCurrentMusicFromUser } = require('../services/activityMusicService');
 const { handleTosInteraction } = require('../handlers/tosHandler');
 const { handleBanInteraction, checkBan, addBan, removeBan, getBans, setAutoBlock } = require('../handlers/banHandler');
 const {
@@ -152,10 +153,15 @@ module.exports = {
                     return await interaction.editReply({ content: `❌ ${result.error}` });
                 }
                 if (result.success) {
-                    await interaction.editReply({
+                    const keepEmbed = config.keepMusicEmbed !== false;
+                    const replyPayload = {
                         content: `✅ Música baixada: \`${result.track.title} - ${result.track.artist}\``,
-                        files: [result.attachment]
-                    });
+                        files: [result.attachment],
+                    };
+                    if (keepEmbed && result.infoEmbed) {
+                        replyPayload.embeds = [result.infoEmbed];
+                    }
+                    await interaction.editReply(replyPayload);
                     if (typeof result.cleanup === 'function') {
                         result.cleanup();
                     }
@@ -426,6 +432,22 @@ module.exports = {
                     .filter(c => c.value.includes(focused) || c.name.toUpperCase().includes(focused))
                     .slice(0, 25);
                 return interaction.respond(filtered);
+            }
+            if (interaction.commandName === 'baixar_musica_atual') {
+                const focused = interaction.options.getFocused().toLowerCase();
+                const members = interaction.guild ? Array.from(interaction.guild.members.cache.values()) : [];
+                const choices = members
+                    .filter(m => !m.user.bot)
+                    .map(m => {
+                        const name = m.displayName || m.user.globalName || m.user.username;
+                        return {
+                            name: `${name} (@${m.user.username})`,
+                            value: m.user.id
+                        };
+                    })
+                    .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
+                    .slice(0, 25);
+                return interaction.respond(choices);
             }
             return;
         }
@@ -857,6 +879,67 @@ module.exports = {
             } catch (err) {
                 console.error('[ModoRadio]', err);
                 await interaction.editReply({ content: '❌ Erro ao iniciar o Modo Rádio.' });
+            }
+        } else if (commandName === 'baixar_musica_atual') {
+            await interaction.deferReply();
+            try {
+                const targetInput = interaction.options.getString('usuario') || interaction.user.id;
+                const musicInfo = await getCurrentMusicFromUser(targetInput, client, interaction.guildId);
+                if (!musicInfo.success) {
+                    let msg = `🎵 ${musicInfo.message}`;
+                    if (musicInfo.helpInstructions || musicInfo.reason === 'no_presence') {
+                        msg += '\n\n> **Como ativar:**\n> Vá em **Configurações do Discord → Privacidade e Segurança → Atividade de Status** e ative **"Exibir atividade atual como mensagem de status"**.';
+                    }
+                    return await interaction.editReply({ content: msg });
+                }
+                const infoEmbed = new EmbedBuilder()
+                    .setColor(0x1DB954)
+                    .setTitle(`${musicInfo.platformEmoji} Música Identificada`)
+                    .setDescription(`**${musicInfo.title}**\n🎤 ${musicInfo.artist}${musicInfo.album ? `\n📀 ${musicInfo.album}` : ''}`)
+                    .addFields({ name: 'Plataforma', value: musicInfo.platformLabel, inline: true });
+                if (musicInfo.targetUser && musicInfo.targetUser.id !== interaction.user.id) {
+                    infoEmbed.addFields({ name: 'Usuário', value: `<@${musicInfo.targetUser.id}>`, inline: true });
+                }
+                infoEmbed.setFooter({ text: `Hikari Music • ${musicInfo.platformLabel}` }).setTimestamp();
+                if (musicInfo.coverUrl) infoEmbed.setThumbnail(musicInfo.coverUrl);
+                const userId = interaction.user.id;
+                if (!canBypass(userId) && isUserBusy(userId)) {
+                    return await interaction.editReply({ content: '⏳ Você já tem um download em andamento. Aguarde.' });
+                }
+                const keepEmbed = config.keepMusicEmbed !== false;
+                const downloadingEmbed = EmbedBuilder.from(infoEmbed);
+                if (keepEmbed) {
+                    downloadingEmbed.addFields({ name: 'Status', value: '⏳ Baixando música, aguarde...', inline: true });
+                }
+                await interaction.editReply({ embeds: [downloadingEmbed] });
+                lockUser(userId);
+                try {
+                    const musicResult = await handleMusicSearchAndDownload(
+                        musicInfo.searchQuery,
+                        null,
+                        { user: interaction.user, userId, userTag: interaction.user.tag, guild: interaction.guild }
+                    );
+                    if (musicResult.error) {
+                        await interaction.editReply({ content: `❌ ${musicResult.error}`, embeds: [] });
+                    } else if (musicResult.isAmbiguous) {
+                        await interaction.editReply({ content: musicResult.textList, components: musicResult.components, embeds: [musicResult.embed] });
+                    } else if (musicResult.success) {
+                        if (keepEmbed) {
+                            await interaction.editReply({ content: `✅ \`${musicResult.track.title} - ${musicResult.track.artist}\``, embeds: [infoEmbed], files: [musicResult.attachment] });
+                        } else {
+                            await interaction.editReply({ content: `✅ \`${musicResult.track.title} - ${musicResult.track.artist}\``, embeds: [], files: [musicResult.attachment] });
+                        }
+                        if (typeof musicResult.cleanup === 'function') musicResult.cleanup();
+                    }
+                } catch (err) {
+                    console.error('[IdentificarMusica]', err);
+                    await interaction.followUp({ content: `\u274C Erro ao baixar: ${err.message}` });
+                } finally {
+                    unlockUser(userId);
+                }
+            } catch (err) {
+                console.error('[IdentificarMusica]', err);
+                await interaction.editReply({ content: '\u274C Erro interno.' });
             }
         }
     },

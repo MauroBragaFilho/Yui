@@ -106,10 +106,10 @@ module.exports = {
                     envInfo = `Servidor: ${message.guild?.name || 'DM'} | Canal: #${message.channel?.name || 'Chat'}\n`;
                 }
                 const finalPrompt = `
---- CONTEXTO DO CHAT ---
+--- CONTEXTO E HISTÓRICO DO CHAT ---
 Data e hora atual: ${currentDate}
 ${envInfo}${history.join('\n')}
---- FIM DO CONTEXTO ---
+--- FIM DO CONTEXTO E HISTÓRICO ---
 --- MENSAGEM ATUAL ---
 ${message.author.username} (${message.author.id}): "${currentUserPrompt}"
 INSTRUÇÃO: Responda diretamente à mensagem atual considerando o contexto.`;

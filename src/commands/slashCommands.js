@@ -328,6 +328,16 @@ const commands = [
             .setName('modo-radio')
             .setDescription('[User] Ativa o Modo Rádio de Música.')
     ),
+    setGlobalContext(
+        new SlashCommandBuilder()
+            .setName('baixar_musica_atual')
+            .setDescription('[User] Baixa a música que você ou outro usuário está ouvindo (Spotify/YT Music/Metrolist).')
+            .addStringOption(option =>
+                option.setName('usuario')
+                    .setDescription('Usuário (menção ou ID do Discord) para checar a música (opcional)')
+                    .setAutocomplete(true)
+                    .setRequired(false))
+    ),
 ].map(command => command.toJSON());
 
 async function registerCommands(client, rest) {

@@ -189,7 +189,7 @@ function buildToolsDefinition(guildId, userId = null) {
     for (const t of activeTools) {
         const f = t.function;
         if (!f.textual_triggers) continue;
-        toolList += `\n${idx}. **${f.name}**: ${f.description.split('.')[0]}.\n`;
+        toolList += `\n${idx}. **${f.name}**: ${f.description}\n`;
         toolList += `   - ${f.textual_triggers}\n`;
         toolList += `   - Args: ${f.textual_args}\n`;
         idx++;
@@ -203,6 +203,7 @@ function buildToolsDefinition(guildId, userId = null) {
         generate_image:  'User: "gera uma imagem de um gato spacial"\nResponse: { "thought": "User quer uma imagem gerada por IA.", "tool": "generate_image", "args": { "prompt": "a space cat floating in galaxy, cinematic, detailed fur, neon lights", "negative_prompt": "nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18" } }',
         check_steam:     'User: "Elden Ring ta em promo na steam?"\nResponse: { "thought": "User quer saber preço de Elden Ring.", "tool": "check_steam", "args": { "game": "Elden Ring" } }',
         convert_currency:'User: "quanto ta 50 dolares em reais?"\nResponse: { "thought": "User quer converter 50 USD para BRL.", "tool": "convert_currency", "args": { "amount": 50, "from": "USD", "to": "BRL" } }',
+        get_current_music:'User: "Hikari, baixe a musica do meu status"\nResponse: { "thought": "User quer baixar música tocando no seu status.", "tool": "get_current_music", "args": { "download": true } }\nUser: "oq eu to escutando no status"\nResponse: { "thought": "User quer saber música do seu status.", "tool": "get_current_music", "args": { "download": true } }',
     };
     for (const [name, example] of Object.entries(examplesMap)) {
         if (!disabled.includes(name)) exampleList += `\n${example}\n`;
@@ -378,6 +379,9 @@ function getHistory(channelId) {
 function setDiscordClient(client) {
     discordClient = client;
 }
+function getDiscordClient() {
+    return discordClient;
+}
 function setOnQueueUpdate(callback) {
     onQueueUpdateCallback = callback;
     notifyQueueUpdate();
@@ -441,7 +445,7 @@ function stripThinking(text) {
     text = text.replace(/(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?\w+\([^]*?\)\)?(?:[\s\n]*```)?/gi, '');
     const mcpToolNames = ['search_game', 'search_web', 'generate_reply', 'download_audio', 'download_video', 'generate_image', 'check_steam', 'convert_currency', 'show_bot_menu', 'ia_automod', 'join_voice_call', 'leave_voice_call', 'default_api'];
     const toolMentionRegex = new RegExp('(?:`?' + mcpToolNames.join('`?|`?') + '`?)', 'i');
-    const thinkingIndicators = /(?:ferramenta|a resposta deve|a mais adequada|o melhor seria|esta pergunta|o usu[aá]rio|preciso (?:saber|analisar|verificar)|vou (?:usar|chamar|analisar)|devo (?:usar|chamar)|(?:é|seria|pode ser) (?:genéric[oa]|específic[oa]))/i;
+    const thinkingIndicators = /(?:usar a ferramenta|chamar a ferramenta|a resposta deve ser|a ferramenta mais adequada|o melhor seria usar|preciso (?:saber|analisar|verificar)|vou (?:usar|chamar)|devo (?:usar|chamar))\b/i;
     if (toolMentionRegex.test(text) && thinkingIndicators.test(text)) {
         console.log('[StripThinking] Detectado vazamento de raciocínio MCP no texto.');
         const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
@@ -469,8 +473,7 @@ function stripThinking(text) {
                 return lines[i];
             }
         }
-        console.warn('[StripThinking] Não foi possível extrair resposta limpa do raciocínio MCP.');
-        return '';
+        console.warn('[StripThinking] Não foi possível isolar raciocínio MCP. Mantendo resposta original.');
     }
     let clean = text.trim();
     if (/^[\(\[\*]*\s*(?:thought|thinking|pensamento|pensamentos|thinking\s+process|racioc[íi]nio|plan|planejamento)s?[\*\)\]]*\s*:?/i.test(clean)) {
@@ -1695,6 +1698,77 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         savePromptToHistory(prompt, userTag, userId, `[TOOL: DOWNLOAD_AUDIO]`, interaction);
                         return;
                     }
+                    if (toolData.tool === 'get_current_music') {
+                        const { getCurrentMusicFromUser } = require('../services/activityMusicService');
+                        const discordClient = getDiscordClient();
+                        const musicInfo = await getCurrentMusicFromUser(userId, discordClient);
+                        if (!musicInfo.success) {
+                            let msg = `🎵 ${musicInfo.message}`;
+                            if (musicInfo.helpInstructions || musicInfo.reason === 'no_presence') {
+                                msg += '\n\n> **Como ativar:**\n> Vá em **Configurações do Discord → Privacidade e Segurança → Atividade de Status** e ative a opção **"Exibir atividade atual como mensagem de status"**.';
+                            }
+                            await unifiedReply(msg);
+                            savePromptToHistory(prompt, userTag, userId, `[TOOL: GET_CURRENT_MUSIC - FAIL:${musicInfo.reason}]`, interaction);
+                            return;
+                        }
+                        const infoEmbed = new EmbedBuilder()
+                            .setColor(0x1DB954)
+                            .setTitle(`${musicInfo.platformEmoji} Música Identificada`)
+                            .setDescription(`**${musicInfo.title}**\n🎤 ${musicInfo.artist}${musicInfo.album ? `\n💿 ${musicInfo.album}` : ''}`)
+                            .addFields({ name: 'Plataforma', value: musicInfo.platformLabel, inline: true })
+                            .setFooter({ text: `Hikari Music • ${musicInfo.platformLabel}` })
+                            .setTimestamp();
+                        if (musicInfo.coverUrl) infoEmbed.setThumbnail(musicInfo.coverUrl);
+                        const musicUserId = userId;
+                        if (!canBypass(musicUserId) && isUserBusy(musicUserId)) {
+                            await unifiedReply('⏳ Você já tem um download em andamento. Aguarde.');
+                            return;
+                        }
+                        lockUser(musicUserId);
+                        try {
+                            const keepEmbed = config.keepMusicEmbed !== false;
+                            const downloadingEmbed = EmbedBuilder.from(infoEmbed);
+                            if (keepEmbed) {
+                                downloadingEmbed.addFields({ name: 'Status', value: '⏳ Baixando música, aguarde...', inline: true });
+                            }
+                            await unifiedReply(null, [], [], [downloadingEmbed]);
+                            const musicResult = await handleMusicSearchAndDownload(
+                                musicInfo.searchQuery,
+                                null,
+                                { user: interaction.user, userId, userTag, guild: interaction.guild, infoEmbed: keepEmbed ? infoEmbed : null, forceDownload: true }
+                            );
+                            if (musicResult.error) {
+                                await unifiedReply(`❌ ${musicResult.error}`);
+                            } else if (musicResult.isAmbiguous) {
+                                const noMatchEmbed = EmbedBuilder.from(infoEmbed)
+                                    .spliceFields(0, 25)
+                                    .addFields(
+                                        { name: 'Plataforma', value: musicInfo.platformLabel, inline: true },
+                                        { name: 'Aviso', value: '⚠️ Não encontrei um arquivo compatível. Escolha abaixo:', inline: false }
+                                    );
+                                await unifiedReply(musicResult.textList, [], musicResult.components, [noMatchEmbed]);
+                            } else if (musicResult.success) {
+                                const finalEmbed = EmbedBuilder.from(infoEmbed).spliceFields(0, 25)
+                                    .addFields({ name: 'Plataforma', value: musicInfo.platformLabel, inline: true });
+                                if (musicResult.lowConfidence) {
+                                    finalEmbed.addFields({ name: 'Aviso', value: '⚠️ Correspondência baixa — pode não ser o arquivo exato.', inline: false });
+                                }
+                                if (keepEmbed) {
+                                    await unifiedReply(`✅ \`${musicResult.track.title} - ${musicResult.track.artist}\``, [musicResult.attachment], [], [finalEmbed]);
+                                } else {
+                                    await unifiedReply(`✅ \`${musicResult.track.title} - ${musicResult.track.artist}\``, [musicResult.attachment]);
+                                }
+                                if (typeof musicResult.cleanup === 'function') musicResult.cleanup();
+                            }
+                        } catch (err) {
+                            console.error('[GetCurrentMusic] Erro:', err.message);
+                            await unifiedReply(`❌ Erro ao baixar a música: ${err.message}`);
+                        } finally {
+                            unlockUser(musicUserId);
+                        }
+                        savePromptToHistory(prompt, userTag, userId, `[TOOL: GET_CURRENT_MUSIC - ${musicInfo.title}]`, interaction);
+                        return;
+                    }
                     if (toolData.tool === 'search_and_download_music') {
                         const musicUserId = userId;
                         if (!canBypass(musicUserId) && isUserBusy(musicUserId)) {
@@ -1719,7 +1793,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             if (musicResult.error) {
                                 await unifiedReply(`❌ ${musicResult.error}`);
                             } else if (musicResult.isAmbiguous) {
-                                await unifiedReply(musicResult.textList, [], musicResult.components, []);
+                                await unifiedReply(musicResult.textList, [], musicResult.components, [musicResult.embed]);
                             } else if (musicResult.success) {
                                 await unifiedReply(`✅ Música: \`${musicResult.track.title} - ${musicResult.track.artist}\``, [musicResult.attachment]);
                                 if (typeof musicResult.cleanup === 'function') {
@@ -2315,6 +2389,88 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
             } else {
                 return;
             }
+        }
+
+        const cleanPromptLower = (prompt || '').toLowerCase().trim();
+        const hasUrl = /https?:\/\//i.test(cleanPromptLower);
+        const isAskingHikari = /(?:voc[eê]|vc|hikari|bot)\s+t[aá]\s+(?:me\s+)?(escutando|ouvindo)|t[aá]\s+me\s+(escutando|ouvindo)|t[aá]\s+ouvindo\s+(?:a\s+gente|n[oó]s)/i.test(cleanPromptLower);
+        const isCurrentMusicIntent = !hasUrl && !isAskingHikari && (
+            /(?:oq|o\s+que|qual\s+m[uú]sica|baixa|puxa|identifica|salva)\s+.*(?:eu\s+t[oô]|eu\s+estou)\s+(escutando|ouvindo)/i.test(cleanPromptLower) ||
+            /(?:oq|o\s+que|qual\s+m[uú]sica)\s+(?:eu\s+)?t[oô]\s+(escutando|ouvindo)/i.test(cleanPromptLower) ||
+            /baixa\s+.*(?:do\s+meu\s+status|do\s+meu\s+spotify|que\s+eu\s+t[oô]\s+(?:escutando|ouvindo))/i.test(cleanPromptLower) ||
+            /(?:minha\s+m[uú]sica\s+do\s+status|m[uú]sica\s+do\s+meu\s+status)/i.test(cleanPromptLower)
+        );
+
+        if (isCurrentMusicIntent) {
+            const { getCurrentMusicFromUser } = require('../services/activityMusicService');
+            const discordClient = getDiscordClient();
+            const musicInfo = await getCurrentMusicFromUser(userId, discordClient);
+            if (!musicInfo.success) {
+                let msg = `🎵 ${musicInfo.message}`;
+                if (musicInfo.helpInstructions || musicInfo.reason === 'no_presence') {
+                    msg += '\n\n> **Como ativar:**\n> Vá em **Configurações do Discord → Privacidade e Segurança → Atividade de Status** e ative a opção **"Exibir atividade atual como mensagem de status"**.';
+                }
+                await unifiedReply(msg);
+                savePromptToHistory(prompt, userTag, userId, `[TOOL: DETERMINISTIC_GET_CURRENT_MUSIC - FAIL:${musicInfo.reason}]`, interaction);
+                return;
+            }
+            const infoEmbed = new EmbedBuilder()
+                .setColor(0x1DB954)
+                .setTitle(`${musicInfo.platformEmoji} Música Identificada`)
+                .setDescription(`**${musicInfo.title}**\n🎤 ${musicInfo.artist}${musicInfo.album ? `\n💿 ${musicInfo.album}` : ''}`)
+                .addFields({ name: 'Plataforma', value: musicInfo.platformLabel, inline: true })
+                .setFooter({ text: `Hikari Music • ${musicInfo.platformLabel}` })
+                .setTimestamp();
+            if (musicInfo.coverUrl) infoEmbed.setThumbnail(musicInfo.coverUrl);
+            const musicUserId = userId;
+            if (!canBypass(musicUserId) && isUserBusy(musicUserId)) {
+                await unifiedReply('⏳ Você já tem um download em andamento. Aguarde.');
+                return;
+            }
+            lockUser(musicUserId);
+            try {
+                const keepEmbed = config.keepMusicEmbed !== false;
+                const downloadingEmbed = EmbedBuilder.from(infoEmbed);
+                if (keepEmbed) {
+                    downloadingEmbed.addFields({ name: 'Status', value: '⏳ Baixando música, aguarde...', inline: true });
+                }
+                await unifiedReply(null, [], [], [downloadingEmbed]);
+                const musicResult = await handleMusicSearchAndDownload(
+                    musicInfo.searchQuery,
+                    null,
+                    { user: interaction.user, userId, userTag, guild: interaction.guild, infoEmbed: keepEmbed ? infoEmbed : null, forceDownload: true }
+                );
+                if (musicResult.error) {
+                    await unifiedReply(`❌ ${musicResult.error}`);
+                } else if (musicResult.isAmbiguous) {
+                    const noMatchEmbed = EmbedBuilder.from(infoEmbed)
+                        .spliceFields(0, 25)
+                        .addFields(
+                            { name: 'Plataforma', value: musicInfo.platformLabel, inline: true },
+                            { name: 'Aviso', value: '⚠️ Não encontrei um arquivo compatível. Escolha abaixo:', inline: false }
+                        );
+                    await unifiedReply(musicResult.textList, [], musicResult.components, [noMatchEmbed]);
+                } else if (musicResult.success) {
+                    const finalEmbed = EmbedBuilder.from(infoEmbed).spliceFields(0, 25)
+                        .addFields({ name: 'Plataforma', value: musicInfo.platformLabel, inline: true });
+                    if (musicResult.lowConfidence) {
+                        finalEmbed.addFields({ name: 'Aviso', value: '⚠️ Correspondência baixa — pode não ser o arquivo exato.', inline: false });
+                    }
+                    if (keepEmbed) {
+                        await unifiedReply(`✅ \`${musicResult.track.title} - ${musicResult.track.artist}\``, [musicResult.attachment], [], [finalEmbed]);
+                    } else {
+                        await unifiedReply(`✅ \`${musicResult.track.title} - ${musicResult.track.artist}\``, [musicResult.attachment]);
+                    }
+                    if (typeof musicResult.cleanup === 'function') musicResult.cleanup();
+                }
+            } catch (err) {
+                console.error('[GetCurrentMusic] Erro:', err.message);
+                await unifiedReply(`❌ Erro ao baixar a música: ${err.message}`);
+            } finally {
+                unlockUser(musicUserId);
+            }
+            savePromptToHistory(prompt, userTag, userId, `[TOOL: DETERMINISTIC_GET_CURRENT_MUSIC - ${musicInfo.title}]`, interaction);
+            return;
         }
 
         if (processedResponse) {

@@ -29,9 +29,14 @@ async function handleMusicSearchAndDownload(query, selectedIndex = null, context
         }
 
         const chosenTrack = session.results[idx];
+        const savedInfoEmbed = session.infoEmbed || null;
         musicSessions.delete(userId);
 
-        return await executeDownloadAndPackage(chosenTrack);
+        const result = await executeDownloadAndPackage(chosenTrack);
+        if (result.success && savedInfoEmbed) {
+            result.infoEmbed = savedInfoEmbed;
+        }
+        return result;
     }
 
     const results = await searchDeezerTracks(query);
@@ -42,6 +47,14 @@ async function handleMusicSearchAndDownload(query, selectedIndex = null, context
     const topResult = results[0];
     const topScore = calculateConfidenceScore(query, topResult);
 
+    if (context.forceDownload) {
+        const result = await executeDownloadAndPackage(topResult);
+        if (result.success && topScore < 40) {
+            result.lowConfidence = true;
+        }
+        return result;
+    }
+
     if (topScore >= 80) {
         return await executeDownloadAndPackage(topResult);
     }
@@ -49,6 +62,7 @@ async function handleMusicSearchAndDownload(query, selectedIndex = null, context
     musicSessions.set(userId, {
         query,
         results,
+        infoEmbed: context.infoEmbed || null,
         timestamp: Date.now()
     });
 

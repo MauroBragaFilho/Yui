@@ -14,6 +14,7 @@ const defaultValues = {
     appealChannelId: '1483987324869017662',
     requireTos: false,
     saveHistory: true,
+    keepMusicEmbed: true, // teste
     defaultAutoMod: true,
     automodMode: 'both',
     sendEnvironmentInfo: true,
@@ -50,6 +51,7 @@ const envMap = {
     APPEAL_CHANNEL_ID: 'appealChannelId',
     REQUIRE_TOS: 'requireTos',
     SAVE_HISTORY: 'saveHistory',
+    KEEP_MUSIC_EMBED: 'keepMusicEmbed',
     DEFAULT_AUTOMOD: 'defaultAutoMod',
     AUTOMOD_MODE: 'automodMode',
     SEND_ENVIRONMENT_INFO: 'sendEnvironmentInfo',
