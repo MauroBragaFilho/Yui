@@ -1217,11 +1217,34 @@ async function generateResponse(prompt, channelId = null, options = {}) {
         { func: tryHuggingFace, supportsSearch: false },
         { func: tryKoboldHorde, supportsSearch: false }
     ];
-    const guildId = options.guildId || null;
+    const guildId = options.guildId || options.guild?.id || null;
     const serverCustomPrompt = getServerPrompt(guildId);
     let baseSystemPrompt = (serverCustomPrompt || config.systemPrompt) + "\n[IMAGEM/VISÃO]: Você CONSEGUE gerar imagens novas do zero usando a ferramenta generate_image — basta o usuário descrever o que quer. Se o pedido for vago (ex: 'faz uma imagem do server'), crie um prompt criativo baseado no contexto (nome do server, tema da conversa, etc.) e gere a imagem. Porém, você NÃO tem visão computacional: não consegue ver, analisar, editar ou descrever imagens que os usuários enviam. Se pedirem para editar/alterar uma imagem existente, explique que só pode gerar artes novas.\n[ANTI-REPETIÇÃO]: NUNCA repita a mesma frase ou resposta idêntica em mensagens consecutivas. Se já disse algo parecido antes, reformule completamente usando palavras diferentes. Varie seu vocabulário e estrutura. Respostas repetitivas são proibidas.";
     if (config.sendEnvironmentInfo && (options.guildName || options.channelName)) {
         baseSystemPrompt += `\n[CONTEXTO DO AMBIENTE]: Você está conversando no servidor Discord "${options.guildName || 'DM'}" no canal/chat "#${options.channelName || 'Chat'}".`;
+    }
+    if (guildId) {
+        try {
+            const { getSession } = require('../music/radioDatabase');
+            const radioSession = getSession(guildId);
+            if (radioSession && (radioSession.status === 'PLAYING' || radioSession.status === 'PAUSED' || radioSession.status === 'BUFFERING') && radioSession.currentTrack) {
+                const track = radioSession.currentTrack;
+                const statusStr = radioSession.status === 'PAUSED' ? 'pausada' : radioSession.status === 'BUFFERING' ? 'carregando' : 'tocando';
+                const posStr = radioSession.currentIndex >= 0 ? `#${radioSession.currentIndex + 1}` : '';
+                const totalStr = Array.isArray(radioSession.playlist) ? `${radioSession.playlist.length}` : '0';
+                let musicInfo = `\n[MODO RÁDIO / MÚSICA ATUAL NO SERVIDOR]:\n- Você está conectada na chamada de voz deste servidor com o Modo Rádio ativo.\n- Status da reprodução: ${statusStr}.\n- Faixa atual (${posStr} de ${totalStr}): "${track.title}" — Artista: "${track.artist}"`;
+                if (track.album) musicInfo += ` (Álbum: "${track.album}")`;
+                if (Array.isArray(radioSession.playlist) && radioSession.playlist.length > 1) {
+                    const nextIdx = radioSession.currentIndex + 1;
+                    if (nextIdx < radioSession.playlist.length) {
+                        const nextTrack = radioSession.playlist[nextIdx];
+                        musicInfo += `.\n- Próxima música da fila: "${nextTrack.title}" — Artista: "${nextTrack.artist}"`;
+                    }
+                }
+                musicInfo += `.\n[INSTRUÇÕES SOBRE O MODO RÁDIO NO CHAT]:\n1) Se o usuário perguntar o que está tocando, qual música é essa, quem está cantando ou sobre a playlist atual, responda informando os dados acima de forma natural.\n2) Se o usuário pedir no chat para você controlar o rádio (ex: pular música, pausar, passar para a próxima, parar) ou adicionar/tocar uma música nova no rádio, informe a ele que para controlar ou adicionar músicas no rádio ele deve usar os botões do menu do Modo Rádio (o painel de embed) ou o comando de voz na call.`;
+                baseSystemPrompt += musicInfo;
+            }
+        } catch (_) {}
     }
     baseSystemPrompt += "\n[REGRAS DE CONTRATO E LIMITAÇÕES]:\n1) Você NÃO tem acesso a configurações internas do servidor, cargos, lista de membros, logs de auditoria ou regras específicas do servidor. Se o usuário perguntar sobre regras do servidor ou informações internas que você não tem como acessar, responda claramente dizendo 'eu não sei' ou que não tem acesso a essas informações.\n2) Seu projeto é de código aberto (open-source) e seu código-fonte/repositório oficial está disponível no GitHub em: https://github.com/yGuilhermy/Hikari. Se o usuário solicitar o link do seu código ou repositório, cite e forneça este link.\n3) Se encontrar 'Você (Hikari): erro da ia' ou 'assistant: erro da ia' no histórico, isso significa que sua resposta anterior falhou por erro técnico. Peça desculpas casualmente e pergunte o que o usuário deseja novamente.";
     if (channelId) {
