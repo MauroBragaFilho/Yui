@@ -93,11 +93,17 @@ module.exports = {
                 });
                 const sortedMessages = [...messageMap.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
                 for (const msg of sortedMessages) {
-                    const authorName = msg.author.id === client.user.id ? 'Você (Hikari)' : `${msg.author.username} (${msg.author.id})`;
+                    const isBot = msg.author.id === client.user.id;
+                    const authorName = isBot ? 'Hikari' : msg.author.username;
                     let content = resolveMentions(msg.content, client);
-                    if (msg.author.id === client.user.id && (content.includes('erro ao processar seu pedido') || content.includes('Limites de Processamento Atingidos') || content.includes('Desculpe, tive um erro'))) {
+                    if (isBot && (content.includes('erro ao processar seu pedido') || content.includes('Limites de Processamento Atingidos') || content.includes('Desculpe, tive um erro'))) {
                         content = 'erro da ia';
                     }
+                    if (isBot) {
+                        content = content.replace(/^-# .*$/gm, '').replace(/🧠 \*\*Processando\.\.\.\*\*/g, '').trim();
+                    }
+                    if (content.trim().length === 0) continue;
+                    if (content.length > 500) content = content.substring(0, 500) + '...';
                     history.push(`${authorName}: ${content}`);
                 }
                 const currentDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -105,14 +111,7 @@ module.exports = {
                 if (config.sendEnvironmentInfo) {
                     envInfo = `Servidor: ${message.guild?.name || 'DM'} | Canal: #${message.channel?.name || 'Chat'}\n`;
                 }
-                const finalPrompt = `
---- CONTEXTO E HISTÓRICO DO CHAT ---
-Data e hora atual: ${currentDate}
-${envInfo}${history.join('\n')}
---- FIM DO CONTEXTO E HISTÓRICO ---
---- MENSAGEM ATUAL ---
-${message.author.username} (${message.author.id}): "${currentUserPrompt}"
-INSTRUÇÃO: Responda diretamente à mensagem atual considerando o contexto.`;
+                const finalPrompt = `--- CONTEXTO ---\nData: ${currentDate}\n${envInfo}${history.join('\n')}\n--- MENSAGEM ATUAL ---\n${message.author.username}: "${currentUserPrompt}"\nINSTRUÇÃO: Responda diretamente à mensagem atual. Não repita o que o usuário disse nem o que você disse antes.`;
                 if (currentUserPrompt.length > 0 || message.attachments.size > 0) {
                     addToQueue(finalPrompt, message, 'mention', { allowSearch: true, searchPrompt: currentUserPrompt, guildId: message.guildId });
                 } else {
@@ -152,27 +151,28 @@ INSTRUÇÃO: Responda diretamente à mensagem atual considerando o contexto.`;
                         const history = [];
                         const recentMessages = await message.channel.messages.fetch({ limit: 5, before: message.id });
                         [...recentMessages.values()].reverse().forEach(msg => {
-                            const authorName = msg.author.id === client.user.id ? 'Você (Hikari)' : `${msg.author.username} (${msg.author.id})`;
+                            const isBot = msg.author.id === client.user.id;
+                            const authorName = isBot ? 'Hikari' : msg.author.username;
                             let content = resolveMentions(msg.content, client);
-                            if (msg.author.id === client.user.id && (content.includes('erro ao processar seu pedido') || content.includes('Limites de Processamento Atingidos') || content.includes('Desculpe, tive um erro'))) {
+                            if (isBot && (content.includes('erro ao processar seu pedido') || content.includes('Limites de Processamento Atingidos') || content.includes('Desculpe, tive um erro'))) {
                                 content = 'erro da ia';
                             }
+                            if (isBot) {
+                                content = content.replace(/^-# .*$/gm, '').replace(/🧠 \*\*Processando\.\.\.\*\*/g, '').trim();
+                            }
+                            if (content.trim().length === 0) return;
+                            if (content.length > 500) content = content.substring(0, 500) + '...';
                             history.push(`${authorName}: ${content}`);
+
                         });
                         const currentDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         let envInfo = '';
                         if (config.sendEnvironmentInfo) {
                             envInfo = `Servidor: ${message.guild?.name || 'DM'} | Canal: #${message.channel?.name || 'Chat'}\n`;
                         }
-                        const finalPrompt = `
---- CONTEXTO DO CHAT ---
-Data e hora atual: ${currentDate}
-${envInfo}${history.join('\n')}
---- FIM DO CONTEXTO ---
---- MENSAGEM ATUAL ---
-${message.author.username}: "${currentUserPrompt}"
-INSTRUÇÃO: Entre na conversa espontaneamente.`;
+                        const finalPrompt = `--- CONTEXTO ---\nData: ${currentDate}\n${envInfo}${history.join('\n')}\n--- MENSAGEM ATUAL ---\n${message.author.username}: "${currentUserPrompt}"\nINSTRUÇÃO: Entre na conversa espontaneamente sem repetir o que foi dito.`;
                         addToQueue(finalPrompt, message, 'mention', { allowSearch: true, searchPrompt: currentUserPrompt, guildId: message.guildId });
+
                     } catch (error) {
                         console.error(error);
                     }

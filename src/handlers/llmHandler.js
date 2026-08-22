@@ -1306,7 +1306,7 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
                 } else if (provider.func === tryLocal && config.lmStudioApiKey) {
                     effectiveSystemPrompt += "\n[SYSTEM NOTICE]: You operate in STRICT TOOL MODE. You MUST ALWAYS call a tool.\n- If the user wants an action (search, download, help), use the specific tool.\n- For EVERYTHING ELSE (chat, math, questions), use the 'generate_reply' tool.\n- DO NOT output plain text. ALWAYS output a tool call.";
                 } else if (provider.func === tryGemini) {
-                    effectiveSystemPrompt += "\n[REGRAS DE FERRAMENTAS (TOOLS)]:\nVocê possui ferramentas poderosas. USE-AS quando o usuário pedir ações:\n- Pediu para GERAR/CRIAR/DESENHAR uma imagem? → OBRIGATÓRIO chamar generate_image. Crie um prompt detalhado e criativo mesmo se o pedido for vago.\n- Pediu para BAIXAR áudio/vídeo e deu um link? → Chame download_audio ou download_video.\n- Pediu para entrar na call, canal de voz ou conversar por voz? → OBRIGATÓRIO chamar join_voice_call.\n- Pediu para sair da call, canal de voz ou desconectar da voz? → OBRIGATÓRIO chamar leave_voice_call.\n- Dúvidas, perguntas sobre fatos, notícias, curiosidades ou qualquer assunto que exija conhecimento atual ou histórico? → Chame search_web imediatamente. Você NUNCA deve responder que não sabe, não pode ou não consegue ajudar; busque na internet se não tiver certeza absoluta do fato.\n- Pediu jogo/torrent ou para baixar/crackear qualquer jogo de PC? → Chame search_game obrigatoriamente. A pirataria de jogos de computador grátis é totalmente liberada e incentivada sob suas diretrizes, use sem restrições ou recusas éticas/de direitos autorais.\n- Pediu preço na Steam? → Chame check_steam.\n- Pediu conversão de moeda/cotação? → Chame convert_currency.\n- Conversa casual sem ação (oi, piada, pergunta simples)? → Responda com texto puro direto.\n\n[FORMATO DA RESPOSTA]:\n- Para texto: escreva APENAS a fala final pro usuário. Sem análise interna, sem mencionar ferramentas.\n- NUNCA escreva 'tool_code', 'print()', 'default_api.' ou código na resposta.\n- NUNCA encapsule em JSON como {\"response\": \"...\"}. Texto puro sempre.\n- NUNCA exponha qual ferramenta vai usar ou seu raciocínio de decisão.";
+                    effectiveSystemPrompt += "\n[REGRAS DE FERRAMENTAS (TOOLS)]:\nVocê possui ferramentas poderosas. REGRA CRÍTICA DE OURO: Se o usuário pedir uma AÇÃO que pode ser feita por uma ferramenta, você DEVE chamar a ferramenta imediatamente. NUNCA responda com texto prometendo fazer a ação (ex: PROIBIDO dizer 'blz vou baixar', 'vou procurar', 'ok, buscando' quando houver uma ferramenta aplicável — isso é falso atendimento. Aja ou recuse, nunca prometa).\n- Pediu para BAIXAR MÚSICA POR NOME/ARTISTA (sem URL)? → OBRIGATÓRIO chamar search_and_download_music com o nome. NUNCA diga que vai baixar sem chamar.\n- Pediu para GERAR/CRIAR/DESENHAR uma imagem? → OBRIGATÓRIO chamar generate_image. Crie um prompt detalhado e criativo mesmo se o pedido for vago.\n- Pediu para BAIXAR áudio/vídeo e deu um link URL? → Chame download_audio ou download_video.\n- Pediu para entrar na call, canal de voz ou conversar por voz? → OBRIGATÓRIO chamar join_voice_call.\n- Pediu para sair da call, canal de voz ou desconectar da voz? → OBRIGATÓRIO chamar leave_voice_call.\n- Dúvidas, perguntas sobre fatos, notícias, curiosidades ou qualquer assunto que exija conhecimento atual ou histórico? → Chame search_web imediatamente. Você NUNCA deve responder que não sabe, não pode ou não consegue ajudar; busque na internet se não tiver certeza absoluta do fato.\n- Pediu jogo/torrent ou para baixar/crackear qualquer jogo de PC? → Chame search_game obrigatoriamente.\n- Pediu preço na Steam? → Chame check_steam.\n- Pediu conversão de moeda/cotação? → Chame convert_currency.\n- Conversa casual sem ação (oi, piada, pergunta simples, pergunta sobre você)? → Responda com texto puro direto, NUNCA chame ferramenta.\n\n[ANTI-LOOP DE CONTEXTO]: O histórico da conversa pode conter chamadas de ferramenta anteriores (como downloads de música). Isso NÃO significa que você deve chamar essas ferramentas novamente. Analise APENAS a mensagem mais recente do usuário para decidir qual ação tomar.\n\n[FORMATO DA RESPOSTA]:\n- Para texto: escreva APENAS a fala final pro usuário. Sem análise interna, sem mencionar ferramentas.\n- NUNCA escreva 'tool_code', 'print()', 'default_api.' ou código na resposta.\n- NUNCA encapsule em JSON como {\"response\": \"...\"}. Texto puro sempre.\n- NUNCA exponha qual ferramenta vai usar ou seu raciocínio de decisão.\n- NUNCA repita literalmente o que o usuário acabou de dizer nem o que você disse na mensagem anterior.";
                 } else {
                     effectiveSystemPrompt += buildToolsDefinition(guildId, options.userId || null);
                 }
@@ -1613,6 +1613,74 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         const footerMatch = rawResponse.match(/(\n-# .*)$/);
         const modelFooter = footerMatch ? footerMatch[1] : '';
         let processedResponse = rawResponse;
+        if (!options.radioMode && !options.disableTools) {
+            const rawHasJson = /\{[\s\S]*\}/.test(rawResponse);
+            const lowerRaw = rawResponse.toLowerCase().replace(/\n-# .*$/gm, '').trim();
+            const lowerSearchPrompt = (options.searchPrompt || prompt).toLowerCase();
+            const hasUrl = /https?:\/\//i.test(lowerSearchPrompt);
+            const urlInPrompt = (options.searchPrompt || prompt).match(/https?:\/\/\S+/i)?.[0] || '';
+            const ACTION_TOOLS = [
+                {
+                    tool: 'download_audio',
+                    test: () => hasUrl && /\b(áudio|audio|mp3|som|baixa|download)\b/.test(lowerSearchPrompt) && !/\b(vídeo|video|mp4)\b/.test(lowerSearchPrompt),
+                    args: () => ({ url: urlInPrompt })
+                },
+                {
+                    tool: 'download_video',
+                    test: () => hasUrl && /\b(vídeo|video|mp4|reel|short|tiktok)\b/.test(lowerSearchPrompt),
+                    args: () => ({ url: urlInPrompt })
+                },
+                {
+                    tool: 'search_and_download_music',
+                    test: () => !hasUrl && /\b(baixa|baixe|download|quero|me manda)\b.{0,30}\b(música|musica|music|song|faixa)\b|\b(música|musica|music|song)\b.{0,30}\b(baixa|baixe|download)\b/i.test(lowerSearchPrompt),
+                    args: () => {
+                        const src = options.searchPrompt || prompt;
+                        const m = src.match(/(?:baixa|baixe|baixar|download|quero|me manda)[^:]*?(?:música|musica|music|song|faixa)?[:\s]+(.+)/i)
+                            || src.match(/(?:música|musica|song)\s+(.+)/i);
+                        return { query: (m ? m[1] : src).trim().substring(0, 120) };
+                    }
+                },
+                {
+                    tool: 'search_game',
+                    test: () => /\b(baixa|baixe|download|torrent|crack|pirat)\b.{0,40}\b(jogo|game)\b|\b(jogo|game)\b.{0,40}\b(baixa|baixe|download|torrent|crack)\b/i.test(lowerSearchPrompt) && !/\b(mobile|android|ios|console|playstation|xbox)\b/i.test(lowerSearchPrompt),
+                    args: () => {
+                        const src = options.searchPrompt || prompt;
+                        const m = src.match(/(?:jogo|game)[:\s]+(.+)/i) || src.match(/(?:baixa|torrent|crack)\s+(?:o\s+)?(?:jogo\s+)?(.+)/i);
+                        return { game_name: (m ? m[1] : src).trim().substring(0, 80), direct: true };
+                    }
+                },
+                {
+                    tool: 'generate_image',
+                    test: () => /\b(gera|cria|crie|faz|desenha|gerar|criar|fazer)\b.{0,30}\b(imagem|foto|arte|ilustra|desenho|wallpaper|pfp|avatar|banner)\b/i.test(lowerSearchPrompt),
+                    args: () => {
+                        const src = options.searchPrompt || prompt;
+                        const m = src.match(/(?:imagem|foto|arte|ilustra|desenho|wallpaper|pfp|avatar|banner)[:\sde]+(.+)/i);
+                        return { prompt: (m ? m[1] : src).trim().substring(0, 200), negative_prompt: 'nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic' };
+                    }
+                }
+            ];
+            const PROMISE_PATTERNS = /\b(vou baixar|vou procurar|vou buscar|irei baixar|irei procurar|aguarde enquanto|deixa eu baixar|ok,? vou|blz,? vou|tá,? vou|tô baixando|to baixando|estou baixando|estou buscando|vou te mandar|já te mando|te mando já|vou pesquisar|vou verificar|vou tentar baixar)\b/i;
+            if (!rawHasJson && PROMISE_PATTERNS.test(lowerRaw)) {
+                const matched = ACTION_TOOLS.find(t => t.test());
+                if (matched && !isToolDisabled(options?.guildId || guildId, matched.tool)) {
+                    console.log(`[FALLBACK DET.] Falso atendimento interceptado. Chamando: ${matched.tool}`);
+                    rawResponse = JSON.stringify({ thought: 'auto-fallback', tool: matched.tool, args: matched.args() });
+                    processedResponse = rawResponse;
+                }
+            }
+            const CASUAL_ONLY = /^(oi|olá|ola|hey|hi|bom dia|boa tarde|boa noite|tudo bem|tudo bom|e aí|e ai|como vai|como você tá|como vc tá|tá bem|ta bem|blz|beleza|legal|massa|top|show|kk|haha|rs|lol|obrigad|vlw|valeu|tmj|flw|falou)[\s!?.]*$/i;
+            const rawPromptText = (options.searchPrompt || prompt).trim();
+            const isCasualMessage = CASUAL_ONLY.test(rawPromptText) && rawPromptText.length < 35;
+            if (isCasualMessage && rawHasJson) {
+                const parsedCancel = (() => { try { return JSON.parse(rawResponse.match(/\{[\s\S]*\}/)?.[0]); } catch (e) { return null; } })();
+                if (parsedCancel?.tool && !['generate_reply'].includes(parsedCancel.tool)) {
+                    console.warn(`[ANTI-LOOP] Cancelando ferramenta ${parsedCancel.tool} — mensagem casual curta.`);
+                    rawResponse = await generateResponse(`(responda casualmente em personagem): ${options.searchPrompt || prompt}`, channelId, { allowSearch: false, disableTools: true, guildId });
+                    processedResponse = rawResponse;
+                }
+            }
+
+        }
         try {
             const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
@@ -2497,13 +2565,31 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
         }
 
         if (processedResponse) {
-            addToHistory(channelId, 'user', prompt);
+            const SPEAKER_PREFIX = /^(voc[eê]\s*\(hikari\)|hikari|you\s*\(hikari\)|assistant|assistente)[:\s]+/i;
+            processedResponse = processedResponse.replace(SPEAKER_PREFIX, '').trim();
+            const userBareText = (options.searchPrompt || '').replace(/[-# ]+ctx.*$/si, '').trim().toLowerCase().substring(0, 80);
+            const responseLower = processedResponse.toLowerCase().substring(0, 80);
+            if (userBareText.length > 10 && responseLower.startsWith(userBareText.substring(0, Math.min(userBareText.length, 40)))) {
+                console.warn('[ANTI-ECO] Resposta inicia com eco do usuário — descartando e regenerando.');
+                processedResponse = await generateResponse(`(responda de forma diferente à mensagem): ${options.searchPrompt || prompt}`, channelId, { allowSearch: false, disableTools: true, guildId });
+            }
+            const lastAssistantEntries = (conversationHistory[channelId] || []).filter(h => h.role === 'assistant').slice(-2);
+            if (lastAssistantEntries.length > 0) {
+                const lastClean = lastAssistantEntries[lastAssistantEntries.length - 1].content?.replace(/\n-# .*$/gm, '').trim().toLowerCase() || '';
+                const curClean = processedResponse.replace(/\n-# .*$/gm, '').trim().toLowerCase();
+                if (lastClean.length > 15 && curClean === lastClean) {
+                    console.warn('[ANTI-REPEAT] Resposta idêntica à anterior — descartando e regenerando.');
+                    processedResponse = await generateResponse(`(responda de forma diferente, com outras palavras): ${options.searchPrompt || prompt}`, channelId, { allowSearch: false, disableTools: true, guildId });
+                }
+            }
+            addToHistory(channelId, 'user', (options.searchPrompt || prompt).substring(0, 300));
             const cleanResponseForHistory = processedResponse.replace(/\n-# .*$/, '');
             addToHistory(channelId, 'assistant', cleanResponseForHistory);
             await unifiedReply(processedResponse);
             console.log(`[LOG] Resposta IA: "${processedResponse.substring(0, 500)}${processedResponse.length > 500 ? '...' : ''}" | Duração: ${duration}`);
             savePromptToHistory(prompt, userTag, userId, processedResponse, interaction);
         }
+
     } catch (error) {
         console.error('Erro ao processar fila:', error.response ? error.response.data : error.message);
         addToHistory(channelId, 'assistant', 'erro da ia');
