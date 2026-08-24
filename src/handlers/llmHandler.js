@@ -2583,11 +2583,25 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                 }
             }
             addToHistory(channelId, 'user', (options.searchPrompt || prompt).substring(0, 300));
+            const floodSingle = /(.)\1{40,}/;
+            const floodAlternating = /(.{1,3})\1{20,}/;
+            if (floodSingle.test(processedResponse) || floodAlternating.test(processedResponse)) {
+                console.warn('[ANTI-FLOOD] Repetição excessiva detectada — colapsando.');
+                processedResponse = processedResponse
+                    .replace(/(.)\1{15,}/g, (_, ch) => ch.repeat(6))
+                    .replace(/(.{1,3})\1{10,}/g, (_, pat) => pat.repeat(4));
+            }
+            if (processedResponse.length > 3900) {
+                const footer = processedResponse.match(/\n-# .*$/)?.[0] || '';
+                processedResponse = processedResponse.substring(0, 3900 - footer.length).trimEnd() + '...' + footer;
+                console.warn('[TRUNCATE] Resposta excedia 3900 chars — truncada antes de enviar.');
+            }
             const cleanResponseForHistory = processedResponse.replace(/\n-# .*$/, '');
             addToHistory(channelId, 'assistant', cleanResponseForHistory);
             await unifiedReply(processedResponse);
             console.log(`[LOG] Resposta IA: "${processedResponse.substring(0, 500)}${processedResponse.length > 500 ? '...' : ''}" | Duração: ${duration}`);
             savePromptToHistory(prompt, userTag, userId, processedResponse, interaction);
+
         }
 
     } catch (error) {
