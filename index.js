@@ -5,7 +5,7 @@ import { Client, GatewayIntentBits, Partials, Collection } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import config from './src/config.js';
+import config from './src/config/index.js';
 import { hookConsoleAndStreams } from './src/utils/logger.js';
 import { startActivityUpdater } from './src/utils/activity.js';
 import { setDiscordClient } from './src/handlers/llmHandler.js';

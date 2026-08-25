@@ -1,7 +1,7 @@
-import axios from 'axios.js';
-import cheerio from 'cheerio.js';
-import fs from 'fs.js';
-import path from 'path.js';
+import axios from 'axios';
+import cheerio from 'cheerio';
+import fs from 'fs';
+import path from 'path';
 import { smartSearch } from './searchManager.js';
 import { AttachmentBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, WebhookClient, ButtonBuilder, ButtonStyle } from 'discord.js';
 import {
@@ -22,7 +22,12 @@ import { convertCurrency } from './currencyHandler.js';
 import { handleMusicSearchAndDownload } from './deezerMusicHandler.js';
 import dotenv from 'dotenv';
 dotenv.config();
-import config from '../config.js';
+import config from '../config/index.js';
+import { getSession } from '../music/radioDatabase.js';
+import { handleRadioMCPCall } from '../music/radioMCPHandler.js';
+import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
+import { buildHelpHomePayload, buildHelpCreatorPayload, buildHelpRulesPayload, buildHelpCommandListPayload } from './helpPanelHandler.js';
+import { joinVoiceCall, leaveVoiceCall } from './voiceHandler.js';
 const geminiCooldowns = {};
 const mcpToolsPath = path.join(__dirname, '../data/mcp_tools.json');
 const TERMS_FILE = path.join(__dirname, '../data/accepted_servers.json');
@@ -1226,7 +1231,6 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     }
     if (guildId) {
         try {
-            import { getSession } from '../music/radioDatabase.js';
             const radioSession = getSession(guildId);
             if (radioSession && (radioSession.status === 'PLAYING' || radioSession.status === 'PAUSED' || radioSession.status === 'BUFFERING') && radioSession.currentTrack) {
                 const track = radioSession.currentTrack;
@@ -1740,7 +1744,6 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         console.log(`[AI THOUGHT] ${toolData.thought}`);
                     }
                     if (options && options.radioMode && toolData.tool && toolData.tool.startsWith('radio_')) {
-                        import { handleRadioMCPCall } from '../music/radioMCPHandler.js';
                         const radioGuildId = options.guildId || interaction.guildId;
                         const radioTextChannel = interaction.radioTextChannel || interaction.channel;
                         const radioUserId = interaction.radioUserId || userId;
@@ -1791,7 +1794,6 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         return;
                     }
                     if (toolData.tool === 'get_current_music') {
-                        import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
                         const discordClient = getDiscordClient();
                         const musicInfo = await getCurrentMusicFromUser(userId, discordClient);
                         if (!musicInfo.success) {
@@ -2075,7 +2077,6 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     }
                     if (toolData.tool === 'show_bot_menu' || toolData.tool === 'get_help') {
                         try {
-                            import { buildHelpHomePayload, buildHelpCreatorPayload, buildHelpRulesPayload, buildHelpCommandListPayload } from './helpPanelHandler.js';
                             let payload;
                             if (toolData.args && toolData.args.context) {
                                 const ctx = toolData.args.context;
@@ -2093,7 +2094,6 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     }
                 }
                 if (toolData.tool === 'join_voice_call') {
-                    import { joinVoiceCall } from './voiceHandler.js';
                     const member = interaction.member;
                     const textChannel = interaction.channel;
                     if (!member) {
@@ -2105,7 +2105,6 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     return;
                 }
                 if (toolData.tool === 'leave_voice_call') {
-                    import { leaveVoiceCall } from './voiceHandler.js';
                     const guildId = interaction.guildId;
                     const textChannel = interaction.channel;
                     if (!guildId) {
@@ -2136,7 +2135,6 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         processedResponse += `\n-# ⏱️ ${duration}`;
                     }
                     if (/yui.*\b(saia|sai|desconecta)\s+(da|do)?\s*(call|voz)\b/i.test(prompt)) {
-                        import { leaveVoiceCall } from './voiceHandler.js';
                         if (interaction.guildId) {
                             await leaveVoiceCall(interaction.guildId, interaction.channel);
                         }
@@ -2463,7 +2461,6 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
             }
 
             if (fallbackTool) {
-                import { handleRadioMCPCall } from '../music/radioMCPHandler.js';
                 const radioGuildId = options.guildId || interaction.guildId;
                 const radioTextChannel = interaction.radioTextChannel || interaction.channel;
                 const radioUserId = interaction.radioUserId || userId;
@@ -2494,7 +2491,6 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
         );
 
         if (isCurrentMusicIntent) {
-            import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
             const discordClient = getDiscordClient();
             const musicInfo = await getCurrentMusicFromUser(userId, discordClient);
             if (!musicInfo.success) {
