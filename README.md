@@ -1,31 +1,141 @@
-# 🤖 GTA Online Updates
+<h1 align="center">🌌 Yui✧</h1>
 
-Bot Discord completo, autônomo e de alta performance para rastreamento de notícias do Rockstar Newswire e eventos diários/semanais do GTA Online.
+<div align="center">
+  <picture>
+    <source
+      width="100%"
+      srcset="https://i.imgur.com/2NTL0Cj.png"
+      media="(prefers-color-scheme: dark)"
+    />
+    <source
+      width="100%"
+      srcset="https://i.imgur.com/2NTL0Cj.png"
+      media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+    />
+    <img width="250" src="https://i.imgur.com/2NTL0Cj.png" alt="Yui Banner" />
+  </picture>
+  <p><i>"Prazer em te conhecer! Eu sou a Yui, sua agente de IA pessoal pro Discord... ✨"</i></p>
 
-Consulte a documentação completa do projeto e arquitetura em: [`.docs/README.md`](file:///d:/Projetos/Bot%20Discord/.docs/README.md)
+  <p align="center">
+    <a href="README.md">
+      <img src="https://img.shields.io/badge/Português-BR-blue?style=for-the-badge" alt="Português">
+    </a>
+    <a href="docs/content_en/README.md">
+      <img src="https://img.shields.io/badge/English-US-red?style=for-the-badge" alt="English">
+    </a>
+  </p>
+</div>
 
 ---
 
-## 🚀 Como Iniciar / Testar no Windows
+### 🎀 O que eu faço? (Funcionalidades)
 
-Basta clicar duas vezes em [`start.bat`](file:///d:/Projetos/Bot%20Discord/start.bat) ou executar no terminal:
+Eu não sou apenas um bot de chat comum! Eu sou uma **Agente Autônoma** capaz de interagir com o mundo real para te ajudar:
 
-```cmd
-start.bat
-```
-
-O menu interativo permitirá:
-1. Iniciar o bot completo
-2. Testar o motor do Newswire isoladamente (Puppeteer on-demand)
-3. Testar o motor do GTA Online (resets e eventos)
-4. Registrar os Slash Commands no Discord
+- **🧠 Cérebro Avançado**: Suporte a múltiplos modelos através de **Gemini**, **LM Studio (Local)** e **HuggingFace**. Minha personalidade é natural e adaptável!
+- **🌍 Pesquisa Inteligente**: Se eu não souber algo, eu pesquiso na internet em tempo real, leio os sites e te trago um resumo mastigadinho.
+- **🎵 DJ Particular & Modo Rádio**: Baixe faixas em alta qualidade (Deezer) por nome/artista ou transmita rádio interativo por voz com 3 modos de escuta: comandos diretos sem IA estilo Alexa (`⚡ Direct`), assistente generativo (`🧠 IA`) e `Off`.
+- **🎮 Cantinho dos Games**: Procuro torrents e magnets de jogos (Dodi/Fitgirl) e consulto nativamente a **Steam** para te dar preços e detalhes técnicos.
+- **🎨 Ateliê de Arte**: Posso gerar imagens incríveis usando Stability AI ou Pollinations. Basta pedir!
+- **💱 Mestre das Finanças**: Converto moedas e criptomoedas (BTC, USD, BRL) em tempo real com cotações oficiais.
+- **🎙️ Assistente de Voz em Calls**: Entre em canais de voz comigo (`/entrar-call`) e converse comigo chamando "Yui". Suporto o protocolo de criptografia DAVE (E2EE) do Discord.
+- **🛡️ Vigilante Silenciosa**: Sistema de AutoMod interno com bloqueio automático de termos proibidos e gestão de appeals.
 
 ---
 
-## 🛠️ Comandos Disponíveis
+### 🚀 Como me acordar (Instalação)
 
-- `/gta-setup` — Configura os canais de notícias, reset diário e semanal no servidor
-- `/gta-daily` — Exibe o resumo do dia (Gun Van, Dealers, Shipwreck, Time Trials)
-- `/gta-weekly` — Exibe o evento semanal (bônus, descontos, pódio)
-- `/gta-news` — Exibe as últimas notícias da Rockstar
-- `/status` — Telemetria de memória RAM, uptime e integridade do bot
+#### ⚡ Método Rápido (Recomendado)
+
+Para uma instalação automática de todas as dependências (Node.js, bibliotecas npm, yt-dlp e ffmpeg), use nossos scripts de setup:
+
+- **Windows:** Clique duas vezes no arquivo `setup.bat`.
+- **Linux:** Execute `chmod +x setup.sh && ./setup.sh`.
+
+---
+
+#### 🛠️ Método Manual
+
+Se você prefere fazer tudo na mão (Ubuntu/Linux recomendado):
+
+1.  **Clone meu código**:
+
+    ```bash
+    git clone https://github.com/yGuilhermy/Yui.git
+    cd Yui
+    ```
+
+2.  **Instale os módulos**:
+
+    ```bash
+    npm install
+    ```
+
+    _Obs: Você precisa do `yt-dlp` e `ffmpeg` instalados no sistema para as funções de música funcionarem direitinho!_
+
+3.  **Configure meus segredos**:
+    - Renomeie o arquivo `.env_example` para `.env` e preencha as chaves.
+    - **Dica:** Você pode mudar meu nome no `.env` alterando `BOT_NAME`!
+
+4.  **Dê o Start**:
+    ```bash
+    node index.js
+    ```
+
+---
+
+### 📚 Wiki & Documentação
+
+Para guias detalhados, dicas de configuração e funcionamento técnico, consulte nossa documentação oficial:
+
+- [🚀 **Guia de Instalação**](./docs/content_pt/GET_STARTED.md): Tudo para colocar a Yui no ar.
+- [⚙️ **Configuração & Multi-Token**](./docs/content_pt/CONFIGURATION.md): Como usar várias chaves e gerenciar donos.
+- [📻 **Modo Rádio & Streaming**](./docs/content_pt/RADIO.md): Sistema completo de rádio, voz interativa e streaming.
+- [🛡️ **Segurança & AutoMod**](./docs/content_pt/MODERATION.md): Entenda como funciona a proteção do bot.
+- [✨ **Lista de Funcionalidades**](./docs/content_pt/FEATURES.md): O que e como pedir as coisas para a Yui.
+- [🎮 **Guia de Comandos**](./docs/content_pt/COMMANDS.md): Detalhes de todos os comandos Slash (/).
+- [🛠️ **Variáveis & APIs**](./docs/content_pt/ENVIRONMENT.md): O que é cada campo do .env e onde pegar as keys.
+- [🛠️ **Sistema de Tools (MCP)**](./docs/content_pt/ADVANCED.md): Documentação para desenvolvedores e ferramentas.
+
+---
+
+### ⚙️ Personalização Centralizada
+
+Quer mudar minha alma? Tudo o que é importante está em `src/config/index.js`. Lá você pode ajustar:
+
+- 👑 O ID do meu mestre (Owner ID)
+- 📝 Meu System Prompt (Minha personalidade básica)
+- 🌐 URLs e Modelos de IA padrão
+- 🤖 Meu nome de ativação no chat
+
+---
+
+### 📝 Notas do dev
+
+- A Yui é uma IA que está em desenvolvimento, então ela pode não funcionar perfeitamente em todos os casos.
+- Você pode mudar o nome da Yui no `.env` alterando `BOT_NAME`!
+- Caso for hospedar uma copia da Yui, Por favor, mantenha o repositório original linkado!
+- Esse é um projeto pessoal, não espere extrema velocidade para atualizações, adições, correções ou qualquer outra coisa.
+- Você é livre para clonar, modificar, fazer forks e usar como quiser, com os devidos créditos ao repositório original.
+- O servidor principal de onde a Yui foi criada e onde eu sou mais ativo: https://discord.gg/NXwKvKNKCd
+- O ID da Yui original é: 1429544961734885406
+
+---
+
+### 📝 ToDo (Para mim mesmo)
+
+- [ ] Modernizar e corrigir codigos (atualmente)
+- [ ] Adicionar mais funcionalidades (MCPs)
+- [ ] Suporte ao Ollama (é facil, mas preguiça)
+- [ ] Adicionar mais modelos de IA (Fallbacks)
+- [ ] Adicionar mais integrações (APIs)
+- [ ] Adicionar mais comandos
+- [ ] Otimizar o uso de Tokens
+- [ ] Adicionar mais segurança
+
+---
+
+<div align="center">
+  <p><i>"Não se esqueça de me dar um pouco de amor (e poder de processamento)!"</i></p>
+  <p>Feito com 💜 e café por <b>yGuilhermy</b></p>
+</div>
