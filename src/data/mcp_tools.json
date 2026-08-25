@@ -9,7 +9,7 @@
     "function": {
       "name": "search_and_download_music",
       "description": "Busca e baixa arquivos de música em alta qualidade (.mp3) utilizando o catálogo do Deezer. Use sempre que o usuário pedir para baixar uma música por nome/artista (sempre de uma corrigida de ortografia se necessario) (ex: 'baixa ai a musica welcome to the jungle' ou 'pesquise ai a musica') ou responder com o número da opção (ex: 'quero a 1', 'a 2'). Se a busca for ambígua, o sistema retornará a lista com as 5 opções para o usuário escolher.",
-      "textual_triggers": "Gatilhos: \"quero a musica\", \"quero baixar\", \"baixa a música X\", \"hikari baixa ai Y\", \"download da música Z\", \"quero a opção 1\", \"baixa a 2\".",
+      "textual_triggers": "Gatilhos: \"quero a musica\", \"quero baixar\", \"baixa a música X\", \"yui baixa ai Y\", \"download da música Z\", \"quero a opção 1\", \"baixa a 2\".",
       "textual_args": "{ \"query\": \"Nome da música e artista\", \"selected_index\": 1 }",
       "parameters": {
         "type": "object",
@@ -315,7 +315,7 @@
     "type": "function",
     "function": {
       "name": "ia_automod",
-      "description": "Dispositivo automático de segurança para moderação de canal. Analisa a interação em busca de assédio severo, xingamentos direcionados à Hikari ou insistência em burlar filtros de segurança para gerar conteúdo proibido. CRÍTICO: Esta ferramenta é de uso exclusivo para banir usuários tóxicos que violam os Termos de Uso. O banimento é definitivo e global. Não use para moderação comum de membros do servidor.",
+      "description": "Dispositivo automático de segurança para moderação de canal. Analisa a interação em busca de assédio severo, xingamentos direcionados à Yui ou insistência em burlar filtros de segurança para gerar conteúdo proibido. CRÍTICO: Esta ferramenta é de uso exclusivo para banir usuários tóxicos que violam os Termos de Uso. O banimento é definitivo e global. Não use para moderação comum de membros do servidor.",
       "textual_triggers": null,
       "textual_args": "{ \"reason\": \"motivo objetivo e claro do banimento\", \"severity\": \"low\" | \"medium\" | \"high\" }",
       "parameters": {
@@ -345,14 +345,14 @@
   {
     "meta": {
       "label": "🎙️ Entrar no Canal de Voz",
-      "description": "Faz a Hikari entrar no canal de voz do usuário para escutar e responder por voz.",
+      "description": "Faz a Yui entrar no canal de voz do usuário para escutar e responder por voz.",
       "disableable": true,
       "defaultDisabled": true
     },
     "type": "function",
     "function": {
       "name": "join_voice_call",
-      "description": "Conecta a Hikari ao canal de voz onde o usuário está conectado no servidor para iniciar o modo de assistente de voz.",
+      "description": "Conecta a Yui ao canal de voz onde o usuário está conectado no servidor para iniciar o modo de assistente de voz.",
       "textual_triggers": "Gatilhos: \"entre na call\", \"entra na call\", \"entra na voz\", \"conecta na call\", \"vem pro canal de voz\", \"entra no voice\".",
       "textual_args": "{}",
       "parameters": {
@@ -365,14 +365,14 @@
   {
     "meta": {
       "label": "🚪 Sair do Canal de Voz",
-      "description": "Faz a Hikari sair do canal de voz em que está conectada.",
+      "description": "Faz a Yui sair do canal de voz em que está conectada.",
       "disableable": true,
       "defaultDisabled": true
     },
     "type": "function",
     "function": {
       "name": "leave_voice_call",
-      "description": "Desconecta a Hikari do canal de voz em que ela está conectada atualmente no servidor.",
+      "description": "Desconecta a Yui do canal de voz em que ela está conectada atualmente no servidor.",
       "textual_triggers": "Gatilhos: \"saia da call\", \"sai da call\", \"saia da voz\", \"sair da voz\", \"desconecta da call\", \"sai do voice\".",
       "textual_args": "{}",
       "parameters": {
@@ -411,7 +411,7 @@
     "type": "function",
     "function": {
       "name": "get_current_music",
-      "description": "Detecta e baixa a música que o usuário que enviou a mensagem está ouvindo no seu próprio status do Discord (Spotify, etc.). Use APENAS quando o usuário perguntar ou pedir explicitamente sobre o que ELE MESMO está escutando no status (ex: 'oq eu to escutando', 'baixa a música do meu status', 'qual musica eu to ouvindo'). NUNCA use se o usuário estiver apenas conversando, fazendo perguntas gerais, ou perguntando se você (Hikari) está ouvindo/escutando algo.",
+      "description": "Detecta e baixa a música que o usuário que enviou a mensagem está ouvindo no seu próprio status do Discord (Spotify, etc.). Use APENAS quando o usuário perguntar ou pedir explicitamente sobre o que ELE MESMO está escutando no status (ex: 'oq eu to escutando', 'baixa a música do meu status', 'qual musica eu to ouvindo'). NUNCA use se o usuário estiver apenas conversando, fazendo perguntas gerais, ou perguntando se você (Yui) está ouvindo/escutando algo.",
       "textual_triggers": "Gatilhos estritos: \"oq eu to escutando\", \"o que eu to ouvindo?\", \"qual musica eu to escutando?\", \"baixe a musica que eu to escutando\", \"baixa a musica do meu status\", \"baixa do meu spotify\".",
       "textual_args": "{ \"download\": true }",
       "parameters": {

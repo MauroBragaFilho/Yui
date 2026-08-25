@@ -5,7 +5,7 @@ module.exports = {
     name: 'guildCreate',
     once: false,
     async execute(guild) {
-        console.log(`[EVENT] Hikari foi adicionada ao servidor: ${guild.name} (${guild.id})`);
+        console.log(`[EVENT] Yui foi adicionada ao servidor: ${guild.name} (${guild.id})`);
         const defaultMode = config.defaultAutoMod !== false ? (config.automodMode || 'both') : 'off';
         setAutoBlock(guild.id, defaultMode);
         await reportNewGuild(guild);

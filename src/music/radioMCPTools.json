@@ -182,7 +182,7 @@
     "type": "function",
     "function": {
       "name": "radio_leave_call",
-      "description": "Encerra o Modo Rádio e desconecta a Hikari do canal de voz. Use SOMENTE quando o usuário pedir EXPLICITAMENTE para sair ou desconectar da call (ex: 'sai da call', 'encerra o rádio', 'desconecta da call', 'tchau Hikari', 'vaza da call'). NUNCA use esta ferramenta para apenas pausar ou parar a música atual.",
+      "description": "Encerra o Modo Rádio e desconecta a Yui do canal de voz. Use SOMENTE quando o usuário pedir EXPLICITAMENTE para sair ou desconectar da call (ex: 'sai da call', 'encerra o rádio', 'desconecta da call', 'tchau Yui', 'vaza da call'). NUNCA use esta ferramenta para apenas pausar ou parar a música atual.",
       "parameters": {
         "type": "object",
         "properties": {},

@@ -1,0 +1,22 @@
+[Unit]
+Description=Yui - GTA Online Updates Discord Bot
+After=network.target
+
+[Service]
+Type=simple
+User=yui-bot
+WorkingDirectory=/opt/yui
+ExecStart=/usr/bin/node /opt/yui/src/index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+LimitNOFILE=65535
+MemoryMax=600M
+
+# Sandboxing e Segurança no Ubuntu 24.04
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

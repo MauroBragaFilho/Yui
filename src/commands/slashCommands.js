@@ -157,7 +157,7 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('aceitar_tos')
-            .setDescription('[Server Admin] Envia o painel com os Termos de Uso da Hikari.')
+            .setDescription('[Server Admin] Envia o painel com os Termos de Uso da Yui.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     ),
     setGlobalContext(
@@ -316,12 +316,12 @@ const commands = [
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('entrar-call')
-            .setDescription('[User] Faz a Hikari entrar no seu canal de voz atual.')
+            .setDescription('[User] Faz a Yui entrar no seu canal de voz atual.')
     ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('sair-call')
-            .setDescription('[User] Faz a Hikari sair do canal de voz atual.')
+            .setDescription('[User] Faz a Yui sair do canal de voz atual.')
     ),
     setGlobalContext(
         new SlashCommandBuilder()

@@ -15,8 +15,8 @@ module.exports = {
             const banEmbed = new EmbedBuilder()
                 .setColor(0xE11D48)
                 .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
-                .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Hikari** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **ALVO:** ${banInfo.typeName || banInfo.type}\n- **MOTIVO:** ${banInfo.reason || 'Violação severa dos Termos de Uso da IA Hikari.'}\n- **STATUS:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços.\n\nSe acredita que isso é um erro, solicite um desbanimento pelo botão abaixo.\n\n---\n💡 **Quer usar a Hikari sem restrições?** Hospede sua própria versão!\n🚀 **Repositório:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
-                .setFooter({ text: 'Hikari Security & Moderation • by yGuilhermy' })
+                .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Yui** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **ALVO:** ${banInfo.typeName || banInfo.type}\n- **MOTIVO:** ${banInfo.reason || 'Violação severa dos Termos de Uso da IA Yui.'}\n- **STATUS:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços.\n\nSe acredita que isso é um erro, solicite um desbanimento pelo botão abaixo.\n\n---\n💡 **Quer usar a Yui sem restrições?** Hospede sua própria versão!\n🚀 **Repositório:** [yGuilhermy/Yui](https://github.com/yGuilhermy/Yui)`)
+                .setFooter({ text: 'Yui Security & Moderation • by yGuilhermy' })
                 .setTimestamp();
             const appealButton = new ButtonBuilder()
                 .setCustomId(`appeal_ban_user_${message.author.id}`)
@@ -24,7 +24,7 @@ module.exports = {
                 .setStyle(ButtonStyle.Secondary);
             const githubButton = new ButtonBuilder()
                 .setLabel('Página do Projeto')
-                .setURL('https://github.com/yGuilhermy/Hikari')
+                .setURL('https://github.com/yGuilhermy/Yui')
                 .setStyle(ButtonStyle.Link)
                 .setEmoji('🚀');
             const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
@@ -36,9 +36,9 @@ module.exports = {
                 const serverSettings = getServerSettings(message.guildId);
                 const respondToEveryone = serverSettings.respondToEveryone || false;
                 const isMention = message.mentions.has(client.user, { ignoreEveryone: true }) || (respondToEveryone && message.mentions.everyone);
-                const botName = config.botName || 'Hikari';
+                const botName = config.botName || 'Yui';
                 const nameRegex = new RegExp(`\\b${botName}\\b`, 'i');
-                const hasHikariName = nameRegex.test(message.content);
+                const hasYuiName = nameRegex.test(message.content);
                 let isReplyToBot = false;
                 if (message.reference && message.reference.messageId) {
                     try {
@@ -50,7 +50,7 @@ module.exports = {
                 }
                 const settings = getChannelSettings(message.channelId);
                 const isChatterActive = settings?.chatter?.active || false;
-                if (isMention || hasHikariName || isReplyToBot || isChatterActive) {
+                if (isMention || hasYuiName || isReplyToBot || isChatterActive) {
                     await sendTermsOfService(message);
                 }
                 return;
@@ -59,10 +59,10 @@ module.exports = {
         const serverSettings = getServerSettings(message.guildId);
         const respondToEveryone = serverSettings.respondToEveryone || false;
         const isMention = message.mentions.has(client.user, { ignoreEveryone: true }) || (respondToEveryone && message.mentions.everyone);
-        const botName = config.botName || 'Hikari';
+        const botName = config.botName || 'Yui';
         const nameRegex = new RegExp(`\\b${botName}\\b`, 'i');
-        const hasHikariName = nameRegex.test(message.content);
-        if (isMention || hasHikariName) {
+        const hasYuiName = nameRegex.test(message.content);
+        if (isMention || hasYuiName) {
             if (message.guildId && message.channelId) {
                 const { setServerLastChannel } = require('../handlers/llmHandler');
                 setServerLastChannel(message.guildId, message.channelId);
@@ -94,7 +94,7 @@ module.exports = {
                 const sortedMessages = [...messageMap.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
                 for (const msg of sortedMessages) {
                     const isBot = msg.author.id === client.user.id;
-                    const authorName = isBot ? 'Hikari' : msg.author.username;
+                    const authorName = isBot ? 'Yui' : msg.author.username;
                     let content = resolveMentions(msg.content, client);
                     if (isBot && (content.includes('erro ao processar seu pedido') || content.includes('Limites de Processamento Atingidos') || content.includes('Desculpe, tive um erro'))) {
                         content = 'erro da ia';
@@ -152,7 +152,7 @@ module.exports = {
                         const recentMessages = await message.channel.messages.fetch({ limit: 5, before: message.id });
                         [...recentMessages.values()].reverse().forEach(msg => {
                             const isBot = msg.author.id === client.user.id;
-                            const authorName = isBot ? 'Hikari' : msg.author.username;
+                            const authorName = isBot ? 'Yui' : msg.author.username;
                             let content = resolveMentions(msg.content, client);
                             if (isBot && (content.includes('erro ao processar seu pedido') || content.includes('Limites de Processamento Atingidos') || content.includes('Desculpe, tive um erro'))) {
                                 content = 'erro da ia';

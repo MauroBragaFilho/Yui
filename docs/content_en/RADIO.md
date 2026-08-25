@@ -1,6 +1,6 @@
 # 📻 Radio Mode System & Audio Streaming
 
-Hikari's **Radio Mode** is a complete musical playback and interactive voice ecosystem for Discord channels, combining real-time progressive audio streaming, multi-platform support, and autonomous AI control.
+Yui's **Radio Mode** is a complete musical playback and interactive voice ecosystem for Discord channels, combining real-time progressive audio streaming, multi-platform support, and autonomous AI control.
 
 ---
 
@@ -49,12 +49,12 @@ Media resolution (`radioProviders.js`) supports multiple formats with instant ex
 - **Real-Time Voice Commands**: Integrated listener captures speech from unmuted users in the channel and decodes PCM WAV audio for the Whisper API.
 - **3-Mode Voice Selector**:
   1. `🔇 Voice: Off`: Voice listening completely disabled.
-  2. `🧠 Voice: AI`: Transcribes audio and sends it to Hikari's generative AI (LLM) model with MCP Tool integration (`radioMCPTools.json`).
+  2. `🧠 Voice: AI`: Transcribes audio and sends it to Yui's generative AI (LLM) model with MCP Tool integration (`radioMCPTools.json`).
   3. `⚡ Voice: Direct`: Ultra-low latency Alexa-style mode. Recognizes intents and keywords locally without invoking AI models.
 - **Direct Mode Algorithm (Keyword & Intent Engine)**:
   - **Instant Execution**: Responds in < 50ms post-STT transcription.
-  - **Mid-sentence Intent Extraction**: Identifies keywords anywhere in spoken phrases (e.g. *"Hikari stop the music then dude"*).
-  - **Supported Intents**: `Pause`, `Resume`, `Stop`, `Next`, `Previous`, `Shuffle`, `Loop`, `Show Queue`, `Song Info`, `Remove Track`, and `Search/Add Songs` (e.g. *"Hikari play Welcome to the Jungle"* or *"Hikari Welcome to the Jungle"*).
+  - **Mid-sentence Intent Extraction**: Identifies keywords anywhere in spoken phrases (e.g. *"Yui stop the music then dude"*).
+  - **Supported Intents**: `Pause`, `Resume`, `Stop`, `Next`, `Previous`, `Shuffle`, `Loop`, `Show Queue`, `Song Info`, `Remove Track`, and `Search/Add Songs` (e.g. *"Yui play Welcome to the Jungle"* or *"Yui Welcome to the Jungle"*).
   - **Temporary Notification**: Sends a chat notification tagging the user (`<@userId> ⚡ **[Direct]** ...`) auto-deleted after 4 seconds.
 - **Rate Limit Protection (429/492)**: Upon hitting Whisper API quota limits, voice listening is temporarily paused for **1 minute**, notifying the chat and auto-enabling afterward.
 - **Empty Channel Monitoring**: Closes session and disconnects call if no human users are present in the channel for over 10 seconds.

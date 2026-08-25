@@ -1,6 +1,6 @@
 # 🚀 Guia de Instalação e Início Rápido (Get Started)
 
-Bem-vindo ao guia técnico de implantação da **Hikari**. Este documento detalha como preparar o ambiente, gerenciar dependências e realizar a primeira inicialização do sistema.
+Bem-vindo ao guia técnico de implantação da **Yui**. Este documento detalha como preparar o ambiente, gerenciar dependências e realizar a primeira inicialização do sistema.
 
 ---
 
@@ -46,8 +46,8 @@ Para automatizar a verificação de ambiente e instalação de dependências (in
 1.  **Clone o Repositório:**
 
     ```bash
-    git clone https://github.com/yGuilhermy/Hikari.git
-    cd Hikari
+    git clone https://github.com/yGuilhermy/Yui.git
+    cd Yui
     ```
 
 2.  **Instalação de Módulos (NPM):**
@@ -59,7 +59,7 @@ Para automatizar a verificação de ambiente e instalação de dependências (in
     _Isso instalará pacotes críticos como `discord.js`, `axios` (requests), `cheerio` (scraping) e `@gradio/client`._
 
 3.  **Configuração de Ambiente de Dados:**
-    A Hikari exige que certas pastas existam para cache e persistência:
+    A Yui exige que certas pastas existam para cache e persistência:
     - `src/data/temp_images/` (Gerado automaticamente, mas garanta permissão de escrita).
     - `src/data/x.json` (Banco global).
 
@@ -86,7 +86,7 @@ Uma vez configurado o arquivo `.env` (Veja o [Guia de Ambiente](./ENVIRONMENT.md
 node index.js
 
 # Recomendado para produção (usa auto-restart em caso de falha)
-npx pm2 start index.js --name hikari
+npx pm2 start index.js --name yui
 ```
 
 ### 💡 Dicas de Especialista:

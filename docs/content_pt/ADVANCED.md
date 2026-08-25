@@ -1,6 +1,6 @@
 # 🛠️ Desenvolvimento Externo e Sistema de Ferramentas (MCP)
 
-Este guia é voltado para desenvolvedores e entusiastas que desejam expandir o cérebro da Hikari usando o **Model Context Protocol (MCP)**.
+Este guia é voltado para desenvolvedores e entusiastas que desejam expandir o cérebro da Yui usando o **Model Context Protocol (MCP)**.
 
 ---
 
@@ -16,7 +16,7 @@ Este guia é voltado para desenvolvedores e entusiastas que desejam expandir o c
 
 ## 🧰 1. Entendendo as "Tools" (Ferramentas)
 
-A Hikari não sabe fazer tudo sozinha. Ela utiliza "Tools" para estender suas capacidades. Quando a IA responde em formato JSON contendo um campo `tool`, o bot interrompe a resposta de texto e executa uma função programada.
+A Yui não sabe fazer tudo sozinha. Ela utiliza "Tools" para estender suas capacidades. Quando a IA responde em formato JSON contendo um campo `tool`, o bot interrompe a resposta de texto e executa uma função programada.
 
 ### O Fluxo Técnico:
 1.  **Declaração:** A ferramenta é descrita no arquivo `src/data/mcp_tools.json`.
@@ -27,7 +27,7 @@ A Hikari não sabe fazer tudo sozinha. Ela utiliza "Tools" para estender suas ca
 
 ## 🤖 2. Ferramentas Nativas Melhoradas (MCP)
 
-O ecossistema MCP da Hikari foi robustamente aprimorado com comportamentos nativos específicos:
+O ecossistema MCP da Yui foi robustamente aprimorado com comportamentos nativos específicos:
 
 ### 1. Câmbio e Finanças (`convert_currency`)
 - **Resiliência a Erros:** O MCP foi aprimorado para lidar com rate-limit e falhas de API financeira. Caso a API principal falhe, há um fallback de cotação.
@@ -68,7 +68,7 @@ No arquivo `src/handlers/llmHandler.js`, adicione a lógica de execução dentro
 
 ## 🏗️ 4. Personalizando a Alma (System Prompt)
 
-A personalidade da Hikari não é apenas texto; é um conjunto de diretrizes de segurança e comportamento.
+A personalidade da Yui não é apenas texto; é um conjunto de diretrizes de segurança e comportamento.
 - **Local:** `src/config/index.js` -> campo `systemPrompt`.
 - **Dica:** Se você alterar as regras de formatação (como permitir emojis), lembre-se de que isso pode aumentar o consumo de tokens e mudar o "tom" das conversas.
 
@@ -76,7 +76,7 @@ A personalidade da Hikari não é apenas texto; é um conjunto de diretrizes de 
 
 ## 💡 Dicas de Desenvolvimento
 
-- 💡 **Logs de Pensamento (Thought Trace):** Observe o console. A Hikari imprime o `"thought"` da IA antes de cada ação de ferramenta. Se ela estiver "alucinando", ajuste a descrição da ferramenta no JSON.
+- 💡 **Logs de Pensamento (Thought Trace):** Observe o console. A Yui imprime o `"thought"` da IA antes de cada ação de ferramenta. Se ela estiver "alucinando", ajuste a descrição da ferramenta no JSON.
 - 💡 **Permissions:** Ao criar ferramentas que deletam mensagens ou gerenciam cargos, certifique-se de que o Bot tem essas permissões no Discord, caso contrário, a `discord.js` lançará um erro de `Missing Permissions`.
 - 💡 **Sanitização de JSON:** Sempre passe as saídas da IA por um filtro de `JSON.parse` se você estiver pedindo logs estruturados, pois modelos menores podem "vazar" chaves como `{"resposta": "..."}` no meio do texto.
 - 💡 **Comentários Internos (Internal Comments):** O bot usa chamadas recursivas (`isInternalComment: true`) para gerar falas naturais após o uso de ferramentas, garantindo que a IA sempre tenha uma "voz" humana após processar dados brutos.

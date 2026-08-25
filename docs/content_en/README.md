@@ -1,4 +1,4 @@
-<h1 align="center">🌌 Hikari (The Silver Glare) ✧</h1>
+<h1 align="center">🌌 Yui (The Silver Glare) ✧</h1>
 
 <div align="center">
   <picture>
@@ -12,9 +12,9 @@
       srcset="https://i.imgur.com/2NTL0Cj.png"
       media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
     />
-    <img width="250" src="https://i.imgur.com/2NTL0Cj.png" alt="Hikari Banner" />
+    <img width="250" src="https://i.imgur.com/2NTL0Cj.png" alt="Yui Banner" />
   </picture>
-  <p><i>"Nice to meet you! I'm Hikari, your personal AI agent for Discord... ✨"</i></p>
+  <p><i>"Nice to meet you! I'm Yui, your personal AI agent for Discord... ✨"</i></p>
 </div>
 
 ---
@@ -49,8 +49,8 @@ If you prefer to do everything yourself (Ubuntu/Linux recommended):
 1.  **Clone my code**:
 
     ```bash
-    git clone https://github.com/yGuilhermy/Hikari.git
-    cd Hikari
+    git clone https://github.com/yGuilhermy/Yui.git
+    cd Yui
     ```
 
 2.  **Install modules**:
@@ -76,11 +76,11 @@ If you prefer to do everything yourself (Ubuntu/Linux recommended):
 
 For detailed guides, configuration tips, and technical details, check our official documentation:
 
-- [🚀 **Installation Guide**](./GET_STARTED.md): Everything to get Hikari up and running.
+- [🚀 **Installation Guide**](./GET_STARTED.md): Everything to get Yui up and running.
 - [⚙️ **Configuration & Multi-Token**](./CONFIGURATION.md): How to use multiple keys and manage owners.
 - [📻 **Radio Mode & Streaming**](./RADIO.md): Comprehensive radio system, voice controls, and streaming.
 - [🛡️ **Security & AutoMod**](./MODERATION.md): Understand how bot protection works.
-- [✨ **Features List**](./FEATURES.md): What and how to ask tasks from Hikari.
+- [✨ **Features List**](./FEATURES.md): What and how to ask tasks from Yui.
 - [🎮 **Commands Guide**](./COMMANDS.md): Details for all Slash commands (/).
 - [🛠️ **Variables & APIs**](./ENVIRONMENT.md): Explanation for each .env field and where to get keys.
 - [🛠️ **Tools System (MCP)**](./ADVANCED.md): Documentation for developers and tools.
@@ -100,13 +100,13 @@ Want to change my soul? Everything important is in `src/config/index.js`. There 
 
 ### 📝 Developer Notes
 
-- Hikari is an AI in development, so she may not work perfectly in every case.
-- You can change Hikari's name in `.env` by modifying `BOT_NAME`!
-- If you're hosting a copy of Hikari, please keep the original repository linked!
+- Yui is an AI in development, so she may not work perfectly in every case.
+- You can change Yui's name in `.env` by modifying `BOT_NAME`!
+- If you're hosting a copy of Yui, please keep the original repository linked!
 - This is a personal project; don't expect extreme speed for updates, additions, or fixes.
 - You're free to clone, modify, fork, and use as you wish, with due credit to the original repository.
-- The primary server where Hikari was created: https://discord.gg/NXwKvKNKCd
-- Original Hikari ID: 1429544961734885406
+- The primary server where Yui was created: https://discord.gg/NXwKvKNKCd
+- Original Yui ID: 1429544961734885406
 
 ---
 

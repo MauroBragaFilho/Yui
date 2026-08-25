@@ -20,7 +20,7 @@ const CONFIG_PAGES = [
         type: 'boolean',
         persistence: 'runtime',
         summary: 'Mostra ou esconde qual modelo respondeu.',
-        description: 'Controla se o nome do modelo de IA (ex: gemini-2.5-flash-lite, Qwen2.5-72B) aparece no rodapé das respostas da Hikari. Útil para debug ou curiosidade, mas pode poluir visualmente se ativado em produção.',
+        description: 'Controla se o nome do modelo de IA (ex: gemini-2.5-flash-lite, Qwen2.5-72B) aparece no rodapé das respostas da Yui. Útil para debug ou curiosidade, mas pode poluir visualmente se ativado em produção.',
         get: () => getShowModel(),
         set: (v) => updateShowModel(v),
     },
@@ -44,7 +44,7 @@ const CONFIG_PAGES = [
         type: 'number',
         persistence: 'runtime',
         summary: 'Quantas vezes re-tenta se der erro.',
-        description: 'Define quantas vezes a Hikari re-tenta gerar uma resposta quando ocorre erro de parsing, vazamento de ferramenta, ou resposta inválida do modelo. Valor 0 = sem retentativa, a primeira resposta (mesmo com erro) é final. Valores altos podem causar lentidão.',
+        description: 'Define quantas vezes a Yui re-tenta gerar uma resposta quando ocorre erro de parsing, vazamento de ferramenta, ou resposta inválida do modelo. Valor 0 = sem retentativa, a primeira resposta (mesmo com erro) é final. Valores altos podem causar lentidão.',
         min: 0, max: 10, step: 1,
         get: () => getErrorRetries(),
         set: (v) => updateErrorRetries(v),
@@ -70,7 +70,7 @@ const CONFIG_PAGES = [
         type: 'number',
         persistence: 'runtime',
         summary: 'Tempo máximo de espera (ms).',
-        description: 'Tempo máximo em milissegundos que a Hikari espera pela resposta do LM Studio antes de considerar timeout e tentar o próximo provider. Modelos grandes locais podem precisar de 60000ms+. Valor muito baixo causa falsos timeouts.',
+        description: 'Tempo máximo em milissegundos que a Yui espera pela resposta do LM Studio antes de considerar timeout e tentar o próximo provider. Modelos grandes locais podem precisar de 60000ms+. Valor muito baixo causa falsos timeouts.',
         min: 5000, max: 300000, step: 5000,
         get: () => getProviderSettings().local.timeout,
         set: (v) => updateProviderSetting('local', 'timeout', v),
@@ -279,7 +279,7 @@ const CONFIG_PAGES = [
         persistence: 'json',
         configKey: 'prefix',
         summary: 'Prefixo para comandos de texto.',
-        description: 'O caractere ou texto que precede comandos de texto (não-slash) do bot. Padrão: "_". Se definido como "@Hikari", o bot responde quando mencionado pelo nome. Não afeta comandos slash (/).',
+        description: 'O caractere ou texto que precede comandos de texto (não-slash) do bot. Padrão: "_". Se definido como "@Yui", o bot responde quando mencionado pelo nome. Não afeta comandos slash (/).',
     },
     {
         key: 'botName',
@@ -312,7 +312,7 @@ const CONFIG_PAGES = [
         persistence: 'json',
         configKey: 'requireTos',
         summary: 'Bloqueia servers que não aceitaram o TOS.',
-        description: 'Quando ativado, servidores que não executaram /aceitar_tos ficam completamente bloqueados de usar qualquer comando da Hikari. Desativar permite que todos os servidores usem o bot imediatamente sem aceitar termos.',
+        description: 'Quando ativado, servidores que não executaram /aceitar_tos ficam completamente bloqueados de usar qualquer comando da Yui. Desativar permite que todos os servidores usem o bot imediatamente sem aceitar termos.',
     },
     {
         key: 'saveHistory',
@@ -373,7 +373,7 @@ const CONFIG_PAGES = [
         persistence: 'json',
         configKey: 'sendEnvironmentInfo',
         summary: 'Inclui info do server/canal no prompt.',
-        description: 'Quando ativado, envia informações do servidor e canal (nome do server, nome do canal, etc.) como contexto adicional no prompt da IA. Isso permite que a Hikari saiba "onde está" e adapte respostas. Desativar economiza tokens.',
+        description: 'Quando ativado, envia informações do servidor e canal (nome do server, nome do canal, etc.) como contexto adicional no prompt da IA. Isso permite que a Yui saiba "onde está" e adapte respostas. Desativar economiza tokens.',
     },
     {
         key: 'geminiModel',
@@ -471,8 +471,8 @@ const CONFIG_PAGES = [
         type: 'string',
         persistence: 'json',
         configKey: 'systemPrompt',
-        summary: 'Prompt base da personalidade da Hikari.',
-        description: 'O system prompt que define as regras, personalidade, estilo de fala e restrições da Hikari globalmente. CUIDADO: alterar incorretamente pode quebrar a persona e o formato de resposta.',
+        summary: 'Prompt base da personalidade da Yui.',
+        description: 'O system prompt que define as regras, personalidade, estilo de fala e restrições da Yui globalmente. CUIDADO: alterar incorretamente pode quebrar a persona e o formato de resposta.',
     },
 ];
 
@@ -542,9 +542,9 @@ function buildHomePage() {
 
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
-        .setTitle('⚙️ Central de Configuração — Hikari')
+        .setTitle('⚙️ Central de Configuração — Yui')
         .setDescription('Painel administrativo para ajuste de todas as configurações do bot em tempo real.\nUse as **setas** para navegar ou **Ir Para** para pular direto a uma config.\n\n**Categorias disponíveis:**')
-        .setFooter({ text: `Página 0/${CONFIG_PAGES.length} • Home • Hikari Config • by yGuilhermy` })
+        .setFooter({ text: `Página 0/${CONFIG_PAGES.length} • Home • Yui Config • by yGuilhermy` })
         .setTimestamp();
 
     for (const [cat, count] of Object.entries(categories)) {
@@ -576,7 +576,7 @@ function buildConfigEmbed(pageIndex) {
             { name: '📂 Categoria', value: page.category, inline: true },
             { name: '💽 Persistência', value: page.persistence === 'runtime' ? '⚡ Runtime (volta ao padrão no restart)' : '💾 JSON Permanente (salvo em disco)', inline: false }
         )
-        .setFooter({ text: `Página ${pageIndex}/${CONFIG_PAGES.length} • ${page.key} • Hikari Config • by yGuilhermy` })
+        .setFooter({ text: `Página ${pageIndex}/${CONFIG_PAGES.length} • ${page.key} • Yui Config • by yGuilhermy` })
         .setTimestamp();
 
     if (envWarning) {

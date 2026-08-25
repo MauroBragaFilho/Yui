@@ -1,6 +1,6 @@
 # 🛡️ Sistema de Segurança, AutoMod e TOS
 
-A Hikari opera sob uma filosofia de "Sanidade como Serviço". Este documento explica o fluxo técnico de proteção da Hikari, desde a entrada em novos servidores até o bloqueio global de usuários maliciosos.
+A Yui opera sob uma filosofia de "Sanidade como Serviço". Este documento explica o fluxo técnico de proteção da Yui, desde a entrada em novos servidores até o bloqueio global de usuários maliciosos.
 
 ---
 
@@ -16,8 +16,8 @@ A Hikari opera sob uma filosofia de "Sanidade como Serviço". Este documento exp
 ## ⚖️ 1. O Fluxo de Termos de Serviço (TOS)
 
 Ao ser adicionada a uma guilda, se `REQUIRE_TOS` estiver ativo:
-1.  **Bloqueio Total do Servidor:** Todos os comandos, chats e interações da Hikari no servidor são completamente bloqueados, respondendo com um aviso de necessidade de aceitação do TOS.
-2.  **Aviso para Administrador:** A Hikari envia um embed interativo no primeiro canal útil ou no canal que foi convidada, solicitando a confirmação do TOS por um administrador do servidor (executando `/aceitar_tos` ou clicando nos botões interativos).
+1.  **Bloqueio Total do Servidor:** Todos os comandos, chats e interações da Yui no servidor são completamente bloqueados, respondendo com um aviso de necessidade de aceitação do TOS.
+2.  **Aviso para Administrador:** A Yui envia um embed interativo no primeiro canal útil ou no canal que foi convidada, solicitando a confirmação do TOS por um administrador do servidor (executando `/aceitar_tos` ou clicando nos botões interativos).
 3.  **Webhook de Auditoria:** O Dono do bot recebe uma notificação no servidor de desenvolvimento com as opções: `REMOVER BOT` ou `CONFIRMAR SERVER`.
     - *Isso permite que você monitore quem está usando sua instância de forma segura.*
 
@@ -38,8 +38,8 @@ O sistema de AutoMod analisa prompts e contextos em busca de padrões proibidos 
 ### 👤 Nível 3: Usuário (User Ban)
 O bloqueio do usuário pode ser ativado por dois métodos simultâneos:
 1. **Filtro de Gatilhos Rápido (Keyword Trigger):** Bloqueio imediato caso o prompt contenha termos sensíveis ou proibidos (ex: crimes graves, termos explícitos).
-2. **Análise Cognitiva da IA (AI AutoMod MCP):** O modelo avalia a intenção do chat de forma autônoma. Se identificar abusos verbais, assédio, xingamentos à Hikari ou tentativas persistentes de manipulação (jailbreak), a IA executará a ferramenta `ia_automod` de forma autônoma, aplicando o banimento global definitivo.
-3. **Moderação em Canais de Voz (Voice AutoMod):** As interações recebidas por voz em chamadas (`/entrar-call`) são transcritas e submetidas às mesmas regras de AutoMod. Além disso, usuários banidos são sumariamente ignorados e impedidos de acionar o bot por voz ou conectar a Hikari em canais de voz.
+2. **Análise Cognitiva da IA (AI AutoMod MCP):** O modelo avalia a intenção do chat de forma autônoma. Se identificar abusos verbais, assédio, xingamentos à Yui ou tentativas persistentes de manipulação (jailbreak), a IA executará a ferramenta `ia_automod` de forma autônoma, aplicando o banimento global definitivo.
+3. **Moderação em Canais de Voz (Voice AutoMod):** As interações recebidas por voz em chamadas (`/entrar-call`) são transcritas e submetidas às mesmas regras de AutoMod. Além disso, usuários banidos são sumariamente ignorados e impedidos de acionar o bot por voz ou conectar a Yui em canais de voz.
 
 ---
 
@@ -62,7 +62,7 @@ Todo alerta de segurança enviado via Webhook possui botões de ação imediata.
 
 - 💡 **Script enable_automod.js:** Você pode rodar `node enable_automod.js` no terminal da aplicação para atualizar síncronamente todos os servidores para o modo `both`, excluir servidores específicos via lista de exclusão (whitelist) e disparar um anúncio formal com botão do GitHub aos chats gerais dos servidores cadastrados.
 - 💡 **ID do Canal de Apelação:** Configure `APPEAL_CHANNEL_ID` no `.env`. Usuários banidos receberão um link para este canal para tentar reverter a punição.
-- 💡 **Remoção Silenciosa:** Se você clicar no botão `Remover Bot` no webhook administrativo, a Hikari sairá do servidor de destino sem emitir nenhum aviso, evitando atritos desnecessários.
+- 💡 **Remoção Silenciosa:** Se você clicar no botão `Remover Bot` no webhook administrativo, a Yui sairá do servidor de destino sem emitir nenhum aviso, evitando atritos desnecessários.
 - 💡 **Trigger Word:** O log de aviso agora exibe exatamente a **Palavra Chave** que ativou o AutoMod, facilitando o discernimento entre ataques reais e falsos positivos.
 
 ---

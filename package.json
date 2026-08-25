@@ -1,29 +1,34 @@
 {
-  "name": "jarvisgpt",
-  "version": "1.6.0",
-  "description": "Um bot Discord com IA.",
-  "main": "index.js",
+  "name": "yui",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Yui — Discord bot unificado e ultra-otimizado para rastreamento de notícias e sistemas diários/semanais do GTA Online.",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy:commands": "node src/discord/deployCommands.js",
+    "test:newswire": "node tests/test-newswire.js",
+    "test:gtao": "node tests/test-gtao.js"
   },
-  "keywords": [],
+  "keywords": [
+    "discord",
+    "gta-online",
+    "rockstar-newswire",
+    "bot",
+    "puppeteer",
+    "sqlite"
+  ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
-    "@discordjs/rest": "^1.7.1",
-    "@discordjs/voice": "^0.19.2",
-    "@gradio/client": "^1.15.2",
-    "axios": "^1.13.4",
-    "cheerio": "^1.2.0",
-    "discord-api-types": "^0.37.100",
-    "discord.js": "^14.15.2",
-    "dotenv": "^16.5.0",
-    "duck-duck-scrape": "^2.2.7",
-    "duckduckgo-search": "^1.0.7",
-    "form-data": "^4.0.5",
-    "libsodium-wrappers": "^0.7.15",
-    "opusscript": "^0.0.8",
-    "prism-media": "^1.3.5",
-    "rcon": "^1.1.0"
+    "axios": "^1.7.9",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "node-cron": "^3.0.3",
+    "puppeteer": "^24.3.0",
+    "sql.js": "^1.12.0",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
   }
 }
