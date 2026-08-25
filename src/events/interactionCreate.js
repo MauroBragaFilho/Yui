@@ -122,7 +122,7 @@ module.exports = {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
                         .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                        .setDescription('Esta ação é restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 return await handleConfigModal(interaction);
@@ -173,7 +173,7 @@ module.exports = {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
                         .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                        .setDescription('Esta ação é restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 return await handleConfigSelect(interaction);
@@ -183,7 +183,7 @@ module.exports = {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
                         .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                        .setDescription('Esta ação é restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 const parts = interaction.customId.split('_');
@@ -220,7 +220,7 @@ module.exports = {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
                         .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                        .setDescription('Esta ação é restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 return await handleConfigButton(interaction);
@@ -230,7 +230,7 @@ module.exports = {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
                         .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Hikari.');
+                        .setDescription('Esta ação é restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
             }
@@ -257,7 +257,7 @@ module.exports = {
                 if (type === 'ignore') {
                     await interaction.update({ content: '✅ Alerta ignorado.', components: [] });
                 } else {
-                    addBan(type, targetId, "Banido remotamente pelo log de violações do sistema Hikari.");
+                    addBan(type, targetId, "Banido remotamente pelo log de violações do sistema Yui.");
                     await interaction.update({ content: `✅ Alvo \`${targetId}\` (${type}) banido com sucesso.`, components: [] });
                 }
                 return;
@@ -305,7 +305,7 @@ module.exports = {
                 const attachmentLimit = guild ? guild.premiumTier === 3 ? 100 * 1024 * 1024 : guild.premiumTier === 2 ? 50 * 1024 * 1024 : 25 * 1024 * 1024 : 25 * 1024 * 1024;
                 const isQueue = isCompressionActive();
                 const progressEmbed = new EmbedBuilder()
-                    .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                    .setFooter({ text: 'Yui Media • by yGuilhermy' })
                     .setTimestamp();
                 if (isQueue) {
                     progressEmbed.setColor(0xF59E0B)
@@ -330,7 +330,7 @@ module.exports = {
                     const errorEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
                         .setTitle('❌ Falha na Compressão')
-                        .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                        .setFooter({ text: 'Yui Media • by yGuilhermy' })
                         .setTimestamp();
                     if (compressError.message === 'MEMORY_ERROR') {
                         errorEmbed.setDescription(`⚠️ Ocorreu um erro de falta de memória no servidor da host ao tentar comprimir o vídeo. Por favor, entre em contato com <@${config.ownerId}>.`);
@@ -367,8 +367,8 @@ module.exports = {
                 const banEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
                     .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
-                    .setDescription(`Sua tentativa de execução foi abortada. O acesso à **IA Hikari** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **Tipo:** ${banInfo.typeName || banInfo.type}\n- **Motivo do Banimento:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Hikari."}\n- **Status Atual:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.\n\nSe você acredita que isso é um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})] ✨`)
-                    .setFooter({ text: 'Hikari Security & Moderation • by yGuilhermy' })
+                    .setDescription(`Sua tentativa de execução foi abortada. O acesso à **IA Yui** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **Tipo:** ${banInfo.typeName || banInfo.type}\n- **Motivo do Banimento:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Yui."}\n- **Status Atual:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.\n\nSe você acredita que isso é um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})] ✨`)
+                    .setFooter({ text: 'Yui Security & Moderation • by yGuilhermy' })
                     .setTimestamp();
                 return interaction.reply({ embeds: [banEmbed], ephemeral: false });
             }
@@ -481,8 +481,8 @@ module.exports = {
                 const alreadyAcceptedEmbed = new EmbedBuilder()
                     .setColor(0x10B981)
                     .setTitle('✅ Termos de Uso Já Aceitos')
-                    .setDescription('Os Termos de Uso da Hikari já foram previamente aceitos e estão ativos neste servidor.')
-                    .setFooter({ text: 'Hikari ToS • by yGuilhermy' })
+                    .setDescription('Os Termos de Uso da Yui já foram previamente aceitos e estão ativos neste servidor.')
+                    .setFooter({ text: 'Yui ToS • by yGuilhermy' })
                     .setTimestamp();
                 return interaction.reply({ embeds: [alreadyAcceptedEmbed], ephemeral: true });
             }
@@ -650,7 +650,7 @@ module.exports = {
                         .setColor(0xF39C12)
                         .setTitle('📦 Vídeo Grande Demais')
                         .setDescription(`O vídeo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor é **${limitMB} MB**.\n\nClique no botão abaixo para tentar comprimir o vídeo automaticamente.\n\n⏰ *O arquivo ficará disponível por 6 horas.*`)
-                        .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                        .setFooter({ text: 'Yui Media • by yGuilhermy' })
                         .setTimestamp();
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId(`compress_video_${fileId}`).setLabel('🔄 Tentar Compressão').setStyle(ButtonStyle.Primary)
@@ -699,7 +699,7 @@ module.exports = {
                 const errEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
                     .setTitle('❌ Acesso Negado')
-                    .setDescription('Comando restrito ao criador da Hikari.');
+                    .setDescription('Comando restrito ao criador da Yui.');
                 return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
             const provider = interaction.options.getString('provider');
@@ -753,7 +753,7 @@ module.exports = {
                         { name: 'Lançamento', value: steamInfo.releaseDate, inline: true },
                         { name: 'Desenvolvedor', value: steamInfo.developers, inline: true }
                     )
-                    .setFooter({ text: 'Fonte: Loja da Steam • Hikari • by yGuilhermy' })
+                    .setFooter({ text: 'Fonte: Loja da Steam • Yui • by yGuilhermy' })
                     .setTimestamp();
 
                 if (steamInfo.headerImage) {
@@ -763,7 +763,7 @@ module.exports = {
                     steamEmbed.addFields({ name: 'Metacritic', value: `${steamInfo.metacritic}/100 🌟`, inline: true });
                 }
 
-                let hikariComment = "";
+                let yuiComment = "";
                 try {
                     const commentPrompt = `Eu acabei de consultar o jogo "${steamInfo.name}" na Steam via comando manual. O preço atual é ${steamInfo.price}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
                     const rawComment = await generateResponse(commentPrompt, interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true });
@@ -776,13 +776,13 @@ module.exports = {
                                 cleanData = parsed.response || parsed.content || parsed.text || parsed.reply || cleanData;
                             } catch (e) {}
                         }
-                        hikariComment = cleanData;
+                        yuiComment = cleanData;
                     }
                 } catch (e) {
                     console.warn('[SteamCommand] Falha ao gerar comentário IA:', e.message);
                 }
 
-                await interaction.editReply({ content: hikariComment || null, embeds: [steamEmbed] });
+                await interaction.editReply({ content: yuiComment || null, embeds: [steamEmbed] });
             } catch (error) {
                 console.error('Erro no comando steam_jogo:', error);
                 const errEmbed = new EmbedBuilder()
@@ -818,10 +818,10 @@ module.exports = {
                         { name: 'Cotação (' + convInfo.from + ')', value: `1 ${convInfo.from} = ${rateFormatted} ${convInfo.to}`, inline: true },
                         { name: 'Última Atualização', value: convInfo.lastUpdate || 'Desconhecida', inline: true }
                     )
-                    .setFooter({ text: 'Fonte: AwesomeAPI • Hikari • by yGuilhermy' })
+                    .setFooter({ text: 'Fonte: AwesomeAPI • Yui • by yGuilhermy' })
                     .setTimestamp();
                     
-                let hikariComment = "";
+                let yuiComment = "";
                 try {
                     const commentPrompt = `Eu acabei de converter ${convInfo.amount} ${convInfo.from} para ${convInfo.to} via comando manual. O resultado foi ${resultFormatted}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
                     const rawComment = await generateResponse(commentPrompt, interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true });
@@ -834,13 +834,13 @@ module.exports = {
                                 cleanData = parsed.response || parsed.content || parsed.text || parsed.reply || cleanData;
                             } catch (e) {}
                         }
-                        hikariComment = cleanData;
+                        yuiComment = cleanData;
                     }
                 } catch (e) {
                     console.warn('[CurrencyCommand] Falha ao gerar comentário IA:', e.message);
                 }
 
-                await interaction.editReply({ content: hikariComment || null, embeds: [convEmbed] });
+                await interaction.editReply({ content: yuiComment || null, embeds: [convEmbed] });
             } catch (error) {
                 console.error('Erro no comando converter_moeda:', error);
                 const errEmbed = new EmbedBuilder()
@@ -900,7 +900,7 @@ module.exports = {
                 if (musicInfo.targetUser && musicInfo.targetUser.id !== interaction.user.id) {
                     infoEmbed.addFields({ name: 'Usuário', value: `<@${musicInfo.targetUser.id}>`, inline: true });
                 }
-                infoEmbed.setFooter({ text: `Hikari Music • ${musicInfo.platformLabel}` }).setTimestamp();
+                infoEmbed.setFooter({ text: `Yui Music • ${musicInfo.platformLabel}` }).setTimestamp();
                 if (musicInfo.coverUrl) infoEmbed.setThumbnail(musicInfo.coverUrl);
                 const userId = interaction.user.id;
                 if (!canBypass(userId) && isUserBusy(userId)) {

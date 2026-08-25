@@ -84,13 +84,13 @@ async function joinVoiceCall(member, textChannel, replyFn = null) {
     const banInfo = checkBan(member.id, guildId, textChannel?.id);
     if (banInfo) {
         console.log(`[VOICE] 🛑 Tentativa de conectar na voz negada (Banido: ${banInfo.typeName} - ${member.id})`);
-        await sendOrReply(`🛑 **Acesso Negado**: Você (${banInfo.typeName.toLowerCase()}) está banido da rede Hikari e não pode utilizar os serviços de voz.`, textChannel, replyFn);
+        await sendOrReply(`🛑 **Acesso Negado**: Você (${banInfo.typeName.toLowerCase()}) está banido da rede Yui e não pode utilizar os serviços de voz.`, textChannel, replyFn);
         return false;
     }
 
     const { isToolDisabled } = require('./llmHandler');
     if (isToolDisabled(guildId, 'join_voice_call')) {
-        await sendOrReply('⚠️ As ferramentas de voz (**Hikari Assistant**) estão desativadas neste servidor por padrão. Um administrador pode ativá-las usando o comando `/ia_ferramentas`.', textChannel, replyFn);
+        await sendOrReply('⚠️ As ferramentas de voz (**Yui Assistant**) estão desativadas neste servidor por padrão. Um administrador pode ativá-las usando o comando `/ia_ferramentas`.', textChannel, replyFn);
         return false;
     }
 
@@ -161,7 +161,7 @@ async function joinVoiceCall(member, textChannel, replyFn = null) {
         playInitialSilence(connection);
         setupVoiceReceiver(stateData, member.client);
 
-        await sendOrReply(`🎙️ Entrei no canal de voz **${voiceChannel.name}**! Diga "Hikari" seguido da sua pergunta.`, textChannel, replyFn);
+        await sendOrReply(`🎙️ Entrei no canal de voz **${voiceChannel.name}**! Diga "Yui" seguido da sua pergunta.`, textChannel, replyFn);
         return true;
     } catch (error) {
         console.error('[VOICE] ❌ Erro ao conectar no canal de voz:', error.message || error);
@@ -296,12 +296,12 @@ async function processVoiceTranscription(userId, text, stateData, client) {
         'transcrição',
         'transcricao',
         'amara.org',
-        'fale com a hikari',
-        'fale com hikari',
-        'falar com a hikari',
-        'falar com hikari',
-        'conversar com a hikari',
-        'conversar com hikari',
+        'fale com a yui',
+        'fale com yui',
+        'falar com a yui',
+        'falar com yui',
+        'conversar com a yui',
+        'conversar com yui',
         'fale com a',
         'falar com a',
         'fale com o',
@@ -313,7 +313,7 @@ async function processVoiceTranscription(userId, text, stateData, client) {
         return;
     }
 
-    const triggerRegex = /\b(hikari|hikare|hikary|hikarii|hikarie|hikaris|hicari|hicare|hicary|hicarii|hicaris|hikario|hicario|hikaru|hicaru|hikar|hicar|ikari|ikare|ikary|ikarii|ikaris|icari|icare|icaro|icary|icarii|icaris|icara|icaras|icaros|ikario|icario|ikaru|icaru|ikar|icar|ricardo|ricard|ricardi|ricari|ricare|rikari|rikare|ricario|ricarto|recari|recaro|ricar|ricardin|ricardinho|ficari|ficare|vicari|vicare|ficardo|vicardo|dicari|dicare|kikari|kicari|ticari|ih\s*cari|e\s*cari|eh\s*cari|i\s*cari|re\s*cari|ri\s*cari|hi\s*cari|he\s*cari|a\s*cari|o\s*cari|ei\s*cari|oh\s*cari|oi\s*cari)\b/i;
+    const triggerRegex = /\b(yui|yuin|yuis|yuih|yuii|yuie|yuia|yuio|yukari|yukare|yukary|yukarii|yukarie|yukaris|yucari|yucare|yucary|yucarii|yucaris|yucario|yucaru|yukar|yukar|ikari|ikare|ikary|ikarii|ikaris|icari|icare|icaro|icary|icarii|icaris|icara|icaras|icaros|ikario|icario|ikaru|icaru|ikar|icar|ricardo|ricard|ricardi|ricari|ricare|rikari|rikare|ricario|ricarto|recari|recaro|ricar|ricardin|ricardinho|ficari|ficare|vicari|vicare|ficardo|vicardo|dicari|dicare|kikari|kicari|ticari|ih\s*cari|e\s*cari|eh\s*cari|i\s*cari|re\s*cari|ri\s*cari|hi\s*cari|he\s*cari|a\s*cari|o\s*cari|ei\s*cari|oh\s*cari|oi\s*cari)\b/i;
     const triggerMatch = lowerText.match(triggerRegex);
 
     if (!triggerMatch) return;
@@ -322,7 +322,7 @@ async function processVoiceTranscription(userId, text, stateData, client) {
     const matchIndex = triggerMatch.index;
     let prompt = text.substring(matchIndex + matchedWord.length).replace(/^[,\s.!?-]+/, '').trim();
     if (!prompt) {
-        prompt = 'Olá Hikari';
+        prompt = 'Olá Yui';
     }
 
     const textChannel = client.channels.cache.get(stateData.textChannelId);

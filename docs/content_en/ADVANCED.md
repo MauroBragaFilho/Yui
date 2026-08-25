@@ -1,6 +1,6 @@
 # 🛠️ External Development and Tool System (MCP)
 
-This guide is for developers and enthusiasts who wish to expand Hikari's brain using the **Model Context Protocol (MCP)**.
+This guide is for developers and enthusiasts who wish to expand Yui's brain using the **Model Context Protocol (MCP)**.
 
 ---
 
@@ -16,7 +16,7 @@ This guide is for developers and enthusiasts who wish to expand Hikari's brain u
 
 ## 🧰 1. Understanding "Tools"
 
-Hikari doesn't know how to do everything by herself. She uses "Tools" to extend her capabilities. When the AI responds in a JSON format containing a `tool` field, the bot interrupts the text response and executes a programmed function.
+Yui doesn't know how to do everything by herself. She uses "Tools" to extend her capabilities. When the AI responds in a JSON format containing a `tool` field, the bot interrupts the text response and executes a programmed function.
 
 ### The Technical Flow:
 1.  **Declaration:** The tool is described in the `src/data/mcp_tools.json` file.
@@ -27,7 +27,7 @@ Hikari doesn't know how to do everything by herself. She uses "Tools" to extend 
 
 ## 🤖 2. Enhanced Native Tools (MCP)
 
-Hikari's MCP ecosystem has been robustly enhanced with specific native behaviors:
+Yui's MCP ecosystem has been robustly enhanced with specific native behaviors:
 
 ### 1. Currency & Finance (`convert_currency`)
 - **Error Resilience:** The MCP has been upgraded to handle rate limits and financial API failures. If the main API fails, a fallback exchange rate is used.
@@ -68,7 +68,7 @@ In the `src/handlers/llmHandler.js` file, add the execution logic inside the `pr
 
 ## 🏗️ 4. Customizing the Soul (System Prompt)
 
-Hikari's personality is not just text; it's a set of safety and behavior guidelines.
+Yui's personality is not just text; it's a set of safety and behavior guidelines.
 - **Location:** `src/config/index.js` -> `systemPrompt` field.
 - **Tip:** If you change the formatting rules (such as allowing emojis), remember that this can increase token consumption and change the "tone" of the conversations.
 
@@ -76,7 +76,7 @@ Hikari's personality is not just text; it's a set of safety and behavior guideli
 
 ## 💡 Development Tips
 
-- 💡 **Thought Trace Logs:** Watch the console. Hikari prints the AI's `"thought"` before each tool action. If it's "hallucinating", adjust the tool description in the JSON.
+- 💡 **Thought Trace Logs:** Watch the console. Yui prints the AI's `"thought"` before each tool action. If it's "hallucinating", adjust the tool description in the JSON.
 - 💡 **Permissions:** When creating tools that delete messages or manage roles, make sure the Bot has those permissions in Discord; otherwise, `discord.js` will throw a `Missing Permissions` error.
 - 💡 **JSON Sanitization:** Always pass the AI's outputs through a `JSON.parse` filter if you're requesting structured logs, as smaller models can "leak" keys like `{"response": "..."}` in the middle of the text.
 - 💡 **Internal Comments:** The bot uses recursive calls (`isInternalComment: true`) to generate natural speech after tool use, ensuring the AI always has a human "voice" after processing raw data.

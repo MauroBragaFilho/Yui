@@ -93,7 +93,7 @@ async function handleServerAdminCommand(interaction) {
             .setColor(0x10B981)
             .setTitle('⚙️ Configuração do Servidor Aplicada')
             .setDescription(results.join('\n\n'))
-            .setFooter({ text: 'Hikari Server Admin • by yGuilhermy' })
+            .setFooter({ text: 'Yui Server Admin • by yGuilhermy' })
             .setTimestamp();
 
         return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -106,7 +106,7 @@ async function sendServerAdminDashboard(interaction, isUpdate = false) {
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
         .setTitle('⚙️ Painel de Administração do Servidor')
-        .setDescription('Selecione uma das opções abaixo para configurar a **Hikari** neste servidor e canal.')
+        .setDescription('Selecione uma das opções abaixo para configurar a **Yui** neste servidor e canal.')
         .addFields(
             { name: '🎭 Personalidade & Humor', value: 'Configure a atitude da IA ou adicione instruções personalizadas para este canal.', inline: false },
             { name: '💬 Mensagens Espontâneas', value: 'Ajuste com que frequência a IA entra nas conversas por conta própria.', inline: false },
@@ -114,7 +114,7 @@ async function sendServerAdminDashboard(interaction, isUpdate = false) {
             { name: '🔔 Resposta a @everyone / @here', value: 'Defina se a IA deve responder quando o servidor for mencionado em massa.', inline: false },
             { name: '🔧 Ferramentas MCP', value: 'Inspecione descrições e ative/desative ferramentas de IA para este servidor.', inline: false }
         )
-        .setFooter({ text: 'Hikari Administrative Dashboard • by yGuilhermy' })
+        .setFooter({ text: 'Yui Administrative Dashboard • by yGuilhermy' })
         .setTimestamp();
 
     const row1 = new ActionRowBuilder().addComponents(
@@ -194,7 +194,7 @@ async function handleServerAdminInteraction(interaction) {
         const embed = new EmbedBuilder()
             .setColor(0x7C3AED)
             .setTitle('💬 Configurar Mensagens Espontâneas')
-            .setDescription('Escolha abaixo o estado e a frequência com que a Hikari falará sozinha neste canal.');
+            .setDescription('Escolha abaixo o estado e a frequência com que a Yui falará sozinha neste canal.');
 
         const rowButtons = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('srvcfg_espontaneo_on').setLabel('🟢 Ativar Espontâneo').setStyle(ButtonStyle.Success),
@@ -219,7 +219,7 @@ async function handleServerAdminInteraction(interaction) {
         const embed = new EmbedBuilder()
             .setColor(0x7C3AED)
             .setTitle('📢 Configurar Canal de Updates')
-            .setDescription('Selecione abaixo o canal de texto onde a Hikari enviará avisos de atualizações.');
+            .setDescription('Selecione abaixo o canal de texto onde a Yui enviará avisos de atualizações.');
 
         const channelSelect = new ChannelSelectMenuBuilder()
             .setCustomId('srvcfg_updates_ch')
@@ -235,7 +235,7 @@ async function handleServerAdminInteraction(interaction) {
         const embed = new EmbedBuilder()
             .setColor(0x7C3AED)
             .setTitle('🔔 Respostas a Menções Globais')
-            .setDescription('Escolha se a Hikari deve responder a marcações de `@everyone` e `@here` neste servidor.');
+            .setDescription('Escolha se a Yui deve responder a marcações de `@everyone` e `@here` neste servidor.');
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('srvcfg_mencoes_on').setLabel('✅ Responder a Mentions').setStyle(ButtonStyle.Success),
@@ -306,7 +306,7 @@ async function handleServerAdminInteraction(interaction) {
         const embed = new EmbedBuilder()
             .setColor(ativo ? 0x10B981 : 0xE11D48)
             .setTitle('🔔 Configuração de Menções Atualizada')
-            .setDescription(`A Hikari irá ${ativo ? '✅ **responder**' : '❌ **ignorar**'} marcações de @everyone e @here neste servidor.`);
+            .setDescription(`A Yui irá ${ativo ? '✅ **responder**' : '❌ **ignorar**'} marcações de @everyone e @here neste servidor.`);
         return interaction.update({ embeds: [embed], components: [] });
     }
 }
@@ -359,7 +359,7 @@ async function handleIaFerramentasCommand(interaction) {
                 { name: '🟢 Ativas', value: activeList.length > 0 ? activeList.join('\n') : '*Nenhuma ferramenta ativa*', inline: false },
                 { name: '🔴 Desativadas', value: disabledList.length > 0 ? disabledList.join('\n') : '*Nenhuma ferramenta desativada*', inline: false }
             )
-            .setFooter({ text: 'Hikari MCP Manager • by yGuilhermy' })
+            .setFooter({ text: 'Yui MCP Manager • by yGuilhermy' })
             .setTimestamp();
 
         return interaction.reply({ embeds: [embed], ephemeral: false });
@@ -391,7 +391,7 @@ async function handleIaFerramentasCommand(interaction) {
                 { name: 'Ferramenta', value: tool.meta?.label || tool.function.name, inline: true },
                 { name: 'Status no Servidor', value: enabled ? '🟢 Ativada' : '🔴 Desativada', inline: true }
             )
-            .setFooter({ text: 'Hikari MCP Manager • by yGuilhermy' })
+            .setFooter({ text: 'Yui MCP Manager • by yGuilhermy' })
             .setTimestamp();
 
         return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -403,7 +403,7 @@ async function handleIaFerramentasCommand(interaction) {
             .setColor(0x10B981)
             .setTitle('🔄 Ferramentas Resetadas')
             .setDescription(`Todas as ferramentas do servidor **${interaction.guild?.name || targetGuildId}** foram restauradas para os valores padrão.`)
-            .setFooter({ text: 'Hikari MCP Manager • by yGuilhermy' })
+            .setFooter({ text: 'Yui MCP Manager • by yGuilhermy' })
             .setTimestamp();
 
         return interaction.reply({ embeds: [embed], ephemeral: true });

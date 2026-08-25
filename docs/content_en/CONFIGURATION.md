@@ -1,6 +1,6 @@
 # ⚙️ Configuration, Governance, and Multi-Token
 
-This document covers Hikari's configuration architecture, focusing on API resilience and scalability of ownership permissions (Multi-Owner).
+This document covers Yui's configuration architecture, focusing on API resilience and scalability of ownership permissions (Multi-Owner).
 
 ---
 
@@ -27,7 +27,7 @@ To bypass rate limits imposed by providers such as Google and Stability, we impl
 
 ## 👑 2. Governance System (Multi-Owner)
 
-Unlike legacy bots that support only one owner, Hikari uses a list of IDs for administrative privilege validation.
+Unlike legacy bots that support only one owner, Yui uses a list of IDs for administrative privilege validation.
 
 ### Configuration:
 In the `.env` file, fill `OWNER_ID` with the user IDs separated by commas.

@@ -1,6 +1,6 @@
 # 🚀 Installation Guide and Quick Start (Get Started)
 
-Welcome to the technical deployment guide for **Hikari**. This document details how to prepare the environment, manage dependencies, and perform the initial system startup.
+Welcome to the technical deployment guide for **Yui**. This document details how to prepare the environment, manage dependencies, and perform the initial system startup.
 
 ---
 
@@ -46,8 +46,8 @@ To automate environment checking and dependency installation (including external
 1.  **Clone the Repository:**
 
     ```bash
-    git clone https://github.com/yGuilhermy/Hikari.git
-    cd Hikari
+    git clone https://github.com/yGuilhermy/Yui.git
+    cd Yui
     ```
 
 2.  **Install Modules (NPM):**
@@ -59,7 +59,7 @@ To automate environment checking and dependency installation (including external
     _This will install critical packages like `discord.js`, `axios` (requests), `cheerio` (scraping), and `@gradio/client`._
 
 3.  **Data Environment Configuration:**
-    Hikari requires certain folders to exist for caching and persistence:
+    Yui requires certain folders to exist for caching and persistence:
     - `src/data/temp_images/` (Generated automatically, but ensure write permission).
     - `src/data/x.json` (Global database).
 
@@ -86,7 +86,7 @@ Once the `.env` file is configured (See the [Environment Guide](./ENVIRONMENT.md
 node index.js
 
 # Recommended for production (uses auto-restart in case of failure)
-npx pm2 start index.js --name hikari
+npx pm2 start index.js --name yui
 ```
 
 ### 💡 Expert Tips:

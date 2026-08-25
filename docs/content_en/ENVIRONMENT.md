@@ -1,6 +1,6 @@
 # 🔑 Environment Variables and Configuration Guide
 
-This guide explains each entry in the `.env` file and Hikari's internal settings, including the necessary links to obtain API keys.
+This guide explains each entry in the `.env` file and Yui's internal settings, including the necessary links to obtain API keys.
 
 ---
 
@@ -26,7 +26,7 @@ This guide explains each entry in the `.env` file and Hikari's internal settings
 
 ### 🧠 Language Models (LLM)
 
-- **`GEMINI_API_KEY`**: Primary key for Hikari's engine. Supports rotation (e.g., `key1,key2`).
+- **`GEMINI_API_KEY`**: Primary key for Yui's engine. Supports rotation (e.g., `key1,key2`).
   - 🔗 **Obtain from:** [Google AI Studio](https://aistudio.google.com/app/apikey)
 - **`HF_TOKEN`**: Token for Hugging Face models (such as FLUX for images or chat models).
   - 🔗 **Obtain from:** [Hugging Face Settings](https://huggingface.co/settings/tokens)
@@ -62,7 +62,7 @@ This guide explains each entry in the `.env` file and Hikari's internal settings
 
 - **`OWNER_ID`**: Your Discord user ID (or multiple separated by commas). This ID is the bot owner, and only they can use commands with the Owner flag.
 - **`PREFIX`**: Prefix for legacy commands (if any). Default: `@`.
-- **`BOT_NAME`**: The name Hikari will recognize as her own.
+- **`BOT_NAME`**: The name Yui will recognize as her own.
 - **`REQUIRE_TOS`**: If `true`, new servers must accept the terms of use before using the bot.
 - **`SAVE_HISTORY`**: Saves message history in `src/data/history.txt` for debugging.
 

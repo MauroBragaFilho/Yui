@@ -5,7 +5,7 @@ module.exports = {
     once: false,
     async execute(guild) {
         if (!guild || !guild.id) return;
-        console.log(`[EVENT] Hikari foi removida do servidor: ${guild.name} (${guild.id})`);
+        console.log(`[EVENT] Yui foi removida do servidor: ${guild.name} (${guild.id})`);
         removeAcceptedServer(guild.id);
     },
 };

@@ -73,7 +73,7 @@ async function handleSauceCommand(interaction) {
 O usuário mandou um screenshot de anime, mas a busca retornou baixa precisão (< 85%).
 Possíveis candidatos: ${uniqueCandidates.join(', ')}.
 [SUA MISSÃO]
-Aja como a Hikari (Otaku/Gamer).
+Aja como a Yui (Otaku/Gamer).
 - Diga que está difícil de ver ("tá meio pixelado", "não tenho certeza").
 - Cite que pode ser um dos animes da lista retornado pela API.
 - Escolha um deles (aleatoriamente ou o que você "preferir") e faça um comentário pessoal/engraçado sobre ele ("torça para ser X porque Y").
@@ -112,7 +112,7 @@ Aja como a Hikari (Otaku/Gamer).
                 { name: '🔞 Classificação', value: isHentai ? 'NSFW (+18)' : 'Seguro', inline: true },
                 { name: '🎯 Precisão', value: `${(animeData.similarity * 100).toFixed(1)}%`, inline: true }
             )
-            .setFooter({ text: 'Sauce encontrado via trace.moe • Hikari • by yGuilhermy' })
+            .setFooter({ text: 'Sauce encontrado via trace.moe • Yui • by yGuilhermy' })
             .setTimestamp();
         if (animeData.videoUrl) {
             embed.setDescription(`${description}\n\n🎥 **[Ver Cena Original](${animeData.videoUrl})**`);
@@ -131,7 +131,7 @@ Nota Anilist: ${score}.
 Sinopse: ${description}.
 Classificação +18: ${isHentai ? 'SIM' : 'NÃO'}.
 [SUA MISSÃO]
-Aja como a Hikari (Analista de Animes).
+Aja como a Yui (Analista de Animes).
 Faça um comentário TÉCNICO e DIRETO sobre a obra.
 - Evite gírias excessivas ou "papo fofo". Vá direto ao ponto.
 - Avalie se vale a pena assistir baseando-se no estúdio e nota.
@@ -146,7 +146,7 @@ MÁXIMO 2 LINHAS + A NOTA.
             const comment = await Promise.race([llmTask, timeoutTask]);
             if (comment && typeof comment === 'string') {
                 const currentDesc = embed.data.description || "";
-                embed.setDescription(`${currentDesc}\n\n**🗣️ Comentário da Hikari:**\n${comment}`);
+                embed.setDescription(`${currentDesc}\n\n**🗣️ Comentário da Yui:**\n${comment}`);
                 await interaction.editReply({
                     content: null,
                     embeds: [embed]

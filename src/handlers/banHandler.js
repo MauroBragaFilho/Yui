@@ -175,7 +175,7 @@ async function handleBanInteraction(interaction, client) {
         await interaction.update({ embeds: [embed], components: [] });
         try {
             const user = await client.users.fetch(requestorId);
-            await user.send(`🎉 Sua apelação foi aceita! O bloqueio de \`${targetId}\` (${type}) foi removido da IA Hikari.`);
+            await user.send(`🎉 Sua apelação foi aceita! O bloqueio de \`${targetId}\` (${type}) foi removido da IA Yui.`);
         } catch(e) {}
     } else if (cid.startsWith('keepban_')) {
         if (!config.isOwner(interaction.user.id)) return interaction.reply({ content: '❌ Somente dono!', ephemeral: true });

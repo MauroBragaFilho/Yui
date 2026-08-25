@@ -23,7 +23,7 @@ async function transcribeWithGroq(audioBuffer, apiKey, filename) {
     formData.append('model', 'whisper-large-v3-turbo');
     formData.append('language', 'pt');
     formData.append('response_format', 'json');
-    formData.append('prompt', 'Hikari, assistente virtual Hikari, fale com a Hikari.');
+    formData.append('prompt', 'Yui, assistente virtual Yui, fale com a Yui.');
 
     const response = await axios.post('https://api.groq.com/openai/v1/audio/transcriptions', formData, {
         headers: {
@@ -121,7 +121,7 @@ async function transcribeWithOpenAI(audioBuffer, apiKey, filename) {
     formData.append('model', 'whisper-1');
     formData.append('language', 'pt');
     formData.append('response_format', 'json');
-    formData.append('prompt', 'Hikari, assistente virtual Hikari, fale com a Hikari.');
+    formData.append('prompt', 'Yui, assistente virtual Yui, fale com a Yui.');
 
     const endpoint = process.env.OPENAI_STT_URL || 'https://api.openai.com/v1/audio/transcriptions';
 

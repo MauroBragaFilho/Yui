@@ -1,6 +1,6 @@
 # 📻 Sistema de Modo Rádio e Streaming de Áudio
 
-O **Modo Rádio** da Hikari é um ecossistema completo de reprodução musical e voz interativa para canais do Discord, combinando streaming progressivo de áudio em tempo real, suporte a múltiplas plataformas e controle autônomo por IA.
+O **Modo Rádio** da Yui é um ecossistema completo de reprodução musical e voz interativa para canais do Discord, combinando streaming progressivo de áudio em tempo real, suporte a múltiplas plataformas e controle autônomo por IA.
 
 ---
 
@@ -49,12 +49,12 @@ A resolução de mídia (`radioProviders.js`) suporta múltiplos formatos com ex
 - **Comandos de Voz em Tempo Real**: Ouvinte integrado que captura fala de usuários não mutados no canal e decodifica o áudio PCM WAV para o Whisper API.
 - **Seletor de 3 Modos de Voz**:
   1. `🔇 Voz: Off`: Escuta por voz completamente desativada.
-  2. `🧠 Voz: IA`: Transcreve o áudio e envia para o modelo de IA (LLM) da Hikari com suporte a ferramentas MCP (`radioMCPTools.json`).
+  2. `🧠 Voz: IA`: Transcreve o áudio e envia para o modelo de IA (LLM) da Yui com suporte a ferramentas MCP (`radioMCPTools.json`).
   3. `⚡ Voz: Direct`: Modo de ultra-baixa latência estilo Alexa. Identifica intenções e palavras-chave de forma local sem passar pelo modelo de IA.
 - **Algoritmo do Modo Direct (Keyword & Intent Engine)**:
   - **Execução Instantânea**: Responde em menos de 50ms após o STT.
-  - **Captura em Frases Curtas e Longas**: Identifica intenções no meio da sentença (ex: *"Hikari, pare a música então cara"*).
-  - **Intenções Suportadas**: `Pausar`, `Retomar`, `Parar`, `Próxima`, `Anterior`, `Embaralhar`, `Repetir`, `Ver Fila`, `Info da Música`, `Remover Faixa` e `Busca/Adição de Músicas` (ex: *"Hikari, tocar Welcome to the Jungle"* ou *"Hikari, Welcome to the Jungle"*).
+  - **Captura em Frases Curtas e Longas**: Identifica intenções no meio da sentença (ex: *"Yui, pare a música então cara"*).
+  - **Intenções Suportadas**: `Pausar`, `Retomar`, `Parar`, `Próxima`, `Anterior`, `Embaralhar`, `Repetir`, `Ver Fila`, `Info da Música`, `Remover Faixa` e `Busca/Adição de Músicas` (ex: *"Yui, tocar Welcome to the Jungle"* ou *"Yui, Welcome to the Jungle"*).
   - **Notificação Temporária**: Envia no chat uma notificação mencionando o usuário (`<@userId> ⚡ **[Direct]** ...`) com exclusão automática em 4 segundos.
 - **Autoproteção de Rate Limit (429/492)**: Ao atingir o limite da API do Whisper, a escuta de voz é desativada temporariamente por **1 minuto**, com notificação automática no chat e reativação agendada.
 - **Monitoramento de Canal Vazio**: Encerra a sessão e desloga a chamada se não houver usuários humanos no canal por mais de 10 segundos.

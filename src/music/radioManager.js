@@ -30,7 +30,7 @@ const { prefetchNextTrack, cleanupSessionAudioFiles } = require('./radioPrefetch
 const radioAmbiguousSessions = new Map();
 const userLastVoiceCommand = new Map();
 
-const RADIO_TRIGGER_REGEX = /\b(hikari|hikare|hikary|hikarii|hikarie|hikaris|hicari|hicare|hicary|hicarii|hicaris|hikario|hicario|hikaru|hicaru|hikar|hicar|ikari|ikare|ikary|ikarii|ikaris|icari|icare|icaro|icary|icarii|icaris|icara|icaras|icaros|ikario|icario|ikaru|icaru|ikar|icar|ricardo|ricard|ricardi|ricari|ricare|rikari|rikare|ricario|ricarto|recari|recaro|ricar|ricardin|ricardinho|ficari|ficare|vicari|vicare|ficardo|vicardo|dicari|dicare|kikari|kicari|ticari|ih\s*cari|e\s*cari|eh\s*cari|i\s*cari|re\s*cari|ri\s*cari|hi\s*cari|he\s*cari|a\s*cari|o\s*cari|ei\s*cari|oh\s*cari|oi\s*cari)\b/i;
+const RADIO_TRIGGER_REGEX = /\b(yui|yuin|yuis|yuih|yuii|yuie|yuia|yuio|yukari|yukare|yukary|yukarii|yukarie|yukaris|yucari|yucare|yucary|yucarii|yucaris|yucario|yucaru|yukar|yukar|ikari|ikare|ikary|ikarii|ikaris|icari|icare|icaro|icary|icarii|icaris|icara|icaras|icaros|ikario|icario|ikaru|icaru|ikar|icar|ricardo|ricard|ricardi|ricari|ricare|rikari|rikare|ricario|ricarto|recari|recaro|ricar|ricardin|ricardinho|ficari|ficare|vicari|vicare|ficardo|vicardo|dicari|dicare|kikari|kicari|ticari|ih\s*cari|e\s*cari|eh\s*cari|i\s*cari|re\s*cari|ri\s*cari|hi\s*cari|he\s*cari|a\s*cari|o\s*cari|ei\s*cari|oh\s*cari|oi\s*cari)\b/i;
 
 function createWavHeader(pcmLength, sampleRate = 48000, numChannels = 2, bitsPerSample = 16) {
     const header = Buffer.alloc(44);
@@ -234,12 +234,12 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
                 'transcrição',
                 'transcricao',
                 'amara.org',
-                'fale com a hikari',
-                'fale com hikari',
-                'falar com a hikari',
-                'falar com hikari',
-                'conversar com a hikari',
-                'conversar com hikari',
+                'fale com a yui',
+                'fale com yui',
+                'falar com a yui',
+                'falar com yui',
+                'conversar com a yui',
+                'conversar com yui',
                 'fale com a',
                 'falar com a',
                 'fale com o',

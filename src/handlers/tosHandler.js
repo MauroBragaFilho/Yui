@@ -89,23 +89,23 @@ function removeAcceptedServer(guildId) {
 const DEFAULT_TOS_PAGES = [
     {
         title: '🛡️ Categoria 1/5 • Moderação Automática (AutoMod)',
-        content: `### 🛡️ 1. O SISTEMA AUTOMOD (MODERAÇÃO AUTOMÁTICA)\nA Hikari possui um dos sistemas de segurança mais severos e avançados do Discord. Esse sistema monitora todas as interações no chat e em chamadas de voz através de dois mecanismos integrados e simultâneos:\n\n1️⃣ **FILTRO DE GATILHOS RÁPIDOS (Keyword Trigger):**\nQualquer mensagem ou comando que contenha termos explícitos altamente proibidos causará um bloqueio automático imediato.\n* *Exemplos de gatilhos:* Apologia a crimes graves, termos relacionados a automutilação, terrorismo, racismo/discurso de ódio extremo, ou tentativas de gerar pornografia/NSFW.\n* *Nota:* O sistema filtra de forma inteligente para evitar falsos positivos comuns, mas termos graves geram punições instantâneas.\n\n2️⃣ **ANÁLISE COGNITIVA DA IA (AI AutoMod MCP):**\nMesmo que você não use palavras ofensivas explícitas, a inteligência artificial analisa o **contexto** e a **intenção** da conversa.\n* **Intenção Maliciosa / Jailbreak:** Tentativas sutis de fazer a IA contornar suas diretrizes de segurança, gerar conteúdo impróprio disfarçado ou ensinar a cometer atos ilícitos.\n* **Abuso, Xingamentos e Toxicidade à IA:** A Hikari não aceita abusos verbais. Insultos direcionados ao bot, assédio moral, xingamentos constantes ou comportamento tóxico forçado acionarão a moderação. A IA identificará o ataque ao seu próprio sistema e usará a ferramenta de banimento de forma autônoma.`
+        content: `### 🛡️ 1. O SISTEMA AUTOMOD (MODERAÇÃO AUTOMÁTICA)\nA Yui possui um dos sistemas de segurança mais severos e avançados do Discord. Esse sistema monitora todas as interações no chat e em chamadas de voz através de dois mecanismos integrados e simultâneos:\n\n1️⃣ **FILTRO DE GATILHOS RÁPIDOS (Keyword Trigger):**\nQualquer mensagem ou comando que contenha termos explícitos altamente proibidos causará um bloqueio automático imediato.\n* *Exemplos de gatilhos:* Apologia a crimes graves, termos relacionados a automutilação, terrorismo, racismo/discurso de ódio extremo, ou tentativas de gerar pornografia/NSFW.\n* *Nota:* O sistema filtra de forma inteligente para evitar falsos positivos comuns, mas termos graves geram punições instantâneas.\n\n2️⃣ **ANÁLISE COGNITIVA DA IA (AI AutoMod MCP):**\nMesmo que você não use palavras ofensivas explícitas, a inteligência artificial analisa o **contexto** e a **intenção** da conversa.\n* **Intenção Maliciosa / Jailbreak:** Tentativas sutis de fazer a IA contornar suas diretrizes de segurança, gerar conteúdo impróprio disfarçado ou ensinar a cometer atos ilícitos.\n* **Abuso, Xingamentos e Toxicidade à IA:** A Yui não aceita abusos verbais. Insultos direcionados ao bot, assédio moral, xingamentos constantes ou comportamento tóxico forçado acionarão a moderação. A IA identificará o ataque ao seu próprio sistema e usará a ferramenta de banimento de forma autônoma.`
     },
     {
         title: '🎙️ Categoria 2/5 • Segurança em Calls de Voz',
-        content: `### 🎙️ 2. REGRAS E SEGURANÇA EM CANAIS DE VOZ (CALLS)\nO uso do Assistente de Voz (\`/entrar-call\`) está sujeito às mesmas diretrizes de segurança de texto:\n* **Transcrição e Monitoramento:** Todo áudio direcionado à Hikari ao falar o gatilho ('Hikari...') é transcrito e processado pelo sistema de AutoMod. Xingamentos, assédio por voz, ofensas ou tentativas de burlar filtros por áudio acarretam **BANIMENTO GLOBAL IMEDIATO**.\n* **Restrição Absoluta de Acesso:** Usuários, servidores ou canais com banimentos ativos estão estritamente proibidos de chamar a Hikari para chamadas de voz. O sistema de voz rejeita o comando \`/entrar-call\` e ignora 100% de qualquer sinal de voz originado de perfis banidos.`
+        content: `### 🎙️ 2. REGRAS E SEGURANÇA EM CANAIS DE VOZ (CALLS)\nO uso do Assistente de Voz (\`/entrar-call\`) está sujeito às mesmas diretrizes de segurança de texto:\n* **Transcrição e Monitoramento:** Todo áudio direcionado à Yui ao falar o gatilho ('Yui...') é transcrito e processado pelo sistema de AutoMod. Xingamentos, assédio por voz, ofensas ou tentativas de burlar filtros por áudio acarretam **BANIMENTO GLOBAL IMEDIATO**.\n* **Restrição Absoluta de Acesso:** Usuários, servidores ou canais com banimentos ativos estão estritamente proibidos de chamar a Yui para chamadas de voz. O sistema de voz rejeita o comando \`/entrar-call\` e ignora 100% de qualquer sinal de voz originado de perfis banidos.`
     },
     {
         title: '🚨 Categoria 3/5 • Diretrizes de Conteúdo',
-        content: `### 🚨 3. DIRETRIZES DE CONTEÚDO (PROIBIÇÕES CRÍTICAS)\nÉ expressamente proibido utilizar qualquer recurso da Hikari (texto ou voz) para fins de:\n* **NSFW & Pornografia:** Criação ou solicitação de descrições, contos ou imagens de cunho sexual.\n* **Violência & Ódio:** Promoção de discurso de ódio contra minorias, preconceito religioso, de gênero, sexual ou apologia à violência física real/tortura.\n* **Ataque e Ofensa ao Bot:** O usuário que abusar verbalmente da Hikari com palavras chulas ou xingamentos tóxicos (em texto ou voz) será **permanentemente bloqueado** e a IA o ignorará de forma absoluta.\n* **Exploração & Spam:** Floodar comandos, tentar derrubar os servidores de IA ou sobrecarregar a fila global.`
+        content: `### 🚨 3. DIRETRIZES DE CONTEÚDO (PROIBIÇÕES CRÍTICAS)\nÉ expressamente proibido utilizar qualquer recurso da Yui (texto ou voz) para fins de:\n* **NSFW & Pornografia:** Criação ou solicitação de descrições, contos ou imagens de cunho sexual.\n* **Violência & Ódio:** Promoção de discurso de ódio contra minorias, preconceito religioso, de gênero, sexual ou apologia à violência física real/tortura.\n* **Ataque e Ofensa ao Bot:** O usuário que abusar verbalmente da Yui com palavras chulas ou xingamentos tóxicos (em texto ou voz) será **permanentemente bloqueado** e a IA o ignorará de forma absoluta.\n* **Exploração & Spam:** Floodar comandos, tentar derrubar os servidores de IA ou sobrecarregar a fila global.`
     },
     {
         title: '🛑 Categoria 4/5 • Funcionamento do Banimento',
-        content: `### 🛑 4. COMO FUNCIONA O BANIMENTO\nQuando um banimento é aplicado (seja por palavra gatilho ou decisão autônoma da IA):\n1. **Bloqueio Global de Perfil:** O ID do seu usuário é banido globalmente. A Hikari passará a ignorar todas as suas interações, áudios de voz, marcações ou comandos em qualquer servidor onde ela esteja presente.\n2. **Notificação de Segurança:** Um alerta detalhado com a violação e a conversa correspondente é enviado ao canal central de auditoria dos administradores.\n3. **Bloqueio de Canal/Servidor:** Em casos graves onde a administração de um servidor permita abusos sistemáticos coletivos, o servidor inteiro pode ser banido da rede Hikari.`
+        content: `### 🛑 4. COMO FUNCIONA O BANIMENTO\nQuando um banimento é aplicado (seja por palavra gatilho ou decisão autônoma da IA):\n1. **Bloqueio Global de Perfil:** O ID do seu usuário é banido globalmente. A Yui passará a ignorar todas as suas interações, áudios de voz, marcações ou comandos em qualquer servidor onde ela esteja presente.\n2. **Notificação de Segurança:** Um alerta detalhado com a violação e a conversa correspondente é enviado ao canal central de auditoria dos administradores.\n3. **Bloqueio de Canal/Servidor:** Em casos graves onde a administração de um servidor permita abusos sistemáticos coletivos, o servidor inteiro pode ser banido da rede Yui.`
     },
     {
         title: '⚖️ Categoria 5/5 • Apelações & Recursos',
-        content: `### ⚖️ 5. APELAÇÕES & RECURSOS\nSe você acredita que o seu banimento foi injusto ou decorreu de um mal-entendido técnico da IA:\n* Você poderá submeter uma apelação clicando no botão **'Solicitar Apelação'** gerado na mensagem do banimento.\n* Sua apelação será avaliada manualmente pelo criador/desenvolvedor da Hikari.\n* *Importante:* Mentir na apelação ou tentar burlar o bloqueio através de contas secundárias resultará na rejeição imediata de qualquer recurso.`
+        content: `### ⚖️ 5. APELAÇÕES & RECURSOS\nSe você acredita que o seu banimento foi injusto ou decorreu de um mal-entendido técnico da IA:\n* Você poderá submeter uma apelação clicando no botão **'Solicitar Apelação'** gerado na mensagem do banimento.\n* Sua apelação será avaliada manualmente pelo criador/desenvolvedor da Yui.\n* *Importante:* Mentir na apelação ou tentar burlar o bloqueio através de contas secundárias resultará na rejeição imediata de qualquer recurso.`
     }
 ];
 
@@ -123,7 +123,7 @@ function buildTosPagePayload(pageIndex = 0, maxVisited = 0, isLegacy = false) {
 
     let description = "";
     if (safePageIndex === 0 && isLegacy) {
-        description += "⚠️ **Aviso de Atualização:** Identificamos que a Hikari já faz parte deste servidor há algum tempo. Implementamos novas diretrizes de segurança e privacidade. **Para continuar utilizando os serviços da Hikari, é obrigatório que a administração aceite os termos abaixo.**\n\n";
+        description += "⚠️ **Aviso de Atualização:** Identificamos que a Yui já faz parte deste servidor há algum tempo. Implementamos novas diretrizes de segurança e privacidade. **Para continuar utilizando os serviços da Yui, é obrigatório que a administração aceite os termos abaixo.**\n\n";
     }
 
     description += currentPage.content;
@@ -136,7 +136,7 @@ function buildTosPagePayload(pageIndex = 0, maxVisited = 0, isLegacy = false) {
         .setColor(0x7C3AED)
         .setTitle(`⚖️ Termos de Uso — ${currentPage.title}`)
         .setDescription(description)
-        .setFooter({ text: `Página ${safePageIndex + 1} de ${totalPages} • Hikari ToS • by yGuilhermy` })
+        .setFooter({ text: `Página ${safePageIndex + 1} de ${totalPages} • Yui ToS • by yGuilhermy` })
         .setTimestamp();
 
     const legFlag = isLegacy ? '1' : '0';
@@ -156,7 +156,7 @@ function buildTosPagePayload(pageIndex = 0, maxVisited = 0, isLegacy = false) {
             .setDisabled(safePageIndex === totalPages - 1),
         new ButtonBuilder()
             .setLabel('Página do Projeto')
-            .setURL('https://github.com/yGuilhermy/Hikari')
+            .setURL('https://github.com/yGuilhermy/Yui')
             .setStyle(ButtonStyle.Link)
             .setEmoji('📂')
     );
@@ -260,14 +260,14 @@ async function handleTosInteraction(interaction) {
                 setServerUpdateChannel(guild.id, targetUpdateChannel.id);
             }
             await interaction.editReply({
-                content: `✅ **Termos de Uso aceitos por <@${interaction.user.id}>!** A Hikari agora está liberada para este servidor. ✨`,
+                content: `✅ **Termos de Uso aceitos por <@${interaction.user.id}>!** A Yui agora está liberada para este servidor. ✨`,
                 embeds: [],
                 components: []
             }).catch(err => console.error('[TOS-DEBUG] Erro no editReply (Accept):', err.message));
             const updatesEmbed = new EmbedBuilder()
                 .setColor(0x7C3AED)
                 .setTitle('📢 Central de Updates Configurada')
-                .setDescription(`O canal <#${targetUpdateChannel.id}> foi registrado para receber as novidades e atualizações da Hikari.\n\nCaso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\``);
+                .setDescription(`O canal <#${targetUpdateChannel.id}> foi registrado para receber as novidades e atualizações da Yui.\n\nCaso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\``);
             await targetUpdateChannel.send({ embeds: [updatesEmbed] }).catch(() => {});
             console.log(`[TOS-DEBUG] Servidor ${guild.id} aceitou.`);
         } else {
@@ -312,7 +312,7 @@ async function reportNewGuild(guild) {
             const autoBanTrigger = checkAutoBan(null, guild.name, guild.id, null, null, null);
             const logEmbed = new EmbedBuilder()
                 .setColor(autoBanTrigger ? 0xF59E0B : 0x10B981)
-                .setTitle(autoBanTrigger ? '⚠️ Hikari Adicionada (Nome Suspeito)' : '📥 Hikari Adicionada a um Novo Servidor')
+                .setTitle(autoBanTrigger ? '⚠️ Yui Adicionada (Nome Suspeito)' : '📥 Yui Adicionada a um Novo Servidor')
                 .setThumbnail(guild.iconURL())
                 .addFields(
                     { name: 'Nome do Servidor', value: `**${guild.name}**`, inline: true },

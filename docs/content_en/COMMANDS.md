@@ -1,6 +1,6 @@
 # 🎮 Advanced Commands Guide
 
-This document details all slash commands (/) available in Hikari, their features, parameters, and permissions.
+This document details all slash commands (/) available in Yui, their features, parameters, and permissions.
 
 ---
 
@@ -20,11 +20,11 @@ This document details all slash commands (/) available in Hikari, their features
 
 ### `/ia_chat`
 
-The primary command for interacting with Hikari's brain.
+The primary command for interacting with Yui's brain.
 
 - **Prompt:** Your question or request.
 - **Visibility:** Choose between `Public` (everyone sees) or `Private` (only you see).
-- **Advanced:** If you mention others in the prompt, Hikari may attempt to understand the context of the conversation.
+- **Advanced:** If you mention others in the prompt, Yui may attempt to understand the context of the conversation.
 
 ### `/chat_resumo`
 
@@ -35,7 +35,7 @@ Reads the latest messages and generates a smart summary.
 
 ### `/chat_humor` (Admin)
 
-Changes Hikari's "soul" in a specific channel.
+Changes Yui's "soul" in a specific channel.
 
 - **Instruction:** New behavior rules (e.g., "Speak like a pirate").
 - **Mood:** Emotional state (e.g., "Angry", "Happy").
@@ -44,7 +44,7 @@ Changes Hikari's "soul" in a specific channel.
 
 ### `/chat_espontaneo` (Owner)
 
-Configures Hikari to intrude into conversations without being called.
+Configures Yui to intrude into conversations without being called.
 
 - **State:** Enable or Disable.
 - **Frequency:** Choose between `Low`, `Medium`, or `High`.
@@ -145,7 +145,7 @@ Unified public dashboard for server configuration.
 
 ### `/config_criador` (Owner / Creator)
 
-Master Control Center for global Hikari network management (hidden/ephemeral for creator).
+Master Control Center for global Yui network management (hidden/ephemeral for creator).
 
 - **Subcommands `painel` / `dashboard`:** Opens the Master Creator dashboard with button controls.
 - **Models:** Configures active LLM model and display settings.
@@ -164,7 +164,7 @@ Independent slash command for server admins to manage MCP tools.
 
 ### `/aceitar_tos` (Server Admin)
 
-Displays and records acceptance of Hikari Terms of Service to unlock bot features on the server.
+Displays and records acceptance of Yui Terms of Service to unlock bot features on the server.
 
 ### `/ia_config` (Owner)
 
@@ -177,7 +177,7 @@ Low-level technical configuration for AI models (`Timeout`, `Temperature`, `Max 
 - 💡 **Privacy First:** Use the `visibility: Private` parameter in the `/ia_chat` command to handle sensitive matters or avoid cluttering the chat with long AI texts.
 - 💡 **Image Quality:** When using `/ia_imagem`, put effort into the `negative_prompt` with terms like `blurry, deformed, low quality` to force the AI to generate sharper results.
 - 💡 **AI Diversity:** If an image provider is slow, try changing the `provider` manually. `Pollinations` is generally the most stable, while `Together` offers high-fidelity FLUX models.
-- 💡 **Context History:** Hikari "remembers" the channel's latest messages. Use this to your advantage when asking for summaries or continuing a conversation without needing to repeat everything.
+- 💡 **Context History:** Yui "remembers" the channel's latest messages. Use this to your advantage when asking for summaries or continuing a conversation without needing to repeat everything.
 
 ---
 

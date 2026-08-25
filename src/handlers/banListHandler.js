@@ -6,7 +6,7 @@ async function buildBanListPayload(client, category, page = 0) {
     const embed = new EmbedBuilder().setColor(0xE11D48);
 
     if (category === 'home') {
-        embed.setTitle('🚫 Central de Bloqueios • Hikari')
+        embed.setTitle('🚫 Central de Bloqueios • Yui')
              .setDescription('Painel administrativo para controle e visualização dos bloqueios globais ativos.')
              .addFields(
                  { name: '👥 Usuários Banidos', value: `${Object.keys(currentBans.users || {}).length} perfil(s)`, inline: true },

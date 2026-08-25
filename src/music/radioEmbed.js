@@ -43,8 +43,8 @@ function buildRadioEmbed(session) {
 
     const embed = new EmbedBuilder()
         .setColor(color)
-        .setTitle('📻 Modo Rádio — Hikari')
-        .setFooter({ text: 'Hikari Radio • Use os botões abaixo para controlar' });
+        .setTitle('📻 Modo Rádio — Yui')
+        .setFooter({ text: 'Yui Radio • Use os botões abaixo para controlar' });
 
     const isFast = session.streamMode === 'FAST';
     const streamModeText = isFast ? '⚡ Rápido (Converte YT ➔ Deezer)' : '⚖️ Híbrido (Padrão)';
@@ -144,7 +144,7 @@ function buildNotFoundEmbed(query) {
         .setColor(0xE11D48)
         .setTitle('❌ Música não encontrada')
         .setDescription(`Não consegui encontrar **"${query}"** no Deezer.`)
-        .setFooter({ text: 'Hikari Radio' });
+        .setFooter({ text: 'Yui Radio' });
 }
 
 module.exports = {

@@ -1,6 +1,6 @@
 # 🎮 Guia Avançado de Comandos / Advanced Commands Guide
 
-Este documento detalha todos os comandos slash (/) disponíveis na Hikari, suas funcionalidades, parâmetros e permissões.
+Este documento detalha todos os comandos slash (/) disponíveis na Yui, suas funcionalidades, parâmetros e permissões.
 
 ---
 
@@ -20,11 +20,11 @@ Este documento detalha todos os comandos slash (/) disponíveis na Hikari, suas 
 
 ### `/ia_chat`
 
-O comando principal para interagir com o cérebro da Hikari.
+O comando principal para interagir com o cérebro da Yui.
 
 - **Prompt:** Sua pergunta ou pedido.
 - **Visibilidade:** Escolha entre `Público` (todos veem) ou `Privado` (apenas você vê).
-- **Advanced:** Se você mencionar outras pessoas no prompt, a Hikari pode tentar entender o contexto da conversa.
+- **Advanced:** Se você mencionar outras pessoas no prompt, a Yui pode tentar entender o contexto da conversa.
 
 ### `/chat_resumo`
 
@@ -35,7 +35,7 @@ Faz a leitura das últimas mensagens e gera um resumo inteligente.
 
 ### `/chat_humor` (Admin)
 
-Altera a "alma" da Hikari em um canal específico.
+Altera a "alma" da Yui em um canal específico.
 
 - **Instrucao:** Novas regras de comportamento (ex: "Fale como um pirata").
 - **Mood:** Estado emocional (ex: "Brava", "Feliz").
@@ -44,7 +44,7 @@ Altera a "alma" da Hikari em um canal específico.
 
 ### `/chat_espontaneo` (Dono)
 
-Configura a Hikari para se intrometer nas conversas sem ser chamada.
+Configura a Yui para se intrometer nas conversas sem ser chamada.
 
 - **Estado:** Ativar ou Desativar.
 - **Frequência:** Escolha entre `Baixa`, `Média` ou `Alta`.
@@ -70,15 +70,15 @@ Gera imagens usando diversos modelos de difusão.
 
 ### `/entrar-call`
 
-Conecta a Hikari ao seu canal de voz atual para atendimento inteligente por voz.
+Conecta a Yui ao seu canal de voz atual para atendimento inteligente por voz.
 
-- **Advanced:** A Hikari escuta os usuários no canal de voz e responde ao ouvir o gatilho "Hikari" (ou equivalências fonéticas). Suporta nativamente o protocolo DAVE (E2EE) de criptografia do Discord e filtro de silêncio por RMS de áudio.
+- **Advanced:** A Yui escuta os usuários no canal de voz e responde ao ouvir o gatilho "Yui" (ou equivalências fonéticas). Suporta nativamente o protocolo DAVE (E2EE) de criptografia do Discord e filtro de silêncio por RMS de áudio.
 
 ### `/sair-call`
 
-Desconecta a Hikari do canal de voz em que ela está conectada no servidor.
+Desconecta a Yui do canal de voz em que ela está conectada no servidor.
 
-- **Advanced:** Pode ser acionado via comando slash, voz ("Hikari, saia da call") ou via ferramenta MCP. Desconecta automaticamente em caso de inatividade quando todos os usuários saem da call.
+- **Advanced:** Pode ser acionado via comando slash, voz ("Yui, saia da call") ou via ferramenta MCP. Desconecta automaticamente em caso de inatividade quando todos os usuários saem da call.
 
 ---
 
@@ -161,7 +161,7 @@ Painel gráfico unificado e público no chat para administração do servidor.
 
 ### `/config_criador` (Dono / Criador)
 
-Central de Controle Master para gerenciamento global da rede Hikari (oculta e restrita ao criador).
+Central de Controle Master para gerenciamento global da rede Yui (oculta e restrita ao criador).
 
 - **Subcomando `painel` / `dashboard`:** Abre o Dashboard Master por botões.
 - **Modelos:** Configura o modelo LLM ativo e exibição de modelo/pensamento.
@@ -180,7 +180,7 @@ Comando independente para administradores de servidor gerenciarem as ferramentas
 
 ### `/aceitar_tos` (Server Admin)
 
-Exibe e registra o aceite dos Termos de Serviço da Hikari para liberar e autorizar as funções do bot no servidor.
+Exibe e registra o aceite dos Termos de Serviço da Yui para liberar e autorizar as funções do bot no servidor.
 
 ### `/ia_config` (Dono)
 
@@ -193,7 +193,7 @@ Ajusta parâmetros técnicos de baixo nível dos modelos de IA (`Timeout`, `Temp
 - 💡 **Privacidade em Primeiro Lugar:** Use o parâmetro `visibilidade: Privado` no comando `/ia_chat` para tratar de assuntos sensíveis ou evitar poluir o chat com textos longos da IA.
 - 💡 **Qualidade de Imagem:** Ao usar `/ia_imagem`, capriche no `negative_prompt` com termos como `blurry, deformed, low quality` para forçar a IA a gerar resultados mais nítidos.
 - 💡 **Multiversidade de IAs:** Se um provedor de imagem estiver lento, experimente trocar o `provider` manualmente. O `Pollinations` é geralmente o mais estável, enquanto o `Together` oferece modelos FLUX de alta fidelidade.
-- 💡 **Histórico de Contexto:** A Hikari "lembra" das últimas mensagens do canal. Use isso a seu favor ao pedir resumos ou continuar uma conversa sem precisar repetir tudo.
+- 💡 **Histórico de Contexto:** A Yui "lembra" das últimas mensagens do canal. Use isso a seu favor ao pedir resumos ou continuar uma conversa sem precisar repetir tudo.
 
 ---
 

@@ -1,42 +1,83 @@
-# 📦 Dependências
+```
+# Dependencies
 node_modules/
-package-lock.json
 
-# 🔑 Segredos e Configurações de Usuário
+# Logs
+logs/
+*.log
+
+# Environment
 .env
 .env.local
+*.env.*
 
-# 🗄️ Dados e Persistência (Ignorar tudo exceto estrutura base)
-src/data/*
-!src/data/help.json
-!src/data/mcp_tools.json
+# Build artifacts
+dist/
+build/
+target/
 
-# 🗑️ Temporários e Logs
-src/data/temp_images/
-src/data/temp_audio/
-src/music/data/temp_radio_audio/
-src/music/data/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
-historico.txt
-
-# 🛠️ IDEs
-.vscode/
-.idea/
-*.swp
-
-# OS
+.git/modules/
 .DS_Store
+.hg/
+.hgignore
+.hgcheck
+.hgsigs
+.mypy_cache/
+.pytest_cache/
+.venv/
+venv/
+CVS/
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-
-# Cookies
-cookies.txt
-
-# Scripts de uso unico
-enable_automod.js
-
-# Sistema de updates
-src/script/send_updates.js
-
-# Notas esquisofrenicas
-notas.md
-notas-tecnicas.md
+```

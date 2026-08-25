@@ -36,7 +36,7 @@ async function handleCreatorAdminCommand(interaction, client) {
         const errEmbed = new EmbedBuilder()
             .setColor(0xE11D48)
             .setTitle('❌ Acesso Negado')
-            .setDescription(`Esse comando é exclusivo do criador da Hikari <@${config.ownerId}>.`);
+            .setDescription(`Esse comando é exclusivo do criador da Yui <@${config.ownerId}>.`);
         return interaction.reply({ embeds: [errEmbed], ephemeral: true });
     }
 
@@ -181,8 +181,8 @@ async function sendCreatorAdminDashboard(interaction, client, isUpdate = false) 
 
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
-        .setTitle('👑 Central de Controle Master • Criador Hikari')
-        .setDescription('Painel de gestão global e administração avançada da Hikari.')
+        .setTitle('👑 Central de Controle Master • Criador Yui')
+        .setDescription('Painel de gestão global e administração avançada da Yui.')
         .addFields(
             { name: '📊 Status do Sistema', value: `**RAM em uso:** ${ramMB} MB\n**Exibir Modelo:** ${getShowModel() ? '✅ Sim' : '❌ Não'}\n**Exibir Pensamento:** ${getShowModelThinking() ? '✅ Sim' : '❌ Não'}\n**Retentativas:** ${getErrorRetries()}\n**AutoMod (Servidor):** \`${autoBlockMode}\``, inline: true },
             { name: '🛑 Restrições Globais', value: `**Usuários:** ${userBansCount}\n**Servidores:** ${guildBansCount}\n**Canais:** ${channelBansCount}`, inline: true }

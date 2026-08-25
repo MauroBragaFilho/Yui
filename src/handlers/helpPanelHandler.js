@@ -7,7 +7,7 @@ const COMMAND_DETAILS = {
         name: '/ia_chat',
         category: '🧠 Inteligência Artificial',
         permission: '👥 Todos os Usuários',
-        description: 'Inicia uma conversa ou faz uma pergunta direta ao cérebro de IA da Hikari.',
+        description: 'Inicia uma conversa ou faz uma pergunta direta ao cérebro de IA da Yui.',
         syntax: '/ia_chat prompt:<texto> [visibilidade:Publico|Privado]',
         options: [
             { name: 'prompt', desc: 'Pergunta, dúvida, instrução ou conversa desejada.', required: true },
@@ -49,7 +49,7 @@ const COMMAND_DETAILS = {
         name: '/aceitar_tos',
         category: '⚙️ Administração de Servidor',
         permission: '🛡️ Administrador do Servidor (Gerenciar Servidor)',
-        description: 'Exibe os Termos de Serviço da Hikari e registra o aceite do servidor para desbloquear a utilização de todos os comandos.',
+        description: 'Exibe os Termos de Serviço da Yui e registra o aceite do servidor para desbloquear a utilização de todos os comandos.',
         syntax: '/aceitar_tos',
         options: [],
         examples: [
@@ -88,7 +88,7 @@ const COMMAND_DETAILS = {
         name: '/entrar-call',
         category: '🎙️ Voz & Calls',
         permission: '👥 Todos os Usuários',
-        description: 'Faz a Hikari entrar no seu canal de voz atual para interagir, responder a gatilhos de voz e atuar como assistente falante.',
+        description: 'Faz a Yui entrar no seu canal de voz atual para interagir, responder a gatilhos de voz e atuar como assistente falante.',
         syntax: '/entrar-call',
         options: [],
         examples: [
@@ -99,7 +99,7 @@ const COMMAND_DETAILS = {
         name: '/sair-call',
         category: '🎙️ Voz & Calls',
         permission: '👥 Todos os Usuários',
-        description: 'Desconecta a Hikari do canal de voz atual em que ela está conectada.',
+        description: 'Desconecta a Yui do canal de voz atual em que ela está conectada.',
         syntax: '/sair-call',
         options: [],
         examples: [
@@ -230,7 +230,7 @@ const COMMAND_DETAILS = {
 
 function getMainCategorySelectMenu(currentActive = 'home') {
     const menuOptions = [
-        { label: '🏠 Visão Geral & Início', description: 'Apresentação principal da Hikari e novidades', value: 'home', default: currentActive === 'home' },
+        { label: '🏠 Visão Geral & Início', description: 'Apresentação principal da Yui e novidades', value: 'home', default: currentActive === 'home' },
         { label: '🤖 Lista Geral de Comandos', description: 'Todos os comandos com menu de inspeção detalhado', value: 'commands_list', default: currentActive === 'commands_list' },
         { label: '⚖️ Regras, Segurança & AutoMod', description: 'Diretrizes de uso e moderação automática por IA', value: 'regras', default: currentActive === 'regras' },
         { label: '✨ Criador & Apoie o Projeto', description: 'Redes sociais de yGuilhermy e apoio via LivePix', value: 'sobre', default: currentActive === 'sobre' }
@@ -247,8 +247,8 @@ function getMainCategorySelectMenu(currentActive = 'home') {
 function buildHelpHomePayload() {
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
-        .setTitle('✨ Central de Ajuda — Hikari AI')
-        .setDescription('Bem-vindo(a) ao hub de ajuda oficial da **Hikari**!\n\nEu sou uma Agente Autônoma multifuncional para o Discord, equipada com inteligência artificial generativa, assistente de voz em chamadas, download de multimídia, busca de jogos torrent, cotações em tempo real e moderação de segurança.\n\n📖 **[Guia Completo de Comandos](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)**')
+        .setTitle('✨ Central de Ajuda — Yui AI')
+        .setDescription('Bem-vindo(a) ao hub de ajuda oficial da **Yui**!\n\nEu sou uma Agente Autônoma multifuncional para o Discord, equipada com inteligência artificial generativa, assistente de voz em chamadas, download de multimídia, busca de jogos torrent, cotações em tempo real e moderação de segurança.\n\n📖 **[Guia Completo de Comandos](https://github.com/yGuilhermy/Yui/blob/main/docs/content_pt/COMMANDS.md)**')
         .addFields(
             { name: '🤖 Comandos & Inspeção', value: 'Explore a lista completa de comandos e selecione qualquer um no menu para ver sua sintaxe e exemplos.', inline: true },
             { name: '⚙️ Configuração do Servidor', value: 'Administradores podem usar `/config_servidor` ou `/ia_ferramentas` para ajustar os recursos.', inline: true },
@@ -258,7 +258,7 @@ function buildHelpHomePayload() {
         .setTimestamp();
 
     const linkButtons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setLabel('🚀 GitHub').setURL('https://github.com/yGuilhermy/Hikari').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setLabel('🚀 GitHub').setURL('https://github.com/yGuilhermy/Yui').setStyle(ButtonStyle.Link),
         new ButtonBuilder().setLabel('🌐 Redes Sociais').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link),
         new ButtonBuilder().setLabel('💖 Apoiar no LivePix').setURL('https://livepix.gg/yguilhermy').setStyle(ButtonStyle.Link)
     );
@@ -270,11 +270,11 @@ function buildHelpCommandListPayload() {
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
         .setTitle('🤖 Lista Geral de Comandos')
-        .setDescription('Confira abaixo a lista completa de comandos da Hikari. Selecione qualquer comando no menu abaixo para abrir sua **inspeção técnica detalhada** com exemplos e opções!\n\n📖 **[Documentação Online](https://github.com/yGuilhermy/Hikari/blob/main/docs/content_pt/COMMANDS.md)**')
+        .setDescription('Confira abaixo a lista completa de comandos da Yui. Selecione qualquer comando no menu abaixo para abrir sua **inspeção técnica detalhada** com exemplos e opções!\n\n📖 **[Documentação Online](https://github.com/yGuilhermy/Yui/blob/main/docs/content_pt/COMMANDS.md)**')
         .addFields(
             {
                 name: '🧠 Inteligência Artificial & Chat',
-                value: '• `/ia_chat` — Converse diretamente com a IA da Hikari (Suporta visibilidade Privada).'
+                value: '• `/ia_chat` — Converse diretamente com a IA da Yui (Suporta visibilidade Privada).'
             },
             {
                 name: '⚙️ Administração de Servidor (Server Admin)',
@@ -282,7 +282,7 @@ function buildHelpCommandListPayload() {
             },
             {
                 name: '🎙️ Voz & Assistente de Call',
-                value: '• `/entrar-call` — Conecta a Hikari ao seu canal de voz para voz por IA.\n• `/sair-call` — Desconecta a Hikari do canal de voz.\n• `/modo-radio` — Inicia o sistema de rádio de música no canal de voz.'
+                value: '• `/entrar-call` — Conecta a Yui ao seu canal de voz para voz por IA.\n• `/sair-call` — Desconecta a Yui do canal de voz.\n• `/modo-radio` — Inicia o sistema de rádio de música no canal de voz.'
             },
             {
                 name: '🎨 Arte, Multimídia & Downloads',
@@ -340,7 +340,7 @@ function buildHelpCommandDetailPayload(commandId) {
         embed.addFields({ name: '💡 Exemplos Práticos de Uso', value: exText, inline: false });
     }
 
-    embed.setFooter({ text: 'Hikari Command Inspector • Use os botões para navegar' });
+    embed.setFooter({ text: 'Yui Command Inspector • Use os botões para navegar' });
 
     const btnRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('help_btn_cmd_list').setLabel('⬅️ Voltar à Lista de Comandos').setStyle(ButtonStyle.Primary),
@@ -360,7 +360,7 @@ function buildHelpRulesPayload(pageIndex = 0) {
         .setColor(0x7C3AED)
         .setTitle(currentPage.title)
         .setDescription(currentPage.content)
-        .setFooter({ text: `Página ${safeIndex + 1} de ${pages.length} • Diretrizes & TOS Hikari • by yGuilhermy` })
+        .setFooter({ text: `Página ${safeIndex + 1} de ${pages.length} • Diretrizes & TOS Yui • by yGuilhermy` })
         .setTimestamp();
 
     const btnRow = new ActionRowBuilder().addComponents(
@@ -387,7 +387,7 @@ function buildHelpCreatorPayload() {
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
         .setTitle('✨ Criador, Redes Sociais & Apoio ao Projeto')
-        .setDescription('Conheça mais sobre o desenvolvedor da **Hikari**, acompanhe as redes sociais oficiais ou apoie o projeto para manter o bot no ar!')
+        .setDescription('Conheça mais sobre o desenvolvedor da **Yui**, acompanhe as redes sociais oficiais ou apoie o projeto para manter o bot no ar!')
         .addFields(
             {
                 name: '👨‍💻 Desenvolvedor & Autor',
@@ -398,17 +398,17 @@ function buildHelpCreatorPayload() {
                 value: 'Acesse o agregador oficial de redes sociais para conferir conteúdos, vídeos, atualizações e projetos:\n👉 **[Redes Sociais do Criador](https://bio.site/yGuilhermy)**'
             },
             {
-                name: '💖 Apoie a Hikari pelo LivePix!',
-                value: 'Manter a infraestrutura de IA, servidores de voz e modelos generativos rodando 24/7 exige custos consideráveis. Se você gosta do projeto e quer ajudar na manutenção, envie um apoio via Pix!\n\n🎁 **[Apoiar no LivePix](https://livepix.gg/yguilhermy)**\n*Qualquer contribuição ajuda imensamente a manter a Hikari sempre online e rápida!*'
+                name: '💖 Apoie a Yui pelo LivePix!',
+                value: 'Manter a infraestrutura de IA, servidores de voz e modelos generativos rodando 24/7 exige custos consideráveis. Se você gosta do projeto e quer ajudar na manutenção, envie um apoio via Pix!\n\n🎁 **[Apoiar no LivePix](https://livepix.gg/yguilhermy)**\n*Qualquer contribuição ajuda imensamente a manter a Yui sempre online e rápida!*'
             }
         )
-        .setFooter({ text: 'Hikari Project • Desenvolvido por yGuilhermy' })
+        .setFooter({ text: 'Yui Project • Desenvolvido por yGuilhermy' })
         .setTimestamp();
 
     const linkButtons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setLabel('🌐 Redes Sociais do Criador').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('🔗'),
         new ButtonBuilder().setLabel('💖 Apoiar no LivePix').setURL('https://livepix.gg/yguilhermy').setStyle(ButtonStyle.Link).setEmoji('🎁'),
-        new ButtonBuilder().setLabel('🚀 GitHub Open Source').setURL('https://github.com/yGuilhermy/Hikari').setStyle(ButtonStyle.Link).setEmoji('⭐')
+        new ButtonBuilder().setLabel('🚀 GitHub Open Source').setURL('https://github.com/yGuilhermy/Yui').setStyle(ButtonStyle.Link).setEmoji('⭐')
     );
 
     return { embeds: [embed], components: [getMainCategorySelectMenu('sobre'), linkButtons] };

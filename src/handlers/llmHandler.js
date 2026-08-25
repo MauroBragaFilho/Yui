@@ -199,11 +199,11 @@ function buildToolsDefinition(guildId, userId = null) {
         download_video:  'User: "Baixa esse vídeo https://www.instagram.com/reel/..."\nResponse: { "thought": "User quer baixar vídeo.", "tool": "download_video", "args": { "url": "https://www.instagram.com/reel/..." } }',
         search_game:     'User: "Arruma o torrent do GTA V"\nResponse: { "thought": "User quer jogo GTA V.", "tool": "search_game", "args": { "game_name": "Grand Theft Auto V" } }',
         search_web:      'User: "Pesquise sobre Hytale"\nResponse: { "thought": "User quer info externa (Web).", "tool": "search_web", "args": { "query": "Hytale game information news" } }',
-        show_bot_menu:   'User: "Hikari, abra o menu interativo de ajuda por favor"\nResponse: { "thought": "User pediu explicitamente para abrir o menu visual de ajuda.", "tool": "show_bot_menu", "args": { "context": "geral" } }',
+        show_bot_menu:   'User: "Yui, abra o menu interativo de ajuda por favor"\nResponse: { "thought": "User pediu explicitamente para abrir o menu visual de ajuda.", "tool": "show_bot_menu", "args": { "context": "geral" } }',
         generate_image:  'User: "gera uma imagem de um gato spacial"\nResponse: { "thought": "User quer uma imagem gerada por IA.", "tool": "generate_image", "args": { "prompt": "a space cat floating in galaxy, cinematic, detailed fur, neon lights", "negative_prompt": "nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18" } }',
         check_steam:     'User: "Elden Ring ta em promo na steam?"\nResponse: { "thought": "User quer saber preço de Elden Ring.", "tool": "check_steam", "args": { "game": "Elden Ring" } }',
         convert_currency:'User: "quanto ta 50 dolares em reais?"\nResponse: { "thought": "User quer converter 50 USD para BRL.", "tool": "convert_currency", "args": { "amount": 50, "from": "USD", "to": "BRL" } }',
-        get_current_music:'User: "Hikari, baixe a musica do meu status"\nResponse: { "thought": "User quer baixar música tocando no seu status.", "tool": "get_current_music", "args": { "download": true } }\nUser: "oq eu to escutando no status"\nResponse: { "thought": "User quer saber música do seu status.", "tool": "get_current_music", "args": { "download": true } }',
+        get_current_music:'User: "Yui, baixe a musica do meu status"\nResponse: { "thought": "User quer baixar música tocando no seu status.", "tool": "get_current_music", "args": { "download": true } }\nUser: "oq eu to escutando no status"\nResponse: { "thought": "User quer saber música do seu status.", "tool": "get_current_music", "args": { "download": true } }',
     };
     for (const [name, example] of Object.entries(examplesMap)) {
         if (!disabled.includes(name)) exampleList += `\n${example}\n`;
@@ -477,9 +477,9 @@ function stripThinking(text) {
     }
     let clean = text.trim();
     if (/^[\(\[\*]*\s*(?:thought|thinking|pensamento|pensamentos|thinking\s+process|racioc[íi]nio|plan|planejamento)s?[\*\)\]]*\s*:?/i.test(clean)) {
-        const labelMatch = clean.match(/[\(\[\*]*\s*(?:response|reply|resposta|fala|hikari|output|text|speech|final\s+speech)\s*[\*\)\]]*\s*:\s*([\s\S]+)$/i);
+        const labelMatch = clean.match(/[\(\[\*]*\s*(?:response|reply|resposta|fala|yui|output|text|speech|final\s+speech)\s*[\*\)\]]*\s*:\s*([\s\S]+)$/i);
         if (labelMatch) {
-            clean = labelMatch[1].replace(/^[\(\[\*]*\s*(?:fala|resposta|hikari|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
+            clean = labelMatch[1].replace(/^[\(\[\*]*\s*(?:fala|resposta|yui|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
         } else {
             const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0);
             if (lines.length > 1) {
@@ -490,12 +490,12 @@ function stripThinking(text) {
                 if (concatMatch) {
                     clean = concatMatch[1].trim();
                 } else {
-                    clean = lastLine.replace(/^[\(\[\*]*\s*(?:fala|resposta|hikari|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
+                    clean = lastLine.replace(/^[\(\[\*]*\s*(?:fala|resposta|yui|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
                 }
             }
         }
     }
-    clean = clean.replace(/^[\(\[\*]*\s*(?:gerar\s*resposta|gerar_resposta|resposta|fala|hikari|output|text|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
+    clean = clean.replace(/^[\(\[\*]*\s*(?:gerar\s*resposta|gerar_resposta|resposta|fala|yui|output|text|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
     const quotedMatch = clean.match(/^(['"]{1,3})([\s\S]+?)\1/);
     if (quotedMatch) {
         clean = quotedMatch[2].trim();
@@ -534,7 +534,7 @@ async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interacti
                 { name: '💬 Prompt do Usuário', value: `\`\`\`${prompt.substring(0, 800)}\`\`\`` },
                 { name: '🤖 Resposta da IA', value: `\`\`\`${aiResponse.substring(0, 800)}\`\`\`` }
             ],
-            footer: { text: 'Hikari Security System' }
+            footer: { text: 'Yui Security System' }
         };
         const components = [{
             type: 1,
@@ -573,7 +573,7 @@ async function reportAutoBanViolation(violation, interaction, prompt, userTag, u
             { name: '📋 Localização', value: type.toUpperCase(), inline: true },
             { name: '💬 Prompt do Usuário', value: `\`\`\`${(prompt || "N/A").substring(0, 800)}\`\`\`` }
         ],
-        footer: { text: 'Hikari Monitoring System' }
+        footer: { text: 'Yui Monitoring System' }
     };
     const components = [{
         type: 1,
@@ -1168,7 +1168,7 @@ async function tryKoboldHorde(prompt, systemPrompt) {
     console.log(`[IA] 5/5 Tentando Kobold Horde...`);
     const hordeHeaders = {
         'Content-Type': 'application/json',
-        'Client-Agent': 'HikariBot:2.1:Maint'
+        'Client-Agent': 'YuiBot:2.1:Maint'
     };
     if (config.hordeApiKey && config.hordeApiKey !== '0000000000') {
         hordeHeaders['apikey'] = config.hordeApiKey;
@@ -1246,7 +1246,7 @@ async function generateResponse(prompt, channelId = null, options = {}) {
             }
         } catch (_) {}
     }
-    baseSystemPrompt += "\n[REGRAS DE CONTRATO E LIMITAÇÕES]:\n1) Você NÃO tem acesso a configurações internas do servidor, cargos, lista de membros, logs de auditoria ou regras específicas do servidor. Se o usuário perguntar sobre regras do servidor ou informações internas que você não tem como acessar, responda claramente dizendo 'eu não sei' ou que não tem acesso a essas informações.\n2) Seu projeto é de código aberto (open-source) e seu código-fonte/repositório oficial está disponível no GitHub em: https://github.com/yGuilhermy/Hikari. Se o usuário solicitar o link do seu código ou repositório, cite e forneça este link.\n3) Se encontrar 'Você (Hikari): erro da ia' ou 'assistant: erro da ia' no histórico, isso significa que sua resposta anterior falhou por erro técnico. Peça desculpas casualmente e pergunte o que o usuário deseja novamente.";
+    baseSystemPrompt += "\n[REGRAS DE CONTRATO E LIMITAÇÕES]:\n1) Você NÃO tem acesso a configurações internas do servidor, cargos, lista de membros, logs de auditoria ou regras específicas do servidor. Se o usuário perguntar sobre regras do servidor ou informações internas que você não tem como acessar, responda claramente dizendo 'eu não sei' ou que não tem acesso a essas informações.\n2) Seu projeto é de código aberto (open-source) e seu código-fonte/repositório oficial está disponível no GitHub em: https://github.com/yGuilhermy/Yui. Se o usuário solicitar o link do seu código ou repositório, cite e forneça este link.\n3) Se encontrar 'Você (Yui): erro da ia' ou 'assistant: erro da ia' no histórico, isso significa que sua resposta anterior falhou por erro técnico. Peça desculpas casualmente e pergunte o que o usuário deseja novamente.";
     if (channelId) {
         const settings = channelSettings[channelId];
         const channelPersona = (typeof settings === 'string') ? settings : settings?.instruction;
@@ -1326,7 +1326,7 @@ ${searchContext}
 A resposta para a pergunta do usuário ESTÁ muito provavelmente no contexto acima.
 Leia os trechos com atenção (procure por datas, placares, nomes exatos, trechos de notícia).
 Ignore seu conhecimento prévio se ele contradizer a pesquisa (pois você pode estar desatualizada).
-Responda com sua personalidade (Hikari), mas SEJA PRECISA nos fatos encontrados.
+Responda com sua personalidade (Yui), mas SEJA PRECISA nos fatos encontrados.
 [PROMPT ORIGINAL DO USUÁRIO]:
 ${prompt}
 `;
@@ -1436,25 +1436,25 @@ async function processQueue() {
                         .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
                         .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**
 
-Sua última ação violou gravemente as diretrizes de segurança da **IA Hikari**. O sistema de moderação automática identificou uma conduta inaceitável e perigosa.
+Sua última ação violou gravemente as diretrizes de segurança da **IA Yui**. O sistema de moderação automática identificou uma conduta inaceitável e perigosa.
 
-**DETALHES DO BANIMENTO DA HIKARI:**
+**DETALHES DO BANIMENTO DA YUI:**
 - **ALVO PENALIZADO:** ${autoBanTrigger.type === 'user' ? 'Seu perfil de usuário (Banido Globalmente)' : autoBanTrigger.type === 'guild' ? 'Este servidor (Bot Inutilizado)' : 'Este canal (Canal Bloqueado)'}
 - **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.
 
-O acesso aos serviços foi completamente revogado e a Hikari não irá responder a você. Qualquer nova tentativa de burlar a segurança agravará a punição.
+O acesso aos serviços foi completamente revogado e a Yui não irá responder a você. Qualquer nova tentativa de burlar a segurança agravará a punição.
 
 Se você julga que isso é um erro grave do bot, você pode tentar apelar pelo botão abaixo para que o desenvolvedor avalie a gravidade.
 
 ---
-✨ **Dica:** Deseja uma versão da **IA Hikari** totalmente aberta, sem filtros ou bloqueios de segurança?
+✨ **Dica:** Deseja uma versão da **IA Yui** totalmente aberta, sem filtros ou bloqueios de segurança?
 Você pode hospedar sua própria versão privada facilmente!
-🚀 **Hospede sua própria Hikari:** [Clique aqui para ver o GitHub](https://github.com/yGuilhermy/Hikari)`)
-                        .setFooter({ text: 'Hikari Security & Moderation • by yGuilhermy' })
+🚀 **Hospede sua própria Yui:** [Clique aqui para ver o GitHub](https://github.com/yGuilhermy/Yui)`)
+                        .setFooter({ text: 'Yui Security & Moderation • by yGuilhermy' })
                         .setTimestamp();
                     const githubButton = new ButtonBuilder()
                         .setLabel('Página do Projeto')
-                        .setURL('https://github.com/yGuilhermy/Hikari')
+                        .setURL('https://github.com/yGuilhermy/Yui')
                         .setStyle(ButtonStyle.Link)
                         .setEmoji('🚀');
                     const appealButton = new ButtonBuilder()
@@ -1474,11 +1474,11 @@ Você pode hospedar sua própria versão privada facilmente!
             const banEmbed = new EmbedBuilder()
                 .setColor(0xE11D48)
                 .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
-                .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Hikari** está permanentemente bloqueado para você.
+                .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Yui** está permanentemente bloqueado para você.
 
 **DETALHES DO SEU BANIMENTO:**
 - **ALVO:** ${banInfo.typeName || banInfo.type}
-- **MOTIVO DO BANIMENTO:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Hikari."}
+- **MOTIVO DO BANIMENTO:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Yui."}
 - **STATUS ATUAL:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.
 
 Você perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.
@@ -1486,10 +1486,10 @@ Você perdeu todos os privilégios de utilização dos nossos serviços. Não ad
 Se você acredita que isso é um erro, solicite um desbanimento pelo botão abaixo.
 
 ---
-💡 **Quer usar a Hikari sem restrições?**
+💡 **Quer usar a Yui sem restrições?**
 Como o projeto é open-source, você pode hospedar sua própria versão e ter controle total!
-🚀 **Repositório:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
-                .setFooter({ text: 'Hikari Security & Moderation • by yGuilhermy' })
+🚀 **Repositório:** [yGuilhermy/Yui](https://github.com/yGuilhermy/Yui)`)
+                .setFooter({ text: 'Yui Security & Moderation • by yGuilhermy' })
                 .setTimestamp();
             const appealButton = new ButtonBuilder()
                 .setCustomId(`appeal_ban_user_${userId}`)
@@ -1497,7 +1497,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 .setStyle(ButtonStyle.Secondary);
             const githubButton = new ButtonBuilder()
                 .setLabel('Página do Projeto')
-                .setURL('https://github.com/yGuilhermy/Hikari')
+                .setURL('https://github.com/yGuilhermy/Yui')
                 .setStyle(ButtonStyle.Link)
                 .setEmoji('🚀');
             const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
@@ -1769,8 +1769,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             const audioEmbed = new EmbedBuilder()
                                 .setColor(0x7C3AED)
                                 .setTitle('🎧 Executando Ação')
-                                .setDescription(`A Hikari está baixando o áudio solicitado.\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Detectado link de música'}*`)
-                                .setFooter({ text: 'Hikari Media • Tool Use: download_audio' });
+                                .setDescription(`A Yui está baixando o áudio solicitado.\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Detectado link de música'}*`)
+                                .setFooter({ text: 'Yui Media • Tool Use: download_audio' });
                             await unifiedReply(null, [], [], [audioEmbed]);
                             const audioData = await downloadAudio(toolData.args.url, { source: 'MCP', userId, userTag, guildName: interaction.guild?.name || 'DM' });
                             if (audioData && audioData.filePath) {
@@ -1807,7 +1807,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             .setTitle(`${musicInfo.platformEmoji} Música Identificada`)
                             .setDescription(`**${musicInfo.title}**\n🎤 ${musicInfo.artist}${musicInfo.album ? `\n💿 ${musicInfo.album}` : ''}`)
                             .addFields({ name: 'Plataforma', value: musicInfo.platformLabel, inline: true })
-                            .setFooter({ text: `Hikari Music • ${musicInfo.platformLabel}` })
+                            .setFooter({ text: `Yui Music • ${musicInfo.platformLabel}` })
                             .setTimestamp();
                         if (musicInfo.coverUrl) infoEmbed.setThumbnail(musicInfo.coverUrl);
                         const musicUserId = userId;
@@ -1914,8 +1914,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             const videoEmbed = new EmbedBuilder()
                                 .setColor(0x7C3AED)
                                 .setTitle('🎬 Executando Ação')
-                                .setDescription(`A Hikari está baixando o vídeo solicitado.\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Detectado link de vídeo'}*`)
-                                .setFooter({ text: 'Hikari Media • Tool Use: download_video' });
+                                .setDescription(`A Yui está baixando o vídeo solicitado.\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Detectado link de vídeo'}*`)
+                                .setFooter({ text: 'Yui Media • Tool Use: download_video' });
                             await unifiedReply(null, [], [], [videoEmbed]);
                             const videoData = await downloadVideo(toolData.args.url, { source: 'MCP', userId, userTag, guildName: interaction.guild?.name || 'DM' });
                             const guild = interaction.guild || interaction?.guild;
@@ -1934,7 +1934,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                     .setColor(0xF59E0B)
                                     .setTitle('📦 Vídeo Grande Demais')
                                     .setDescription(`O vídeo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor é **${limitMB} MB**.\n\nClique no botão abaixo para tentar comprimir o vídeo automaticamente.\n\n⏰ *O arquivo ficará disponível por 6 horas.*`)
-                                    .setFooter({ text: 'Hikari Media • by yGuilhermy' })
+                                    .setFooter({ text: 'Yui Media • by yGuilhermy' })
                                     .setTimestamp();
                                 const row = new ActionRowBuilder().addComponents(
                                     new ButtonBuilder().setCustomId(`compress_video_${fileId}`).setLabel('🔄 Tentar Compressão').setStyle(ButtonStyle.Primary)
@@ -1960,7 +1960,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             .setColor(0x7C3AED)
                             .setTitle('🎮 Executando Ação')
                             .setDescription(`Buscando arquivo de download do jogo: **${gameName}**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Buscando torrent'}*`)
-                            .setFooter({ text: 'Hikari Game Search • Tool Use: search_game' });
+                            .setFooter({ text: 'Yui Game Search • Tool Use: search_game' });
                         await unifiedReply(null, [], [], [gameEmbed]);
                         const results = await searchGames(gameName, provider);
                         addToHistory(channelId, 'user', prompt);
@@ -1980,7 +1980,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                     .setDescription(`> *${toolData.thought}*\n\n${torrentInfo.message}`)
                                     .setColor(torrentInfo.color)
                                     .addFields({ name: '🔗 Magnet Link (Backup)', value: `\`\`\`${bestGame.magnet}\`\`\`` })
-                                    .setFooter({ text: 'Hikari Torrent Search • by yGuilhermy' });
+                                    .setFooter({ text: 'Yui Torrent Search • by yGuilhermy' });
                                 const payload = { content: '', embeds: [gameEmbed], files: [attachment], components: [] };
                                 if (type === 'mention') await replyMessage.edit(payload);
                                 else await interaction.editReply(payload);
@@ -2014,7 +2014,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                         .setTitle(titleText)
                                         .setDescription(description)
                                         .setColor(0x7C3AED)
-                                        .setFooter({ text: 'Hikari Torrent Search • by yGuilhermy' });
+                                        .setFooter({ text: 'Yui Torrent Search • by yGuilhermy' });
                                     
                                     const components = createPaginationComponents(page, totalPages, pageItems, startIndex);
                                     return { embeds: [embed], components };
@@ -2052,7 +2052,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                                 .setDescription(result.message)
                                                 .setColor(result.color)
                                                 .addFields({ name: '🔗 Magnet Link (Backup)', value: `\`\`\`${selectedGame.magnet}\`\`\`` })
-                                                .setFooter({ text: 'Hikari Torrent Search • by yGuilhermy' });
+                                                .setFooter({ text: 'Yui Torrent Search • by yGuilhermy' });
                                                 
                                             await i.editReply({ content: '', embeds: [successEmbed], files: [attachment] });
                                             collector.stop();
@@ -2134,7 +2134,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     } else {
                         processedResponse += `\n-# ⏱️ ${duration}`;
                     }
-                    if (/\bhikari\b.*\b(saia|sai|desconecta)\s+(da|do)?\s*(call|voz)\b/i.test(prompt)) {
+                    if (/yui.*\b(saia|sai|desconecta)\s+(da|do)?\s*(call|voz)\b/i.test(prompt)) {
                         const { leaveVoiceCall } = require('./voiceHandler');
                         if (interaction.guildId) {
                             await leaveVoiceCall(interaction.guildId, interaction.channel);
@@ -2148,7 +2148,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         .setColor(0x7C3AED)
                         .setTitle('🔎 Executando Ação')
                         .setDescription(`Pesquisando na web por: **"${query}"**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Buscando informações'}*`)
-                        .setFooter({ text: 'Hikari Search • Tool Use: search_web' });
+                        .setFooter({ text: 'Yui Search • Tool Use: search_web' });
                     await unifiedReply(null, [], [], [searchEmbed]);
                     const searchResults = await performWebSearch(query);
                     if (searchResults) {
@@ -2172,7 +2172,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                         .setColor(0x7C3AED)
                         .setTitle('🎮 Executando Ação')
                         .setDescription(`Consultando dados sobre **"${query}"** na Steam\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Consultando a Steam'}*`)
-                        .setFooter({ text: 'Hikari Steam • Tool Use: check_steam' });
+                        .setFooter({ text: 'Yui Steam • Tool Use: check_steam' });
                     await unifiedReply(null, [], [], [steamSearchEmbed]);
                     const steamInfo = await getSteamGameInfo(query);
                     
@@ -2192,7 +2192,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 { name: 'Lançamento', value: steamInfo.releaseDate, inline: true },
                                 { name: 'Desenvolvedor', value: steamInfo.developers, inline: true }
                             )
-                            .setFooter({ text: 'Fonte: Loja da Steam • Hikari • by yGuilhermy' })
+                            .setFooter({ text: 'Fonte: Loja da Steam • Yui • by yGuilhermy' })
                             .setTimestamp();
                             
                         if (steamInfo.headerImage) {
@@ -2202,7 +2202,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                             steamEmbed.addFields({ name: 'Metacritic', value: `${steamInfo.metacritic}/100 🌟`, inline: true });
                         }
                         
-                        let hikariComment = `Ok, puxei as informações sobre **${steamInfo.name}** pra você! Está custando ${steamInfo.price}.`;
+                        let yuiComment = `Ok, puxei as informações sobre **${steamInfo.name}** pra você! Está custando ${steamInfo.price}.`;
                         
                         try {
                             const commentPrompt = `Eu acabei de consultar o jogo "${steamInfo.name}" na Steam. O preço atual é ${steamInfo.price} e o lançamento foi em ${steamInfo.releaseDate}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, colocando o valor na resposta, na sua personalidade de forma natural. (NÃO gere json nem responda pedindo, apenas diga a fala natural).`;
@@ -2216,18 +2216,18 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                         cleanData = parsed.response || parsed.content || parsed.text || parsed.reply || parsed.resposta || parsed.mensagem || (Object.keys(parsed).length === 1 ? Object.values(parsed)[0] : cleanData);
                                     } catch (e) {}
                                 }
-                                hikariComment = cleanData;
+                                yuiComment = cleanData;
                             }
                         } catch (e) {
                             console.warn('Erro ao gerar comentario steam', e.message);
                         }
 
-                        const payload = { content: hikariComment, embeds: [steamEmbed], files: [] };
+                        const payload = { content: yuiComment, embeds: [steamEmbed], files: [] };
                         if (type === 'mention') await replyMessage.edit(payload);
                         else await interaction.editReply(payload);
                         
                         addToHistory(channelId, 'user', prompt);
-                        addToHistory(channelId, 'assistant', `[Consulta Steam: ${steamInfo.name}] ${hikariComment}`);
+                        addToHistory(channelId, 'assistant', `[Consulta Steam: ${steamInfo.name}] ${yuiComment}`);
                         savePromptToHistory(prompt, userTag, userId, `[TOOL: CHECK_STEAM - "${steamInfo.name}"]`, interaction);
                         return;
                     }
@@ -2238,7 +2238,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                         .setColor(0x7C3AED)
                         .setTitle('💱 Executando Ação')
                         .setDescription(`Convertendo **${amount} ${from}** para **${to}**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Consultando câmbio'}*`)
-                        .setFooter({ text: 'Hikari Finance • Tool Use: convert_currency' });
+                        .setFooter({ text: 'Yui Finance • Tool Use: convert_currency' });
                     await unifiedReply(null, [], [], [currencyEmbed]);
                     const convInfo = await convertCurrency(amount, from, to);
                     
@@ -2256,10 +2256,10 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 { name: 'Cotação (' + convInfo.from + ')', value: `1 ${convInfo.from} = ${rateFormatted} ${convInfo.to}`, inline: true },
                                 { name: 'Última Atualização', value: convInfo.lastUpdate || 'Desconhecida', inline: true }
                             )
-                            .setFooter({ text: 'Fonte: AwesomeAPI • Hikari • by yGuilhermy' })
+                            .setFooter({ text: 'Fonte: AwesomeAPI • Yui • by yGuilhermy' })
                             .setTimestamp();
                             
-                        let hikariComment = `Pronto! Deu **${resultFormatted} ${convInfo.to}** na cotação atual.`;
+                        let yuiComment = `Pronto! Deu **${resultFormatted} ${convInfo.to}** na cotação atual.`;
                         
                         try {
                             const commentPrompt = `Eu acabei de converter ${convInfo.amount} ${convInfo.from} para ${convInfo.to}. O resultado foi ${resultFormatted}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (NÃO gere json nem responda pedindo, apenas diga a fala natural).`;
@@ -2273,18 +2273,18 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                         cleanData = parsed.response || parsed.content || parsed.text || parsed.reply || parsed.resposta || parsed.mensagem || (Object.keys(parsed).length === 1 ? Object.values(parsed)[0] : cleanData);
                                     } catch (e) {}
                                 }
-                                hikariComment = cleanData;
+                                yuiComment = cleanData;
                             }
                         } catch (e) {
                             console.warn('Erro ao gerar comentario currency', e.message);
                         }
 
-                        const payload = { content: hikariComment, embeds: [convEmbed], files: [] };
+                        const payload = { content: yuiComment, embeds: [convEmbed], files: [] };
                         if (type === 'mention') await replyMessage.edit(payload);
                         else await interaction.editReply(payload);
                         
                         addToHistory(channelId, 'user', prompt);
-                        addToHistory(channelId, 'assistant', `[Converteu ${convInfo.amount} ${convInfo.from} para ${convInfo.to} -> ${resultFormatted}] ${hikariComment}`);
+                        addToHistory(channelId, 'assistant', `[Converteu ${convInfo.amount} ${convInfo.from} para ${convInfo.to} -> ${resultFormatted}] ${yuiComment}`);
                         savePromptToHistory(prompt, userTag, userId, `[TOOL: CONVERT_CURRENCY - "${amount} ${from} -> ${to}"]`, interaction);
                         return;
                     }
@@ -2302,7 +2302,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                     const hasNsfwRequest = NSFW_POSITIVE_KEYWORDS.some(kw => lowerImagePrompt.includes(kw));
                     if (hasNsfwRequest) {
                         console.warn(`[GenerateImage] Bloqueado pedido NSFW: "${imagePrompt.substring(0, 80)}"`);
-                        const scoldPrompt = `O usuário te pediu para gerar uma imagem com conteúdo NSFW/impróprio: "${imagePrompt.substring(0, 100)}". Dê uma bronca curta e natural nele, na sua personalidade Hikari, sem gerar a imagem. Seja direta, sem rodeios, pode ser um pouco irônica.`;
+                        const scoldPrompt = `O usuário te pediu para gerar uma imagem com conteúdo NSFW/impróprio: "${imagePrompt.substring(0, 100)}". Dê uma bronca curta e natural nele, na sua personalidade Yui, sem gerar a imagem. Seja direta, sem rodeios, pode ser um pouco irônica.`;
                         const scoldResponse = await generateResponse(scoldPrompt, channelId, { allowSearch: false, disableTools: true, guildId });
                         processedResponse = scoldResponse;
                     } else {
@@ -2321,15 +2321,15 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                             .setColor(0x7C3AED)
                             .setTitle('🎨 Executando Ação')
                             .setDescription(`Gerando imagem com IA\n\n💬 **Prompt:**\n> *"${imagePrompt.substring(0, 100)}${imagePrompt.length > 100 ? '...' : ''}"*\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Criando ilustração'}*`)
-                            .setFooter({ text: 'Hikari Art • Tool Use: generate_image' });
+                            .setFooter({ text: 'Yui Art • Tool Use: generate_image' });
                         await unifiedReply(null, [], [], [imageEmbed]);
                         try {
                             const imageData = await generateImage(imagePrompt, imageNegative, width, height);
                             if (imageData && (imageData.imageUrl || imageData.localFilePath)) {
-                                let hikariComment = 'olha, ficou bem interessante isso daí...';
+                                let yuiComment = 'olha, ficou bem interessante isso daí...';
                                 try {
-                                    console.log(`[ImageHandler] Pedindo comentário para Hikari sobre: "${imagePrompt.substring(0, 40)}..."`);
-                                    const commentPrompt = `Você (Hikari) acabou de gerar uma imagem com o prompt: "${imagePrompt}". Faça um comentário MUITO CURTO (máximo 15 palavras), natural e casual sobre essa ideia/resultado. NÃO use JSON. NÃO use ferramentas. Apenas texto puro. Seja direta e use seu estilo de fala.`;
+                                    console.log(`[ImageHandler] Pedindo comentário para Yui sobre: "${imagePrompt.substring(0, 40)}..."`);
+                                    const commentPrompt = `Você (Yui) acabou de gerar uma imagem com o prompt: "${imagePrompt}". Faça um comentário MUITO CURTO (máximo 15 palavras), natural e casual sobre essa ideia/resultado. NÃO use JSON. NÃO use ferramentas. Apenas texto puro. Seja direta e use seu estilo de fala.`;
                                     const rawComment = await generateResponse(commentPrompt, channelId, {
                                         allowSearch: false,
                                         disableTools: true,
@@ -2345,8 +2345,8 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                                 cleanData = parsed.response || parsed.content || parsed.text || parsed.reply || parsed.resposta || parsed.mensagem || (Object.keys(parsed).length === 1 ? Object.values(parsed)[0] : cleanData);
                                             } catch (e) {}
                                         }
-                                        hikariComment = cleanData;
-                                        console.log(`[ImageHandler] Comentário gerado: "${hikariComment}"`);
+                                        yuiComment = cleanData;
+                                        console.log(`[ImageHandler] Comentário gerado: "${yuiComment}"`);
                                     }
                                 } catch (commentErr) {
                                     console.warn('[GenerateImage] Falha ao gerar comentário:', commentErr.message);
@@ -2377,11 +2377,11 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 const supportBtnRow = new ActionRowBuilder().addComponents(
                                     new ButtonBuilder().setLabel('Apoiar projeto').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('💖')
                                 );
-                                const payload = { content: hikariComment, embeds: [imageEmbed], files: imageFiles, components: [supportBtnRow] };
+                                const payload = { content: yuiComment, embeds: [imageEmbed], files: imageFiles, components: [supportBtnRow] };
                                 if (type === 'mention') await replyMessage.edit(payload);
                                 else await interaction.editReply(payload);
                                 addToHistory(channelId, 'user', prompt);
-                                addToHistory(channelId, 'assistant', `[Gerou imagem via ${imageData.modelName}] ${hikariComment}`);
+                                addToHistory(channelId, 'assistant', `[Gerou imagem via ${imageData.modelName}] ${yuiComment}`);
                                 savePromptToHistory(prompt, userTag, userId, `[TOOL: GENERATE_IMAGE - "${imagePrompt}"]`, interaction);
                                 return;
                             } else {
@@ -2405,17 +2405,17 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                             const { reason, severity } = toolData.args;
                             const alreadyBanned = checkBan(userId, null, null);
                             if (!alreadyBanned) {
-                                addBan('user', userId, reason || 'Violação dos Termos detectada pela IA Hikari.');
+                                addBan('user', userId, reason || 'Violação dos Termos detectada pela IA Yui.');
                                 console.warn(`[IA_AUTOMOD] Usuário ${userTag} (${userId}) banido pela IA. Severidade: ${severity}. Motivo: ${reason}`);
                                 const banEmbed = new EmbedBuilder()
                                     .setColor(0xE11D48)
                                     .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
-                                    .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**\n\nO sistema de inteligência da Hikari analisou o contexto desta conversa e identificou uma conduta que viola gravemente os Termos de Uso.\n\n**DETALHES DO BANIMENTO:**\n- **ALVO PENALIZADO:** Seu perfil de usuário (Banido Globalmente)\n- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.\n\nO acesso aos serviços foi completamente revogado. Qualquer nova tentativa de burlar a segurança agravará a punição.\n\nSe você julga que isso é um erro, utilize o botão de apelação abaixo.\n\n---\n✨ **Dica:** Quer a Hikari sem filtros? Hospede sua própria versão!\n🚀 **GitHub:** [yGuilhermy/Hikari](https://github.com/yGuilhermy/Hikari)`)
-                                    .setFooter({ text: 'Hikari AI AutoMod • by yGuilhermy' })
+                                    .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**\n\nO sistema de inteligência da Yui analisou o contexto desta conversa e identificou uma conduta que viola gravemente os Termos de Uso.\n\n**DETALHES DO BANIMENTO:**\n- **ALVO PENALIZADO:** Seu perfil de usuário (Banido Globalmente)\n- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.\n\nO acesso aos serviços foi completamente revogado. Qualquer nova tentativa de burlar a segurança agravará a punição.\n\nSe você julga que isso é um erro, utilize o botão de apelação abaixo.\n\n---\n✨ **Dica:** Quer a Yui sem filtros? Hospede sua própria versão!\n🚀 **GitHub:** [yGuilhermy/Yui](https://github.com/yGuilhermy/Yui)`)
+                                    .setFooter({ text: 'Yui AI AutoMod • by yGuilhermy' })
                                     .setTimestamp();
                                 const githubButton = new ButtonBuilder()
                                     .setLabel('Página do Projeto')
-                                    .setURL('https://github.com/yGuilhermy/Hikari')
+                                    .setURL('https://github.com/yGuilhermy/Yui')
                                     .setStyle(ButtonStyle.Link)
                                     .setEmoji('🚀');
                                 const appealButton = new ButtonBuilder()
@@ -2450,7 +2450,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                 fallbackTool = 'radio_next_track';
             } else if (/^(volta|anterior|back)$/i.test(cleanPrompt) || cleanPrompt.includes('volta') || cleanPrompt.includes('anterior')) {
                 fallbackTool = 'radio_prev_track';
-            } else if (/^(sai da call|desconecta da call|encerra o rádio|tchau hikari)$/i.test(cleanPrompt) || cleanPrompt.includes('sai da call') || cleanPrompt.includes('desconecta da call')) {
+            } else if (/^(sai da call|desconecta da call|encerra o rádio|tchau yui)$/i.test(cleanPrompt) || cleanPrompt.includes('sai da call') || cleanPrompt.includes('desconecta da call')) {
                 fallbackTool = 'radio_leave_call';
             } else if (/^(fila|lista|playlist)$/i.test(cleanPrompt)) {
                 fallbackTool = 'radio_show_queue';
@@ -2484,8 +2484,8 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
 
         const cleanPromptLower = (prompt || '').toLowerCase().trim();
         const hasUrl = /https?:\/\//i.test(cleanPromptLower);
-        const isAskingHikari = /(?:voc[eê]|vc|hikari|bot)\s+t[aá]\s+(?:me\s+)?(escutando|ouvindo)|t[aá]\s+me\s+(escutando|ouvindo)|t[aá]\s+ouvindo\s+(?:a\s+gente|n[oó]s)/i.test(cleanPromptLower);
-        const isCurrentMusicIntent = !hasUrl && !isAskingHikari && (
+        const isAskingYui = /(?:voc[eê]|vc|yui|bot)\s+t[aá]\s+(?:me\s+)?(escutando|ouvindo)|t[aá]\s+me\s+(escutando|ouvindo)|t[aá]\s+ouvindo\s+(?:a\s+gente|n[oó]s)/i.test(cleanPromptLower);
+        const isCurrentMusicIntent = !hasUrl && !isAskingYui && (
             /(?:oq|o\s+que|qual\s+m[uú]sica|baixa|puxa|identifica|salva)\s+.*(?:eu\s+t[oô]|eu\s+estou)\s+(escutando|ouvindo)/i.test(cleanPromptLower) ||
             /(?:oq|o\s+que|qual\s+m[uú]sica)\s+(?:eu\s+)?t[oô]\s+(escutando|ouvindo)/i.test(cleanPromptLower) ||
             /baixa\s+.*(?:do\s+meu\s+status|do\s+meu\s+spotify|que\s+eu\s+t[oô]\s+(?:escutando|ouvindo))/i.test(cleanPromptLower) ||
@@ -2510,7 +2510,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                 .setTitle(`${musicInfo.platformEmoji} Música Identificada`)
                 .setDescription(`**${musicInfo.title}**\n🎤 ${musicInfo.artist}${musicInfo.album ? `\n💿 ${musicInfo.album}` : ''}`)
                 .addFields({ name: 'Plataforma', value: musicInfo.platformLabel, inline: true })
-                .setFooter({ text: `Hikari Music • ${musicInfo.platformLabel}` })
+                .setFooter({ text: `Yui Music • ${musicInfo.platformLabel}` })
                 .setTimestamp();
             if (musicInfo.coverUrl) infoEmbed.setThumbnail(musicInfo.coverUrl);
             const musicUserId = userId;
@@ -2565,7 +2565,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
         }
 
         if (processedResponse) {
-            const SPEAKER_PREFIX = /^(voc[eê]\s*\(hikari\)|hikari|you\s*\(hikari\)|assistant|assistente)[:\s]+/i;
+            const SPEAKER_PREFIX = /^(voc[eê]\s*\(yui\)|yui|you\s*\(yui\)|assistant|assistente)[:\s]+/i;
             processedResponse = processedResponse.replace(SPEAKER_PREFIX, '').trim();
             const userBareText = (options.searchPrompt || '').replace(/[-# ]+ctx.*$/si, '').trim().toLowerCase().substring(0, 80);
             const responseLower = processedResponse.toLowerCase().substring(0, 80);
