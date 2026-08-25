@@ -1,4 +1,4 @@
-const { ActivityType } = require('discord.js');
+import { ActivityType } from 'discord.js';
 
 const lyrics = [
     "Baby, I don't wanna move, guess I'd rather rot in my room",
@@ -48,4 +48,4 @@ function updateBotActivity(clientInstance, queueLength) {
     }
 }
 
-module.exports = { updateBotActivity, startActivityUpdater };
+export default { updateBotActivity, startActivityUpdater };

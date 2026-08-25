@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs.js';
+import path from 'path.js';
 
 const DATA_DIR = path.join(__dirname, 'data');
 const SESSION_FILE = path.join(DATA_DIR, 'radio_sessions.json');
@@ -303,7 +303,7 @@ function toggleStreamMode(guildId) {
     return s.streamMode;
 }
 
-module.exports = {
+export default {
     createSession,
     getSession,
     updateSession,

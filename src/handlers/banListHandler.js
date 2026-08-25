@@ -1,5 +1,5 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getBans } = require('./banHandler');
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { getBans } from './banHandler.js';
 
 async function buildBanListPayload(client, category, page = 0) {
     const currentBans = getBans();
@@ -243,7 +243,7 @@ async function buildBanDetailPayload(client, category, targetId) {
     return { embeds: [embed], components: [navRow, actionRow] };
 }
 
-module.exports = {
+export default {
     buildBanListPayload,
     buildBanDetailPayload
 };

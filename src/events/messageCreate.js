@@ -1,9 +1,9 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { checkBan } = require('../handlers/banHandler');
-const { resolveMentions } = require('../utils/mentions');
-const { addToQueue, getChannelSettings, getServerSettings } = require('../handlers/llmHandler');
-const config = require('../config');
-module.exports = {
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { checkBan } from '../handlers/banHandler.js';
+import { resolveMentions } from '../utils/mentions.js';
+import { addToQueue, getChannelSettings, getServerSettings } from '../handlers/llmHandler.js';
+import config from '../config.js';
+export default {
     name: 'messageCreate',
     once: false,
     async execute(message, client) {
@@ -31,7 +31,7 @@ module.exports = {
             return message.reply({ embeds: [banEmbed], components: [banRow] }).catch(() => {});
         }
         if (message.guildId) {
-            const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
+            import { isServerAccepted, sendTermsOfService } from '../handlers/tosHandler.js';
             if (!isServerAccepted(message.guildId)) {
                 const serverSettings = getServerSettings(message.guildId);
                 const respondToEveryone = serverSettings.respondToEveryone || false;
@@ -64,9 +64,9 @@ module.exports = {
         const hasYuiName = nameRegex.test(message.content);
         if (isMention || hasYuiName) {
             if (message.guildId && message.channelId) {
-                const { setServerLastChannel } = require('../handlers/llmHandler');
+                import { setServerLastChannel } from '../handlers/llmHandler.js';
                 setServerLastChannel(message.guildId, message.channelId);
-                const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
+                import { checkAndInitializeUpdateChannel } from '../handlers/tosHandler.js';
                 await checkAndInitializeUpdateChannel(message.guild, message.channel);
             }
             try {
@@ -141,9 +141,9 @@ module.exports = {
                 }
                 if (Math.random() < chance) {
                     if (message.guildId && message.channelId) {
-                        const { setServerLastChannel } = require('../handlers/llmHandler');
+                        import { setServerLastChannel } from '../handlers/llmHandler.js';
                         setServerLastChannel(message.guildId, message.channelId);
-                        const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
+                        import { checkAndInitializeUpdateChannel } from '../handlers/tosHandler.js';
                         await checkAndInitializeUpdateChannel(message.guild, message.channel);
                     }
                     try {

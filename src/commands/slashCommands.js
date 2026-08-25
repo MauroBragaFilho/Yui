@@ -1,11 +1,11 @@
-const {
+import {
     SlashCommandBuilder,
     ApplicationIntegrationType,
     InteractionContextType,
     PermissionFlagsBits,
     Routes,
     ChannelType
-} = require('discord.js');
+} from 'discord.js';
 
 const setGlobalContext = (builder) => {
     return builder
@@ -353,4 +353,4 @@ async function registerCommands(client, rest) {
     }
 }
 
-module.exports = { commands, registerCommands };
+export default { commands, registerCommands };

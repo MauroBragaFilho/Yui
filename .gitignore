@@ -1,41 +1,39 @@
 ```
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-logs/
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Editors
-.vscode/
-.idea/
-
 # Dependencies
 node_modules/
-.venv/
-venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+
+# Environment variables
+.env
+.env.local
+*.env.*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Logs
+*.log
 
 # Build artifacts
 dist/
 build/
 target/
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
 
-# System files
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# OS generated files
 .DS_Store
 Thumbs.db
 
@@ -62,80 +60,4 @@ Thumbs.db
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Python specific
-*.pyc
-__pycache__/
-*.pyo
-*.pyd
-.Python
-*.so
-.coverage
-.coverage.*
-.cache
-.pytest_cache/
-.mypy_cache/
-
-# Node.js specific
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.npm
-.npx
-
-# Java specific
-*.class
-*.jar
-*.war
-*.ear
-target/
-.gradle/
-build/
-
-# C/C++ specific
-*.o
-*.a
-*.so
-*.dll
-*.exe
-*.out
-*.obj
-
-# Go specific
-*.o
-*.a
-*.so
-*.exe
-*.out
-*.obj
-bin/
-vendor/
-
-# Ruby specific
-*.gem
-*.rbc
-.bundle/
-vendor/bundle/
-.ruby-version
-.rbenv-vars
-
-# Rust specific
-target/
-Cargo.lock
-*.so
-*.dylib
-*.dll
-
-# Temporary files
-*.tmp
-*.temp
-*.bak
-*~
-.#*
 ```

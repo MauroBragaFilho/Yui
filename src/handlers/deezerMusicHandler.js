@@ -1,6 +1,6 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
-const { searchDeezerTracks, calculateConfidenceScore, downloadDeezerTrack, cleanupTempAudio } = require('../services/deezerMusicService');
-const { checkBan } = require('./banHandler');
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
+import { searchDeezerTracks, calculateConfidenceScore, downloadDeezerTrack, cleanupTempAudio } from '../services/deezerMusicService.js';
+import { checkBan } from './banHandler.js';
 
 const musicSessions = new Map();
 
@@ -138,7 +138,7 @@ function clearSession(userId) {
     musicSessions.delete(userId);
 }
 
-module.exports = {
+export default {
     handleMusicSearchAndDownload,
     executeDownloadAndPackage,
     clearSession

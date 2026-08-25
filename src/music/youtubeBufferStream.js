@@ -1,8 +1,8 @@
-const { Readable } = require('stream');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const config = require('../config');
+import { Readable } from 'stream.js';
+import { spawn } from 'child_process.js';
+import fs from 'fs.js';
+import path from 'path.js';
+import config from '../config.js';
 
 const SAMPLE_RATE = 48000;
 const CHANNELS = 2;
@@ -189,7 +189,7 @@ function createYouTubeProgressiveStream(url, options) {
     return new YouTubeBufferStream(url, options);
 }
 
-module.exports = {
+export default {
     YouTubeBufferStream,
     createYouTubeProgressiveStream
 };

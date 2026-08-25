@@ -1,7 +1,7 @@
-const fs = require('fs');
-const path = require('path');
-const { getSession } = require('./radioDatabase');
-const { downloadTrackToDisk } = require('./radioProviders');
+import fs from 'fs.js';
+import path from 'path.js';
+import { getSession } from './radioDatabase.js';
+import { downloadTrackToDisk } from './radioProviders.js';
 
 const activePrefetchQueues = new Set();
 const TEMP_DIR = path.join(__dirname, '../../temp_radio_audio');
@@ -113,7 +113,7 @@ function cleanupSessionAudioFiles(session) {
     }
 }
 
-module.exports = {
+export default {
     prefetchNextTrack,
     prefetchPlaylistTracks,
     cleanupSessionAudioFiles,

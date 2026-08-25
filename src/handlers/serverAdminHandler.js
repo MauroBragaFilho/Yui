@@ -1,4 +1,4 @@
-const {
+import {
     EmbedBuilder,
     ActionRowBuilder,
     StringSelectMenuBuilder,
@@ -10,9 +10,9 @@ const {
     TextInputStyle,
     PermissionFlagsBits,
     ChannelType
-} = require('discord.js');
-const config = require('../config');
-const {
+} from 'discord.js';
+import config from '../config.js';
+import {
     setChannelPersona,
     setChannelChatter,
     setServerEveryoneMention,
@@ -21,8 +21,8 @@ const {
     getAllMcpTools,
     setServerToolEnabled,
     resetServerTools
-} = require('./llmHandler');
-const { sendMcpToolsManager } = require('./mcpToolPanelHandler');
+} from './llmHandler.js';
+import { sendMcpToolsManager } from './mcpToolPanelHandler.js';
 
 async function handleServerAdminCommand(interaction) {
     const hasPermission = !interaction.guild || (interaction.member && (
@@ -410,7 +410,7 @@ async function handleIaFerramentasCommand(interaction) {
     }
 }
 
-module.exports = {
+export default {
     handleServerAdminCommand,
     handleServerAdminInteraction,
     handleIaFerramentasCommand

@@ -1,6 +1,6 @@
-const axios = require('axios');
-const { EmbedBuilder } = require('discord.js');
-const { generateResponse } = require('./llmHandler');
+import axios from 'axios.js';
+import { EmbedBuilder } from 'discord.js';
+import { generateResponse } from './llmHandler.js';
 async function getAnimeSource(imageUrl) {
     try {
         const response = await axios.get(`https://api.trace.moe/search?anilistInfo&url=${encodeURIComponent(imageUrl)}`);
@@ -166,4 +166,4 @@ MÁXIMO 2 LINHAS + A NOTA.
         await interaction.editReply('Tive um erro interno ao processar sua imagem.');
     }
 }
-module.exports = { handleSauceCommand };
+export default { handleSauceCommand };

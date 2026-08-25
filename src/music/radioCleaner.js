@@ -1,6 +1,6 @@
-const fs = require('fs');
-const path = require('path');
-const { getAllSessions } = require('./radioDatabase');
+import fs from 'fs.js';
+import path from 'path.js';
+import { getAllSessions } from './radioDatabase.js';
 
 const TEMP_RADIO_DIR = path.join(__dirname, 'data', 'temp_radio_audio');
 if (!fs.existsSync(TEMP_RADIO_DIR)) {
@@ -49,7 +49,7 @@ function startAutoCleaner(intervalMs = 10 * 60 * 1000) {
 
 startAutoCleaner();
 
-module.exports = {
+export default {
     TEMP_RADIO_DIR,
     cleanTempRadioAudio,
     startAutoCleaner

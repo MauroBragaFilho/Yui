@@ -1,8 +1,8 @@
-const fs = require('fs');
-const path = require('path');
-const { checkAutoBan } = require('./banHandler');
-const config = require('../config');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AuditLogEvent, WebhookClient } = require('discord.js');
+import fs from 'fs.js';
+import path from 'path.js';
+import { checkAutoBan } from './banHandler.js';
+import config from '../config.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AuditLogEvent, WebhookClient } from 'discord.js';
 const TERMS_FILE = path.join(__dirname, '../data/accepted_servers.json');
 if (!fs.existsSync(path.dirname(TERMS_FILE))) {
     fs.mkdirSync(path.dirname(TERMS_FILE), { recursive: true });
@@ -225,7 +225,7 @@ async function handleTosInteraction(interaction) {
     if (interaction.customId !== 'tos_accept' && interaction.customId !== 'tos_decline') return;
     try {
         console.log(`[TOS-DEBUG] Iniciando interação: ${interaction.customId} | Usuário: ${interaction.user.tag} | Guild: ${interaction.guild?.name || 'N/A'}`);
-        const { PermissionFlagsBits } = require('discord.js');
+        import { PermissionFlagsBits } from 'discord.js';
         await interaction.deferUpdate().catch(e => {
             console.error('[TOS-DEBUG] Falha ao dar deferUpdate:', e.message);
         });
@@ -249,7 +249,7 @@ async function handleTosInteraction(interaction) {
             console.log('[TOS-DEBUG] Salvando aceitação síncrona...');
             saveAcceptedServer(guild.name, guild.id, guild.ownerId, interaction.user.id);
             console.log('[TOS-DEBUG] Salvo com sucesso.');
-            const { setServerUpdateChannel, getServerSettings } = require('./llmHandler');
+            import { setServerUpdateChannel, getServerSettings } from './llmHandler.js';
             const settings = getServerSettings(guild.id);
             let targetUpdateChannel = null;
             if (settings && settings.updateChannelId) {
@@ -360,7 +360,7 @@ async function reportNewGuild(guild) {
 async function checkAndInitializeUpdateChannel(guild, channel) {
     if (!guild) return;
     if (!isServerAccepted(guild.id)) return;
-    const { getServerSettings, setServerUpdateChannel } = require('./llmHandler');
+    import { getServerSettings, setServerUpdateChannel } from './llmHandler.js';
     const settings = getServerSettings(guild.id);
     if (!settings.updateChannelId) {
         const target = findGeneralChannel(guild) || channel;
@@ -369,7 +369,7 @@ async function checkAndInitializeUpdateChannel(guild, channel) {
         }
     }
 }
-module.exports = {
+export default {
     isServerAccepted,
     sendTermsOfService,
     handleTosInteraction,

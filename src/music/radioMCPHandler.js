@@ -1,4 +1,4 @@
-const {
+import {
     getSession,
     updateSession,
     addTrackToQueue,
@@ -10,17 +10,17 @@ const {
     destroySession,
     stopRadio,
     removeTrackFromPlaylist
-} = require('./radioDatabase');
-const {
+} from './radioDatabase.js';
+import {
     playTrack,
     pausePlayer,
     resumePlayer,
     stopPlayer,
     updateEmbed
-} = require('./radioAudioPlayer');
-const { resolveInput } = require('./radioProviders');
-const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
-const { prefetchNextTrack } = require('./radioPrefetcher');
+} from './radioAudioPlayer.js';
+import { resolveInput } from './radioProviders.js';
+import { buildQueueEmbed, buildAmbiguousEmbed } from './radioEmbed.js';
+import { prefetchNextTrack } from './radioPrefetcher.js';
 
 async function sendTempMessage(textChannel, content, delayMs = 5000) {
     try {
@@ -50,10 +50,10 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
         if (resolved.type === 'ambiguous') {
             const embed = buildAmbiguousEmbed(resolved.results);
             const pendingKey = `radio_ambiguous_${guildId}_${userId}`;
-            const { radioAmbiguousSessions, scheduleAmbiguousAutoSelect } = require('./radioManager');
+            import { radioAmbiguousSessions, scheduleAmbiguousAutoSelect } from './radioManager.js';
             radioAmbiguousSessions.set(pendingKey, { results: resolved.results, guildId, userId, textChannel, client });
             try {
-                const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+                import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
                 const selectMenu = new StringSelectMenuBuilder()
                     .setCustomId(`radio_ambiguous_select_${guildId}_${userId}`)
                     .setPlaceholder('Escolha a música...')
@@ -221,7 +221,7 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
     }
 
     if (toolName === 'radio_leave_call') {
-        const { leaveRadioCall } = require('./radioManager');
+        import { leaveRadioCall } from './radioManager.js';
         await leaveRadioCall(guildId, textChannel);
         await sendTempMessage(textChannel, `👋 ${userMention} Rádio encerrado. Até mais!`);
         return null;
@@ -237,4 +237,4 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
     return null;
 }
 
-module.exports = { handleRadioMCPCall };
+export default { handleRadioMCPCall };

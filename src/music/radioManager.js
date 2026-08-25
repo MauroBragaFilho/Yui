@@ -1,13 +1,13 @@
-const {
+import {
     joinVoiceChannel,
     getVoiceConnection,
     VoiceConnectionStatus,
     entersState,
     EndBehaviorType
-} = require('@discordjs/voice');
-const prism = require('prism-media');
-const { transcribeAudio } = require('../services/sttService');
-const {
+} from '@discordjs/voice.js';
+import prism from 'prism-media.js';
+import { transcribeAudio } from '../services/sttService.js';
+import {
     createSession,
     getSession,
     destroySession,
@@ -21,11 +21,11 @@ const {
     toggleShuffle,
     removeTrackFromPlaylist,
     stopRadio
-} = require('./radioDatabase');
-const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
-const { buildRadioEmbed } = require('./radioEmbed');
-const { resolveInput } = require('./radioProviders');
-const { prefetchNextTrack, cleanupSessionAudioFiles } = require('./radioPrefetcher');
+} from './radioDatabase.js';
+import { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } from './radioAudioPlayer.js';
+import { buildRadioEmbed } from './radioEmbed.js';
+import { resolveInput } from './radioProviders.js';
+import { prefetchNextTrack, cleanupSessionAudioFiles } from './radioPrefetcher.js';
 
 const radioAmbiguousSessions = new Map();
 const userLastVoiceCommand = new Map();
@@ -110,7 +110,7 @@ async function startRadioMode(member, textChannel, client) {
         return { success: false, error: '❌ Não foi possível conectar ao canal de voz (tempo limite esgotado ou desconectado).' };
     }
 
-    const { isToolDisabled } = require('../handlers/llmHandler');
+    import { isToolDisabled } from '../handlers/llmHandler.js';
     const session = createSession(guildId, voiceChannel.id, textChannel.id);
     if (isToolDisabled(guildId, 'radio_voice_stt')) {
         updateSession(guildId, { voiceListening: false, voiceMode: 'OFF' });
@@ -149,7 +149,7 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
     const receiver = connection.receiver;
 
     receiver.speaking.on('start', (userId) => {
-        const { isToolDisabled } = require('../handlers/llmHandler');
+        import { isToolDisabled } from '../handlers/llmHandler.js';
         if (isToolDisabled(guildId, 'radio_voice_stt')) return;
 
         const session = getSession(guildId);
@@ -288,7 +288,7 @@ function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voice
 }
 
 async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChannel, client) {
-    const { parseRadioIntent } = require('./radioIntentEngine');
+    import { parseRadioIntent } from './radioIntentEngine.js';
     const intent = parseRadioIntent(prompt);
     if (!intent) return;
 
@@ -410,7 +410,7 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
     }
 
     if (intent.type === 'QUEUE') {
-        const { buildQueueEmbed } = require('./radioEmbed');
+        import { buildQueueEmbed } from './radioEmbed.js';
         const embed = buildQueueEmbed(session);
         if (textChannel) {
             try {
@@ -477,13 +477,13 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
 }
 
 async function processRadioVoiceCommand(prompt, userId, guildId, textChannel, client) {
-    const fs = require('fs');
-    const path = require('path');
+    import fs from 'fs.js';
+    import path from 'path.js';
 
     const radioMCPToolsPath = path.join(__dirname, 'radioMCPTools.json');
     const radioMCPTools = JSON.parse(fs.readFileSync(radioMCPToolsPath, 'utf-8'));
 
-    const { addToQueue } = require('../handlers/llmHandler');
+    import { addToQueue } from '../handlers/llmHandler.js';
 
     const contextMessage = {
         id: `radio_voice_${Date.now()}`,
@@ -616,7 +616,7 @@ function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
     }
 }
 
-module.exports = {
+export default {
     startRadioMode,
     leaveRadioCall,
     setupRadioVoiceReceiver,

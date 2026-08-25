@@ -1,6 +1,7 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
-require('dotenv').config();
+import axios from 'axios.js';
+import cheerio from 'cheerio.js';
+import dotenv from 'dotenv';
+dotenv.config();
 const SEARCH_CONFIG = {
     BING_ENDPOINT: 'https://www.bing.com/search',
     MAX_RESULTS_SCRAPE: 8,
@@ -208,6 +209,6 @@ async function smartSearch(prompt, providerFunc) {
     console.log(`[🔎 CONTEXTO] Total Contexto Gerado: ${finalContext.length} chars (~${totalTokens} tokens)`);
     return finalContext.length > 0 ? finalContext : null;
 }
-module.exports = {
+export default {
     smartSearch
 };

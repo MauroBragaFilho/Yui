@@ -1,6 +1,6 @@
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
+import fs from 'fs.js';
+import path from 'path.js';
+import axios from 'axios.js';
 
 const cachePath = path.join(__dirname, '../data/currency_cache.json');
 
@@ -188,6 +188,6 @@ async function convertCurrency(amount, from, to) {
     }
 }
 
-module.exports = {
+export default {
     convertCurrency
 };

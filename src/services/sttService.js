@@ -1,6 +1,7 @@
-const axios = require('axios');
-const FormData = require('form-data');
-require('dotenv').config();
+import axios from 'axios.js';
+import FormData from 'form-data.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const STT_PROVIDERS_CONFIG = {
     GROQ: true,
@@ -251,7 +252,7 @@ async function transcribeAudio(audioBuffer, filename = 'speech.wav') {
     return null;
 }
 
-module.exports = {
+export default {
     transcribeAudio,
     STT_PROVIDERS_CONFIG
 };
