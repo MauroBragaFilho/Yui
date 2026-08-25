@@ -19,16 +19,16 @@ export function createWeeklyEmbed(weeklyData) {
 
   if (weeklyData.podiumVehicle) {
     embed.addFields({
-      name: '🎰 Veículo do Cassino (Pódio)',
-      value: `🚗 **${weeklyData.podiumVehicle}**`,
+      name: '**🎰 Veículo do Cassino (Pódio)**',
+      value: `🚗 ${weeklyData.podiumVehicle}`,
       inline: true,
     });
   }
 
   if (weeklyData.prizeRide) {
     embed.addFields({
-      name: '🏁 Veículo do Evento de Carros LS',
-      value: `🏎️ **${weeklyData.prizeRide}**`,
+      name: '**🏁 Veículo do Evento de Carros LS**',
+      value: `🏎️ ${weeklyData.prizeRide}`,
       inline: true,
     });
   }
@@ -36,7 +36,7 @@ export function createWeeklyEmbed(weeklyData) {
   if (weeklyData.bonuses && weeklyData.bonuses.length > 0) {
     const bonusTxt = weeklyData.bonuses.slice(0, 6).map((b) => `• ${b}`).join('\n');
     embed.addFields({
-      name: '💰 Bônus de GTA$ e RP',
+      name: '**💰 Bônus de GTA$ e RP**',
       value: bonusTxt,
       inline: false,
     });
@@ -45,7 +45,7 @@ export function createWeeklyEmbed(weeklyData) {
   if (weeklyData.discounts && weeklyData.discounts.length > 0) {
     const discTxt = weeklyData.discounts.slice(0, 6).map((d) => `• ${d}`).join('\n');
     embed.addFields({
-      name: '🏷️ Descontos da Semana',
+      name: '**🏷️ Descontos da Semana**',
       value: discTxt,
       inline: false,
     });
