@@ -1,6 +1,6 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } = require('discord.js');
-const config = require('../config');
-const {
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
+import config from '../config.js';
+import {
     updateShowModel,
     getShowModel,
     updateShowModelThinking,
@@ -9,7 +9,7 @@ const {
     getErrorRetries,
     updateProviderSetting,
     getProviderSettings,
-} = require('./llmHandler');
+} from './llmHandler.js';
 
 const CONFIG_PAGES = [
     {
@@ -724,8 +724,8 @@ function buildFullPayload(pageIndex) {
     return { embeds: [embed], components };
 }
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs.js';
+import path from 'path.js';
 
 function updateConfigJson(key, value) {
     const configJsonPath = path.join(__dirname, '../config/config.json');
@@ -897,7 +897,7 @@ async function handleConfigSelect(interaction) {
     return await interaction.update(buildFullPayload(pageIndex));
 }
 
-module.exports = {
+export default {
     handleConfigCommand,
     handleConfigButton,
     handleConfigModal,

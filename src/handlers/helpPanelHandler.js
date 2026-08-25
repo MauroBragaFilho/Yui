@@ -1,6 +1,6 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import fs from 'fs.js';
+import path from 'path.js';
 
 const COMMAND_DETAILS = {
     'ia_chat': {
@@ -351,7 +351,7 @@ function buildHelpCommandDetailPayload(commandId) {
 }
 
 function buildHelpRulesPayload(pageIndex = 0) {
-    const { getTosPages } = require('./tosHandler');
+    import { getTosPages } from './tosHandler.js';
     const pages = getTosPages();
     const safeIndex = Math.max(0, Math.min(pageIndex, pages.length - 1));
     const currentPage = pages[safeIndex];
@@ -452,7 +452,7 @@ async function handleHelpInteraction(interaction) {
     }
 }
 
-module.exports = {
+export default {
     buildHelpHomePayload,
     buildHelpCommandListPayload,
     buildHelpCommandDetailPayload,

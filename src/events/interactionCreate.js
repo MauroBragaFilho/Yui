@@ -1,11 +1,11 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-const config = require('../config');
-const { getCurrentMusicFromUser } = require('../services/activityMusicService');
-const { handleTosInteraction } = require('../handlers/tosHandler');
-const { handleBanInteraction, checkBan, addBan, removeBan, getBans, setAutoBlock } = require('../handlers/banHandler');
-const {
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
+import fs from 'fs.js';
+import path from 'path.js';
+import config from '../config.js';
+import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
+import { handleTosInteraction } from '../handlers/tosHandler.js';
+import { handleBanInteraction, checkBan, addBan, removeBan, getBans, setAutoBlock } from '../handlers/banHandler.js';
+import {
     addToQueue,
     getDisabledTools,
     getAllMcpTools,
@@ -21,9 +21,9 @@ const {
     setServerEveryoneMention,
     setServerUpdateChannel,
     setServerLastChannel
-} = require('../handlers/llmHandler');
-const { generateImage } = require('../handlers/imageHandler');
-const {
+} from '../handlers/llmHandler.js';
+import { generateImage } from '../handlers/imageHandler.js';
+import {
     downloadAudio,
     downloadVideo,
     sanitizeFilenameForDiscord,
@@ -39,19 +39,19 @@ const {
     getMemoryUsagePercent,
     logCompressionAction,
     formatVideoSuccessMessage
-} = require('../handlers/youtubeAudioHandler');
-const { executeGameCommand } = require('../handlers/gameHandler');
-const { handleSauceCommand } = require('../handlers/sauceHandler');
-const { getSteamGameInfo } = require('../handlers/steamHandler');
-const { convertCurrency } = require('../handlers/currencyHandler');
-const { generateResponse } = require('../handlers/llmHandler');
-const { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect } = require('../handlers/configPanelHandler');
-const { handleMusicSearchAndDownload, clearSession } = require('../handlers/deezerMusicHandler');
-const { handleRadioButton, handleRadioModal, handleAmbiguousSelect } = require('../music/radioModalHandler');
-const { startRadioMode } = require('../music/radioManager');
-const { handleServerAdminCommand, handleServerAdminInteraction, handleIaFerramentasCommand } = require('../handlers/serverAdminHandler');
-const { handleCreatorAdminCommand, handleCreatorAdminInteraction } = require('../handlers/creatorAdminHandler');
-const { buildBanListPayload, buildBanDetailPayload } = require('../handlers/banListHandler');
+} from '../handlers/youtubeAudioHandler.js';
+import { executeGameCommand } from '../handlers/gameHandler.js';
+import { handleSauceCommand } from '../handlers/sauceHandler.js';
+import { getSteamGameInfo } from '../handlers/steamHandler.js';
+import { convertCurrency } from '../handlers/currencyHandler.js';
+import { generateResponse } from '../handlers/llmHandler.js';
+import { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect } from '../handlers/configPanelHandler.js';
+import { handleMusicSearchAndDownload, clearSession } from '../handlers/deezerMusicHandler.js';
+import { handleRadioButton, handleRadioModal, handleAmbiguousSelect } from '../music/radioModalHandler.js';
+import { startRadioMode } from '../music/radioManager.js';
+import { handleServerAdminCommand, handleServerAdminInteraction, handleIaFerramentasCommand } from '../handlers/serverAdminHandler.js';
+import { handleCreatorAdminCommand, handleCreatorAdminInteraction } from '../handlers/creatorAdminHandler.js';
+import { buildBanListPayload, buildBanDetailPayload } from '../handlers/banListHandler.js';
 
 function getHelpRegrasPages(regrasAnswer) {
     if (!regrasAnswer) return [];
@@ -76,14 +76,14 @@ function getHelpRegrasPages(regrasAnswer) {
     }];
 }
 
-module.exports = {
+export default {
     name: 'interactionCreate',
     once: false,
     async execute(interaction, client) {
         if (interaction.guildId) {
             const isWhitelisted = config.isAutomodWhitelisted(interaction.user.id) || config.isOwner(interaction.user.id);
             if (!isWhitelisted) {
-                const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
+                import { isServerAccepted, sendTermsOfService } from '../handlers/tosHandler.js';
                 if (!isServerAccepted(interaction.guildId)) {
                     const isTosAction = (interaction.isCommand() && interaction.commandName === 'aceitar_tos') ||
                                         (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline' || interaction.customId.startsWith('tos_nav_')));
@@ -105,11 +105,11 @@ module.exports = {
                 return await handleCreatorAdminInteraction(interaction, client);
             }
             if (interaction.customId.startsWith('srvmcp_')) {
-                const { handleMcpToolInteraction } = require('../handlers/mcpToolPanelHandler');
+                import { handleMcpToolInteraction } from '../handlers/mcpToolPanelHandler.js';
                 return await handleMcpToolInteraction(interaction);
             }
             if (interaction.customId.startsWith('help_')) {
-                const { handleHelpInteraction } = require('../handlers/helpPanelHandler');
+                import { handleHelpInteraction } from '../handlers/helpPanelHandler.js';
                 return await handleHelpInteraction(interaction);
             }
         }
@@ -356,7 +356,7 @@ module.exports = {
         if (interaction.isCommand()) {
             if (interaction.guildId && interaction.channelId) {
                 setServerLastChannel(interaction.guildId, interaction.channelId);
-                const { checkAndInitializeUpdateChannel } = require('../handlers/tosHandler');
+                import { checkAndInitializeUpdateChannel } from '../handlers/tosHandler.js';
                 await checkAndInitializeUpdateChannel(interaction.guild, interaction.channel);
             }
             const sub = interaction.options.getSubcommand(false);
@@ -476,7 +476,7 @@ module.exports = {
                     .setDescription('Apenas administradores do servidor podem aceitar os Termos de Uso.');
                 return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
-            const { isServerAccepted, sendTermsOfService } = require('../handlers/tosHandler');
+            import { isServerAccepted, sendTermsOfService } from '../handlers/tosHandler.js';
             if (isServerAccepted(interaction.guildId)) {
                 const alreadyAcceptedEmbed = new EmbedBuilder()
                     .setColor(0x10B981)
@@ -488,7 +488,7 @@ module.exports = {
             }
             await sendTermsOfService(interaction);
         } else if (commandName === 'ajuda') {
-            const { buildHelpHomePayload } = require('../handlers/helpPanelHandler');
+            import { buildHelpHomePayload } from '../handlers/helpPanelHandler.js';
             return await interaction.reply({ ...buildHelpHomePayload(), ephemeral: false });
         } else if (commandName === 'ia_imagem') {
             const prompt = interaction.options.getString('prompt');
@@ -850,7 +850,7 @@ module.exports = {
                 await interaction.editReply({ embeds: [errEmbed] });
             }
         } else if (commandName === 'entrar-call') {
-            const { joinVoiceCall } = require('../handlers/voiceHandler');
+            import { joinVoiceCall } from '../handlers/voiceHandler.js';
             await interaction.deferReply({ ephemeral: true });
             const result = await joinVoiceCall(interaction.member, interaction.channel);
             if (result) {
@@ -859,7 +859,7 @@ module.exports = {
                 await interaction.editReply({ content: '❌ Não foi possível entrar no canal de voz.' });
             }
         } else if (commandName === 'sair-call') {
-            const { leaveVoiceCall } = require('../handlers/voiceHandler');
+            import { leaveVoiceCall } from '../handlers/voiceHandler.js';
             await interaction.deferReply({ ephemeral: true });
             const result = await leaveVoiceCall(interaction.guildId, interaction.channel);
             if (result) {

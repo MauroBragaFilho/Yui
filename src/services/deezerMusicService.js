@@ -1,8 +1,9 @@
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-require('dotenv').config();
+import axios from 'axios.js';
+import fs from 'fs.js';
+import path from 'path.js';
+import { exec } from 'child_process.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const TEMP_AUDIO_DIR = path.join(__dirname, '../data/temp_audio');
 if (!fs.existsSync(TEMP_AUDIO_DIR)) {
@@ -98,7 +99,7 @@ function cleanupTempAudio(filePath) {
     }
 }
 
-module.exports = {
+export default {
     searchDeezerTracks,
     calculateConfidenceScore,
     downloadDeezerTrack,

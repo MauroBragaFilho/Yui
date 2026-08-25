@@ -1,4 +1,4 @@
-const { ActivityType } = require('discord.js');
+import { ActivityType } from 'discord.js';
 
 const PREMID_YTMUSIC_APP_ID = '463151177836658699';
 
@@ -139,4 +139,4 @@ async function getCurrentMusicFromUser(userId, client, preferGuildId = null) {
     };
 }
 
-module.exports = { getCurrentMusicFromUser };
+export default { getCurrentMusicFromUser };

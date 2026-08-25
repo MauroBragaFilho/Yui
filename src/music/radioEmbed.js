@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 function formatDuration(seconds) {
     if (!seconds || isNaN(seconds)) return '?:??';
@@ -147,7 +147,7 @@ function buildNotFoundEmbed(query) {
         .setFooter({ text: 'Yui Radio' });
 }
 
-module.exports = {
+export default {
     buildRadioEmbed,
     buildQueueEmbed,
     buildAmbiguousEmbed,

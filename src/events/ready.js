@@ -1,20 +1,20 @@
-const { REST, Routes } = require('discord.js');
-const { setDiscordClient, setOnQueueUpdate } = require('../handlers/llmHandler');
-const { updateBotActivity } = require('../utils/activity');
-const { registerCommands, commands } = require('../commands/slashCommands');
-const config = require('../config');
+import { REST, Routes } from 'discord.js';
+import { setDiscordClient, setOnQueueUpdate } from '../handlers/llmHandler.js';
+import { updateBotActivity } from '../utils/activity.js';
+import { registerCommands, commands } from '../commands/slashCommands.js';
+import config from '../config/index.js';
 
-module.exports = {
+export default {
     name: 'ready',
     once: true,
     async execute(client) {
         console.log(`Logado como ${client.user.tag}!`);
-        
+
         setDiscordClient(client);
         setOnQueueUpdate((queueLength) => updateBotActivity(client, queueLength));
 
-        const rest = new REST({ version: '10' }).setToken(config.discordToken);
-        
+        const rest = new REST({ version: '10' }).setToken(config.discord.token);
+
         try {
             console.log('Iniciando registro de comandos...');
             await rest.put(

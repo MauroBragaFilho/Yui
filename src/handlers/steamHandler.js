@@ -1,5 +1,5 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+import axios from 'axios.js';
+import cheerio from 'cheerio.js';
 
 async function getSteamGameInfo(query) {
     try {
@@ -53,6 +53,6 @@ async function getSteamGameInfo(query) {
     }
 }
 
-module.exports = {
+export default {
     getSteamGameInfo
 };

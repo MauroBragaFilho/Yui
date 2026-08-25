@@ -1,9 +1,9 @@
-const { exec, spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const crypto = require('crypto');
-const config = require('../config');
+import { exec, spawn } from 'child_process.js';
+import fs from 'fs.js';
+import path from 'path.js';
+import os from 'os.js';
+import crypto from 'crypto.js';
+import config from '../config.js';
 
 const TEMP_AUDIO_DIR = path.join(__dirname, '../data/temp_audio');
 const TEMP_VIDEO_DIR = path.join(__dirname, '../data/temp_videos');
@@ -467,7 +467,7 @@ function isCompressionActive() {
     return isCompressing;
 }
 
-module.exports = {
+export default {
     downloadAudio,
     downloadVideo,
     sanitizeFilenameForDiscord,

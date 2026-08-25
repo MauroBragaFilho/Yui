@@ -1,7 +1,7 @@
-const { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, AttachmentBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
+import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, AttachmentBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import axios from 'axios.js';
+import fs from 'fs.js';
+import path from 'path.js';
 
 const SOURCES = [
     { name: 'FitGirl', url: path.join(__dirname, '../data/fitgirl.json'), emoji: '💃' },
@@ -258,4 +258,4 @@ async function executeGameCommand(interaction) {
     }
 }
 
-module.exports = { executeGameCommand, searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString };
+export default { executeGameCommand, searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString };

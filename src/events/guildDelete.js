@@ -1,6 +1,6 @@
-const { removeAcceptedServer } = require('../handlers/tosHandler');
+import { removeAcceptedServer } from '../handlers/tosHandler.js';
 
-module.exports = {
+export default {
     name: 'guildDelete',
     once: false,
     async execute(guild) {

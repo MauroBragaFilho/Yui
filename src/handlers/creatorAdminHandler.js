@@ -1,4 +1,4 @@
-const {
+import {
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
@@ -6,17 +6,17 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle
-} = require('discord.js');
-const config = require('../config');
-const {
+} from 'discord.js';
+import config from '../config.js';
+import {
     addBan,
     removeBan,
     getBans,
     setAutoBlock,
     getAutoBlockMode
-} = require('./banHandler');
-const { buildBanListPayload } = require('./banListHandler');
-const {
+} from './banHandler.js';
+import { buildBanListPayload } from './banListHandler.js';
+import {
     updateShowModel,
     getShowModel,
     updateShowModelThinking,
@@ -27,9 +27,9 @@ const {
     getAllMcpTools,
     setServerToolEnabled,
     resetServerTools
-} = require('./llmHandler');
-const { handleConfigCommand } = require('./configPanelHandler');
-const { sendMcpToolsManager } = require('./mcpToolPanelHandler');
+} from './llmHandler.js';
+import { handleConfigCommand } from './configPanelHandler.js';
+import { sendMcpToolsManager } from './mcpToolPanelHandler.js';
 
 async function handleCreatorAdminCommand(interaction, client) {
     if (!config.isOwner(interaction.user.id)) {
@@ -429,7 +429,7 @@ async function handleCreatorAdminInteraction(interaction, client) {
     }
 }
 
-module.exports = {
+export default {
     handleCreatorAdminCommand,
     handleCreatorAdminInteraction
 };

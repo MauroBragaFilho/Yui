@@ -1,11 +1,11 @@
-const axios = require('axios');
-const { exec } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const { searchDeezerTracks, calculateConfidenceScore } = require('../services/deezerMusicService');
-const { downloadAudio } = require('../handlers/youtubeAudioHandler');
+import axios from 'axios.js';
+import { exec } from 'child_process.js';
+import path from 'path.js';
+import fs from 'fs.js';
+import { searchDeezerTracks, calculateConfidenceScore } from '../services/deezerMusicService.js';
+import { downloadAudio } from '../handlers/youtubeAudioHandler.js';
 
-const { TEMP_RADIO_DIR, cleanTempRadioAudio } = require('./radioCleaner');
+import { TEMP_RADIO_DIR, cleanTempRadioAudio } from './radioCleaner.js';
 
 function extractUrl(str) {
     if (!str) return '';
@@ -98,7 +98,7 @@ async function resolveYouTubeTrack(url) {
     }
 
     return new Promise((resolve) => {
-        const config = require('../config');
+        import config from '../config.js';
         const cookiesPath = config.ytdlpCookiesPath;
         const cookieFlag = (cookiesPath && fs.existsSync(cookiesPath)) ? `--cookies "${cookiesPath}"` : '';
         const cmd = `yt-dlp --no-warnings --no-update ${cookieFlag} -j "${cleanUrl}"`;
@@ -159,7 +159,7 @@ async function resolveDeezerAlbum(url) {
 function resolveYouTubePlaylist(url) {
     return new Promise((resolve) => {
         const cleanUrl = extractUrl(url);
-        const config = require('../config');
+        import config from '../config.js';
         const cookiesPath = config.ytdlpCookiesPath;
         const cookieFlag = (cookiesPath && fs.existsSync(cookiesPath)) ? `--cookies "${cookiesPath}"` : '';
         const cmd = `yt-dlp --no-warnings --no-update ${cookieFlag} --flat-playlist --playlist-end 100 -j "${cleanUrl}"`;
@@ -513,7 +513,7 @@ async function resolveInput(input, guildId = null) {
     const cleanUrl = extractUrl(input);
     const hasHttp = /^https?:\/\//i.test(cleanUrl);
 
-    const { getSession } = require('./radioDatabase');
+    import { getSession } from './radioDatabase.js';
     const session = guildId ? getSession(guildId) : null;
     const isFast = session?.streamMode === 'FAST';
 
@@ -566,7 +566,7 @@ async function resolveInput(input, guildId = null) {
     return { type: 'not_found' };
 }
 
-module.exports = {
+export default {
     resolveInput,
     downloadTrackToDisk,
     searchByName,

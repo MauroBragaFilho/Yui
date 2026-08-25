@@ -1,7 +1,8 @@
-const fs   = require('fs');
-const path = require('path');
-const config = require('../config');
-require('dotenv').config();
+import fs from 'fs.js';
+import path from 'path.js';
+import config from '../config.js';
+import dotenv from 'dotenv';
+dotenv.config();
 const SAFETY_NEGATIVE_BASE = 'nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18, genitals, suggestive, semi-nude';
 function enforceSafetyNegative(negativePrompt = '') {
     if (!negativePrompt.trim()) return SAFETY_NEGATIVE_BASE;
@@ -287,4 +288,4 @@ async function generateImage(prompt, negativePrompt = '', width = 1024, height =
     console.error(`[ImageHandler] CRITICAL: Fallback failed para a lista de provedores tentados (${providersToTry.map(p => p.id).join(', ')}).`);
     return null;
 }
-module.exports = { generateImage };
+export default { generateImage };

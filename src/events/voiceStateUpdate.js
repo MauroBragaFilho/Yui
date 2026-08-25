@@ -1,6 +1,6 @@
-const { handleVoiceStateUpdate } = require('../handlers/voiceHandler');
+import { handleVoiceStateUpdate } from '../handlers/voiceHandler.js';
 
-module.exports = {
+export default {
     name: 'voiceStateUpdate',
     once: false,
     async execute(oldState, newState) {

@@ -1,6 +1,6 @@
-const fs = require('fs');
-const path = require('path');
-const config = require('../config');
+import fs from 'fs.js';
+import path from 'path.js';
+import config from '../config.js';
 const BANS_FILE = path.join(__dirname, '../data/bans.json');
 if (!fs.existsSync(path.dirname(BANS_FILE))) {
     fs.mkdirSync(path.dirname(BANS_FILE), { recursive: true });
@@ -38,7 +38,7 @@ function setAutoBlock(guildId, val) {
     saveBans();
     return true;
 }
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
 function saveBans() {
     fs.writeFileSync(BANS_FILE, JSON.stringify(bans, null, 2));
 }
@@ -186,7 +186,7 @@ async function handleBanInteraction(interaction, client) {
         await interaction.update({ embeds: [embed], components: [] });
     }
 }
-module.exports = {
+export default {
     checkBan,
     addBan,
     removeBan,

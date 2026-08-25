@@ -1,6 +1,6 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
-const config = require('../config');
-const { getDisabledTools, getAllMcpTools, setServerToolEnabled, resetServerTools } = require('./llmHandler');
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
+import config from '../config.js';
+import { getDisabledTools, getAllMcpTools, setServerToolEnabled, resetServerTools } from './llmHandler.js';
 
 const TOOL_DESCRIPTIONS = {
     'search_and_download_music': '**Propósito:** Permite que a Yui pesquise no catálogo do Deezer e faça o download de arquivos de áudio de alta qualidade (.mp3).\n\n**Como Usar:** Peça por nome da música ou artista (ex: *"yui baixa welcome to the jungle"*). Se a busca for ambígua, o bot apresentará 5 opções no chat para escolha.\n\n**Gatilhos Típicos:** *"baixa a música X"*, *"download de Y"*, *"pesquise a música Z"*, *"quero a opção 1"*.\n\n**Saída:** Arquivo de áudio `.mp3` enviado diretamente na conversa.',
@@ -164,7 +164,7 @@ async function handleMcpToolInteraction(interaction) {
     }
 }
 
-module.exports = {
+export default {
     sendMcpToolsManager,
     handleMcpToolInteraction
 };

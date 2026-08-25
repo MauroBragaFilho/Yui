@@ -1,4 +1,4 @@
-const {
+import {
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
@@ -8,14 +8,14 @@ const {
     TextInputBuilder,
     TextInputStyle,
     MessageFlags
-} = require('discord.js');
-const { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, cycleVoiceMode, toggleStreamMode, stopRadio, removeTrackFromPlaylist } = require('./radioDatabase');
-const { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } = require('./radioAudioPlayer');
-const { buildQueueEmbed, buildAmbiguousEmbed } = require('./radioEmbed');
-const { resolveInput } = require('./radioProviders');
-const { leaveRadioCall, radioAmbiguousSessions, scheduleAmbiguousAutoSelect } = require('./radioManager');
-const { setLoopMode, toggleShuffle, prevTrack, skipToTrack } = require('./radioDatabase');
-const { prefetchNextTrack } = require('./radioPrefetcher');
+} from 'discord.js';
+import { getSession, updateSession, addTrackToQueue, nextTrack, toggleVoiceListening, cycleVoiceMode, toggleStreamMode, stopRadio, removeTrackFromPlaylist } from './radioDatabase.js';
+import { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } from './radioAudioPlayer.js';
+import { buildQueueEmbed, buildAmbiguousEmbed } from './radioEmbed.js';
+import { resolveInput } from './radioProviders.js';
+import { leaveRadioCall, radioAmbiguousSessions, scheduleAmbiguousAutoSelect } from './radioManager.js';
+import { setLoopMode, toggleShuffle, prevTrack, skipToTrack } from './radioDatabase.js';
+import { prefetchNextTrack } from './radioPrefetcher.js';
 
 function isUserInRadioChannel(interaction, session) {
     if (!session) return false;
@@ -86,7 +86,7 @@ async function handleRadioButton(interaction, client) {
         }
 
         if (cid === 'radio_voice_toggle') {
-            const { isToolDisabled } = require('../handlers/llmHandler');
+            import { isToolDisabled } from '../handlers/llmHandler.js';
             if (isToolDisabled(guildId, 'radio_voice_stt')) {
                 return await interaction.reply({
                     content: '⚠️ **Reconhecimento de Voz (STT) Desativado no Servidor:** A escuta por voz do Rádio está desativada neste servidor por padrão para economia de recursos. Peça a um Administrador do servidor para ativá-la usando o comando `/ia_ferramentas`.',
@@ -148,7 +148,7 @@ async function handleRadioButton(interaction, client) {
 
         const updatedSession = getSession(guildId);
         if (updatedSession) {
-            const { buildRadioEmbed } = require('./radioEmbed');
+            import { buildRadioEmbed } from './radioEmbed.js';
             const { embeds, components } = buildRadioEmbed(updatedSession);
             await interaction.editReply({ embeds, components }).catch(async () => {
                 await updateEmbed(guildId, textChannel, client);
@@ -357,7 +357,7 @@ async function handleAmbiguousSelect(interaction, client) {
     return true;
 }
 
-module.exports = {
+export default {
     handleRadioButton,
     handleRadioModal,
     handleAmbiguousSelect

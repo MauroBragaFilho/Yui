@@ -1,10 +1,10 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
-const fs = require('fs');
-const path = require('path');
-const { smartSearch } = require('./searchManager');
-const { AttachmentBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, WebhookClient, ButtonBuilder, ButtonStyle } = require('discord.js');
-const {
+import axios from 'axios.js';
+import cheerio from 'cheerio.js';
+import fs from 'fs.js';
+import path from 'path.js';
+import { smartSearch } from './searchManager.js';
+import { AttachmentBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, WebhookClient, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
     downloadAudio,
     downloadVideo,
     sanitizeFilenameForDiscord,
@@ -14,14 +14,15 @@ const {
     canBypass,
     storeVideoForCompression,
     formatVideoSuccessMessage
-} = require('./youtubeAudioHandler');
-const { searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString } = require('./gameHandler');
-const { generateImage } = require('./imageHandler');
-const { getSteamGameInfo } = require('./steamHandler');
-const { convertCurrency } = require('./currencyHandler');
-const { handleMusicSearchAndDownload } = require('./deezerMusicHandler');
-require('dotenv').config();
-const config = require('../config');
+} from './youtubeAudioHandler.js';
+import { searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString } from './gameHandler.js';
+import { generateImage } from './imageHandler.js';
+import { getSteamGameInfo } from './steamHandler.js';
+import { convertCurrency } from './currencyHandler.js';
+import { handleMusicSearchAndDownload } from './deezerMusicHandler.js';
+import dotenv from 'dotenv';
+dotenv.config();
+import config from '../config.js';
 const geminiCooldowns = {};
 const mcpToolsPath = path.join(__dirname, '../data/mcp_tools.json');
 const TERMS_FILE = path.join(__dirname, '../data/accepted_servers.json');
@@ -503,7 +504,7 @@ function stripThinking(text) {
     return clean;
 }
 
-const { checkBan, addBan, removeBan, getBans, checkAutoBan, getAutoBlock, getAutoBlockMode, forbiddenKeywords } = require('./banHandler');
+import { checkBan, addBan, removeBan, getBans, checkAutoBan, getAutoBlock, getAutoBlockMode, forbiddenKeywords } from './banHandler.js';
 async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interaction) {
     const webhookUrl = config.avisosWebhookUrl;
     if (!webhookUrl) return;
@@ -1225,7 +1226,7 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     }
     if (guildId) {
         try {
-            const { getSession } = require('../music/radioDatabase');
+            import { getSession } from '../music/radioDatabase.js';
             const radioSession = getSession(guildId);
             if (radioSession && (radioSession.status === 'PLAYING' || radioSession.status === 'PAUSED' || radioSession.status === 'BUFFERING') && radioSession.currentTrack) {
                 const track = radioSession.currentTrack;
@@ -1739,7 +1740,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         console.log(`[AI THOUGHT] ${toolData.thought}`);
                     }
                     if (options && options.radioMode && toolData.tool && toolData.tool.startsWith('radio_')) {
-                        const { handleRadioMCPCall } = require('../music/radioMCPHandler');
+                        import { handleRadioMCPCall } from '../music/radioMCPHandler.js';
                         const radioGuildId = options.guildId || interaction.guildId;
                         const radioTextChannel = interaction.radioTextChannel || interaction.channel;
                         const radioUserId = interaction.radioUserId || userId;
@@ -1790,7 +1791,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         return;
                     }
                     if (toolData.tool === 'get_current_music') {
-                        const { getCurrentMusicFromUser } = require('../services/activityMusicService');
+                        import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
                         const discordClient = getDiscordClient();
                         const musicInfo = await getCurrentMusicFromUser(userId, discordClient);
                         if (!musicInfo.success) {
@@ -2074,7 +2075,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     }
                     if (toolData.tool === 'show_bot_menu' || toolData.tool === 'get_help') {
                         try {
-                            const { buildHelpHomePayload, buildHelpCreatorPayload, buildHelpRulesPayload, buildHelpCommandListPayload } = require('./helpPanelHandler');
+                            import { buildHelpHomePayload, buildHelpCreatorPayload, buildHelpRulesPayload, buildHelpCommandListPayload } from './helpPanelHandler.js';
                             let payload;
                             if (toolData.args && toolData.args.context) {
                                 const ctx = toolData.args.context;
@@ -2092,7 +2093,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     }
                 }
                 if (toolData.tool === 'join_voice_call') {
-                    const { joinVoiceCall } = require('./voiceHandler');
+                    import { joinVoiceCall } from './voiceHandler.js';
                     const member = interaction.member;
                     const textChannel = interaction.channel;
                     if (!member) {
@@ -2104,7 +2105,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     return;
                 }
                 if (toolData.tool === 'leave_voice_call') {
-                    const { leaveVoiceCall } = require('./voiceHandler');
+                    import { leaveVoiceCall } from './voiceHandler.js';
                     const guildId = interaction.guildId;
                     const textChannel = interaction.channel;
                     if (!guildId) {
@@ -2135,7 +2136,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         processedResponse += `\n-# ⏱️ ${duration}`;
                     }
                     if (/yui.*\b(saia|sai|desconecta)\s+(da|do)?\s*(call|voz)\b/i.test(prompt)) {
-                        const { leaveVoiceCall } = require('./voiceHandler');
+                        import { leaveVoiceCall } from './voiceHandler.js';
                         if (interaction.guildId) {
                             await leaveVoiceCall(interaction.guildId, interaction.channel);
                         }
@@ -2462,7 +2463,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
             }
 
             if (fallbackTool) {
-                const { handleRadioMCPCall } = require('../music/radioMCPHandler');
+                import { handleRadioMCPCall } from '../music/radioMCPHandler.js';
                 const radioGuildId = options.guildId || interaction.guildId;
                 const radioTextChannel = interaction.radioTextChannel || interaction.channel;
                 const radioUserId = interaction.radioUserId || userId;
@@ -2493,7 +2494,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
         );
 
         if (isCurrentMusicIntent) {
-            const { getCurrentMusicFromUser } = require('../services/activityMusicService');
+            import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
             const discordClient = getDiscordClient();
             const musicInfo = await getCurrentMusicFromUser(userId, discordClient);
             if (!musicInfo.success) {
@@ -2685,7 +2686,7 @@ function updateProviderSetting(provider, key, value) {
 function getProviderSettings() {
     return providerSettings;
 }
-module.exports = {
+export default {
     stripThinking,
     addToQueue,
     setOnQueueUpdate,

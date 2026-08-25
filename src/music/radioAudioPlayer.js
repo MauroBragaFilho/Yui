@@ -1,16 +1,16 @@
-const {
+import {
     createAudioPlayer,
     createAudioResource,
     AudioPlayerStatus,
     getVoiceConnection,
     StreamType
-} = require('@discordjs/voice');
-const fs = require('fs');
-const path = require('path');
-const { getSession, updateSession, nextTrack } = require('./radioDatabase');
-const { downloadTrackToDisk } = require('./radioProviders');
-const { buildRadioEmbed } = require('./radioEmbed');
-const { createYouTubeProgressiveStream } = require('./youtubeBufferStream');
+} from '@discordjs/voice.js';
+import fs from 'fs.js';
+import path from 'path.js';
+import { getSession, updateSession, nextTrack } from './radioDatabase.js';
+import { downloadTrackToDisk } from './radioProviders.js';
+import { buildRadioEmbed } from './radioEmbed.js';
+import { createYouTubeProgressiveStream } from './youtubeBufferStream.js';
 
 const players = new Map();
 const activeStreams = new Map();
@@ -37,14 +37,14 @@ async function playChime(guildId) {
             conn.subscribe(player);
         }
         const silenceFrame = Buffer.from([0xf8, 0xff, 0xfe]);
-        const { Readable } = require('stream');
+        import { Readable } from 'stream.js';
         const s = new Readable({ read() { this.push(silenceFrame); this.push(null); } });
         const resource = createAudioResource(s, { inputType: StreamType.Opus });
         player.play(resource);
     } catch (_) {}
 }
 
-const { prefetchNextTrack } = require('./radioPrefetcher');
+import { prefetchNextTrack } from './radioPrefetcher.js';
 
 async function playTrack(guildId, track, textChannel, client) {
     const conn = getVoiceConnection(guildId);
@@ -117,7 +117,7 @@ async function playTrack(guildId, track, textChannel, client) {
         await playChime(guildId);
         if (textChannel) {
             try {
-                const { buildNotFoundEmbed } = require('./radioEmbed');
+                import { buildNotFoundEmbed } from './radioEmbed.js';
                 await textChannel.send({ embeds: [buildNotFoundEmbed(track.title)] });
             } catch (_) {}
         }
@@ -227,7 +227,7 @@ async function updateEmbed(guildId, textChannel, client) {
     }
 }
 
-module.exports = {
+export default {
     playTrack,
     pausePlayer,
     resumePlayer,

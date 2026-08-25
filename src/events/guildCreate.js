@@ -1,7 +1,8 @@
-const { reportNewGuild } = require('../handlers/tosHandler');
-const { setAutoBlock } = require('../handlers/banHandler');
-const config = require('../config');
-module.exports = {
+import { reportNewGuild } from '../handlers/tosHandler.js';
+import { setAutoBlock } from '../handlers/banHandler.js';
+import config from '../config/index.js';
+
+export default {
     name: 'guildCreate',
     once: false,
     async execute(guild) {
