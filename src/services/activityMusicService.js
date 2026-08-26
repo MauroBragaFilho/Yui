@@ -139,4 +139,5 @@ async function getCurrentMusicFromUser(userId, client, preferGuildId = null) {
     };
 }
 
+export { getCurrentMusicFromUser };
 export default { getCurrentMusicFromUser };

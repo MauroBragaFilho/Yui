@@ -1,6 +1,8 @@
-import fs from 'fs.js';
-import path from 'path.js';
-import axios from 'axios.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import axios from 'axios';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const cachePath = path.join(__dirname, '../data/currency_cache.json');
 
@@ -188,6 +190,7 @@ async function convertCurrency(amount, from, to) {
     }
 }
 
+export { convertCurrency };
 export default {
     convertCurrency
 };

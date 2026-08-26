@@ -1,16 +1,18 @@
-import axios from 'axios.js';
-import fs from 'fs.js';
-import path from 'path.js';
-import { exec } from 'child_process.js';
+import axios from 'axios';
+import fs from 'node:fs';
+import path from 'node:path';
+import { exec } from 'node:child_process';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
 dotenv.config();
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMP_AUDIO_DIR = path.join(__dirname, '../data/temp_audio');
 if (!fs.existsSync(TEMP_AUDIO_DIR)) {
     fs.mkdirSync(TEMP_AUDIO_DIR, { recursive: true });
 }
 
-function calculateConfidenceScore(query, track) {
+export function calculateConfidenceScore(query, track) {
     const cleanQuery = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const cleanTitle = (track.title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const cleanArtist = (track.artist?.name || track.artist || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -32,7 +34,7 @@ function calculateConfidenceScore(query, track) {
     return score;
 }
 
-async function searchDeezerTracks(query) {
+export async function searchDeezerTracks(query) {
     try {
         const searchUrl = `https://api.deezer.com/search?q=${encodeURIComponent(query)}`;
         const response = await axios.get(searchUrl);
@@ -53,7 +55,7 @@ async function searchDeezerTracks(query) {
     }
 }
 
-function downloadDeezerTrack(trackUrlOrId) {
+export function downloadDeezerTrack(trackUrlOrId) {
     return new Promise((resolve, reject) => {
         const arl = process.env.DEEZER_ARL || process.env.DEEMIX_ARL || '';
         const link = String(trackUrlOrId).startsWith('http') ? trackUrlOrId : `https://www.deezer.com/track/${trackUrlOrId}`;
@@ -89,7 +91,7 @@ function downloadDeezerTrack(trackUrlOrId) {
     });
 }
 
-function cleanupTempAudio(filePath) {
+export function cleanupTempAudio(filePath) {
     if (filePath && fs.existsSync(filePath)) {
         try {
             fs.unlinkSync(filePath);

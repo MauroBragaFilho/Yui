@@ -1,13 +1,15 @@
-import fs from 'fs.js';
-import path from 'path.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getAllSessions } from './radioDatabase.js';
 
-const TEMP_RADIO_DIR = path.join(__dirname, 'data', 'temp_radio_audio');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+export const TEMP_RADIO_DIR = path.join(__dirname, 'data', 'temp_radio_audio');
 if (!fs.existsSync(TEMP_RADIO_DIR)) {
     fs.mkdirSync(TEMP_RADIO_DIR, { recursive: true });
 }
 
-function cleanTempRadioAudio(maxAgeMs = 15 * 60 * 1000) {
+export function cleanTempRadioAudio(maxAgeMs = 15 * 60 * 1000) {
     if (!fs.existsSync(TEMP_RADIO_DIR)) return;
 
     try {

@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
-import fs from 'fs.js';
-import path from 'path.js';
+import fs from 'node:fs';
+import path from 'node:path';
 import config from '../config.js';
 import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
 import { handleTosInteraction } from '../handlers/tosHandler.js';
@@ -83,7 +83,7 @@ export default {
         if (interaction.guildId) {
             const isWhitelisted = config.isAutomodWhitelisted(interaction.user.id) || config.isOwner(interaction.user.id);
             if (!isWhitelisted) {
-                import { isServerAccepted, sendTermsOfService } from '../handlers/tosHandler.js';
+                const { isServerAccepted, sendTermsOfService } = await import('../handlers/tosHandler.js');
                 if (!isServerAccepted(interaction.guildId)) {
                     const isTosAction = (interaction.isCommand() && interaction.commandName === 'aceitar_tos') ||
                                         (interaction.isButton() && (interaction.customId === 'tos_accept' || interaction.customId === 'tos_decline' || interaction.customId.startsWith('tos_nav_')));
@@ -105,11 +105,11 @@ export default {
                 return await handleCreatorAdminInteraction(interaction, client);
             }
             if (interaction.customId.startsWith('srvmcp_')) {
-                import { handleMcpToolInteraction } from '../handlers/mcpToolPanelHandler.js';
+                const { handleMcpToolInteraction } = await import('../handlers/mcpToolPanelHandler.js');
                 return await handleMcpToolInteraction(interaction);
             }
             if (interaction.customId.startsWith('help_')) {
-                import { handleHelpInteraction } from '../handlers/helpPanelHandler.js';
+                const { handleHelpInteraction } = await import('../handlers/helpPanelHandler.js');
                 return await handleHelpInteraction(interaction);
             }
         }
@@ -356,7 +356,7 @@ export default {
         if (interaction.isCommand()) {
             if (interaction.guildId && interaction.channelId) {
                 setServerLastChannel(interaction.guildId, interaction.channelId);
-                import { checkAndInitializeUpdateChannel } from '../handlers/tosHandler.js';
+                const { checkAndInitializeUpdateChannel } = await import('../handlers/tosHandler.js');
                 await checkAndInitializeUpdateChannel(interaction.guild, interaction.channel);
             }
             const sub = interaction.options.getSubcommand(false);
@@ -476,7 +476,7 @@ export default {
                     .setDescription('Apenas administradores do servidor podem aceitar os Termos de Uso.');
                 return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
-            import { isServerAccepted, sendTermsOfService } from '../handlers/tosHandler.js';
+            const { isServerAccepted, sendTermsOfService } = await import('../handlers/tosHandler.js');
             if (isServerAccepted(interaction.guildId)) {
                 const alreadyAcceptedEmbed = new EmbedBuilder()
                     .setColor(0x10B981)
@@ -488,7 +488,7 @@ export default {
             }
             await sendTermsOfService(interaction);
         } else if (commandName === 'ajuda') {
-            import { buildHelpHomePayload } from '../handlers/helpPanelHandler.js';
+            const { buildHelpHomePayload } = await import('../handlers/helpPanelHandler.js');
             return await interaction.reply({ ...buildHelpHomePayload(), ephemeral: false });
         } else if (commandName === 'ia_imagem') {
             const prompt = interaction.options.getString('prompt');
@@ -850,7 +850,7 @@ export default {
                 await interaction.editReply({ embeds: [errEmbed] });
             }
         } else if (commandName === 'entrar-call') {
-            import { joinVoiceCall } from '../handlers/voiceHandler.js';
+            const { joinVoiceCall } = await import('../handlers/voiceHandler.js');
             await interaction.deferReply({ ephemeral: true });
             const result = await joinVoiceCall(interaction.member, interaction.channel);
             if (result) {
@@ -859,7 +859,7 @@ export default {
                 await interaction.editReply({ content: '❌ Não foi possível entrar no canal de voz.' });
             }
         } else if (commandName === 'sair-call') {
-            import { leaveVoiceCall } from '../handlers/voiceHandler.js';
+            const { leaveVoiceCall } = await import('../handlers/voiceHandler.js');
             await interaction.deferReply({ ephemeral: true });
             const result = await leaveVoiceCall(interaction.guildId, interaction.channel);
             if (result) {

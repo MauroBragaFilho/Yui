@@ -1,5 +1,5 @@
-import axios from 'axios.js';
-import FormData from 'form-data.js';
+import axios from 'axios';
+import FormData from 'form-data';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -251,6 +251,8 @@ async function transcribeAudio(audioBuffer, filename = 'speech.wav') {
 
     return null;
 }
+
+export { transcribeAudio, STT_PROVIDERS_CONFIG };
 
 export default {
     transcribeAudio,

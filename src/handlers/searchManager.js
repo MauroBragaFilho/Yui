@@ -1,5 +1,5 @@
-import axios from 'axios.js';
-import cheerio from 'cheerio.js';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 import dotenv from 'dotenv';
 dotenv.config();
 const SEARCH_CONFIG = {
@@ -209,6 +209,7 @@ async function smartSearch(prompt, providerFunc) {
     console.log(`[🔎 CONTEXTO] Total Contexto Gerado: ${finalContext.length} chars (~${totalTokens} tokens)`);
     return finalContext.length > 0 ? finalContext : null;
 }
+export { smartSearch };
 export default {
     smartSearch
 };

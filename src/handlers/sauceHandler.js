@@ -1,4 +1,4 @@
-import axios from 'axios.js';
+import axios from 'axios';
 import { EmbedBuilder } from 'discord.js';
 import { generateResponse } from './llmHandler.js';
 async function getAnimeSource(imageUrl) {
@@ -166,4 +166,5 @@ MÁXIMO 2 LINHAS + A NOTA.
         await interaction.editReply('Tive um erro interno ao processar sua imagem.');
     }
 }
+export { handleSauceCommand };
 export default { handleSauceCommand };

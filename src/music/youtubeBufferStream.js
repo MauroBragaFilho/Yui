@@ -1,7 +1,7 @@
-import { Readable } from 'stream.js';
-import { spawn } from 'child_process.js';
-import fs from 'fs.js';
-import path from 'path.js';
+import { Readable } from 'node:stream';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import config from '../config.js';
 
 const SAMPLE_RATE = 48000;
@@ -188,6 +188,8 @@ class YouTubeBufferStream extends Readable {
 function createYouTubeProgressiveStream(url, options) {
     return new YouTubeBufferStream(url, options);
 }
+
+export { YouTubeBufferStream, createYouTubeProgressiveStream };
 
 export default {
     YouTubeBufferStream,

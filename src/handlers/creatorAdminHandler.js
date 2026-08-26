@@ -429,6 +429,7 @@ async function handleCreatorAdminInteraction(interaction, client) {
     }
 }
 
+export { handleCreatorAdminCommand, handleCreatorAdminInteraction };
 export default {
     handleCreatorAdminCommand,
     handleCreatorAdminInteraction

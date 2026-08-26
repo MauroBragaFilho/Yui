@@ -31,7 +31,7 @@ export default {
             return message.reply({ embeds: [banEmbed], components: [banRow] }).catch(() => {});
         }
         if (message.guildId) {
-            import { isServerAccepted, sendTermsOfService } from '../handlers/tosHandler.js';
+            const { isServerAccepted, sendTermsOfService } = await import('../handlers/tosHandler.js');
             if (!isServerAccepted(message.guildId)) {
                 const serverSettings = getServerSettings(message.guildId);
                 const respondToEveryone = serverSettings.respondToEveryone || false;
@@ -64,9 +64,9 @@ export default {
         const hasYuiName = nameRegex.test(message.content);
         if (isMention || hasYuiName) {
             if (message.guildId && message.channelId) {
-                import { setServerLastChannel } from '../handlers/llmHandler.js';
+                const { setServerLastChannel } = await import('../handlers/llmHandler.js');
                 setServerLastChannel(message.guildId, message.channelId);
-                import { checkAndInitializeUpdateChannel } from '../handlers/tosHandler.js';
+                const { checkAndInitializeUpdateChannel } = await import('../handlers/tosHandler.js');
                 await checkAndInitializeUpdateChannel(message.guild, message.channel);
             }
             try {
@@ -141,9 +141,9 @@ export default {
                 }
                 if (Math.random() < chance) {
                     if (message.guildId && message.channelId) {
-                        import { setServerLastChannel } from '../handlers/llmHandler.js';
+                        const { setServerLastChannel } = await import('../handlers/llmHandler.js');
                         setServerLastChannel(message.guildId, message.channelId);
-                        import { checkAndInitializeUpdateChannel } from '../handlers/tosHandler.js';
+                        const { checkAndInitializeUpdateChannel } = await import('../handlers/tosHandler.js');
                         await checkAndInitializeUpdateChannel(message.guild, message.channel);
                     }
                     try {

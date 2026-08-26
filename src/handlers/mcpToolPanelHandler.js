@@ -164,6 +164,7 @@ async function handleMcpToolInteraction(interaction) {
     }
 }
 
+export { sendMcpToolsManager, handleMcpToolInteraction };
 export default {
     sendMcpToolsManager,
     handleMcpToolInteraction

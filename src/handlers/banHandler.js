@@ -1,5 +1,7 @@
-import fs from 'fs.js';
-import path from 'path.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import config from '../config.js';
 const BANS_FILE = path.join(__dirname, '../data/bans.json');
 if (!fs.existsSync(path.dirname(BANS_FILE))) {
@@ -186,6 +188,9 @@ async function handleBanInteraction(interaction, client) {
         await interaction.update({ embeds: [embed], components: [] });
     }
 }
+export const getBans = () => bans;
+export { checkBan, addBan, removeBan, setAutoBlock, checkAutoBan, handleBanInteraction, getAutoBlock, getAutoBlockMode, forbiddenKeywords };
+
 export default {
     checkBan,
     addBan,

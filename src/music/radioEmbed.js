@@ -147,6 +147,8 @@ function buildNotFoundEmbed(query) {
         .setFooter({ text: 'Yui Radio' });
 }
 
+export { buildRadioEmbed, buildQueueEmbed, buildAmbiguousEmbed, buildNotFoundEmbed, formatDuration };
+
 export default {
     buildRadioEmbed,
     buildQueueEmbed,

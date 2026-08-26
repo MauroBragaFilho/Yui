@@ -8,6 +8,24 @@ import { discordPublisher } from './discord/publisher.js';
 import { deploySlashCommands } from './discord/deployCommands.js';
 import { downloadTunables } from './utils/tunables.js';
 
+async function registerHikariEvents(client) {
+  const eventFiles = [
+    './events/guildCreate.js',
+    './events/guildDelete.js',
+    './events/voiceStateUpdate.js',
+    './events/interactionCreate.js',
+    './events/messageCreate.js',
+  ];
+
+  for (const eventFile of eventFiles) {
+    const event = (await import(eventFile)).default;
+    const listener = (...args) => event.execute(...args, client);
+    if (event.once) client.once(event.name, listener);
+    else client.on(event.name, listener);
+  }
+  logger.info(`[Hikari] ${eventFiles.length} eventos integrados.`);
+}
+
 async function bootstrap() {
   logger.info('====================================================');
   logger.info('🚀 Inicializando Yui...');
@@ -32,6 +50,7 @@ async function bootstrap() {
   }
 
   const client = createDiscordClient();
+  await registerHikariEvents(client);
 
   try {
     await client.login(config.discord.token);

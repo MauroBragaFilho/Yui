@@ -1,7 +1,9 @@
 import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, AttachmentBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import axios from 'axios.js';
-import fs from 'fs.js';
-import path from 'path.js';
+import axios from 'axios';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SOURCES = [
     { name: 'FitGirl', url: path.join(__dirname, '../data/fitgirl.json'), emoji: '💃' },
@@ -258,4 +260,5 @@ async function executeGameCommand(interaction) {
     }
 }
 
+export { executeGameCommand, searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString };
 export default { executeGameCommand, searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString };

@@ -1,7 +1,9 @@
-import axios from 'axios.js';
-import { exec } from 'child_process.js';
-import path from 'path.js';
-import fs from 'fs.js';
+import axios from 'axios';
+import { exec } from 'node:child_process';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { searchDeezerTracks, calculateConfidenceScore } from '../services/deezerMusicService.js';
 import { downloadAudio } from '../handlers/youtubeAudioHandler.js';
 
@@ -97,8 +99,8 @@ async function resolveYouTubeTrack(url) {
         } catch (_) {}
     }
 
-    return new Promise((resolve) => {
-        import config from '../config.js';
+    return new Promise(async (resolve) => {
+        const { default: config } = await import('../config.js');
         const cookiesPath = config.ytdlpCookiesPath;
         const cookieFlag = (cookiesPath && fs.existsSync(cookiesPath)) ? `--cookies "${cookiesPath}"` : '';
         const cmd = `yt-dlp --no-warnings --no-update ${cookieFlag} -j "${cleanUrl}"`;
@@ -157,9 +159,9 @@ async function resolveDeezerAlbum(url) {
 }
 
 function resolveYouTubePlaylist(url) {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
         const cleanUrl = extractUrl(url);
-        import config from '../config.js';
+        const { default: config } = await import('../config.js');
         const cookiesPath = config.ytdlpCookiesPath;
         const cookieFlag = (cookiesPath && fs.existsSync(cookiesPath)) ? `--cookies "${cookiesPath}"` : '';
         const cmd = `yt-dlp --no-warnings --no-update ${cookieFlag} --flat-playlist --playlist-end 100 -j "${cleanUrl}"`;
@@ -513,7 +515,7 @@ async function resolveInput(input, guildId = null) {
     const cleanUrl = extractUrl(input);
     const hasHttp = /^https?:\/\//i.test(cleanUrl);
 
-    import { getSession } from './radioDatabase.js';
+    const { getSession } = await import('./radioDatabase.js');
     const session = guildId ? getSession(guildId) : null;
     const isFast = session?.streamMode === 'FAST';
 
@@ -565,6 +567,8 @@ async function resolveInput(input, guildId = null) {
     }
     return { type: 'not_found' };
 }
+
+export { resolveInput, downloadTrackToDisk, searchByName };
 
 export default {
     resolveInput,

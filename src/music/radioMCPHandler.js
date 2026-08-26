@@ -10,10 +10,8 @@ import {
     destroySession,
     stopRadio,
     removeTrackFromPlaylist,
-    radioAmbiguousSessions,
-    scheduleAmbiguousAutoSelect,
-    leaveRadioCall
 } from './radioDatabase.js';
+import { radioAmbiguousSessions, scheduleAmbiguousAutoSelect, leaveRadioCall } from './radioManager.js';
 import {
     playTrack,
     pausePlayer,
@@ -54,10 +52,10 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
         if (resolved.type === 'ambiguous') {
             const embed = buildAmbiguousEmbed(resolved.results);
             const pendingKey = `radio_ambiguous_${guildId}_${userId}`;
-            import { radioAmbiguousSessions, scheduleAmbiguousAutoSelect } from './radioManager.js';
+            const { radioAmbiguousSessions, scheduleAmbiguousAutoSelect } = await import('./radioManager.js');
             radioAmbiguousSessions.set(pendingKey, { results: resolved.results, guildId, userId, textChannel, client });
             try {
-                import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+                const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
                 const selectMenu = new StringSelectMenuBuilder()
                     .setCustomId(`radio_ambiguous_select_${guildId}_${userId}`)
                     .setPlaceholder('Escolha a música...')
@@ -225,7 +223,7 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
     }
 
     if (toolName === 'radio_leave_call') {
-        import { leaveRadioCall } from './radioManager.js';
+        const { leaveRadioCall } = await import('./radioManager.js');
         await leaveRadioCall(guildId, textChannel);
         await sendTempMessage(textChannel, `👋 ${userMention} Rádio encerrado. Até mais!`);
         return null;
@@ -241,4 +239,5 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
     return null;
 }
 
+export { handleRadioMCPCall };
 export default { handleRadioMCPCall };

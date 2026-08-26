@@ -14,6 +14,10 @@ export function createDiscordClient() {
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.DirectMessages,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildPresences,
+      GatewayIntentBits.GuildVoiceStates,
       // Necessário para ler o texto de mensagens comuns (comandos por
       // prefixo, ex: "+yui diario"). É um "Privileged Intent" — precisa
       // ser ativado manualmente em "Bot" > "Privileged Gateway Intents"

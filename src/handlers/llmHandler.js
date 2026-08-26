@@ -1,7 +1,9 @@
 import axios from 'axios';
-import cheerio from 'cheerio';
+import * as cheerio from 'cheerio';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { smartSearch } from './searchManager.js';
 import { AttachmentBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, WebhookClient, ButtonBuilder, ButtonStyle } from 'discord.js';
 import {
@@ -2682,6 +2684,18 @@ function updateProviderSetting(provider, key, value) {
 function getProviderSettings() {
     return providerSettings;
 }
+export const getAllMcpTools = () => ALL_MCP_TOOLS;
+export {
+    stripThinking, addToQueue, setOnQueueUpdate, setDiscordClient,
+    setChannelPersona, setChannelChatter, getChannelSettings,
+    updateProviderSetting, getProviderSettings, updateShowModel, getShowModel,
+    updateShowModelThinking, getShowModelThinking, updateErrorRetries,
+    getErrorRetries, generateResponse, getServerPrompt, setServerPrompt,
+    resetServerPrompt, getDisabledTools, isToolDisabled, setServerToolEnabled,
+    resetServerTools, getServerSettings, setServerEveryoneMention,
+    setServerUpdateChannel, setServerLastChannel
+};
+
 export default {
     stripThinking,
     addToQueue,

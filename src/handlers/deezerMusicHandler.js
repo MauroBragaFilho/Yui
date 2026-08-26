@@ -138,6 +138,7 @@ function clearSession(userId) {
     musicSessions.delete(userId);
 }
 
+export { handleMusicSearchAndDownload, executeDownloadAndPackage, clearSession };
 export default {
     handleMusicSearchAndDownload,
     executeDownloadAndPackage,

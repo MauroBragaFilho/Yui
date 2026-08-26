@@ -4,9 +4,11 @@ import {
     AudioPlayerStatus,
     getVoiceConnection,
     StreamType
-} from '@discordjs/voice.js';
-import fs from 'fs.js';
-import path from 'path.js';
+} from '@discordjs/voice';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { getSession, updateSession, nextTrack } from './radioDatabase.js';
 import { downloadTrackToDisk } from './radioProviders.js';
 import { buildRadioEmbed } from './radioEmbed.js';
@@ -37,7 +39,7 @@ async function playChime(guildId) {
             conn.subscribe(player);
         }
         const silenceFrame = Buffer.from([0xf8, 0xff, 0xfe]);
-        import { Readable } from 'stream.js';
+        const { Readable } = await import('node:stream');
         const s = new Readable({ read() { this.push(silenceFrame); this.push(null); } });
         const resource = createAudioResource(s, { inputType: StreamType.Opus });
         player.play(resource);
@@ -117,7 +119,7 @@ async function playTrack(guildId, track, textChannel, client) {
         await playChime(guildId);
         if (textChannel) {
             try {
-                import { buildNotFoundEmbed } from './radioEmbed.js';
+                const { buildNotFoundEmbed } = await import('./radioEmbed.js');
                 await textChannel.send({ embeds: [buildNotFoundEmbed(track.title)] });
             } catch (_) {}
         }
@@ -226,6 +228,8 @@ async function updateEmbed(guildId, textChannel, client) {
         embedUpdateLocksMap.delete(guildId);
     }
 }
+
+export { playTrack, pausePlayer, resumePlayer, stopPlayer, playChime, updateEmbed, getPlayer };
 
 export default {
     playTrack,

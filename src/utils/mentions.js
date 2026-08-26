@@ -10,4 +10,5 @@ function resolveMentions(text, clientInstance) {
     });
     return resolvedText;
 }
-module.exports = { resolveMentions };
+export { resolveMentions };
+export default { resolveMentions };

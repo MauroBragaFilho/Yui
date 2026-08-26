@@ -1,5 +1,5 @@
-import axios from 'axios.js';
-import cheerio from 'cheerio.js';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
 async function getSteamGameInfo(query) {
     try {
@@ -53,6 +53,7 @@ async function getSteamGameInfo(query) {
     }
 }
 
+export { getSteamGameInfo };
 export default {
     getSteamGameInfo
 };

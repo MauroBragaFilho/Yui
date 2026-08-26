@@ -410,6 +410,7 @@ async function handleIaFerramentasCommand(interaction) {
     }
 }
 
+export { handleServerAdminCommand, handleServerAdminInteraction, handleIaFerramentasCommand };
 export default {
     handleServerAdminCommand,
     handleServerAdminInteraction,

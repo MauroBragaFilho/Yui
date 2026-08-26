@@ -1,5 +1,7 @@
-import fs from 'fs.js';
-import path from 'path.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { checkAutoBan } from './banHandler.js';
 import config from '../config.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AuditLogEvent, WebhookClient } from 'discord.js';
@@ -225,7 +227,7 @@ async function handleTosInteraction(interaction) {
     if (interaction.customId !== 'tos_accept' && interaction.customId !== 'tos_decline') return;
     try {
         console.log(`[TOS-DEBUG] Iniciando interação: ${interaction.customId} | Usuário: ${interaction.user.tag} | Guild: ${interaction.guild?.name || 'N/A'}`);
-        import { PermissionFlagsBits } from 'discord.js';
+        const { PermissionFlagsBits } = await import('discord.js');
         await interaction.deferUpdate().catch(e => {
             console.error('[TOS-DEBUG] Falha ao dar deferUpdate:', e.message);
         });
@@ -249,7 +251,7 @@ async function handleTosInteraction(interaction) {
             console.log('[TOS-DEBUG] Salvando aceitação síncrona...');
             saveAcceptedServer(guild.name, guild.id, guild.ownerId, interaction.user.id);
             console.log('[TOS-DEBUG] Salvo com sucesso.');
-            import { setServerUpdateChannel, getServerSettings } from './llmHandler.js';
+            const { setServerUpdateChannel, getServerSettings } = await import('./llmHandler.js');
             const settings = getServerSettings(guild.id);
             let targetUpdateChannel = null;
             if (settings && settings.updateChannelId) {
@@ -360,7 +362,7 @@ async function reportNewGuild(guild) {
 async function checkAndInitializeUpdateChannel(guild, channel) {
     if (!guild) return;
     if (!isServerAccepted(guild.id)) return;
-    import { getServerSettings, setServerUpdateChannel } from './llmHandler.js';
+    const { getServerSettings, setServerUpdateChannel } = await import('./llmHandler.js');
     const settings = getServerSettings(guild.id);
     if (!settings.updateChannelId) {
         const target = findGeneralChannel(guild) || channel;
@@ -369,6 +371,8 @@ async function checkAndInitializeUpdateChannel(guild, channel) {
         }
     }
 }
+export { getTosPages, reportNewGuild, removeAcceptedServer, isServerAccepted, sendTermsOfService, handleTosInteraction, checkAndInitializeUpdateChannel };
+
 export default {
     isServerAccepted,
     sendTermsOfService,

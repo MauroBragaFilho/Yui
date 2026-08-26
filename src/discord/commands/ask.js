@@ -1,8 +1,8 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { aiClient } from '../../utils/aiClient.js';
 import { config } from '../../config/index.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { getKnowledgeContext } from '../../utils/knowledgeBase.js';
+import { generateResponse } from '../../handlers/llmHandler.js';
 
 function buildGtaDataContext() {
   const parts = [];
@@ -96,23 +96,21 @@ export const askCommand = {
     ),
 
   async execute(interaction) {
-    if (!aiClient.isConfigured()) {
-      return interaction.reply({
-        content:
-          '🤖 A integração ainda não foi configurada.',
-        ephemeral: true,
-      });
-    }
-
     await interaction.deferReply();
 
     const pergunta = interaction.options.getString('mensagem');
 
     try {
-      const resposta = await aiClient.chatCompletion([
-        { role: 'system', content: buildSystemPrompt() },
-        { role: 'user', content: pergunta },
-      ]);
+      const resposta = await generateResponse(
+        `${buildSystemPrompt()}\n\nPergunta do usuário: ${pergunta}`,
+        interaction.channelId,
+        {
+          guildId: interaction.guildId,
+          allowSearch: true,
+          disableTools: false,
+          userId: interaction.user.id,
+        }
+      );
 
       // Discord limita mensagens a 2000 caracteres.
       const truncated = resposta.length > 1900 ? `${resposta.slice(0, 1900)}...` : resposta;

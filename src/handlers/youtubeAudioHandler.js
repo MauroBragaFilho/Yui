@@ -1,10 +1,12 @@
-import { exec, spawn } from 'child_process.js';
-import fs from 'fs.js';
-import path from 'path.js';
-import os from 'os.js';
-import crypto from 'crypto.js';
+import { exec, spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import config from '../config.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMP_AUDIO_DIR = path.join(__dirname, '../data/temp_audio');
 const TEMP_VIDEO_DIR = path.join(__dirname, '../data/temp_videos');
 if (!fs.existsSync(TEMP_AUDIO_DIR)) fs.mkdirSync(TEMP_AUDIO_DIR, { recursive: true });
@@ -466,6 +468,14 @@ function getCompressionQueuePosition(userId) {
 function isCompressionActive() {
     return isCompressing;
 }
+
+export {
+    downloadAudio, downloadVideo, sanitizeFilenameForDiscord, detectPlatform,
+    isUserBusy, lockUser, unlockUser, canBypass, storeVideoForCompression,
+    getPendingVideo, removePendingVideo, enqueueCompression,
+    getCompressionQueuePosition, isCompressionActive, getMemoryUsagePercent,
+    logCompressionAction, formatVideoSuccessMessage
+};
 
 export default {
     downloadAudio,

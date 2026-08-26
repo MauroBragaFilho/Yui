@@ -724,8 +724,8 @@ function buildFullPayload(pageIndex) {
     return { embeds: [embed], components };
 }
 
-import fs from 'fs.js';
-import path from 'path.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 function updateConfigJson(key, value) {
     const configJsonPath = path.join(__dirname, '../config/config.json');
@@ -897,6 +897,7 @@ async function handleConfigSelect(interaction) {
     return await interaction.update(buildFullPayload(pageIndex));
 }
 
+export { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect };
 export default {
     handleConfigCommand,
     handleConfigButton,

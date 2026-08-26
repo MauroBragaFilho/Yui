@@ -1,5 +1,7 @@
-import fs from 'fs.js';
-import path from 'path.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import config from '../config.js';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -288,4 +290,5 @@ async function generateImage(prompt, negativePrompt = '', width = 1024, height =
     console.error(`[ImageHandler] CRITICAL: Fallback failed para a lista de provedores tentados (${providersToTry.map(p => p.id).join(', ')}).`);
     return null;
 }
+export { generateImage };
 export default { generateImage };

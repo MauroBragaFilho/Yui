@@ -243,6 +243,7 @@ async function buildBanDetailPayload(client, category, targetId) {
     return { embeds: [embed], components: [navRow, actionRow] };
 }
 
+export { buildBanListPayload, buildBanDetailPayload };
 export default {
     buildBanListPayload,
     buildBanDetailPayload

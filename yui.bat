@@ -59,7 +59,7 @@ if "%opt%"=="1" (
     echo     Yui esta rodando... ^(Ctrl+C para encerrar^)
     echo ===================================================
     echo.
-    node index.js
+    node src/index.js
     echo %RESET%
     pause
     goto MENU

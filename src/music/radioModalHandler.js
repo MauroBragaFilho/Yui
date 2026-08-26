@@ -86,7 +86,7 @@ async function handleRadioButton(interaction, client) {
         }
 
         if (cid === 'radio_voice_toggle') {
-            import { isToolDisabled } from '../handlers/llmHandler.js';
+            const { isToolDisabled } = await import('../handlers/llmHandler.js');
             if (isToolDisabled(guildId, 'radio_voice_stt')) {
                 return await interaction.reply({
                     content: '⚠️ **Reconhecimento de Voz (STT) Desativado no Servidor:** A escuta por voz do Rádio está desativada neste servidor por padrão para economia de recursos. Peça a um Administrador do servidor para ativá-la usando o comando `/ia_ferramentas`.',
@@ -148,7 +148,7 @@ async function handleRadioButton(interaction, client) {
 
         const updatedSession = getSession(guildId);
         if (updatedSession) {
-            import { buildRadioEmbed } from './radioEmbed.js';
+            const { buildRadioEmbed } = await import('./radioEmbed.js');
             const { embeds, components } = buildRadioEmbed(updatedSession);
             await interaction.editReply({ embeds, components }).catch(async () => {
                 await updateEmbed(guildId, textChannel, client);
@@ -357,6 +357,7 @@ async function handleAmbiguousSelect(interaction, client) {
     return true;
 }
 
+export { handleRadioButton, handleRadioModal, handleAmbiguousSelect };
 export default {
     handleRadioButton,
     handleRadioModal,

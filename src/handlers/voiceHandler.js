@@ -1,6 +1,6 @@
-import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, getVoiceConnection, createAudioPlayer, createAudioResource, StreamType, entersState } from '@discordjs/voice.js';
-import prism from 'prism-media.js';
-import { Readable } from 'stream.js';
+import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, getVoiceConnection, createAudioPlayer, createAudioResource, StreamType, entersState } from '@discordjs/voice';
+import prism from 'prism-media';
+import { Readable } from 'node:stream';
 import { transcribeAudio } from '../services/sttService.js';
 import { addToQueue } from './llmHandler.js';
 import { checkBan } from './banHandler.js';
@@ -88,7 +88,7 @@ async function joinVoiceCall(member, textChannel, replyFn = null) {
         return false;
     }
 
-    import { isToolDisabled } from './llmHandler.js';
+    const { isToolDisabled } = await import('./llmHandler.js');
     if (isToolDisabled(guildId, 'join_voice_call')) {
         await sendOrReply('⚠️ As ferramentas de voz (**Yui Assistant**) estão desativadas neste servidor por padrão. Um administrador pode ativá-las usando o comando `/ia_ferramentas`.', textChannel, replyFn);
         return false;
@@ -277,7 +277,7 @@ async function processVoiceTranscription(userId, text, stateData, client) {
     }
 
     try {
-        import { hasActiveSession } from '../music/radioDatabase.js';
+        const { hasActiveSession } = await import('../music/radioDatabase.js');
         if (hasActiveSession(stateData.guildId)) {
             return;
         }
@@ -398,6 +398,7 @@ function getActiveVoiceConnection(guildId) {
     return activeConnections.get(guildId);
 }
 
+export { joinVoiceCall, leaveVoiceCall, handleVoiceStateUpdate, getActiveVoiceConnection };
 export default {
     joinVoiceCall,
     leaveVoiceCall,

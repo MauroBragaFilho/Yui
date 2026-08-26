@@ -1,5 +1,7 @@
-import fs from 'fs.js';
-import path from 'path.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DATA_DIR = path.join(__dirname, 'data');
 const SESSION_FILE = path.join(DATA_DIR, 'radio_sessions.json');
@@ -302,6 +304,13 @@ function toggleStreamMode(guildId) {
     _save();
     return s.streamMode;
 }
+
+export {
+    createSession, getSession, updateSession, destroySession, hasActiveSession,
+    addTrackToQueue, skipToTrack, nextTrack, prevTrack, setLoopMode,
+    toggleShuffle, toggleVoiceListening, cycleVoiceMode, toggleStreamMode,
+    getAllSessions, stopRadio, removeTrackFromPlaylist
+};
 
 export default {
     createSession,

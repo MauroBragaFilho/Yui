@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import fs from 'fs.js';
-import path from 'path.js';
+import { getTosPages } from './tosHandler.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const COMMAND_DETAILS = {
     'ia_chat': {
@@ -351,7 +352,6 @@ function buildHelpCommandDetailPayload(commandId) {
 }
 
 function buildHelpRulesPayload(pageIndex = 0) {
-    import { getTosPages } from './tosHandler.js';
     const pages = getTosPages();
     const safeIndex = Math.max(0, Math.min(pageIndex, pages.length - 1));
     const currentPage = pages[safeIndex];
@@ -451,6 +451,11 @@ async function handleHelpInteraction(interaction) {
         return await interaction.update(payload);
     }
 }
+
+export {
+    buildHelpHomePayload, buildHelpCommandListPayload, buildHelpCommandDetailPayload,
+    buildHelpRulesPayload, buildHelpCreatorPayload, handleHelpInteraction
+};
 
 export default {
     buildHelpHomePayload,
