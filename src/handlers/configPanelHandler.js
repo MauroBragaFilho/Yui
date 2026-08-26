@@ -544,7 +544,7 @@ function buildHomePage() {
         .setColor(0x7C3AED)
         .setTitle('⚙️ Central de Configuração — Yui')
         .setDescription('Painel administrativo para ajuste de todas as configurações do bot em tempo real.\nUse as **setas** para navegar ou **Ir Para** para pular direto a uma config.\n\n**Categorias disponíveis:**')
-        .setFooter({ text: `Página 0/${CONFIG_PAGES.length} • Home • Yui Config • by yGuilhermy` })
+        .setFooter({ text: `Página 0/${CONFIG_PAGES.length} • Home • Yui Config • by oBraga` })
         .setTimestamp();
 
     for (const [cat, count] of Object.entries(categories)) {
@@ -576,7 +576,7 @@ function buildConfigEmbed(pageIndex) {
             { name: '📂 Categoria', value: page.category, inline: true },
             { name: '💽 Persistência', value: page.persistence === 'runtime' ? '⚡ Runtime (volta ao padrão no restart)' : '💾 JSON Permanente (salvo em disco)', inline: false }
         )
-        .setFooter({ text: `Página ${pageIndex}/${CONFIG_PAGES.length} • ${page.key} • Yui Config • by yGuilhermy` })
+        .setFooter({ text: `Página ${pageIndex}/${CONFIG_PAGES.length} • ${page.key} • Yui Config • by oBraga` })
         .setTimestamp();
 
     if (envWarning) {

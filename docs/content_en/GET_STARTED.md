@@ -46,7 +46,7 @@ To automate environment checking and dependency installation (including external
 1.  **Clone the Repository:**
 
     ```bash
-    git clone https://github.com/yGuilhermy/Yui.git
+    git clone https://github.com/MauroBragaFilho/Yui.git
     cd Yui
     ```
 

@@ -208,7 +208,7 @@ async function executeGameCommand(interaction) {
                 .setTitle(`🔍 Resultados para: "${gameName}" (Página ${page + 1}/${totalPages})`)
                 .setDescription(description)
                 .setColor('#8F55FD')
-                .setFooter({ text: 'Yui Torrent • by yGuilhermy' });
+                .setFooter({ text: 'Yui Torrent • by oBraga' });
             
             const components = createPaginationComponents(page, totalPages, pageItems, startIndex);
             return { embeds: [embed], components };
@@ -243,7 +243,7 @@ async function executeGameCommand(interaction) {
                     .setDescription(result.message)
                     .setColor(result.color)
                     .addFields({ name: '🔗 Magnet Link (Backup)', value: `\`\`\`${selectedGame.magnet}\`\`\`` })
-                    .setFooter({ text: 'Yui Torrent Search • by yGuilhermy' });
+                    .setFooter({ text: 'Yui Torrent Search • by oBraga' });
                 await i.editReply({ content: '', embeds: [successEmbed], files: [attachment] });
                 collector.stop();
             }

@@ -61,7 +61,7 @@ Se você prefere fazer tudo na mão (Ubuntu/Linux recomendado):
 1.  **Clone meu código**:
 
     ```bash
-    git clone https://github.com/yGuilhermy/Yui.git
+    git clone https://github.com/MauroBragaFilho/Yui.git
     cd Yui
     ```
 
@@ -112,13 +112,13 @@ Quer mudar minha alma? Tudo o que é importante está em `src/config/index.js`. 
 
 ### 📝 Notas do dev
 
-- A Yui é uma IA que está em desenvolvimento, então ela pode não funcionar perfeitamente em todos os casos.
+- A Hikari é uma IA que está em desenvolvimento, então ela pode não funcionar perfeitamente em todos os casos.
 - Você pode mudar o nome da Yui no `.env` alterando `BOT_NAME`!
 - Caso for hospedar uma copia da Yui, Por favor, mantenha o repositório original linkado!
 - Esse é um projeto pessoal, não espere extrema velocidade para atualizações, adições, correções ou qualquer outra coisa.
 - Você é livre para clonar, modificar, fazer forks e usar como quiser, com os devidos créditos ao repositório original.
 - O servidor principal de onde a Yui foi criada e onde eu sou mais ativo: https://discord.gg/NXwKvKNKCd
-- O ID da Yui original é: 1429544961734885406
+- O ID da Hikari original é: 1429544961734885406
 
 ---
 
@@ -137,5 +137,5 @@ Quer mudar minha alma? Tudo o que é importante está em `src/config/index.js`. 
 
 <div align="center">
   <p><i>"Não se esqueça de me dar um pouco de amor (e poder de processamento)!"</i></p>
-  <p>Feito com 💜 e café por <b>yGuilhermy</b></p>
+  <p>Feito com 💜 e café por <b>oBraga</b></p>
 </div>

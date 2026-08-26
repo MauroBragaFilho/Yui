@@ -46,7 +46,7 @@ Para automatizar a verificação de ambiente e instalação de dependências (in
 1.  **Clone o Repositório:**
 
     ```bash
-    git clone https://github.com/yGuilhermy/Yui.git
+    git clone https://github.com/MauroBragaFilho/Yui.git
     cd Yui
     ```
 

@@ -49,7 +49,7 @@ If you prefer to do everything yourself (Ubuntu/Linux recommended):
 1.  **Clone my code**:
 
     ```bash
-    git clone https://github.com/yGuilhermy/Yui.git
+    git clone https://github.com/MauroBragaFilho/Yui.git
     cd Yui
     ```
 
@@ -124,5 +124,5 @@ Want to change my soul? Everything important is in `src/config/index.js`. There 
 
 <div align="center">
   <p><i>"Don't forget to give me some love (and processing power)!"</i></p>
-  <p>Made with 💜 and coffee by <b>yGuilhermy</b></p>
+  <p>Made with 💜 and coffee by <b>oBraga</b></p>
 </div>

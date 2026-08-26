@@ -23,7 +23,7 @@ async function registerHikariEvents(client) {
     if (event.once) client.once(event.name, listener);
     else client.on(event.name, listener);
   }
-  logger.info(`[Hikari] ${eventFiles.length} eventos integrados.`);
+  logger.info(`[Yui] ${eventFiles.length} eventos integrados.`);
 }
 
 async function bootstrap() {

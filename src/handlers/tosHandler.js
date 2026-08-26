@@ -138,7 +138,7 @@ function buildTosPagePayload(pageIndex = 0, maxVisited = 0, isLegacy = false) {
         .setColor(0x7C3AED)
         .setTitle(`⚖️ Termos de Uso — ${currentPage.title}`)
         .setDescription(description)
-        .setFooter({ text: `Página ${safePageIndex + 1} de ${totalPages} • Yui ToS • by yGuilhermy` })
+        .setFooter({ text: `Página ${safePageIndex + 1} de ${totalPages} • Yui ToS • by oBraga` })
         .setTimestamp();
 
     const legFlag = isLegacy ? '1' : '0';
@@ -158,7 +158,7 @@ function buildTosPagePayload(pageIndex = 0, maxVisited = 0, isLegacy = false) {
             .setDisabled(safePageIndex === totalPages - 1),
         new ButtonBuilder()
             .setLabel('Página do Projeto')
-            .setURL('https://github.com/yGuilhermy/Yui')
+            .setURL('https://github.com/MauroBragaFilho/Yui')
             .setStyle(ButtonStyle.Link)
             .setEmoji('📂')
     );
@@ -177,7 +177,7 @@ function buildTosPagePayload(pageIndex = 0, maxVisited = 0, isLegacy = false) {
             .setEmoji('❌'),
         new ButtonBuilder()
             .setLabel('Apoiar desenvolvimento')
-            .setURL('https://bio.site/yGuilhermy')
+            .setURL('https://bio.site/oBraga')
             .setStyle(ButtonStyle.Link)
             .setEmoji('💖')
     );
@@ -327,7 +327,7 @@ async function reportNewGuild(guild) {
                 logEmbed.addFields({ name: '🚨 Alerta de Termo', value: `O nome do servidor contém o termo proibido: \`${autoBanTrigger.keyword}\``, inline: false });
             }
             logEmbed.addFields({ name: 'Criado em', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:R>`, inline: true })
-                .setFooter({ text: `Total de Servidores: ${guild.client.guilds.cache.size} • by yGuilhermy` })
+                .setFooter({ text: `Total de Servidores: ${guild.client.guilds.cache.size} • by oBraga` })
                 .setTimestamp();
             
             const mngRow = new ActionRowBuilder().addComponents(

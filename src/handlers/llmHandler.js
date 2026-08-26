@@ -1253,7 +1253,7 @@ async function generateResponse(prompt, channelId = null, options = {}) {
             }
         } catch (_) {}
     }
-    baseSystemPrompt += "\n[REGRAS DE CONTRATO E LIMITAÇÕES]:\n1) Você NÃO tem acesso a configurações internas do servidor, cargos, lista de membros, logs de auditoria ou regras específicas do servidor. Se o usuário perguntar sobre regras do servidor ou informações internas que você não tem como acessar, responda claramente dizendo 'eu não sei' ou que não tem acesso a essas informações.\n2) Seu projeto é de código aberto (open-source) e seu código-fonte/repositório oficial está disponível no GitHub em: https://github.com/yGuilhermy/Yui. Se o usuário solicitar o link do seu código ou repositório, cite e forneça este link.\n3) Se encontrar 'Você (Yui): erro da ia' ou 'assistant: erro da ia' no histórico, isso significa que sua resposta anterior falhou por erro técnico. Peça desculpas casualmente e pergunte o que o usuário deseja novamente.";
+    baseSystemPrompt += "\n[REGRAS DE CONTRATO E LIMITAÇÕES]:\n1) Você NÃO tem acesso a configurações internas do servidor, cargos, lista de membros, logs de auditoria ou regras específicas do servidor. Se o usuário perguntar sobre regras do servidor ou informações internas que você não tem como acessar, responda claramente dizendo 'eu não sei' ou que não tem acesso a essas informações.\n2) Seu projeto é de código aberto (open-source) e seu código-fonte/repositório oficial está disponível no GitHub em: https://github.com/MauroBragaFilho/Yui. Se o usuário solicitar o link do seu código ou repositório, cite e forneça este link.\n3) Se encontrar 'Você (Yui): erro da ia' ou 'assistant: erro da ia' no histórico, isso significa que sua resposta anterior falhou por erro técnico. Peça desculpas casualmente e pergunte o que o usuário deseja novamente.";
     if (channelId) {
         const settings = channelSettings[channelId];
         const channelPersona = (typeof settings === 'string') ? settings : settings?.instruction;
@@ -1456,12 +1456,12 @@ Se você julga que isso é um erro grave do bot, você pode tentar apelar pelo b
 ---
 ✨ **Dica:** Deseja uma versão da **IA Yui** totalmente aberta, sem filtros ou bloqueios de segurança?
 Você pode hospedar sua própria versão privada facilmente!
-🚀 **Hospede sua própria Yui:** [Clique aqui para ver o GitHub](https://github.com/yGuilhermy/Yui)`)
-                        .setFooter({ text: 'Yui Security & Moderation • by yGuilhermy' })
+🚀 **Hospede sua própria Yui:** [Clique aqui para ver o GitHub](https://github.com/MauroBragaFilho/Yui)`)
+                        .setFooter({ text: 'Yui Security & Moderation • by oBraga' })
                         .setTimestamp();
                     const githubButton = new ButtonBuilder()
                         .setLabel('Página do Projeto')
-                        .setURL('https://github.com/yGuilhermy/Yui')
+                        .setURL('https://github.com/MauroBragaFilho/Yui')
                         .setStyle(ButtonStyle.Link)
                         .setEmoji('🚀');
                     const appealButton = new ButtonBuilder()
@@ -1495,8 +1495,8 @@ Se você acredita que isso é um erro, solicite um desbanimento pelo botão abai
 ---
 💡 **Quer usar a Yui sem restrições?**
 Como o projeto é open-source, você pode hospedar sua própria versão e ter controle total!
-🚀 **Repositório:** [yGuilhermy/Yui](https://github.com/yGuilhermy/Yui)`)
-                .setFooter({ text: 'Yui Security & Moderation • by yGuilhermy' })
+🚀 **Repositório:** [MauroBragaFilho/Yui](https://github.com/MauroBragaFilho/Yui)`)
+                .setFooter({ text: 'Yui Security & Moderation • by oBraga' })
                 .setTimestamp();
             const appealButton = new ButtonBuilder()
                 .setCustomId(`appeal_ban_user_${userId}`)
@@ -1504,7 +1504,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 .setStyle(ButtonStyle.Secondary);
             const githubButton = new ButtonBuilder()
                 .setLabel('Página do Projeto')
-                .setURL('https://github.com/yGuilhermy/Yui')
+                .setURL('https://github.com/MauroBragaFilho/Yui')
                 .setStyle(ButtonStyle.Link)
                 .setEmoji('🚀');
             const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);
@@ -1939,7 +1939,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                     .setColor(0xF59E0B)
                                     .setTitle('📦 Vídeo Grande Demais')
                                     .setDescription(`O vídeo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor é **${limitMB} MB**.\n\nClique no botão abaixo para tentar comprimir o vídeo automaticamente.\n\n⏰ *O arquivo ficará disponível por 6 horas.*`)
-                                    .setFooter({ text: 'Yui Media • by yGuilhermy' })
+                                    .setFooter({ text: 'Yui Media • by oBraga' })
                                     .setTimestamp();
                                 const row = new ActionRowBuilder().addComponents(
                                     new ButtonBuilder().setCustomId(`compress_video_${fileId}`).setLabel('🔄 Tentar Compressão').setStyle(ButtonStyle.Primary)
@@ -1985,7 +1985,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                     .setDescription(`> *${toolData.thought}*\n\n${torrentInfo.message}`)
                                     .setColor(torrentInfo.color)
                                     .addFields({ name: '🔗 Magnet Link (Backup)', value: `\`\`\`${bestGame.magnet}\`\`\`` })
-                                    .setFooter({ text: 'Yui Torrent Search • by yGuilhermy' });
+                                    .setFooter({ text: 'Yui Torrent Search • by oBraga' });
                                 const payload = { content: '', embeds: [gameEmbed], files: [attachment], components: [] };
                                 if (type === 'mention') await replyMessage.edit(payload);
                                 else await interaction.editReply(payload);
@@ -2019,7 +2019,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                         .setTitle(titleText)
                                         .setDescription(description)
                                         .setColor(0x7C3AED)
-                                        .setFooter({ text: 'Yui Torrent Search • by yGuilhermy' });
+                                        .setFooter({ text: 'Yui Torrent Search • by oBraga' });
                                     
                                     const components = createPaginationComponents(page, totalPages, pageItems, startIndex);
                                     return { embeds: [embed], components };
@@ -2057,7 +2057,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                                                 .setDescription(result.message)
                                                 .setColor(result.color)
                                                 .addFields({ name: '🔗 Magnet Link (Backup)', value: `\`\`\`${selectedGame.magnet}\`\`\`` })
-                                                .setFooter({ text: 'Yui Torrent Search • by yGuilhermy' });
+                                                .setFooter({ text: 'Yui Torrent Search • by oBraga' });
                                                 
                                             await i.editReply({ content: '', embeds: [successEmbed], files: [attachment] });
                                             collector.stop();
@@ -2193,7 +2193,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 { name: 'Lançamento', value: steamInfo.releaseDate, inline: true },
                                 { name: 'Desenvolvedor', value: steamInfo.developers, inline: true }
                             )
-                            .setFooter({ text: 'Fonte: Loja da Steam • Yui • by yGuilhermy' })
+                            .setFooter({ text: 'Fonte: Loja da Steam • Yui • by oBraga' })
                             .setTimestamp();
                             
                         if (steamInfo.headerImage) {
@@ -2257,7 +2257,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 { name: 'Cotação (' + convInfo.from + ')', value: `1 ${convInfo.from} = ${rateFormatted} ${convInfo.to}`, inline: true },
                                 { name: 'Última Atualização', value: convInfo.lastUpdate || 'Desconhecida', inline: true }
                             )
-                            .setFooter({ text: 'Fonte: AwesomeAPI • Yui • by yGuilhermy' })
+                            .setFooter({ text: 'Fonte: AwesomeAPI • Yui • by oBraga' })
                             .setTimestamp();
                             
                         let yuiComment = `Pronto! Deu **${resultFormatted} ${convInfo.to}** na cotação atual.`;
@@ -2360,7 +2360,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                         { name: '🌱 Seed',   value: `\`${imageData.actualSeed}\``, inline: true },
                                         { name: '📐 Resolução', value: `\`${width}x${height}\``, inline: true }
                                     )
-                                    .setFooter({ text: `Prompt: ${imagePrompt.substring(0, 100)}${imagePrompt.length > 100 ? '...' : ''} • by yGuilhermy` })
+                                    .setFooter({ text: `Prompt: ${imagePrompt.substring(0, 100)}${imagePrompt.length > 100 ? '...' : ''} • by oBraga` })
                                     .setTimestamp();
                                 const imageFiles = [];
                                 if (imageData.imageUrl) {
@@ -2376,7 +2376,7 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                     throw new Error('Nenhuma imagem disponível para exibir');
                                 }
                                 const supportBtnRow = new ActionRowBuilder().addComponents(
-                                    new ButtonBuilder().setLabel('Apoiar projeto').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('💖')
+                                    new ButtonBuilder().setLabel('Apoiar projeto').setURL('https://bio.site/oBraga').setStyle(ButtonStyle.Link).setEmoji('💖')
                                 );
                                 const payload = { content: yuiComment, embeds: [imageEmbed], files: imageFiles, components: [supportBtnRow] };
                                 if (type === 'mention') await replyMessage.edit(payload);
@@ -2411,12 +2411,12 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                                 const banEmbed = new EmbedBuilder()
                                     .setColor(0xE11D48)
                                     .setTitle('🚨 DISPOSITIVO DE SEGURANÇA ACIONADO — VOCÊ FOI BANIDO!')
-                                    .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**\n\nO sistema de inteligência da Yui analisou o contexto desta conversa e identificou uma conduta que viola gravemente os Termos de Uso.\n\n**DETALHES DO BANIMENTO:**\n- **ALVO PENALIZADO:** Seu perfil de usuário (Banido Globalmente)\n- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.\n\nO acesso aos serviços foi completamente revogado. Qualquer nova tentativa de burlar a segurança agravará a punição.\n\nSe você julga que isso é um erro, utilize o botão de apelação abaixo.\n\n---\n✨ **Dica:** Quer a Yui sem filtros? Hospede sua própria versão!\n🚀 **GitHub:** [yGuilhermy/Yui](https://github.com/yGuilhermy/Yui)`)
-                                    .setFooter({ text: 'Yui AI AutoMod • by yGuilhermy' })
+                                    .setDescription(`🛑 **UM BLOQUEIO PERMANENTE E IMEDIATO FOI APLICADO.**\n\nO sistema de inteligência da Yui analisou o contexto desta conversa e identificou uma conduta que viola gravemente os Termos de Uso.\n\n**DETALHES DO BANIMENTO:**\n- **ALVO PENALIZADO:** Seu perfil de usuário (Banido Globalmente)\n- **STATUS:** 🔴 TOTALMENTE BANIDO E BLOQUEADO.\n\nO acesso aos serviços foi completamente revogado. Qualquer nova tentativa de burlar a segurança agravará a punição.\n\nSe você julga que isso é um erro, utilize o botão de apelação abaixo.\n\n---\n✨ **Dica:** Quer a Yui sem filtros? Hospede sua própria versão!\n🚀 **GitHub:** [MauroBragaFilho/Yui](https://github.com/MauroBragaFilho/Yui)`)
+                                    .setFooter({ text: 'Yui AI AutoMod • by oBraga' })
                                     .setTimestamp();
                                 const githubButton = new ButtonBuilder()
                                     .setLabel('Página do Projeto')
-                                    .setURL('https://github.com/yGuilhermy/Yui')
+                                    .setURL('https://github.com/MauroBragaFilho/Yui')
                                     .setStyle(ButtonStyle.Link)
                                     .setEmoji('🚀');
                                 const appealButton = new ButtonBuilder()

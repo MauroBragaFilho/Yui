@@ -234,7 +234,7 @@ function getMainCategorySelectMenu(currentActive = 'home') {
         { label: '🏠 Visão Geral & Início', description: 'Apresentação principal da Yui e novidades', value: 'home', default: currentActive === 'home' },
         { label: '🤖 Lista Geral de Comandos', description: 'Todos os comandos com menu de inspeção detalhado', value: 'commands_list', default: currentActive === 'commands_list' },
         { label: '⚖️ Regras, Segurança & AutoMod', description: 'Diretrizes de uso e moderação automática por IA', value: 'regras', default: currentActive === 'regras' },
-        { label: '✨ Criador & Apoie o Projeto', description: 'Redes sociais de yGuilhermy e apoio via LivePix', value: 'sobre', default: currentActive === 'sobre' }
+        //{ label: '✨ Criador & Apoie o Projeto', description: 'Redes sociais de oBraga e apoio via LivePix', value: 'sobre', default: currentActive === 'sobre' }
     ];
 
     return new ActionRowBuilder().addComponents(
@@ -249,19 +249,19 @@ function buildHelpHomePayload() {
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
         .setTitle('✨ Central de Ajuda — Yui AI')
-        .setDescription('Bem-vindo(a) ao hub de ajuda oficial da **Yui**!\n\nEu sou uma Agente Autônoma multifuncional para o Discord, equipada com inteligência artificial generativa, assistente de voz em chamadas, download de multimídia, busca de jogos torrent, cotações em tempo real e moderação de segurança.\n\n📖 **[Guia Completo de Comandos](https://github.com/yGuilhermy/Yui/blob/main/docs/content_pt/COMMANDS.md)**')
+        .setDescription('Bem-vindo(a) ao hub de ajuda oficial da **Yui**!\n\nEu sou uma Agente Autônoma multifuncional para o Discord, equipada com inteligência artificial generativa, assistente de voz em chamadas, download de multimídia, busca de jogos torrent, cotações em tempo real e moderação de segurança.\n\n📖 **[Guia Completo de Comandos](https://github.com/MauroBragaFilho/Yui/blob/main/docs/content_pt/COMMANDS.md)**')
         .addFields(
             { name: '🤖 Comandos & Inspeção', value: 'Explore a lista completa de comandos e selecione qualquer um no menu para ver sua sintaxe e exemplos.', inline: true },
             { name: '⚙️ Configuração do Servidor', value: 'Administradores podem usar `/config_servidor` ou `/ia_ferramentas` para ajustar os recursos.', inline: true },
             { name: '💖 Apoie o Projeto', value: 'Conheça as redes do criador e ajude a manter o bot no ar via **LivePix**!', inline: false }
         )
-        .setFooter({ text: 'Use o menu suspenso abaixo para navegar pelas seções • by yGuilhermy' })
+        .setFooter({ text: 'Use o menu suspenso abaixo para navegar pelas seções • by oBraga' })
         .setTimestamp();
 
     const linkButtons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setLabel('🚀 GitHub').setURL('https://github.com/yGuilhermy/Yui').setStyle(ButtonStyle.Link),
-        new ButtonBuilder().setLabel('🌐 Redes Sociais').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link),
-        new ButtonBuilder().setLabel('💖 Apoiar no LivePix').setURL('https://livepix.gg/yguilhermy').setStyle(ButtonStyle.Link)
+        new ButtonBuilder().setLabel('🚀 GitHub').setURL('https://github.com/MauroBragaFilho/Yui').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setLabel('🌐 Redes Sociais').setURL('https://bio.site/oBraga').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setLabel('💖 Apoiar no LivePix').setURL('https://livepix.gg/obragafilho').setStyle(ButtonStyle.Link)
     );
 
     return { embeds: [embed], components: [getMainCategorySelectMenu('home'), linkButtons] };
@@ -271,7 +271,7 @@ function buildHelpCommandListPayload() {
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
         .setTitle('🤖 Lista Geral de Comandos')
-        .setDescription('Confira abaixo a lista completa de comandos da Yui. Selecione qualquer comando no menu abaixo para abrir sua **inspeção técnica detalhada** com exemplos e opções!\n\n📖 **[Documentação Online](https://github.com/yGuilhermy/Yui/blob/main/docs/content_pt/COMMANDS.md)**')
+        .setDescription('Confira abaixo a lista completa de comandos da Yui. Selecione qualquer comando no menu abaixo para abrir sua **inspeção técnica detalhada** com exemplos e opções!\n\n📖 **[Documentação Online](https://github.com/MauroBragaFilho/Yui/blob/main/docs/content_pt/COMMANDS.md)**')
         .addFields(
             {
                 name: '🧠 Inteligência Artificial & Chat',
@@ -360,7 +360,7 @@ function buildHelpRulesPayload(pageIndex = 0) {
         .setColor(0x7C3AED)
         .setTitle(currentPage.title)
         .setDescription(currentPage.content)
-        .setFooter({ text: `Página ${safeIndex + 1} de ${pages.length} • Diretrizes & TOS Yui • by yGuilhermy` })
+        .setFooter({ text: `Página ${safeIndex + 1} de ${pages.length} • Diretrizes & TOS Yui • by oBraga` })
         .setTimestamp();
 
     const btnRow = new ActionRowBuilder().addComponents(
@@ -391,24 +391,24 @@ function buildHelpCreatorPayload() {
         .addFields(
             {
                 name: '👨‍💻 Desenvolvedor & Autor',
-                value: 'Criado com dedicação por **yGuilhermy** (<@593372065730396160>).\nO projeto é **100% Código Aberto (Open Source)**!'
+                value: 'Criado com dedicação por **oBraga** (<@369618206970609675>).\nO projeto é **100% Código Aberto (Open Source)**!'
             },
             {
                 name: '🌐 Redes Sociais do Criador & Hub Central',
-                value: 'Acesse o agregador oficial de redes sociais para conferir conteúdos, vídeos, atualizações e projetos:\n👉 **[Redes Sociais do Criador](https://bio.site/yGuilhermy)**'
+                value: 'Acesse o agregador oficial de redes sociais para conferir conteúdos, vídeos, atualizações e projetos:\n👉 **[Redes Sociais do Criador](https://bio.site/oBraga)**'
             },
             {
                 name: '💖 Apoie a Yui pelo LivePix!',
-                value: 'Manter a infraestrutura de IA, servidores de voz e modelos generativos rodando 24/7 exige custos consideráveis. Se você gosta do projeto e quer ajudar na manutenção, envie um apoio via Pix!\n\n🎁 **[Apoiar no LivePix](https://livepix.gg/yguilhermy)**\n*Qualquer contribuição ajuda imensamente a manter a Yui sempre online e rápida!*'
+                value: 'Manter a infraestrutura de IA, servidores de voz e modelos generativos rodando 24/7 exige custos consideráveis. Se você gosta do projeto e quer ajudar na manutenção, envie um apoio via Pix!\n\n🎁 **[Apoiar no LivePix](https://livepix.gg/obragafilho)**\n*Qualquer contribuição ajuda imensamente a manter a Yui sempre online e rápida!*'
             }
         )
-        .setFooter({ text: 'Yui Project • Desenvolvido por yGuilhermy' })
+        .setFooter({ text: 'Yui Project • Desenvolvido por oBraga' })
         .setTimestamp();
 
     const linkButtons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setLabel('🌐 Redes Sociais do Criador').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('🔗'),
-        new ButtonBuilder().setLabel('💖 Apoiar no LivePix').setURL('https://livepix.gg/yguilhermy').setStyle(ButtonStyle.Link).setEmoji('🎁'),
-        new ButtonBuilder().setLabel('🚀 GitHub Open Source').setURL('https://github.com/yGuilhermy/Yui').setStyle(ButtonStyle.Link).setEmoji('⭐')
+        new ButtonBuilder().setLabel('🌐 Redes Sociais do Criador').setURL('https://bio.site/oBraga').setStyle(ButtonStyle.Link).setEmoji('🔗'),
+        new ButtonBuilder().setLabel('💖 Apoiar no LivePix').setURL('https://livepix.gg/obragafilho').setStyle(ButtonStyle.Link).setEmoji('🎁'),
+        new ButtonBuilder().setLabel('🚀 GitHub Open Source').setURL('https://github.com/MauroBragaFilho/Yui').setStyle(ButtonStyle.Link).setEmoji('⭐')
     );
 
     return { embeds: [embed], components: [getMainCategorySelectMenu('sobre'), linkButtons] };

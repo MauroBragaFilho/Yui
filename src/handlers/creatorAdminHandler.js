@@ -187,7 +187,7 @@ async function sendCreatorAdminDashboard(interaction, client, isUpdate = false) 
             { name: '📊 Status do Sistema', value: `**RAM em uso:** ${ramMB} MB\n**Exibir Modelo:** ${getShowModel() ? '✅ Sim' : '❌ Não'}\n**Exibir Pensamento:** ${getShowModelThinking() ? '✅ Sim' : '❌ Não'}\n**Retentativas:** ${getErrorRetries()}\n**AutoMod (Servidor):** \`${autoBlockMode}\``, inline: true },
             { name: '🛑 Restrições Globais', value: `**Usuários:** ${userBansCount}\n**Servidores:** ${guildBansCount}\n**Canais:** ${channelBansCount}`, inline: true }
         )
-        .setFooter({ text: 'Central de Administração Criador • by yGuilhermy' })
+        .setFooter({ text: 'Central de Administração Criador • by oBraga' })
         .setTimestamp();
 
     const row1 = new ActionRowBuilder().addComponents(

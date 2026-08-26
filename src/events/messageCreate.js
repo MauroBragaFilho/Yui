@@ -15,8 +15,8 @@ export default {
             const banEmbed = new EmbedBuilder()
                 .setColor(0xE11D48)
                 .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
-                .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Yui** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **ALVO:** ${banInfo.typeName || banInfo.type}\n- **MOTIVO:** ${banInfo.reason || 'Violação severa dos Termos de Uso da IA Yui.'}\n- **STATUS:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços.\n\nSe acredita que isso é um erro, solicite um desbanimento pelo botão abaixo.\n\n---\n💡 **Quer usar a Yui sem restrições?** Hospede sua própria versão!\n🚀 **Repositório:** [yGuilhermy/Yui](https://github.com/yGuilhermy/Yui)`)
-                .setFooter({ text: 'Yui Security & Moderation • by yGuilhermy' })
+                .setDescription(`Sua tentativa de interação foi abortada. O acesso à **IA Yui** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **ALVO:** ${banInfo.typeName || banInfo.type}\n- **MOTIVO:** ${banInfo.reason || 'Violação severa dos Termos de Uso da IA Yui.'}\n- **STATUS:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços.\n\nSe acredita que isso é um erro, solicite um desbanimento pelo botão abaixo.\n\n---\n💡 **Quer usar a Yui sem restrições?** Hospede sua própria versão!\n🚀 **Repositório:** [MauroBragaFilho/Yui](https://github.com/MauroBragaFilho/Yui)`)
+                .setFooter({ text: 'Yui Security & Moderation • by oBraga' })
                 .setTimestamp();
             const appealButton = new ButtonBuilder()
                 .setCustomId(`appeal_ban_user_${message.author.id}`)
@@ -24,7 +24,7 @@ export default {
                 .setStyle(ButtonStyle.Secondary);
             const githubButton = new ButtonBuilder()
                 .setLabel('Página do Projeto')
-                .setURL('https://github.com/yGuilhermy/Yui')
+                .setURL('https://github.com/MauroBragaFilho/Yui')
                 .setStyle(ButtonStyle.Link)
                 .setEmoji('🚀');
             const banRow = new ActionRowBuilder().addComponents(appealButton, githubButton);

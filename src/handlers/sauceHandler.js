@@ -112,7 +112,7 @@ Aja como a Yui (Otaku/Gamer).
                 { name: '🔞 Classificação', value: isHentai ? 'NSFW (+18)' : 'Seguro', inline: true },
                 { name: '🎯 Precisão', value: `${(animeData.similarity * 100).toFixed(1)}%`, inline: true }
             )
-            .setFooter({ text: 'Sauce encontrado via trace.moe • Yui • by yGuilhermy' })
+            .setFooter({ text: 'Sauce encontrado via trace.moe • Yui • by oBraga' })
             .setTimestamp();
         if (animeData.videoUrl) {
             embed.setDescription(`${description}\n\n🎥 **[Ver Cena Original](${animeData.videoUrl})**`);

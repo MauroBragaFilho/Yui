@@ -93,7 +93,7 @@ async function handleServerAdminCommand(interaction) {
             .setColor(0x10B981)
             .setTitle('⚙️ Configuração do Servidor Aplicada')
             .setDescription(results.join('\n\n'))
-            .setFooter({ text: 'Yui Server Admin • by yGuilhermy' })
+            .setFooter({ text: 'Yui Server Admin • by oBraga' })
             .setTimestamp();
 
         return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -114,7 +114,7 @@ async function sendServerAdminDashboard(interaction, isUpdate = false) {
             { name: '🔔 Resposta a @everyone / @here', value: 'Defina se a IA deve responder quando o servidor for mencionado em massa.', inline: false },
             { name: '🔧 Ferramentas MCP', value: 'Inspecione descrições e ative/desative ferramentas de IA para este servidor.', inline: false }
         )
-        .setFooter({ text: 'Yui Administrative Dashboard • by yGuilhermy' })
+        .setFooter({ text: 'Yui Administrative Dashboard • by oBraga' })
         .setTimestamp();
 
     const row1 = new ActionRowBuilder().addComponents(
@@ -126,7 +126,7 @@ async function sendServerAdminDashboard(interaction, isUpdate = false) {
 
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('srvcfg_btn_mcp').setLabel('Ferramentas MCP').setStyle(ButtonStyle.Secondary).setEmoji('🔧'),
-        new ButtonBuilder().setLabel('Apoiar projeto').setURL('https://bio.site/yGuilhermy').setStyle(ButtonStyle.Link).setEmoji('💖')
+        new ButtonBuilder().setLabel('Apoiar projeto').setURL('https://bio.site/oBraga').setStyle(ButtonStyle.Link).setEmoji('💖')
     );
 
     if (isUpdate) {
@@ -359,7 +359,7 @@ async function handleIaFerramentasCommand(interaction) {
                 { name: '🟢 Ativas', value: activeList.length > 0 ? activeList.join('\n') : '*Nenhuma ferramenta ativa*', inline: false },
                 { name: '🔴 Desativadas', value: disabledList.length > 0 ? disabledList.join('\n') : '*Nenhuma ferramenta desativada*', inline: false }
             )
-            .setFooter({ text: 'Yui MCP Manager • by yGuilhermy' })
+            .setFooter({ text: 'Yui MCP Manager • by oBraga' })
             .setTimestamp();
 
         return interaction.reply({ embeds: [embed], ephemeral: false });
@@ -391,7 +391,7 @@ async function handleIaFerramentasCommand(interaction) {
                 { name: 'Ferramenta', value: tool.meta?.label || tool.function.name, inline: true },
                 { name: 'Status no Servidor', value: enabled ? '🟢 Ativada' : '🔴 Desativada', inline: true }
             )
-            .setFooter({ text: 'Yui MCP Manager • by yGuilhermy' })
+            .setFooter({ text: 'Yui MCP Manager • by oBraga' })
             .setTimestamp();
 
         return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -403,7 +403,7 @@ async function handleIaFerramentasCommand(interaction) {
             .setColor(0x10B981)
             .setTitle('🔄 Ferramentas Resetadas')
             .setDescription(`Todas as ferramentas do servidor **${interaction.guild?.name || targetGuildId}** foram restauradas para os valores padrão.`)
-            .setFooter({ text: 'Yui MCP Manager • by yGuilhermy' })
+            .setFooter({ text: 'Yui MCP Manager • by oBraga' })
             .setTimestamp();
 
         return interaction.reply({ embeds: [embed], ephemeral: true });

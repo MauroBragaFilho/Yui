@@ -105,7 +105,7 @@ async function tryStableHorde(prompt, negativePrompt, width, height) {
         headers: {
             'Content-Type': 'application/json',
             'apikey': apiKey,
-            'Client-Agent': 'YuiBot:3.0:github.com/yguilhermy/Yui',
+            'Client-Agent': 'YuiBot:3.0:github.com/MauroBragaFilho/Yui',
         },
         body: JSON.stringify({
             prompt: `${prompt} ### ${negativePrompt}`,

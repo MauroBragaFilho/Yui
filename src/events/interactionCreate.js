@@ -305,7 +305,7 @@ export default {
                 const attachmentLimit = guild ? guild.premiumTier === 3 ? 100 * 1024 * 1024 : guild.premiumTier === 2 ? 50 * 1024 * 1024 : 25 * 1024 * 1024 : 25 * 1024 * 1024;
                 const isQueue = isCompressionActive();
                 const progressEmbed = new EmbedBuilder()
-                    .setFooter({ text: 'Yui Media • by yGuilhermy' })
+                    .setFooter({ text: 'Yui Media • by oBraga' })
                     .setTimestamp();
                 if (isQueue) {
                     progressEmbed.setColor(0xF59E0B)
@@ -330,7 +330,7 @@ export default {
                     const errorEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
                         .setTitle('❌ Falha na Compressão')
-                        .setFooter({ text: 'Yui Media • by yGuilhermy' })
+                        .setFooter({ text: 'Yui Media • by oBraga' })
                         .setTimestamp();
                     if (compressError.message === 'MEMORY_ERROR') {
                         errorEmbed.setDescription(`⚠️ Ocorreu um erro de falta de memória no servidor da host ao tentar comprimir o vídeo. Por favor, entre em contato com <@${config.ownerId}>.`);
@@ -368,7 +368,7 @@ export default {
                     .setColor(0xE11D48)
                     .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
                     .setDescription(`Sua tentativa de execução foi abortada. O acesso à **IA Yui** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **Tipo:** ${banInfo.typeName || banInfo.type}\n- **Motivo do Banimento:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Yui."}\n- **Status Atual:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.\n\nSe você acredita que isso é um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})] ✨`)
-                    .setFooter({ text: 'Yui Security & Moderation • by yGuilhermy' })
+                    .setFooter({ text: 'Yui Security & Moderation • by oBraga' })
                     .setTimestamp();
                 return interaction.reply({ embeds: [banEmbed], ephemeral: false });
             }
@@ -482,7 +482,7 @@ export default {
                     .setColor(0x10B981)
                     .setTitle('✅ Termos de Uso Já Aceitos')
                     .setDescription('Os Termos de Uso da Yui já foram previamente aceitos e estão ativos neste servidor.')
-                    .setFooter({ text: 'Yui ToS • by yGuilhermy' })
+                    .setFooter({ text: 'Yui ToS • by oBraga' })
                     .setTimestamp();
                 return interaction.reply({ embeds: [alreadyAcceptedEmbed], ephemeral: true });
             }
@@ -509,7 +509,7 @@ export default {
                             { name: '🌱 Seed', value: `\`${imageData.actualSeed}\``, inline: true },
                             { name: '📐 Resolução', value: `\`${width}x${height}\``, inline: true }
                         )
-                        .setFooter({ text: `Prompt: ${prompt.substring(0, 100)} • by yGuilhermy` })
+                        .setFooter({ text: `Prompt: ${prompt.substring(0, 100)} • by oBraga` })
                         .setTimestamp();
                     const files = [];
                     if (imageData.imageUrl) {
@@ -650,7 +650,7 @@ export default {
                         .setColor(0xF39C12)
                         .setTitle('📦 Vídeo Grande Demais')
                         .setDescription(`O vídeo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor é **${limitMB} MB**.\n\nClique no botão abaixo para tentar comprimir o vídeo automaticamente.\n\n⏰ *O arquivo ficará disponível por 6 horas.*`)
-                        .setFooter({ text: 'Yui Media • by yGuilhermy' })
+                        .setFooter({ text: 'Yui Media • by oBraga' })
                         .setTimestamp();
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId(`compress_video_${fileId}`).setLabel('🔄 Tentar Compressão').setStyle(ButtonStyle.Primary)
@@ -753,7 +753,7 @@ export default {
                         { name: 'Lançamento', value: steamInfo.releaseDate, inline: true },
                         { name: 'Desenvolvedor', value: steamInfo.developers, inline: true }
                     )
-                    .setFooter({ text: 'Fonte: Loja da Steam • Yui • by yGuilhermy' })
+                    .setFooter({ text: 'Fonte: Loja da Steam • Yui • by oBraga' })
                     .setTimestamp();
 
                 if (steamInfo.headerImage) {
@@ -818,7 +818,7 @@ export default {
                         { name: 'Cotação (' + convInfo.from + ')', value: `1 ${convInfo.from} = ${rateFormatted} ${convInfo.to}`, inline: true },
                         { name: 'Última Atualização', value: convInfo.lastUpdate || 'Desconhecida', inline: true }
                     )
-                    .setFooter({ text: 'Fonte: AwesomeAPI • Yui • by yGuilhermy' })
+                    .setFooter({ text: 'Fonte: AwesomeAPI • Yui • by oBraga' })
                     .setTimestamp();
                     
                 let yuiComment = "";
