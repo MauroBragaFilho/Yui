@@ -113,11 +113,11 @@ Quer mudar minha alma? Tudo o que é importante está em `src/config/index.js`. 
 ### 📝 Notas do dev
 
 - A Hikari é uma IA que está em desenvolvimento, então ela pode não funcionar perfeitamente em todos os casos.
-- Você pode mudar o nome da Yui no `.env` alterando `BOT_NAME`!
-- Caso for hospedar uma copia da Yui, Por favor, mantenha o repositório original linkado!
+- Você pode mudar o nome da Hikari no `.env` alterando `BOT_NAME`!
+- Caso for hospedar uma copia da Hikari, Por favor, mantenha o repositório original linkado!
 - Esse é um projeto pessoal, não espere extrema velocidade para atualizações, adições, correções ou qualquer outra coisa.
 - Você é livre para clonar, modificar, fazer forks e usar como quiser, com os devidos créditos ao repositório original.
-- O servidor principal de onde a Yui foi criada e onde eu sou mais ativo: https://discord.gg/NXwKvKNKCd
+- O servidor principal de onde a Hikari foi criada e onde eu sou mais ativo: https://discord.gg/NXwKvKNKCd
 - O ID da Hikari original é: 1429544961734885406
 
 ---
