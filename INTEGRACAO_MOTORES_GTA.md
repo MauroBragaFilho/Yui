@@ -62,7 +62,7 @@ src/engines/newswire/
 | `/yui-noticias [qtd]` | `news.js` | Exibe últimas notícias (1-5, padrão: 2) |
 | `/yui-configurar` | `setup.js` | Configura canais de publicação no servidor |
 | `/yui-status` | `status.js` | Exibe telemetria e saúde do bot |
-| `/yui-perguntar` | `ask.js` | Converse com a Yui sobre GTA Online |
+| `/yui` | `ask.js` | Converse com a Yui sobre GTA Online |
 
 ---
 

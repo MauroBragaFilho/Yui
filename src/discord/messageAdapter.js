@@ -40,7 +40,7 @@ export function createMessageAdapter(message, { stringArgs = [], channelArg = nu
     },
 
     options: {
-      // Usado por /yui-noticias (quantidade) e /yui-perguntar (mensagem)
+      // Usado por /yui-noticias (quantidade) e /yui (mensagem)
       getString(name) {
         const found = stringArgs.find((a) => a.name === name);
         return found ? found.value : null;

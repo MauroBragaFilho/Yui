@@ -61,7 +61,7 @@ export default {
   geminiUrl: process.env.GEMINI_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
   geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
   geminiModelFallback: process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.5-flash',
-  geminiApiKeys: (process.env.GEMINI_API_KEYS || '').split(',').map((key) => key.trim()).filter(Boolean),
+  geminiApiKeys: (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '').split(',').map((key) => key.trim()).filter(Boolean),
   hfApiUrl: process.env.HF_API_URL || 'https://router.huggingface.co/v1/chat/completions',
   hfModel: process.env.HF_MODEL || 'Qwen/Qwen2.5-72B-Instruct',
   hfToken: process.env.HF_TOKEN || '',

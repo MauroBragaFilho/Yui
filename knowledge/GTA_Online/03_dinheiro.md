@@ -1,6 +1,4 @@
-GTA ONLINE — GRADE DE PAGAMENTOS PÓS-TU 1.73
-
-Valores de golpes, nerfs, Hard, primeira conclusão semanal, Elite e cálculos
+GTA ONLINE — GRADE DE PAGAMENTOS
 
 ## 1. Visão geral
 

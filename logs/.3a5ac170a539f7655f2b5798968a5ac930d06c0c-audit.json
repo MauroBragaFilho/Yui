@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "D:\\Projetos\\Yui\\logs\\.3a5ac170a539f7655f2b5798968a5ac930d06c0c-audit.json",
+    "files": [
+        {
+            "date": 1787751302777,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-08-26.log",
+            "hash": "4d64731515d247e1c60414ba13ea8ed4d3417ac5ee93c50efab715a03938cfce"
+        },
+        {
+            "date": 1787806254604,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-08-27.log",
+            "hash": "fd9de6de03eebea9f1c6f65fefa1df86fdc79eaef02b7c1aea1ce7e76259dfa0"
+        }
+    ],
+    "hashType": "sha256"
+}

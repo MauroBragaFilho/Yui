@@ -86,7 +86,7 @@ function buildSystemPrompt() {
 
 export const askCommand = {
   data: new SlashCommandBuilder()
-    .setName('yui-perguntar')
+    .setName('yui')
     .setDescription('Converse com a Yui sobre GTA Online.')
     .addStringOption((option) =>
       option
