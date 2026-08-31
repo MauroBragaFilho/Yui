@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import config from '../config.js';
+import { getYtdlpPath, getFfmpegPath } from '../utils/binaries.js';
 
 const SAMPLE_RATE = 48000;
 const CHANNELS = 2;
@@ -63,8 +64,11 @@ class YouTubeBufferStream extends Readable {
             'pipe:1'
         ];
 
-        this.ytdlpProcess = spawn('yt-dlp', ytdlpArgs);
-        this.ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+        const ytdlpBin = getYtdlpPath();
+        const ffmpegBin = getFfmpegPath();
+
+        this.ytdlpProcess = spawn(ytdlpBin, ytdlpArgs);
+        this.ffmpegProcess = spawn(ffmpegBin, ffmpegArgs);
 
         this.ytdlpProcess.stdout.pipe(this.ffmpegProcess.stdin);
 

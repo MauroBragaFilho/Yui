@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { searchDeezerTracks, calculateConfidenceScore } from '../services/deezerMusicService.js';
 import { downloadAudio } from '../handlers/youtubeAudioHandler.js';
+import { getYtdlpPath } from '../utils/binaries.js';
 
 import { TEMP_RADIO_DIR, cleanTempRadioAudio } from './radioCleaner.js';
 
@@ -103,7 +104,8 @@ async function resolveYouTubeTrack(url) {
         const { default: config } = await import('../config.js');
         const cookiesPath = config.ytdlpCookiesPath;
         const cookieFlag = (cookiesPath && fs.existsSync(cookiesPath)) ? `--cookies "${cookiesPath}"` : '';
-        const cmd = `yt-dlp --no-warnings --no-update ${cookieFlag} -j "${cleanUrl}"`;
+        const ytdlpBin = getYtdlpPath();
+        const cmd = `"${ytdlpBin}" --no-warnings --no-update ${cookieFlag} -j "${cleanUrl}"`;
 
         exec(cmd, { maxBuffer: 10 * 1024 * 1024, timeout: 15000 }, (err, stdout) => {
             let m = {};
@@ -164,7 +166,8 @@ function resolveYouTubePlaylist(url) {
         const { default: config } = await import('../config.js');
         const cookiesPath = config.ytdlpCookiesPath;
         const cookieFlag = (cookiesPath && fs.existsSync(cookiesPath)) ? `--cookies "${cookiesPath}"` : '';
-        const cmd = `yt-dlp --no-warnings --no-update ${cookieFlag} --flat-playlist --playlist-end 100 -j "${cleanUrl}"`;
+        const ytdlpBin = getYtdlpPath();
+        const cmd = `"${ytdlpBin}" --no-warnings --no-update ${cookieFlag} --flat-playlist --playlist-end 100 -j "${cleanUrl}"`;
 
         exec(cmd, { maxBuffer: 10 * 1024 * 1024, timeout: 35000 }, (err, stdout) => {
             if (!stdout) return resolve([]);

@@ -42,6 +42,11 @@ export const config = {
     // buffs/debuffs, etc. A Yui lê tudo automaticamente antes de responder.
     knowledgeDir: process.env.AI_KNOWLEDGE_DIR || './knowledge',
   },
+  binaries: {
+    ytdlpPath: process.env.YTDLP_PATH || '',
+    ffmpegPath: process.env.FFMPEG_PATH || '',
+    ffprobePath: process.env.FFPROBE_PATH || '',
+  },
 };
 
 // Compatibilidade com os módulos legados da Hikari, que usam configuração
@@ -75,6 +80,9 @@ export default {
   togetherApiKey: process.env.TOGETHER_API_KEY || '',
   stabilityApiKeys: (process.env.STABILITY_API_KEYS || '').split(',').map((key) => key.trim()).filter(Boolean),
   hordeImageApiKey: process.env.HORDE_IMAGE_API_KEY || '',
+  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
+  cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN || '',
+  cloudflareModel: process.env.CLOUDFLARE_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast',
   ytdlpCookiesPath: process.env.YTDLP_COOKIES_PATH || '',
   ytdlpExtraFlags: ['--ignore-config', '--js-runtimes', 'node', '--remote-components', 'ejs:github'],
   isOwner: (id) => id && (id === process.env.OWNER_ID || (process.env.OWNER_IDS || '').split(',').map((v) => v.trim()).includes(id)),

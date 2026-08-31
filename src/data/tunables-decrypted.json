@@ -1,7 +1,7 @@
 {
-  "updated": 1787906463,
-  "hash": "2A20BB58B11088769990966B566F1918B30D14C7",
-  "date": "2026-08-28",
+  "updated": 1788166209,
+  "hash": "B45A13CBA8862462C225E0F0081431CC32D5D119",
+  "date": "2026-08-31",
   "contents": {
     "version": 1,
     "format": 1,
@@ -732,12 +732,12 @@
         "0x33733A31": 1,
         "ENABLE_SAVE_MIGRATION": true,
         "EVENT_WKLY": 513,
-        "TUNABLE_VERSION": 5131
+        "TUNABLE_VERSION": 5132
       },
       "CONTENT_MODIFIER_0": {
-        "CASH_MULTIPLIER": 6,
-        "JOB_RP_CAP": 60000,
-        "XP_MULTIPLIER": 6
+        "CASH_MULTIPLIER": 2,
+        "JOB_RP_CAP": 20000,
+        "XP_MULTIPLIER": 2
       },
       "CONTENT_MODIFIER_1": {
         "CASH_MULTIPLIER": 1,
@@ -745,9 +745,9 @@
         "XP_MULTIPLIER": 2
       },
       "CONTENT_MODIFIER_2": {
-        "CASH_MULTIPLIER": 6,
-        "JOB_RP_CAP": 60000,
-        "XP_MULTIPLIER": 6
+        "CASH_MULTIPLIER": 3,
+        "JOB_RP_CAP": 30000,
+        "XP_MULTIPLIER": 3
       },
       "MP_GLOBAL": {
         "ENABLE_PLAYED_WITH_METRIC": true,

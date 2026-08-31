@@ -5,13 +5,9 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import config from '../config.js';
+import { getYtdlpPath, getFfmpegPath } from '../utils/binaries.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOCAL_YTDLP = path.join(__dirname, '../data/yt-dlp.exe');
-const LOCAL_FFMPEG = path.join(__dirname, '../data/ffmpeg.exe');
-const YTDLP_COMMAND = process.env.YTDLP_COMMAND || (process.platform === 'win32' && fs.existsSync(LOCAL_YTDLP)
-    ? `"${LOCAL_YTDLP}"`
-    : process.platform === 'win32' ? 'py -m yt_dlp' : 'yt-dlp');
 const TEMP_AUDIO_DIR = path.join(__dirname, '../data/temp_audio');
 const TEMP_VIDEO_DIR = path.join(__dirname, '../data/temp_videos');
 if (!fs.existsSync(TEMP_AUDIO_DIR)) fs.mkdirSync(TEMP_AUDIO_DIR, { recursive: true });
@@ -27,7 +23,13 @@ const TIKTOK_REGEX = /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)?tiktok\.com\/.+/;
 const activeUserProcesses = new Set();
 let isCompressing = false;
 const compressionQueue = [];
-const pendingVideoFiles = new Map();function logMediaAction(type, platform, url, context, status, extra = '') {
+const pendingVideoFiles = new Map();
+
+function getYtdlpCmd() {
+    return `"${getYtdlpPath()}"`;
+}
+
+function logMediaAction(type, platform, url, context, status, extra = '') {
     let source = 'Desconhecido';
     let userStr = 'N/A';
     let localStr = 'DM';
@@ -129,7 +131,10 @@ function buildYtdlpAudioFlags(outputPath, url) {
         flags.push('--cookies', `"${cookiesPath}"`);
     }
     flags.push(...config.ytdlpExtraFlags);
-    if (fs.existsSync(LOCAL_FFMPEG)) flags.push('--ffmpeg-location', `"${LOCAL_FFMPEG}"`);
+    const ffmpegPath = getFfmpegPath();
+    if (fs.existsSync(ffmpegPath)) {
+        flags.push('--ffmpeg-location', `"${ffmpegPath}"`);
+    }
     flags.push('-o', `"${outputPath}"`, '--print-json', `"${url}"`);
     return flags.join(' ');
 }
@@ -141,7 +146,10 @@ function buildYtdlpVideoFlags(outputPath, url) {
         flags.push('--cookies', `"${cookiesPath}"`);
     }
     flags.push(...config.ytdlpExtraFlags);
-    if (fs.existsSync(LOCAL_FFMPEG)) flags.push('--ffmpeg-location', `"${LOCAL_FFMPEG}"`);
+    const ffmpegPath = getFfmpegPath();
+    if (fs.existsSync(ffmpegPath)) {
+        flags.push('--ffmpeg-location', `"${ffmpegPath}"`);
+    }
     flags.push('-o', `"${outputPath}"`, '--print-json', `"${url}"`);
     return flags.join(' ');
 }
@@ -234,7 +242,7 @@ async function downloadAudio(videoUrl, context = null) {
         const videoId = extractVideoId(videoUrl, platform);
         const tempOutputFilename = `${videoId}.mp3`;
         const tempOutputFilePath = path.join(TEMP_AUDIO_DIR, tempOutputFilename);
-        const command = `${YTDLP_COMMAND} ${buildYtdlpAudioFlags(tempOutputFilePath, processedUrl)}`;
+        const command = `${getYtdlpCmd()} ${buildYtdlpAudioFlags(tempOutputFilePath, processedUrl)}`;
         logMediaAction('Download Áudio', platform, videoUrl, context, 'Iniciado');
         exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
             if (error) {
@@ -301,7 +309,7 @@ async function downloadVideo(videoUrl, context = null) {
         const videoId = extractVideoId(videoUrl, platform);
         const tempOutputFilename = `${videoId}.mp4`;
         const tempOutputFilePath = path.join(TEMP_VIDEO_DIR, tempOutputFilename);
-        const command = `${YTDLP_COMMAND} ${buildYtdlpVideoFlags(tempOutputFilePath, processedUrl)}`;
+        const command = `${getYtdlpCmd()} ${buildYtdlpVideoFlags(tempOutputFilePath, processedUrl)}`;
         logMediaAction('Download Vídeo', platform, videoUrl, context, 'Iniciado');
         exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
             if (error) {
@@ -400,8 +408,9 @@ async function compressVideo(inputPath, attachmentLimit) {
             outputPath
         ];
 
-        console.log(`[MediaHandler] Comprimindo: ffmpeg ${ffmpegArgs.join(' ')}`);
-        const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+        const ffmpegBin = getFfmpegPath();
+        console.log(`[MediaHandler] Comprimindo: ${ffmpegBin} ${ffmpegArgs.join(' ')}`);
+        const ffmpegProcess = spawn(ffmpegBin, ffmpegArgs);
         let killed = false;
 
         const memoryMonitor = setInterval(() => {

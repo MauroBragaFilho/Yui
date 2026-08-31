@@ -222,6 +222,7 @@ loadServerTools();
 const providerSettings = {
     local:        { timeout: 60000, temperature: 0.7, max_tokens: 1024, top_p: 0.9 },
     gemini:       { timeout: 60000, temperature: 0.7, max_tokens: 2048, top_p: 1.0 },
+    cloudflare:   { timeout: 30000, temperature: 0.7, max_tokens: 1024 },
     pollinations: { timeout: 60000, temperature: 0.7, max_tokens: 1024 },
     hf:           { timeout: 60000, temperature: 0.7, max_tokens: 512 },
     horde:        { timeout: 60000, temperature: 0.7, max_tokens: 256 }
@@ -1107,8 +1108,59 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
     }
     throw new Error(`Todas as chaves Gemini falharam em todos os modelos. Último erro: ${lastError ? lastError.message : 'Nenhuma chave válida'}`);
 }
+
+async function tryCloudflare(prompt, systemPrompt, options = {}) {
+    const accountId = config.cloudflareAccountId || process.env.CLOUDFLARE_ACCOUNT_ID;
+    const apiToken = config.cloudflareApiToken || process.env.CLOUDFLARE_API_TOKEN;
+    const model = config.cloudflareModel || process.env.CLOUDFLARE_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast';
+
+    if (!accountId || !apiToken) {
+        throw new Error('Cloudflare Workers AI não configurado (falta CLOUDFLARE_ACCOUNT_ID ou CLOUDFLARE_API_TOKEN)');
+    }
+
+    console.log(`[IA] Tentando Cloudflare Workers AI (${model})...`);
+
+    const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+    const headers = {
+        'Authorization': `Bearer ${apiToken}`,
+        'Content-Type': 'application/json'
+    };
+
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...(options.history || []),
+        { role: 'user', content: prompt }
+    ];
+
+    try {
+        const response = await axios.post(url, {
+            messages,
+            max_tokens: providerSettings.cloudflare.max_tokens,
+            temperature: providerSettings.cloudflare.temperature
+        }, {
+            headers,
+            timeout: providerSettings.cloudflare.timeout
+        });
+
+        const result = response.data?.result;
+        const text = result?.response || response.data?.response;
+
+        if (text) {
+            return {
+                text: text.trim(),
+                modelName: `Cloudflare (${model.split('/').pop()})`
+            };
+        }
+
+        throw new Error('Cloudflare retornou resposta vazia');
+    } catch (error) {
+        const msg = error.response?.data?.errors?.[0]?.message || error.response?.data?.error || error.message;
+        throw new Error(`Cloudflare AI Error: ${msg}`);
+    }
+}
+
 async function tryPollinations(prompt, systemPrompt) {
-    console.log(`[IA] 3/5 Tentando Pollinations...`);
+    console.log(`[IA] Tentando Pollinations...`);
     try {
         const response = await axios.post('https://text.pollinations.ai/', {
             messages: [
@@ -1221,6 +1273,7 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     const providers = [
         { func: tryLocal, supportsSearch: true },
         { func: tryGemini, supportsSearch: true },
+        { func: tryCloudflare, supportsSearch: false },
         { func: tryPollinations, supportsSearch: false },
         { func: tryHuggingFace, supportsSearch: false },
         { func: tryKoboldHorde, supportsSearch: false }
@@ -1282,6 +1335,7 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
         try {
             const providerKey = provider.func === tryLocal ? 'local' :
                                 provider.func === tryGemini ? `gemini 1/${config.geminiApiKeys.length || 1}` :
+                                provider.func === tryCloudflare ? 'cloudflare' :
                                 provider.func === tryPollinations ? 'pollinations' :
                                 provider.func === tryHuggingFace ? 'hf' :
                                 provider.func === tryKoboldHorde ? 'horde' : 'unknown';

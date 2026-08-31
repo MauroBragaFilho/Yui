@@ -8,7 +8,21 @@ import { logger } from '../utils/logger.js';
 export function startScheduler(client) {
   logger.info('[Scheduler] Inicializando agendador central de tarefas em UTC...');
 
-  // 1. Verificação periódica do Rockstar Newswire (Default: a cada 30 minutos)
+  // 1. Verificação suave inicial do Newswire (Catch-up com delay de 2 minutos após o bot subir)
+  setTimeout(async () => {
+    try {
+      logger.info('[Scheduler] ⏳ Executando primeira checagem de sincronização do Newswire (delay inicial)...');
+      const unpostedNews = await newswireEngine.checkLatestNews();
+      if (unpostedNews.length > 0) {
+        logger.info(`[Scheduler] Publicando ${unpostedNews.length} notícia(s) acumulada(s)...`);
+        await discordPublisher.publishNews(client, unpostedNews);
+      }
+    } catch (err) {
+      logger.warn(`[Scheduler] Falha na sincronização inicial do Newswire: ${err.message}`);
+    }
+  }, 2 * 60 * 1000);
+
+  // 2. Verificação periódica do Rockstar Newswire (Default: a cada 30 minutos)
   const newswireCronExpr = `*/${config.newswire.intervalMinutes} * * * *`;
   cron.schedule(newswireCronExpr, async () => {
     try {
@@ -23,8 +37,7 @@ export function startScheduler(client) {
   });
   logger.info(`[Scheduler] Agendamento do Newswire configurado para rodar a cada ${config.newswire.intervalMinutes} minutos.`);
 
-  // 2. Reset Diário do GTA Online às 06:00 UTC pontualmente
-  // Cron: '0 6 * * *' com timezone UTC
+  // 3. Reset Diário do GTA Online às 06:00 UTC pontualmente
   cron.schedule('0 6 * * *', async () => {
     try {
       logger.info('[Scheduler] ⏰ Disparando tarefa do Reset Diário do GTA Online (06:00 UTC)...');
@@ -40,7 +53,7 @@ export function startScheduler(client) {
   });
   logger.info('[Scheduler] Reset Diário do GTA Online agendado para 06:00 UTC.');
 
-  // 3. Verificação de Atualização Semanal (Todas as quintas-feiras a cada hora entre 09:00 e 15:00 UTC)
+  // 4. Verificação de Atualização Semanal (Todas as quintas-feiras a cada hora entre 09:00 e 15:00 UTC)
   cron.schedule('0 9-15 * * 4', async () => {
     try {
       logger.info('[Scheduler] Disparando checagem semanal de quinta-feira...');
@@ -62,3 +75,5 @@ export function startScheduler(client) {
   });
   logger.info('[Scheduler] Monitoramento semanal de eventos (quintas-feiras) ativo.');
 }
+
+export default { startScheduler };
