@@ -57,9 +57,9 @@ src/engines/newswire/
 
 | Comando | Arquivo | Descrição |
 |---------|---------|-----------|
-| `/yui-diario` | `daily.js` | Consulta o resumo diário (Gun Van, Dealers, etc.) |
-| `/yui-semanal` | `weekly.js` | Consulta eventos da semana (bônus, pódio, descontos) |
-| `/yui-noticias [qtd]` | `news.js` | Exibe últimas notícias (1-5, padrão: 2) |
+| `/gta-diario` | `daily.js` | Consulta o resumo diário (Gun Van, Dealers, etc.) |
+| `/gta-semanal` | `weekly.js` | Consulta eventos da semana (bônus, pódio, descontos) |
+| `/gta-noticias [qtd]` | `news.js` | Exibe últimas notícias (1-5, padrão: 2) |
 | `/yui-configurar` | `setup.js` | Configura canais de publicação no servidor |
 | `/yui-status` | `status.js` | Exibe telemetria e saúde do bot |
 | `/yui` | `ask.js` | Converse com a Yui sobre GTA Online |

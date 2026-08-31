@@ -1,141 +1,94 @@
-<h1 align="center">🌌 Yui✧</h1>
+# Atualização — Dados de Veículos e Armas (gta-v-data-dumps)
 
-<div align="center">
-  <picture>
-    <source
-      width="100%"
-      srcset="https://i.imgur.com/2NTL0Cj.png"
-      media="(prefers-color-scheme: dark)"
-    />
-    <source
-      width="100%"
-      srcset="https://i.imgur.com/2NTL0Cj.png"
-      media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
-    />
-    <img width="250" src="https://i.imgur.com/2NTL0Cj.png" alt="Yui Banner" />
-  </picture>
-  <p><i>"Prazer em te conhecer! Eu sou a Yui, sua agente de IA pessoal pro Discord... ✨"</i></p>
+Integra o repositório [DurtyFree/gta-v-data-dumps](https://github.com/DurtyFree/gta-v-data-dumps)
+ao `/yui-perguntar`, permitindo que a IA responda com dados técnicos reais
+de veículos e armas do jogo (classe, fabricante, categoria, etc.) em vez
+de depender só do conhecimento genérico de treinamento do modelo.
 
-  <p align="center">
-    <a href="README.md">
-      <img src="https://img.shields.io/badge/Português-BR-blue?style=for-the-badge" alt="Português">
-    </a>
-    <a href="docs/content_en/README.md">
-      <img src="https://img.shields.io/badge/English-US-red?style=for-the-badge" alt="English">
-    </a>
-  </p>
-</div>
+## Arquivos novos
 
----
+- **`src/utils/vehicleData.js`** — baixa `vehicles.json` do dump, filtra
+  só os campos relevantes (nome PT/EN, classe, fabricante, stats de
+  handling) e salva em cache local (`src/data/vehicles.json`).
+- **`src/utils/weaponData.js`** — baixa `weapons.json` do dump, filtra
+  campos relevantes (nome PT, categoria, tipo de dano/munição) e salva em
+  cache local (`src/data/weaponsDump.json`).
 
-### 🎀 O que eu faço? (Funcionalidades)
+## Arquivos alterados
 
-Eu não sou apenas um bot de chat comum! Eu sou uma **Agente Autônoma** capaz de interagir com o mundo real para te ajudar:
+- **`src/discord/commands/ask.js`** — adiciona `buildVehicleWeaponContext()`,
+  que extrai palavras/bigramas da pergunta do usuário, busca correspondências
+  nos dois dumps e injeta os resultados no prompt da IA como "dados técnicos
+  oficiais". Também troquei as referências "Gun Van"/"Street Dealers"/"Time
+  Trials" no texto do contexto para os nomes já traduzidos usados no resto
+  do bot (Van de Armas / Comerciantes / Desafios Contra o Relógio).
+- **`src/index.js`** — chama `downloadVehicleData()` e `downloadWeaponData()`
+  no bootstrap, logo após o `downloadTunables()` já existente. Falha em
+  qualquer um dos dois não é fatal: o bot loga um aviso e segue normalmente
+  (a funcionalidade de busca só fica indisponível até o cache ser baixado
+  com sucesso, seja no próximo restart ou manualmente).
 
-- **🧠 Cérebro Avançado**: Suporte a múltiplos modelos através de **Gemini**, **LM Studio (Local)** e **HuggingFace**. Minha personalidade é natural e adaptável!
-- **🌍 Pesquisa Inteligente**: Se eu não souber algo, eu pesquiso na internet em tempo real, leio os sites e te trago um resumo mastigadinho.
-- **🎵 DJ Particular & Modo Rádio**: Baixe faixas em alta qualidade (Deezer) por nome/artista ou transmita rádio interativo por voz com 3 modos de escuta: comandos diretos sem IA estilo Alexa (`⚡ Direct`), assistente generativo (`🧠 IA`) e `Off`.
-- **🎮 Cantinho dos Games**: Procuro torrents e magnets de jogos (Dodi/Fitgirl) e consulto nativamente a **Steam** para te dar preços e detalhes técnicos.
-- **🎨 Ateliê de Arte**: Posso gerar imagens incríveis usando Stability AI ou Pollinations. Basta pedir!
-- **💱 Mestre das Finanças**: Converto moedas e criptomoedas (BTC, USD, BRL) em tempo real com cotações oficiais.
-- **🎙️ Assistente de Voz em Calls**: Entre em canais de voz comigo (`/entrar-call`) e converse comigo chamando "Yui". Suporto o protocolo de criptografia DAVE (E2EE) do Discord.
-- **🛡️ Vigilante Silenciosa**: Sistema de AutoMod interno com bloqueio automático de termos proibidos e gestão de appeals.
+> Este pacote assume que você já aplicou a separação de bancos de dados
+> combinada anteriormente (`core.db`, `newswire.db`, `gta-diario.db`,
+> `gta-semanal.db`) — o `src/index.js` aqui já vem com essa parte incluída,
+> então **substitua o arquivo inteiro**, não faça merge manual se você tiver
+> feito outras edições nele.
 
----
+## ✅ Conversão de velocidade — fórmula confirmada
 
-### 🚀 Como me acordar (Instalação)
+O campo `MaxSpeed` do dump é o valor bruto do handling do jogo
+(`fInitialDriveMaxFlatVel`). Pesquisei a fórmula oficial documentada pela
+comunidade de modding (GTAMods Wiki — referência técnica padrão para o
+`handling.meta` do GTA V):
 
-#### ⚡ Método Rápido (Recomendado)
+> **km/h = MaxSpeed × 1.32**
+> (fonte: https://gtamods.com/wiki/Handling.meta)
 
-Para uma instalação automática de todas as dependências (Node.js, bibliotecas npm, yt-dlp e ffmpeg), use nossos scripts de setup:
+Esse é o valor teórico máximo do veículo em pista plana/reta, calculado
+pela própria engine do jogo — pode divergir levemente do que aparece no
+HUD em condições reais de estrada/tração/vento, mas é a fórmula correta
+e documentada, não mais uma estimativa arbitrária.
 
-- **Windows:** Clique duas vezes no arquivo `setup.bat`.
-- **Linux:** Execute `chmod +x setup.sh && ./setup.sh`.
+O código em `ask.js` já usa esse fator (`v.maxSpeed * 1.32`), e o texto
+enviado pra IA explica essa nuance (valor teórico em pista plana) sem
+tratar como "chute" — porque agora não é mais um chute.
 
----
+## Sobre o dump de armas
 
-#### 🛠️ Método Manual
+Confirmado na conversa anterior: `weapons.json` **não traz dano numérico,
+alcance ou precisão** — essas informações ficam em `weaponinfo.meta`, que
+não está neste repositório específico. Por isso `weaponData.js` só expõe
+categoria, tipo de munição e tipo de dano. Se você quiser esses números
+no futuro, vou precisar localizar outra fonte de dados pra isso.
 
-Se você prefere fazer tudo na mão (Ubuntu/Linux recomendado):
+## Onde colocar cada arquivo
 
-1.  **Clone meu código**:
+```
+src/utils/vehicleData.js                (NOVO)
+src/utils/weaponData.js                 (NOVO)
+src/discord/commands/ask.js             (SUBSTITUI)
+src/index.js                            (SUBSTITUI — já inclui a separação de bancos)
+```
 
-    ```bash
-    git clone https://github.com/MauroBragaFilho/Yui.git
-    cd Yui
-    ```
+## Passos após copiar os arquivos
 
-2.  **Instale os módulos**:
+```bash
+npm start
+```
 
-    ```bash
-    npm install
-    ```
+Na primeira inicialização, os dois dumps serão baixados automaticamente
+e salvos em `src/data/vehicles.json` e `src/data/weaponsDump.json`. Nas
+próximas inicializações, o bot tenta baixar a versão mais atual, mas usa
+o cache local como fallback caso o GitHub esteja indisponível.
 
-    _Obs: Você precisa do `yt-dlp` e `ffmpeg` instalados no sistema para as funções de música funcionarem direitinho!_
+## Testando
 
-3.  **Configure meus segredos**:
-    - Renomeie o arquivo `.env_example` para `.env` e preencha as chaves.
-    - **Dica:** Você pode mudar meu nome no `.env` alterando `BOT_NAME`!
+Depois de reiniciar o bot, teste com:
 
-4.  **Dê o Start**:
-    ```bash
-    node index.js
-    ```
+```
+/yui-perguntar mensagem: qual a classe do Truffled Adder?
+/yui-perguntar mensagem: me fala sobre a Carbine Rifle
+```
 
----
-
-### 📚 Wiki & Documentação
-
-Para guias detalhados, dicas de configuração e funcionamento técnico, consulte nossa documentação oficial:
-
-- [🚀 **Guia de Instalação**](./docs/content_pt/GET_STARTED.md): Tudo para colocar a Yui no ar.
-- [⚙️ **Configuração & Multi-Token**](./docs/content_pt/CONFIGURATION.md): Como usar várias chaves e gerenciar donos.
-- [📻 **Modo Rádio & Streaming**](./docs/content_pt/RADIO.md): Sistema completo de rádio, voz interativa e streaming.
-- [🛡️ **Segurança & AutoMod**](./docs/content_pt/MODERATION.md): Entenda como funciona a proteção do bot.
-- [✨ **Lista de Funcionalidades**](./docs/content_pt/FEATURES.md): O que e como pedir as coisas para a Yui.
-- [🎮 **Guia de Comandos**](./docs/content_pt/COMMANDS.md): Detalhes de todos os comandos Slash (/).
-- [🛠️ **Variáveis & APIs**](./docs/content_pt/ENVIRONMENT.md): O que é cada campo do .env e onde pegar as keys.
-- [🛠️ **Sistema de Tools (MCP)**](./docs/content_pt/ADVANCED.md): Documentação para desenvolvedores e ferramentas.
-
----
-
-### ⚙️ Personalização Centralizada
-
-Quer mudar minha alma? Tudo o que é importante está em `src/config/index.js`. Lá você pode ajustar:
-
-- 👑 O ID do meu mestre (Owner ID)
-- 📝 Meu System Prompt (Minha personalidade básica)
-- 🌐 URLs e Modelos de IA padrão
-- 🤖 Meu nome de ativação no chat
-
----
-
-### 📝 Notas do dev
-
-- A Hikari é uma IA que está em desenvolvimento, então ela pode não funcionar perfeitamente em todos os casos.
-- Você pode mudar o nome da Hikari no `.env` alterando `BOT_NAME`!
-- Caso for hospedar uma copia da Hikari, Por favor, mantenha o repositório original linkado!
-- Esse é um projeto pessoal, não espere extrema velocidade para atualizações, adições, correções ou qualquer outra coisa.
-- Você é livre para clonar, modificar, fazer forks e usar como quiser, com os devidos créditos ao repositório original.
-- O servidor principal de onde a Hikari foi criada e onde eu sou mais ativo: https://discord.gg/NXwKvKNKCd
-- O ID da Hikari original é: 1429544961734885406
-
----
-
-### 📝 ToDo (Para mim mesmo)
-
-- [ ] Modernizar e corrigir codigos (atualmente)
-- [ ] Adicionar mais funcionalidades (MCPs)
-- [ ] Suporte ao Ollama (é facil, mas preguiça)
-- [ ] Adicionar mais modelos de IA (Fallbacks)
-- [ ] Adicionar mais integrações (APIs)
-- [ ] Adicionar mais comandos
-- [ ] Otimizar o uso de Tokens
-- [ ] Adicionar mais segurança
-
----
-
-<div align="center">
-  <p><i>"Não se esqueça de me dar um pouco de amor (e poder de processamento)!"</i></p>
-  <p>Feito com 💜 e café por <b>oBraga</b></p>
-</div>
+Se a IA responder com dados específicos (classe, fabricante, categoria)
+em vez de resposta genérica, a integração está funcionando.

@@ -14,6 +14,26 @@
             "date": 1787806254604,
             "name": "D:\\Projetos\\Yui\\logs\\app-2026-08-27.log",
             "hash": "fd9de6de03eebea9f1c6f65fefa1df86fdc79eaef02b7c1aea1ce7e76259dfa0"
+        },
+        {
+            "date": 1787899147979,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-08-28.log",
+            "hash": "d6e3f029a32f6cfeb45a0f4675b898c6d08ffbaca1088b118a774b58da6eed74"
+        },
+        {
+            "date": 1787972400740,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-08-29.log",
+            "hash": "ce8a13d772eeac9e822042f13c6775dbda90def7816a3008712c8f69a973db62"
+        },
+        {
+            "date": 1788058800553,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-08-30.log",
+            "hash": "a31a2fabb0f389c62131514a92ea113dce65527284197a5b992c8a5a48d9b7fe"
+        },
+        {
+            "date": 1788154466955,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-08-31.log",
+            "hash": "2b6cc66b8b1504475fc7484440cc51bc81414e11a31512ddf9029f0e62d5f19a"
         }
     ],
     "hashType": "sha256"

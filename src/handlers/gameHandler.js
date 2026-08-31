@@ -7,7 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SOURCES = [
     { name: 'FitGirl', url: path.join(__dirname, '../data/fitgirl.json'), emoji: '💃' },
-    { name: 'DODI', url: path.join(__dirname, '../data/dodi.json'), emoji: '🦆' }
+    { name: 'DODI', url: path.join(__dirname, '../data/dodi.json'), emoji: '🦆' },
+    { name: 'Online Fix', url: path.join(__dirname, '../data/onlinefix.json'), emoji: '🦆' }
 ];
 
 const aliases = {
@@ -54,6 +55,7 @@ async function fetchTorrentFile(hash) {
 async function searchGames(gameName, provider = 'any') {
     let fitgirlMatches = [];
     let dodiMatches = [];
+    let onlineFixMatches = [];
     
     let query = normalizeString(gameName);
     for (const [key, value] of Object.entries(aliases)) {
@@ -101,16 +103,18 @@ async function searchGames(gameName, provider = 'any') {
             
             if (source.name === 'FitGirl') fitgirlMatches = found;
             if (source.name === 'DODI') dodiMatches = found;
+            if (source.name === 'Online Fix') onlineFixMatches = found;
         } catch (err) {
             console.error(`Erro ao buscar em ${source.name}:`, err.message);
         }
     }));
 
     const finalResults = [];
-    const maxLength = Math.max(fitgirlMatches.length, dodiMatches.length);
+    const maxLength = Math.max(fitgirlMatches.length, dodiMatches.length, onlineFixMatches.length);
     for (let i = 0; i < maxLength; i++) {
         if (i < fitgirlMatches.length) finalResults.push(fitgirlMatches[i]);
         if (i < dodiMatches.length) finalResults.push(dodiMatches[i]);
+        if (i < onlineFixMatches.length) finalResults.push(onlineFixMatches[i]);
         if (finalResults.length >= 25) break;
     }
     return finalResults.slice(0, 25);

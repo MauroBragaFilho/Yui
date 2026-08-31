@@ -42,11 +42,11 @@ if not exist ".env" (
 )
 
 echo Escolha uma opcao:
+echo [0] Sair
 echo [1] Iniciar Yui (Producao/Desenvolvimento)
 echo [2] Testar Coleta do Newswire Engine (Puppeteer isolado)
 echo [3] Testar Coleta do GTAO Engine (Sistemas Diarios/Semanais)
 echo [4] Registrar / Atualizar Slash Commands no Discord
-echo [0] Sair
 echo.
 set "opt="
 set /p "opt=Digite a opcao desejada [0-4]: "

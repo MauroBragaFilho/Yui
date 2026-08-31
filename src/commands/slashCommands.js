@@ -57,6 +57,7 @@ export const commands = [
                     .setRequired(false)
                     .addChoices(
                         { name: 'Qualquer uma', value: 'any' },
+                        { name: 'Online Fix', value: 'onlinefix' },
                         { name: 'DODI Repacks', value: 'dodi' },
                         { name: 'FitGirl Repacks', value: 'fitgirl' }
                     ))

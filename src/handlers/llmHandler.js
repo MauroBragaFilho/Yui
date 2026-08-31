@@ -220,7 +220,7 @@ function buildToolsDefinition(guildId, userId = null) {
 }
 loadServerTools();
 const providerSettings = {
-    local:        { timeout: 1, temperature: 0.7, max_tokens: 1024, top_p: 0.9 },
+    local:        { timeout: 60000, temperature: 0.7, max_tokens: 1024, top_p: 0.9 },
     gemini:       { timeout: 60000, temperature: 0.7, max_tokens: 2048, top_p: 1.0 },
     pollinations: { timeout: 60000, temperature: 0.7, max_tokens: 1024 },
     hf:           { timeout: 60000, temperature: 0.7, max_tokens: 512 },

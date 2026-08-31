@@ -67,9 +67,9 @@ npm run dev
 
 | Comando | Descrição |
 |---------|-----------|
-| `/yui-diario` | Consulta o resumo diário do GTA Online |
-| `/yui-semanal` | Consulta eventos e descontos da semana |
-| `/yui-noticias [quantidade]` | Exibe últimas notícias (1-5, padrão: 2) |
+| `/gta-diario` | Consulta o resumo diário do GTA Online |
+| `/gta-semanal` | Consulta eventos e descontos da semana |
+| `/gta-noticias [quantidade]` | Exibe últimas notícias (1-5, padrão: 2) |
 
 ## 🚀 Fluxo Recomendado
 

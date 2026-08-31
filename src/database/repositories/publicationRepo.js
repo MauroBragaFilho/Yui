@@ -1,4 +1,6 @@
-import { dbWrapper } from '../db.js';
+import { getDbWrapper } from '../db.js';
+
+const dbWrapper = getDbWrapper('core');
 
 export const publicationRepository = {
   isPublished(contentType, contentId, guildId) {

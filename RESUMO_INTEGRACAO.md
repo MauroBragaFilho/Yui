@@ -26,12 +26,12 @@ Integração completa dos **dois motores de atualizações do GTA Online** no c�
 
 | Comando | Descrição |
 |---------|-----------|
-| `/yui-diario` | Resumo diário do GTA Online |
-| `/yui-semanal` | Eventos da semana |
-| `/yui-noticias [qtd]` | Últimas notícias (1-5) |
+| `/gta-diario` | Resumo diário do GTA Online |
+| `/gta-semanal` | Eventos da semana |
+| `/gta-noticias [qtd]` | Últimas notícias (1-5) |
 | `/yui-configurar` | Configura canais do servidor |
 | `/yui-status` | Telemetria do bot |
-| `/yui-perguntar` | IA da Yui sobre GTA |
+| `/yui` | IA da Yui sobre GTA |
 
 ### 3. Scripts de Teste
 
@@ -182,7 +182,7 @@ O scheduler já está configurado para executar automaticamente:
 
 - [x] GTAO Engine integrado e testável
 - [x] Newswire Engine integrado e testável
-- [x] Comandos Slash implementados (`/yui-diario`, `/yui-semanal`, `/yui-noticias`)
+- [x] Comandos Slash implementados (`/gta-diario`, `/gta-semanal`, `/gta-noticias`)
 - [x] Scheduler configurado (automático)
 - [x] Scripts de teste independentes (Windows e Linux)
 - [x] Script de deploy de comandos

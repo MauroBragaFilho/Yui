@@ -4,7 +4,7 @@
  * já esperam (interaction.deferReply, interaction.editReply, etc).
  *
  * Isso evita duplicar a lógica de cada comando em dois lugares —
- * tanto "/yui-diario" quanto "+yui diario" chamam exatamente a mesma
+ * tanto "/gta-diario" quanto "+yui diario" chamam exatamente a mesma
  * função `execute()`.
  */
 export function createMessageAdapter(message, { stringArgs = [], channelArg = null } = {}) {
@@ -40,7 +40,7 @@ export function createMessageAdapter(message, { stringArgs = [], channelArg = nu
     },
 
     options: {
-      // Usado por /yui-noticias (quantidade) e /yui (mensagem)
+      // Usado por /gta-noticias (quantidade) e /yui (mensagem)
       getString(name) {
         const found = stringArgs.find((a) => a.name === name);
         return found ? found.value : null;

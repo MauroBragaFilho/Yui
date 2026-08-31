@@ -5,7 +5,7 @@ import { createNewswireEmbed } from '../embeds/newswireEmbed.js';
 
 export const newsCommand = {
   data: new SlashCommandBuilder()
-    .setName('yui-noticias')
+    .setName('gta-noticias')
     .setDescription('Exibe as últimas notícias publicadas no Rockstar Newswire.')
     .addIntegerOption((option) =>
       option

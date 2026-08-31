@@ -1,4 +1,5 @@
 import { initDatabase } from '../src/database/db.js';
+import { NEWSWIRE_SCHEMA } from '../src/database/schemas.js';
 import { newswireEngine } from '../src/engines/newswire/index.js';
 import { logger } from '../src/utils/logger.js';
 import { getSystemMetrics } from '../src/utils/systemMetrics.js';
@@ -6,7 +7,7 @@ import { getSystemMetrics } from '../src/utils/systemMetrics.js';
 async function runNewswireTest() {
   logger.info('=== [TESTE ISOLADO] NEWSIWIRE ENGINE & PUPPETEER ===');
   
-  await initDatabase();
+  await initDatabase('newswire', NEWSWIRE_SCHEMA);
 
   const metricsBefore = getSystemMetrics();
   logger.info(`Memória RAM antes da execução: ${metricsBefore.rssMB} MB`);

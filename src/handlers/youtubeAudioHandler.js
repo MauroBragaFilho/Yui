@@ -7,6 +7,11 @@ import { fileURLToPath } from 'node:url';
 import config from '../config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const LOCAL_YTDLP = path.join(__dirname, '../data/yt-dlp.exe');
+const LOCAL_FFMPEG = path.join(__dirname, '../data/ffmpeg.exe');
+const YTDLP_COMMAND = process.env.YTDLP_COMMAND || (process.platform === 'win32' && fs.existsSync(LOCAL_YTDLP)
+    ? `"${LOCAL_YTDLP}"`
+    : process.platform === 'win32' ? 'py -m yt_dlp' : 'yt-dlp');
 const TEMP_AUDIO_DIR = path.join(__dirname, '../data/temp_audio');
 const TEMP_VIDEO_DIR = path.join(__dirname, '../data/temp_videos');
 if (!fs.existsSync(TEMP_AUDIO_DIR)) fs.mkdirSync(TEMP_AUDIO_DIR, { recursive: true });
@@ -124,6 +129,7 @@ function buildYtdlpAudioFlags(outputPath, url) {
         flags.push('--cookies', `"${cookiesPath}"`);
     }
     flags.push(...config.ytdlpExtraFlags);
+    if (fs.existsSync(LOCAL_FFMPEG)) flags.push('--ffmpeg-location', `"${LOCAL_FFMPEG}"`);
     flags.push('-o', `"${outputPath}"`, '--print-json', `"${url}"`);
     return flags.join(' ');
 }
@@ -135,6 +141,7 @@ function buildYtdlpVideoFlags(outputPath, url) {
         flags.push('--cookies', `"${cookiesPath}"`);
     }
     flags.push(...config.ytdlpExtraFlags);
+    if (fs.existsSync(LOCAL_FFMPEG)) flags.push('--ffmpeg-location', `"${LOCAL_FFMPEG}"`);
     flags.push('-o', `"${outputPath}"`, '--print-json', `"${url}"`);
     return flags.join(' ');
 }
@@ -227,7 +234,7 @@ async function downloadAudio(videoUrl, context = null) {
         const videoId = extractVideoId(videoUrl, platform);
         const tempOutputFilename = `${videoId}.mp3`;
         const tempOutputFilePath = path.join(TEMP_AUDIO_DIR, tempOutputFilename);
-        const command = `yt-dlp ${buildYtdlpAudioFlags(tempOutputFilePath, processedUrl)}`;
+        const command = `${YTDLP_COMMAND} ${buildYtdlpAudioFlags(tempOutputFilePath, processedUrl)}`;
         logMediaAction('Download Áudio', platform, videoUrl, context, 'Iniciado');
         exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
             if (error) {
@@ -239,8 +246,10 @@ async function downloadAudio(videoUrl, context = null) {
                     errObj = new Error("VIDEO_AGE_RESTRICTED: Este vídeo é restrito por idade.");
                 } else if (stderr.includes("no appropriate format") || stdout.includes("no appropriate format")) {
                     errObj = new Error("FORMAT_UNAVAILABLE: Não foi encontrado um formato de áudio adequado.");
+                } else if (error.code === 'ENOENT' || /not recognized|não é reconhecido|command not found/i.test(stderr)) {
+                    errObj = new Error('YTDLP_NOT_INSTALLED: O yt-dlp não está instalado ou não está disponível no PATH da máquina. Instale-o e reinicie o bot.');
                 } else {
-                    errObj = new Error(`lib do ytdlp desatualizada, peça o <@${config.ownerId}> para atualizar na host`);
+                    errObj = new Error(`YTDLP_ERROR: O yt-dlp falhou: ${stderr.trim().split('\n').pop() || error.message}`);
                 }
                 logMediaAction('Download Áudio', platform, videoUrl, context, 'Erro', `Detalhe: ${errObj.message}`);
                 return reject(errObj);
@@ -292,7 +301,7 @@ async function downloadVideo(videoUrl, context = null) {
         const videoId = extractVideoId(videoUrl, platform);
         const tempOutputFilename = `${videoId}.mp4`;
         const tempOutputFilePath = path.join(TEMP_VIDEO_DIR, tempOutputFilename);
-        const command = `yt-dlp ${buildYtdlpVideoFlags(tempOutputFilePath, processedUrl)}`;
+        const command = `${YTDLP_COMMAND} ${buildYtdlpVideoFlags(tempOutputFilePath, processedUrl)}`;
         logMediaAction('Download Vídeo', platform, videoUrl, context, 'Iniciado');
         exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
             if (error) {

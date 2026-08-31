@@ -29,8 +29,6 @@ export async function deploySlashCommands() {
 
   try {
     if (config.discord.guildId) {
-      // Registro por servidor (guild): aparece INSTANTANEAMENTE.
-      // Ideal para desenvolvimento e testes.
       logger.info(
         `[DeployCommands] Registrando ${commands.length} comandos no servidor ${config.discord.guildId} (instantâneo)...`
       );
@@ -40,8 +38,6 @@ export async function deploySlashCommands() {
       );
       logger.info('[DeployCommands] Slash Commands registrados no servidor com sucesso!');
 
-      // Limpa quaisquer comandos GLOBAIS antigos, para evitar duplicatas
-      // (ex: se em algum momento o bot rodou sem DISCORD_GUILD_ID definido).
       try {
         const existingGlobal = await rest.get(Routes.applicationCommands(config.discord.clientId));
         if (existingGlobal.length > 0) {
@@ -54,7 +50,6 @@ export async function deploySlashCommands() {
         logger.warn(`[DeployCommands] Não foi possível verificar/limpar comandos globais: ${cleanupError.message}`);
       }
     } else {
-      // Registro global: pode levar até 1 hora para propagar em todos os servidores.
       logger.info(`[DeployCommands] Iniciando registro de ${commands.length} comandos Slash globais...`);
       logger.warn(
         '[DeployCommands] DISCORD_GUILD_ID não definido no .env — o registro será GLOBAL e pode levar até 1 hora para aparecer no Discord. Para testes instantâneos, defina DISCORD_GUILD_ID no .env.'
@@ -70,7 +65,6 @@ export async function deploySlashCommands() {
   }
 }
 
-// Permitir execução direta via script (node src/discord/deployCommands.js)
 if (process.argv[1]?.endsWith('deployCommands.js')) {
   deploySlashCommands();
 }

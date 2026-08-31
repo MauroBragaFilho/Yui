@@ -9,7 +9,7 @@ import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
 // Mapeia o subcomando digitado (ex: "+yui diario") para o mesmo objeto
-// de comando usado pelos slash commands (/yui-diario). Aceita também
+// de comando usado pelos slash commands (/gta-diario). Aceita também
 // alguns apelidos mais curtos, por conveniência.
 const ROUTES = {
   diario: dailyCommand,

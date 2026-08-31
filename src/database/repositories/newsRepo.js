@@ -1,4 +1,6 @@
-import { dbWrapper } from '../db.js';
+import { getDbWrapper } from '../db.js';
+
+const dbWrapper = getDbWrapper('newswire');
 
 export const newsRepository = {
   getById(id) {

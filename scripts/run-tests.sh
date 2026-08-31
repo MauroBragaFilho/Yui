@@ -37,9 +37,9 @@ fi
 echo "[3/3] Verificando comandos do Discord..."
 echo "----------------------------------------------"
 echo "Comandos disponíveis:"
-echo "  /yui-diario   - Consulta o resumo diário do GTA Online"
-echo "  /yui-semanal  - Consulta eventos e descontos da semana"
-echo "  /yui-noticias - Exibe últimas notícias do Rockstar Newswire"
+echo "  /gta-diario   - Consulta o resumo diário do GTA Online"
+echo "  /gta-semanal  - Consulta eventos e descontos da semana"
+echo "  /gta-noticias - Exibe últimas notícias do Rockstar Newswire"
 echo ""
 
 echo "============================================"

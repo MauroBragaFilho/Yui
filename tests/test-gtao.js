@@ -1,11 +1,13 @@
 import { initDatabase } from '../src/database/db.js';
+import { GTA_DAILY_SCHEMA, GTA_WEEKLY_SCHEMA } from '../src/database/schemas.js';
 import { gtaoEngine } from '../src/engines/gtao/index.js';
 import { logger } from '../src/utils/logger.js';
 
 async function runGTAOTest() {
   logger.info('=== [TESTE ISOLADO] GTAO ENGINE (DIÁRIO & SEMANAL) ===');
 
-  await initDatabase();
+  await initDatabase('gta-diario', GTA_DAILY_SCHEMA);
+  await initDatabase('gta-semanal', GTA_WEEKLY_SCHEMA);
 
   try {
     logger.info('1. Testando coleta diária (Gun Van, Dealers, Shipwreck, Time Trials)...');

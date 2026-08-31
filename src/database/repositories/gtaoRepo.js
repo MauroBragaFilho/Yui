@@ -1,49 +1,24 @@
-import { dbWrapper } from '../db.js';
+import { dailyRepository } from './dailyRepo.js';
+import { weeklyRepository } from './weeklyRepo.js';
 
+/**
+ * Mantido por compatibilidade: todo o código existente do projeto importa
+ * `gtaoRepository` de um único lugar (comandos, publisher, scheduler, etc).
+ * Internamente, agora delega para dois repositórios separados que apontam
+ * para bancos de dados diferentes:
+ *
+ *   dailyRepository  -> database/gta-diario.db
+ *   weeklyRepository -> database/gta-semanal.db
+ *
+ * Nenhum outro arquivo do projeto precisa ser alterado por causa dessa
+ * separação — a assinatura (nomes de métodos) permanece idêntica.
+ */
 export const gtaoRepository = {
-  getDaily(dateStr) {
-    const stmt = dbWrapper.prepare('SELECT * FROM daily_resets WHERE reset_date = ?');
-    const res = stmt.get(dateStr);
-    return res ? { ...res, data: JSON.parse(res.data_json) } : null;
-  },
+  getDaily: dailyRepository.getDaily,
+  getLatestDaily: dailyRepository.getLatestDaily,
+  saveDaily: dailyRepository.saveDaily,
 
-  getLatestDaily() {
-    const stmt = dbWrapper.prepare('SELECT * FROM daily_resets ORDER BY reset_date DESC LIMIT 1');
-    const res = stmt.get();
-    return res ? { ...res, data: JSON.parse(res.data_json) } : null;
-  },
-
-  saveDaily(dateStr, data) {
-    const stmt = dbWrapper.prepare(`
-      INSERT INTO daily_resets (reset_date, data_json)
-      VALUES (?, ?)
-      ON CONFLICT(reset_date) DO UPDATE SET
-        data_json = excluded.data_json,
-        created_at = CURRENT_TIMESTAMP
-    `);
-    return stmt.run(dateStr, JSON.stringify(data));
-  },
-
-  getWeekly(weekStr) {
-    const stmt = dbWrapper.prepare('SELECT * FROM weekly_events WHERE event_week = ?');
-    const res = stmt.get(weekStr);
-    return res ? { ...res, data: JSON.parse(res.data_json) } : null;
-  },
-
-  getLatestWeekly() {
-    const stmt = dbWrapper.prepare('SELECT * FROM weekly_events ORDER BY event_week DESC LIMIT 1');
-    const res = stmt.get();
-    return res ? { ...res, data: JSON.parse(res.data_json) } : null;
-  },
-
-  saveWeekly(weekStr, data) {
-    const stmt = dbWrapper.prepare(`
-      INSERT INTO weekly_events (event_week, data_json)
-      VALUES (?, ?)
-      ON CONFLICT(event_week) DO UPDATE SET
-        data_json = excluded.data_json,
-        created_at = CURRENT_TIMESTAMP
-    `);
-    return stmt.run(weekStr, JSON.stringify(data));
-  },
+  getWeekly: weeklyRepository.getWeekly,
+  getLatestWeekly: weeklyRepository.getLatestWeekly,
+  saveWeekly: weeklyRepository.saveWeekly,
 };

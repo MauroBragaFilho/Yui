@@ -5,7 +5,7 @@ import { createDailyEmbed } from '../embeds/dailyEmbed.js';
 
 export const dailyCommand = {
   data: new SlashCommandBuilder()
-    .setName('yui-diario')
+    .setName('gta-diario')
     .setDescription('Consulta sob demanda o resumo diário atual do GTA Online (Gun Van, Dealers, etc.).'),
 
   async execute(interaction) {

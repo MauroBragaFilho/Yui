@@ -10,7 +10,8 @@ import { logger } from '../../../utils/logger.js';
  *
  * Esta função busca o artigo semanal mais recente no Newswire, lê o
  * conteúdo completo, traduz para PT-BR e monta os dados usados pelo
- * comando /yui-semanal e pelo scheduler automático.
+ * comando /gta-semanal, pelo /yui-resumo-semanal e pelo scheduler
+ * automático.
  */
 
 const WEEKLY_TITLE_KEYWORDS = [
@@ -19,15 +20,40 @@ const WEEKLY_TITLE_KEYWORDS = [
   'podium',
   'prize ride',
   'discount',
+  'discounts',
   'now available in gta online',
   'gta$',
   'twitch prime',
   'prime gaming',
+  'reward',
+  'rewards',
+  'triple',
+  'double',
+  '2x',
+  '3x',
+  'this week',
+  'this week in',
+  'weekly',
+  'week in gta online',
+  'gta+ member',
+  'gta+ members',
+  'free this week',
+  'gta online this week',
+  'races',
+  'time trial',
 ];
 
-function looksLikeWeeklyArticle(title) {
+/**
+ * Verifica se um artigo tem "cara" de atualização semanal, seja pelo
+ * título (lista de palavras-chave conhecidas) ou pela categoria oficial
+ * do post ("GTA Online" / "GTA V"), que costuma acompanhar esses artigos
+ * mesmo quando o título é bem genérico (ex: "Take in Triple Rewards...").
+ */
+function looksLikeWeeklyArticle(title, category) {
   const lower = (title || '').toLowerCase();
-  return WEEKLY_TITLE_KEYWORDS.some((kw) => lower.includes(kw));
+  const lowerCategory = (category || '').toLowerCase();
+  if (WEEKLY_TITLE_KEYWORDS.some((kw) => lower.includes(kw))) return true;
+  return lowerCategory.includes('gta online') || lowerCategory.includes('gta v');
 }
 
 export async function fetchWeeklyEvent() {
@@ -40,13 +66,17 @@ export async function fetchWeeklyEvent() {
     }
 
     // Os artigos vêm ordenados do mais recente para o mais antigo.
-    const weeklyArticle = articles.find((a) => looksLikeWeeklyArticle(a.title));
+    let weeklyArticle = articles.find((a) => looksLikeWeeklyArticle(a.title, a.category));
 
+    // Fallback: se nenhum título/categoria bateu com as keywords conhecidas,
+    // assume o artigo mais recente. A Rockstar publica a atualização semanal
+    // quase sempre como o post mais novo do Newswire nas quintas-feiras, e
+    // os títulos variam demais para depender só de uma lista fixa de termos.
     if (!weeklyArticle) {
-      logger.info(
-        '[GTAO] fetchWeeklyEvent(): nenhum artigo com cara de atualização semanal encontrado nos posts recentes.'
+      logger.warn(
+        `[GTAO] fetchWeeklyEvent(): nenhum título reconhecido pelas keywords. Usando fallback (artigo mais recente): "${articles[0].title}"`
       );
-      return null;
+      weeklyArticle = articles[0];
     }
 
     // Lê o corpo completo do artigo (a listagem só traz o título)
@@ -67,7 +97,8 @@ export async function fetchWeeklyEvent() {
       translatedParagraphs.push(await translateToPortuguese(paragraph));
     }
 
-    // Discord embed fields têm limite de 1024 caracteres — cortamos com folga.
+    // Texto completo (usado pela análise da IA) e versão cortada (usada no
+    // embed do Discord, que tem limite de 1024 caracteres por campo).
     const fullSummary = translatedParagraphs.join('\n\n');
     const summary =
       fullSummary.length > 1000 ? `${fullSummary.slice(0, 1000).trim()}…` : fullSummary;
@@ -76,6 +107,7 @@ export async function fetchWeeklyEvent() {
       title: translatedTitle,
       url: weeklyArticle.url,
       summary,
+      fullText: fullSummary,
       thumbnailUrl: heroImageUrl || weeklyArticle.thumbnailUrl || '',
       publishedAt: weeklyArticle.publishedAt,
     };
