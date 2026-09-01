@@ -1,10 +1,15 @@
-import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, getVoiceConnection, createAudioPlayer, createAudioResource, StreamType, entersState } from '@discordjs/voice';
+import { joinVoiceChannel, VoiceConnectionStatus, EndBehaviorType, getVoiceConnection, createAudioPlayer, createAudioResource, StreamType, entersState, AudioPlayerStatus } from '@discordjs/voice';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';
 import { transcribeAudio } from '../services/sttService.js';
+import { synthesizeSpeech } from '../services/ttsService.js';
 import { addToQueue } from './llmHandler.js';
 import { checkBan } from './banHandler.js';
 const activeConnections = new Map();
+// Players persistentes por guild para fila de fala (evita sobreposição de respostas na call).
+const speechPlayers = new Map();
+const speechQueue = new Map();
+
 const activeAudioStreams = new Set();
 
 function createWavHeader(pcmLength, sampleRate = 48000, numChannels = 2, bitsPerSample = 16) {
