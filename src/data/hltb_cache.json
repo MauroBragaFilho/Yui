@@ -1,0 +1,32 @@
+{
+  "cyberpunk 2077": {
+    "timestamp": 1788290911776,
+    "data": {
+      "name": "Cyberpunk 2077",
+      "mainStory": "26h",
+      "mainExtras": "63h",
+      "completionist": "109h",
+      "allStyles": "66h"
+    }
+  },
+  "the witcher 3": {
+    "timestamp": 1788291022705,
+    "data": {
+      "name": "The Witcher 3: Wild Hunt",
+      "mainStory": "52h",
+      "mainExtras": "104h",
+      "completionist": "175h",
+      "allStyles": "104h"
+    }
+  },
+  "elden ring": {
+    "timestamp": 1788291228552,
+    "data": {
+      "name": "Elden Ring",
+      "mainStory": "60h",
+      "mainExtras": "101h",
+      "completionist": "136h",
+      "allStyles": "106h"
+    }
+  }
+}

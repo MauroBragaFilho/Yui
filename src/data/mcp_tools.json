@@ -424,5 +424,69 @@
         }
       }
     }
+  },
+  {
+    "meta": {
+      "label": "🎮 Info de Jogo (RAWG + HowLongToBeat)",
+      "description": "Busca notas, gêneros, plataformas, data de lançamento, descrição e tempo de jogo de qualquer título de videogame",
+      "disableable": true
+    },
+    "type": "function",
+    "function": {
+      "name": "check_game_info",
+      "description": "Consulta informações gerais de QUALQUER jogo de videogame: nota da comunidade (RAWG), nota Metacritic, gêneros, plataformas disponíveis, data de lançamento, desenvolvedora, sinopse e tempo médio de conclusão (HowLongToBeat: campanha, campanha+extras e 100%). Use quando o usuário perguntar sobre um jogo em geral (ex: 'qual a nota de X', 'quanto tempo pra zerar Y', 'sobre o que é Z', 'em quais plataformas tem W'). Diferente de 'check_steam' (que é focado em preço/promoção na loja) e 'search_game' (que é exclusivo para baixar torrent).",
+      "textual_triggers": "Gatilhos: \"qual a nota de X\", \"quanto tempo pra zerar Y\", \"sobre o que é o jogo Z\", \"vale a pena jogar W\", \"quantas horas tem a campanha de K\", \"em que plataforma tem Q\". Diferenciar de 'check_steam' (preço, não usar para info geral de jogo) e 'search_game' (torrent, não usar).",
+      "textual_args": "{ \"game\": \"Nome do jogo\" }",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "game": {
+            "type": "string",
+            "description": "Nome do jogo a ser consultado."
+          }
+        },
+        "required": [
+          "game"
+        ]
+      }
+    }
+  },
+  {
+    "meta": {
+      "label": "💻 Meu PC Roda? (Compatibilidade)",
+      "description": "Compara os requisitos de um jogo com as specs do PC do usuário e diz se roda tranquilamente, no mínimo, vai sofrer ou não roda",
+      "disableable": true
+    },
+    "type": "function",
+    "function": {
+      "name": "check_pc_compatibility",
+      "description": "Verifica se o PC do usuário consegue rodar um determinado jogo comparando as specs do jogador com os requisitos mínimos e recomendados do título. O usuário pode informar as specs na hora (cpu, gpu, ram) ou podem estar salvas em user_pc_specs.json. Se o usuário NÃO tiver specs salvas e NÃO fornecer na mensagem, PERGUNTE as specs dele antes de chamar a ferramenta. NUNCA invente specs. Use também para informar os requisitos mínimos e recomendados do jogo (ex: 'requisitos de Y', 'meu pc roda Z?').",
+      "textual_triggers": "Gatilhos: \"meu pc roda X?\", \"consegue rodar Y?\", \"requisitos de Z\", \"vou tankar o jogo W?\", \"specs pra jogar K\". Diferenciar de 'check_game_info' (que dá nota/tempo, sem foco em rodar) e 'check_steam' (que dá preço).",
+      "textual_args": "{ \"game\": \"Nome do jogo\", \"cpu\": \"opcional\", \"gpu\": \"opcional\", \"ram\": \"opcional\" }",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "game": {
+            "type": "string",
+            "description": "Nome do jogo cujos requisitos serão comparados."
+          },
+          "cpu": {
+            "type": "string",
+            "description": "Opcional. Processador do usuário, se informado na mensagem (ex: 'Ryzen 5 5600')."
+          },
+          "gpu": {
+            "type": "string",
+            "description": "Opcional. Placa de vídeo do usuário, se informada na mensagem (ex: 'RTX 3060')."
+          },
+          "ram": {
+            "type": "string",
+            "description": "Opcional. Memória RAM do usuário, se informada na mensagem (ex: '16 GB')."
+          }
+        },
+        "required": [
+          "game"
+        ]
+      }
+    }
   }
 ]

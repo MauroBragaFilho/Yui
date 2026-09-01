@@ -1,0 +1,25 @@
+{
+  "_comentario": "Templates de texto por tipo de evento detectado. Placeholders: {label}, {game}, {track}, {artist}. 'activityType' é o tipo do Discord (Watching/Listening/Playing). 'status' é o indicador de bolinha (online/idle/dnd).",
+  "events": {
+    "streaming": {
+      "template": "🔴 {label} está ao vivo",
+      "activityType": "Watching",
+      "status": "online"
+    },
+    "playing_game": {
+      "template": "Watching {label} jogando {game}",
+      "activityType": "Watching",
+      "status": "online"
+    },
+    "listening_music": {
+      "template": "Listening 🎵 {track} — {artist}",
+      "activityType": "Listening",
+      "status": "dnd"
+    },
+    "radio_track": {
+      "template": "Listening 🎵 {track} — {artist}",
+      "activityType": "Listening",
+      "status": "online"
+    }
+  }
+}

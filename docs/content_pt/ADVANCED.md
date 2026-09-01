@@ -44,6 +44,14 @@ O ecossistema MCP da Yui foi robustamente aprimorado com comportamentos nativos 
 - **Direcionamento Inteligente:** A IA identifica a intenção do usuário sobre baixar vídeo ou áudio. Caso o pedido seja ambíguo, a IA faz perguntas de esclarecimento ao usuário no chat em vez de disparar a ferramenta às cegas. O MCP não inicia processos de compressão; essa decisão fica a cargo do Discord e do usuário via botões.
 - **Busca e Download de Música (`search_and_download_music`):** Permite à IA buscar e baixar músicas em MP3 HQ diretamente do Deezer via `deemix`. Se a busca possuir alta pontuação de certeza (>=80%), realiza o download imediato; caso seja ambígua, apresenta uma lista textual com as 5 opções acompanhada de menu suspenso para escolha pelo usuário.
 
+### 5. Info de Jogos (`check_game_info`)
+- **Fontes Combinadas:** Consulta RAWG.io (nota da comunidade, gêneros, plataformas, desenvolvedora) + HowLongToBeat (tempo de campanha, campanha+extras, 100%).
+- **Fallback para Steam:** Quando a RAWG não está configurada, o sistema busca metacritic e sinopse pela Steam API (gratuita), mantendo a tool útil mesmo sem `RAWG_API_KEY`.
+
+### 6. Compatibilidade de PC (`check_pc_compatibility`)
+- **Comparação de Specs:** Recebe o jogo e (opcionalmente) CPU/GPU/RAM do usuário, compara com os requisitos mínimos/recomendados extraídos da Steam API e dá um veredito natural: "roda tranquilo", "roda no mínimo", "vai sofrer" ou "não vai rodar".
+- **Persistência:** Specs podem ser salvas em `src/data/user_pc_specs.json` por userId. Se não houver specs nem cadastro, a Yui pergunta antes de comparar.
+
 ---
 
 ## 📂 3. Como criar uma nova Ferramenta?

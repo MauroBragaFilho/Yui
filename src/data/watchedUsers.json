@@ -1,0 +1,11 @@
+{
+  "_comentario": "Lista de pessoas cuja presença o bot monitora. 'priority' menor = mais importante (desempata se dois usuários estão ativos ao mesmo tempo). 'preferGuildId' é opcional — acelera a busca se você já sabe em qual servidor checar primeiro.",
+  "users": [
+    {
+      "userId": "SEU_USER_ID_AQUI",
+      "label": "Yui",
+      "priority": 1,
+      "preferGuildId": null
+    }
+  ]
+}

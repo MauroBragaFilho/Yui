@@ -139,5 +139,5 @@ async function getCurrentMusicFromUser(userId, client, preferGuildId = null) {
     };
 }
 
-export { getCurrentMusicFromUser };
+export { getCurrentMusicFromUser, resolveMember, PLATFORM_PRIORITY };
 export default { getCurrentMusicFromUser };

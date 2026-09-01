@@ -6,6 +6,8 @@ node_modules/
 log/
 *.log
 *.tmp
+*.exe
+*.txt
 
 # Environment
 .env
@@ -20,7 +22,9 @@ log/
 # Build outputs
 dist/
 build/
-```
+
+# Archives
 .zip
 .Backup/
-data/
+
+```

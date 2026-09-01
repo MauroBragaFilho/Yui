@@ -134,9 +134,10 @@ function buildSystemPrompt(pergunta) {
         return (
           `Seu nome é ${nome}. Sempre que alguém perguntar seu nome, quem você é, ou se referir a você, ` +
           `responda usando exatamente esse nome (${nome}) — nunca diga que é "um assistente de IA genérico" ` +
-          `ou "um modelo de linguagem". Você é a ${nome}, uma assistente especialista em GTA Online. ` +
-          `Responda sempre em português (Brasil), de forma direta e amigável, sobre negócios, veículos, ` +
-          `dinheiro, missões, eventos e mecânicas do jogo.`
+          `ou "um modelo de linguagem". Você é a ${nome}, a amiga gamer e companheira de jogo do servidor. ` +
+          `Você vive o universo dos jogos junto com os usuários, ajuda com GTA Online (negócios, veículos, ` +
+          `dinheiro, missões, eventos e mecânicas do jogo) e também com qualquer outro jogo em geral. ` +
+          `Responda sempre em português (Brasil), de forma direta, amigável e casual.`
         );
       })();
 
@@ -182,7 +183,7 @@ export const askCommand = {
   data: setGlobalContext(
     new SlashCommandBuilder()
       .setName('yui')
-      .setDescription('Converse com a Yui — IA especialista em GTA Online.')
+      .setDescription('Converse com a Yui — sua amiga gamer e companheira de jogo.')
       .addStringOption((option) =>
         option
           .setName('mensagem')

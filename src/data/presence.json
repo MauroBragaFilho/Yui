@@ -1,0 +1,37 @@
+{
+  "_comentario": "Edite esta lista livremente. 'type' aceita: Playing, Watching, Listening, Competing, Custom. 'intervalHours' é opcional e sobrescreve o intervalo padrão SÓ para este status específico (ex: 0.5 = 30min). Se omitido, usa o defaultIntervalHours abaixo.",
+  "defaultIntervalHours": 2,
+  "statuses": [
+    {
+      "type": "Custom",
+      "text": "Cuidando do GTA Online por aqui ✨",
+      "status": "online"
+    },
+    {
+      "type": "Watching",
+      "text": "a Van de Armas rodar pelo mapa",
+      "status": "online"
+    },
+    {
+      "type": "Playing",
+      "text": "GTA Online",
+      "status": "online"
+    },
+    {
+      "type": "Listening",
+      "text": "Program me - Robopup",
+      "status": "dnd",
+      "intervalHours": 5
+    },
+    {
+      "type": "Custom",
+      "text": "use /yui-diario pra ver o reset de hoje",
+      "status": "online"
+    },
+    {
+      "type": "Competing",
+      "text": "Time Trials",
+      "status": "idle"
+    }
+  ]
+}

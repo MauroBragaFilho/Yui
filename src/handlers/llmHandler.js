@@ -21,6 +21,7 @@ import { searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeS
 import { generateImage } from './imageHandler.js';
 import { getSteamGameInfo } from './steamHandler.js';
 import { convertCurrency } from './currencyHandler.js';
+import { getGameInfoWithSteamFallback, compareSpecs, formatVerdict } from './gameInfoHandler.js';
 import { handleMusicSearchAndDownload } from './deezerMusicHandler.js';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -210,6 +211,8 @@ function buildToolsDefinition(guildId, userId = null) {
         show_bot_menu:   'User: "Yui, abra o menu interativo de ajuda por favor"\nResponse: { "thought": "User pediu explicitamente para abrir o menu visual de ajuda.", "tool": "show_bot_menu", "args": { "context": "geral" } }',
         generate_image:  'User: "gera uma imagem de um gato spacial"\nResponse: { "thought": "User quer uma imagem gerada por IA.", "tool": "generate_image", "args": { "prompt": "a space cat floating in galaxy, cinematic, detailed fur, neon lights", "negative_prompt": "nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18" } }',
         check_steam:     'User: "Elden Ring ta em promo na steam?"\nResponse: { "thought": "User quer saber preço de Elden Ring.", "tool": "check_steam", "args": { "game": "Elden Ring" } }',
+        check_game_info: 'User: "qual a nota de Elden Ring?"\nResponse: { "thought": "User quer info geral do jogo.", "tool": "check_game_info", "args": { "game": "Elden Ring" } }\nUser: "quanto tempo pra zerar Baldur\u0027s Gate 3?"\nResponse: { "thought": "User quer tempo de jogo.", "tool": "check_game_info", "args": { "game": "Baldur\u0027s Gate 3" } }',
+        check_pc_compatibility: 'User: "meu pc com rtx 3060 e 16gb roda cyberpunk?"\nResponse: { "thought": "User quer saber se roda.", "tool": "check_pc_compatibility", "args": { "game": "Cyberpunk 2077", "gpu": "RTX 3060", "ram": "16 GB" } }\nUser: "requisitos de GTA VI"\nResponse: { "thought": "User quer requisitos do jogo.", "tool": "check_pc_compatibility", "args": { "game": "GTA VI" } }',
         convert_currency:'User: "quanto ta 50 dolares em reais?"\nResponse: { "thought": "User quer converter 50 USD para BRL.", "tool": "convert_currency", "args": { "amount": 50, "from": "USD", "to": "BRL" } }',
         get_current_music:'User: "Yui, baixe a musica do meu status"\nResponse: { "thought": "User quer baixar música tocando no seu status.", "tool": "get_current_music", "args": { "download": true } }\nUser: "oq eu to escutando no status"\nResponse: { "thought": "User quer saber música do seu status.", "tool": "get_current_music", "args": { "download": true } }',
     };
@@ -1280,7 +1283,7 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     ];
     const guildId = options.guildId || options.guild?.id || null;
     const serverCustomPrompt = getServerPrompt(guildId);
-    let baseSystemPrompt = (serverCustomPrompt || config.systemPrompt) + "\n[IMAGEM/VISÃO]: Você CONSEGUE gerar imagens novas do zero usando a ferramenta generate_image — basta o usuário descrever o que quer. Se o pedido for vago (ex: 'faz uma imagem do server'), crie um prompt criativo baseado no contexto (nome do server, tema da conversa, etc.) e gere a imagem. Porém, você NÃO tem visão computacional: não consegue ver, analisar, editar ou descrever imagens que os usuários enviam. Se pedirem para editar/alterar uma imagem existente, explique que só pode gerar artes novas.\n[ANTI-REPETIÇÃO]: NUNCA repita a mesma frase ou resposta idêntica em mensagens consecutivas. Se já disse algo parecido antes, reformule completamente usando palavras diferentes. Varie seu vocabulário e estrutura. Respostas repetitivas são proibidas.";
+    let baseSystemPrompt = (serverCustomPrompt || config.systemPrompt || "") + "\n[IDENTIDADE — REGRA DE PRIORIDADE MÁXIMA]: Você é a amiga gamer do servidor, uma companheira de jogo que vive naquele universo. NUNCA se refira a si mesma como 'assistente virtual', 'IA', 'inteligência artificial', 'bot', 'modelo', 'sistema', 'ferramenta' ou qualquer variação desses termos — nem para confirmar, nem para negar, nem indiretamente (ex: 'não sou uma IA, sou...' também é proibido). Se perguntarem se você é uma IA ou bot, desvie naturalmente e se apresente como a parceira de jogo do servidor. Use linguagem de identidade como 'sou sua parceira de jogo', 'tô aqui contigo', 'bora jogar isso junto'. Nunca fale 'fui projetada para', 'meu propósito é', 'como assistente/IA/sistema'.\n[IMAGEM/VISÃO]: Você CONSEGUE gerar imagens novas do zero usando a ferramenta generate_image — basta o usuário descrever o que quer. Se o pedido for vago (ex: 'faz uma imagem do server'), crie um prompt criativo baseado no contexto (nome do server, tema da conversa, etc.) e gere a imagem. Porém, você NÃO tem visão computacional: não consegue ver, analisar, editar ou descrever imagens que os usuários enviam. Se pedirem para editar/alterar uma imagem existente, explique que só pode gerar artes novas.\n[ANTI-REPETIÇÃO]: NUNCA repita a mesma frase ou resposta idêntica em mensagens consecutivas. Se já disse algo parecido antes, reformule completamente usando palavras diferentes. Varie seu vocabulário e estrutura. Respostas repetitivas são proibidas.";
     if (config.sendEnvironmentInfo && (options.guildName || options.channelName)) {
         baseSystemPrompt += `\n[CONTEXTO DO AMBIENTE]: Você está conversando no servidor Discord "${options.guildName || 'DM'}" no canal/chat "#${options.channelName || 'Chat'}".`;
     }
@@ -2344,6 +2347,200 @@ Responda APENAS com texto (NÃO USE JSON/TOOLS AGORA). Seja direto e informativo
                         return;
                     }
                 }
+                if (toolData.tool === 'check_game_info') {
+                    const gameQuery = toolData.args.game || '';
+                    const infoEmbed = new EmbedBuilder()
+                        .setColor(0x7C3AED)
+                        .setTitle('🎮 Executando Ação')
+                        .setDescription(`Consultando informações sobre **${gameQuery}**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Buscando dados do jogo'}*`)
+                        .setFooter({ text: 'Yui Games • Tool Use: check_game_info' });
+                    await unifiedReply(null, [], [], [infoEmbed]);
+
+                    const gameInfo = await getGameInfoWithSteamFallback(gameQuery);
+                    if (!gameInfo || gameInfo.error) {
+                        let errMsg = gameInfo && gameInfo.error ? gameInfo.error : `Não consegui achar dados de "${gameQuery}".`;
+                        try {
+                            const fallbackPrompt = `O usuário perguntou sobre o jogo "${gameQuery}" mas não encontrei dados (RAWG/HowLongToBeat). Responda naturalmente na sua personalidade, de forma curta, dizendo que não achei infos completas e sugira buscar em outra fonte ou usar o search_web. Não use JSON.`;
+                            const fallbackResp = await generateResponse(fallbackPrompt, channelId, { allowSearch: true, disableTools: true, guildId });
+                            if (fallbackResp && !fallbackResp.includes('⚠️ SYSTEM ERROR')) errMsg = fallbackResp;
+                        } catch (e) {}
+                        processedResponse = errMsg;
+                        addToHistory(channelId, 'assistant', errMsg);
+                        savePromptToHistory(prompt, userTag, userId, `[TOOL: CHECK_GAME_INFO - "${gameQuery}" -> erro]`, interaction);
+                        return;
+                    }
+
+                    const fields = [];
+                    if (gameInfo.rating != null) fields.push({ name: '⭐ Nota da comunidade', value: `${gameInfo.rating} / 10`, inline: true });
+                    if (gameInfo.metacritic != null) fields.push({ name: '🎯 Metacritic', value: `${gameInfo.metacritic}/100`, inline: true });
+                    if (gameInfo.genres && gameInfo.genres.length > 0) fields.push({ name: '🎭 Gêneros', value: gameInfo.genres.slice(0, 6).join(', '), inline: false });
+                    if (gameInfo.platforms && gameInfo.platforms.length > 0) fields.push({ name: '🖥️ Plataformas', value: gameInfo.platforms.slice(0, 8).join(', '), inline: false });
+                    if (gameInfo.released) fields.push({ name: '📅 Lançamento', value: gameInfo.released, inline: true });
+                    if (gameInfo.developers && gameInfo.developers.length > 0) fields.push({ name: '🏗️ Desenvolvedora', value: gameInfo.developers.join(', '), inline: true });
+
+                    if (gameInfo.hltb) {
+                        const hltbParts = [];
+                        if (gameInfo.hltb.mainStory) hltbParts.push(`**Campanha:** ${gameInfo.hltb.mainStory}`);
+                        if (gameInfo.hltb.mainExtras) hltbParts.push(`**+ Extras:** ${gameInfo.hltb.mainExtras}`);
+                        if (gameInfo.hltb.completionist) hltbParts.push(`**100%:** ${gameInfo.hltb.completionist}`);
+                        if (hltbParts.length > 0) fields.push({ name: '⏱️ Tempo médio de jogo', value: hltbParts.join('\n'), inline: false });
+                    }
+
+                    const resultEmbed = new EmbedBuilder()
+                        .setColor(0x10B981)
+                        .setTitle(`🎮 ${gameInfo.name}`)
+                        .setDescription(gameInfo.description || 'Sem sinopse disponível.')
+                        .addFields(fields)
+                        .setFooter({ text: 'Fontes: RAWG.io & HowLongToBeat • Yui' })
+                        .setTimestamp();
+                    if (gameInfo.backgroundImage) resultEmbed.setThumbnail(gameInfo.backgroundImage);
+
+                    let yuiComment = gameInfo.rating != null ? `Nota ${gameInfo.rating}/10 na comunidade. Quer que eu detalhe algo específico desse jogo?` : 'Achei essas informações pra você.';
+                    try {
+                        const commentPrompt = `Você (Yui) acabou de buscar informações do jogo "${gameInfo.name}". Faça um comentário MUITO CURTO (máx 15 palavras), casual e de amiga gamer sobre o jogo. Não use JSON nem ferramentas.`;
+                        const rawComment = await generateResponse(commentPrompt, channelId, { allowSearch: false, disableTools: true, guildId, isInternalComment: true });
+                        if (rawComment && !rawComment.includes('⚠️ SYSTEM ERROR')) {
+                            let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
+                            const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
+                            if (jsonMatch) { try { const parsed = JSON.parse(jsonMatch[0]); cleanData = parsed.response || parsed.content || parsed.text || parsed.reply || parsed.resposta || parsed.mensagem || cleanData; } catch (e) {} }
+                            yuiComment = cleanData;
+                        }
+                    } catch (e) {}
+
+                    const payload = { content: yuiComment, embeds: [resultEmbed], files: [] };
+                    if (type === 'mention') await replyMessage.edit(payload);
+                    else await interaction.editReply(payload);
+
+                    addToHistory(channelId, 'user', prompt);
+                    addToHistory(channelId, 'assistant', `[Consultou info de "${gameInfo.name}"]`);
+                    savePromptToHistory(prompt, userTag, userId, `[TOOL: CHECK_GAME_INFO - "${gameQuery}"]`, interaction);
+                    return;
+                }
+
+                if (toolData.tool === 'check_pc_compatibility') {
+                    const gameQuery = toolData.args.game || '';
+                    const inlineCpu = toolData.args.cpu || null;
+                    const inlineGpu = toolData.args.gpu || null;
+                    const inlineRam = toolData.args.ram || null;
+
+                    const compatEmbed = new EmbedBuilder()
+                        .setColor(0x7C3AED)
+                        .setTitle('💻 Executando Ação')
+                        .setDescription(`Verificando requisitos de **${gameQuery}**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Comparando specs'}*`)
+                        .setFooter({ text: 'Yui Games • Tool Use: check_pc_compatibility' });
+                    await unifiedReply(null, [], [], [compatEmbed]);
+
+                    let savedSpecs = null;
+                    try {
+                        const specsPath = path.join(__dirname, '../data/user_pc_specs.json');
+                        if (fs.existsSync(specsPath)) {
+                            const allSpecs = JSON.parse(fs.readFileSync(specsPath, 'utf8'));
+                            savedSpecs = allSpecs[userId] || allSpecs[userTag] || null;
+                        }
+                    } catch (e) {}
+
+                    const userSpecs = {
+                        cpu: inlineCpu || (savedSpecs && savedSpecs.cpu) || null,
+                        gpu: inlineGpu || (savedSpecs && savedSpecs.gpu) || null,
+                        ram: inlineRam || (savedSpecs && savedSpecs.ram) || null
+                    };
+
+                    const steamInfo = await getSteamGameInfo(gameQuery);
+                    const reqs = steamInfo && steamInfo.success && steamInfo.pcRequirements ? steamInfo.pcRequirements : null;
+                    const specsKnown = userSpecs.cpu || userSpecs.gpu || userSpecs.ram;
+
+if (!specsKnown) {
+                        const fields = [];
+                        if (reqs && reqs.minimum) {
+                            const minParts = [
+                                reqs.minimum.os ? `**Sistema:** ${reqs.minimum.os}` : null,
+                                reqs.minimum.processor ? `**CPU:** ${reqs.minimum.processor}` : null,
+                                reqs.minimum.memory ? `**RAM:** ${reqs.minimum.memory}` : null,
+                                reqs.minimum.graphics ? `**GPU:** ${reqs.minimum.graphics}` : null,
+                                reqs.minimum.storage ? `**Armazenamento:** ${reqs.minimum.storage}` : null
+                            ].filter(Boolean);
+                            if (minParts.length > 0) fields.push({ name: '🖥️ Requisitos Mínimos', value: minParts.join('\n'), inline: false });
+                        }
+                        if (reqs && reqs.recommended) {
+                            const recParts = [
+                                reqs.recommended.os ? `**Sistema:** ${reqs.recommended.os}` : null,
+                                reqs.recommended.processor ? `**CPU:** ${reqs.recommended.processor}` : null,
+                                reqs.recommended.memory ? `**RAM:** ${reqs.recommended.memory}` : null,
+                                reqs.recommended.graphics ? `**GPU:** ${reqs.recommended.graphics}` : null,
+                                reqs.recommended.storage ? `**Armazenamento:** ${reqs.recommended.storage}` : null
+                            ].filter(Boolean);
+                            if (recParts.length > 0) fields.push({ name: '🚀 Requisitos Recomendados', value: recParts.join('\n'), inline: false });
+                        }
+
+                        const resultEmbed = new EmbedBuilder()
+                            .setColor(0xF59E0B)
+                            .setTitle(`💻 Requisitos de ${steamInfo && steamInfo.success ? steamInfo.name : gameQuery}`)
+                            .setDescription(fields.length > 0 ? 'Esses são os requisitos. Me conta suas specs (CPU, GPU e RAM) que eu te digo se roda!' : 'Não consegui achar os requisitos técnicos desse jogo pela Steam.')
+                            .addFields(fields)
+                            .setFooter({ text: 'Fonte: Steam • Yui' })
+                            .setTimestamp();
+
+                        const payload = { content: fields.length > 0 ? 'Não sei se seu PC roda sem saber suas specs. Me fala o processador, a placa de vídeo e a RAM que eu comparo!' : 'Não achei requisitos pra esse jogo.', embeds: [resultEmbed], files: [] };
+                        if (type === 'mention') await replyMessage.edit(payload);
+                        else await interaction.editReply(payload);
+
+                        addToHistory(channelId, 'user', prompt);
+                        addToHistory(channelId, 'assistant', `[Mostrou requisitos de "${gameQuery}"]`);
+                        savePromptToHistory(prompt, userTag, userId, `[TOOL: CHECK_PC_COMPATIBILITY - "${gameQuery}" -> sem specs]`, interaction);
+                        return;
+                    }
+const reqsForCompare = reqs || { minimum: {}, recommended: {} };
+                    const comparison = compareSpecs(userSpecs, reqsForCompare);
+                    const verdictText = formatVerdict(comparison);
+
+                    const compFields = [];
+                    compFields.push({ name: '🖥️ Requisitos Mínimos', value: [
+                        reqsForCompare.minimum.os ? `**Sistema:** ${reqsForCompare.minimum.os}` : null,
+                        reqsForCompare.minimum.processor ? `**CPU:** ${reqsForCompare.minimum.processor}` : null,
+                        reqsForCompare.minimum.memory ? `**RAM:** ${reqsForCompare.minimum.memory}` : null,
+                        reqsForCompare.minimum.graphics ? `**GPU:** ${reqsForCompare.minimum.graphics}` : null,
+                        reqsForCompare.minimum.storage ? `**Armazenamento:** ${reqsForCompare.minimum.storage}` : null
+                    ].filter(Boolean).join('\n') || 'Não disponível', inline: false });
+                    if (reqsForCompare.recommended) {
+                        compFields.push({ name: '🚀 Requisitos Recomendados', value: [
+                            reqsForCompare.recommended.os ? `**Sistema:** ${reqsForCompare.recommended.os}` : null,
+                            reqsForCompare.recommended.processor ? `**CPU:** ${reqsForCompare.recommended.processor}` : null,
+                            reqsForCompare.recommended.memory ? `**RAM:** ${reqsForCompare.recommended.memory}` : null,
+                            reqsForCompare.recommended.graphics ? `**GPU:** ${reqsForCompare.recommended.graphics}` : null,
+                            reqsForCompare.recommended.storage ? `**Armazenamento:** ${reqsForCompare.recommended.storage}` : null
+                        ].filter(Boolean).join('\n') || 'Não disponível', inline: false });
+                    }
+
+                    const verdictColor = comparison.verdict === 'comfortable' ? 0x22C55E : comparison.verdict === 'minimum' ? 0x3B82F6 : comparison.verdict === 'struggling' ? 0xF59E0B : 0xEF4444;
+                    const resultEmbed = new EmbedBuilder()
+                        .setColor(verdictColor)
+                        .setTitle(`💻 ${steamInfo && steamInfo.success ? steamInfo.name : gameQuery} no seu PC`)
+                        .setDescription(`**Veredito: ${verdictText}**\n\n**Suas specs:** CPU ${userSpecs.cpu || 'não informado'} • GPU ${userSpecs.gpu || 'não informado'} • RAM ${userSpecs.ram || 'não informado'}`)
+                        .addFields(compFields)
+                        .setFooter({ text: 'Fonte: Steam • Yui' })
+                        .setTimestamp();
+let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outro?`;
+                    try {
+                        const commentPrompt = `Você (Yui) acabou de comparar as specs de um usuário com o jogo "${gameQuery}" e o veredito foi: ${verdictText}. Faça um comentário MUITO CURTO (máx 15 palavras), casual e de amiga gamer. Não use JSON nem ferramentas.`;
+                        const rawComment = await generateResponse(commentPrompt, channelId, { allowSearch: false, disableTools: true, guildId, isInternalComment: true });
+                        if (rawComment && !rawComment.includes('⚠️ SYSTEM ERROR')) {
+                            let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
+                            const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
+                            if (jsonMatch) { try { const parsed = JSON.parse(jsonMatch[0]); cleanData = parsed.response || parsed.content || parsed.text || parsed.reply || parsed.resposta || parsed.mensagem || cleanData; } catch (e) {} }
+                            yuiComment = cleanData;
+                        }
+                    } catch (e) {}
+
+                    const payload = { content: yuiComment, embeds: [resultEmbed], files: [] };
+                    if (type === 'mention') await replyMessage.edit(payload);
+                    else await interaction.editReply(payload);
+
+                    addToHistory(channelId, 'user', prompt);
+                    addToHistory(channelId, 'assistant', `[Comparou specs com "${gameQuery}" -> ${verdictText}]`);
+                    savePromptToHistory(prompt, userTag, userId, `[TOOL: CHECK_PC_COMPATIBILITY - "${gameQuery}" -> ${verdictText}]`, interaction);
+                    return;
+                }
+
                 if (toolData.tool === 'generate_image') {
                     const imagePrompt = toolData.args.prompt || '';
                     let imageNegative = toolData.args.negative_prompt || '';

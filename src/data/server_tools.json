@@ -1,0 +1,10 @@
+{
+  "1471605845472182527": {
+    "disabled": [],
+    "enabled": [
+      "join_voice_call",
+      "leave_voice_call",
+      "radio_voice_stt"
+    ]
+  }
+}

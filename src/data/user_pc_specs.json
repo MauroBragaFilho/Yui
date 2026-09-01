@@ -1,0 +1,9 @@
+{
+  "exemplo": {
+    "cpu": "AMD Ryzen 5 5600",
+    "gpu": "RTX 3060",
+    "ram": "16 GB RAM",
+    "storage": "512 GB SSD",
+    "os": "Windows 11"
+  }
+}

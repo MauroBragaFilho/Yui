@@ -15,11 +15,35 @@ function readKnowledgeFiles(dir) {
     return { content: '', fileCount: 0 };
   }
 
-  const files = fs
-    .readdirSync(dir)
-    .filter((f) => f.toLowerCase().endsWith('.txt') || f.toLowerCase().endsWith('.md'))
-    .filter((f) => f.toLowerCase() !== 'readme.md')
-    .sort();
+  // Coleta arquivos .md/.txt da raiz e também de subpastas (exceto GTA_Online,
+  // que possui regra própria de escopo na Knowledge Base e é gerenciado à parte).
+  const EXCLUDED_SUBDIRS = new Set(['gta_online']);
+  const collected = [];
+
+  function walk(currentDir, depth) {
+    if (depth > 3) return;
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const name = entry.name;
+      if (entry.isDirectory()) {
+        if (EXCLUDED_SUBDIRS.has(name.toLowerCase())) continue;
+        walk(path.join(currentDir, name), depth + 1);
+      } else if (entry.isFile()) {
+        const lower = name.toLowerCase();
+        const isDoc = lower.endsWith('.txt') || lower.endsWith('.md');
+        const isReadme = lower === 'readme.md';
+        if (isDoc && !isReadme) {
+          collected.push({ rel: path.join(currentDir, name), name });
+        }
+      }
+    }
+  }
+
+  walk(dir, 0);
+  collected.sort((a, b) => a.rel.localeCompare(b.rel, 'pt-BR'));
+
+  const files = collected;
 
   if (files.length === 0) {
     return { content: '', fileCount: 0 };
@@ -31,17 +55,17 @@ function readKnowledgeFiles(dir) {
   for (const file of files) {
     if (totalChars >= MAX_TOTAL_CHARS) {
       logger.warn(
-        `[KnowledgeBase] Limite total de contexto atingido — arquivo "${file}" e seguintes foram ignorados desta vez.`
+        `[KnowledgeBase] Limite total de contexto atingido — arquivo "${file.name}" e seguintes foram ignorados desta vez.`
       );
       break;
     }
 
-    const fullPath = path.join(dir, file);
+    const fullPath = file.rel;
     let text;
     try {
       text = fs.readFileSync(fullPath, 'utf8');
     } catch (err) {
-      logger.warn(`[KnowledgeBase] Não foi possível ler "${file}": ${err.message}`);
+      logger.warn(`[KnowledgeBase] Não foi possível ler "${file.name}": ${err.message}`);
       continue;
     }
 
@@ -54,7 +78,7 @@ function readKnowledgeFiles(dir) {
       text = `${text.slice(0, remaining)}\n[...conteúdo truncado...]`;
     }
 
-    parts.push(`### Arquivo: ${file}\n${text.trim()}`);
+    parts.push(`### Arquivo: ${file.rel}\n${text.trim()}`);
     totalChars += text.length;
   }
 
