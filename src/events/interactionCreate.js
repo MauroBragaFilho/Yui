@@ -1,4 +1,4 @@
-import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
+﻿import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import config from '../config.js';
@@ -52,6 +52,13 @@ import { startRadioMode } from '../music/radioManager.js';
 import { handleServerAdminCommand, handleServerAdminInteraction, handleIaFerramentasCommand } from '../handlers/serverAdminHandler.js';
 import { handleCreatorAdminCommand, handleCreatorAdminInteraction } from '../handlers/creatorAdminHandler.js';
 import { buildBanListPayload, buildBanDetailPayload } from '../handlers/banListHandler.js';
+import { askCommand } from '../discord/commands/ask.js';
+import { dailyCommand } from '../discord/commands/daily.js';
+import { weeklyCommand } from '../discord/commands/weekly.js';
+import { newsCommand } from '../discord/commands/news.js';
+import { statusCommand } from '../discord/commands/status.js';
+import { setupCommand } from '../discord/commands/setup.js';
+import { baixarMusicaCommand } from '../discord/commands/baixarMusica.js';
 
 function getHelpRegrasPages(regrasAnswer) {
     if (!regrasAnswer) return [];
@@ -64,14 +71,14 @@ function getHelpRegrasPages(regrasAnswer) {
                 const firstLine = lines[0].replace(/^###\s+/, '').trim();
                 const body = lines.slice(1).join('\n').trim();
                 return {
-                    title: `⚖️ Regras & Termos (${idx + 1}/${categorySections.length}) • ${firstLine}`,
+                    title: `âš–ï¸ Regras & Termos (${idx + 1}/${categorySections.length}) â€¢ ${firstLine}`,
                     content: `### ${firstLine}\n\n${body}`
                 };
             });
         }
     }
     return [{
-        title: '⚖️ Regras & Termos (1/1)',
+        title: 'âš–ï¸ Regras & Termos (1/1)',
         content: regrasAnswer
     }];
 }
@@ -121,8 +128,8 @@ export default {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Yui.');
+                        .setTitle('âŒ Acesso Negado')
+                        .setDescription('Esta aÃ§Ã£o Ã© restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 return await handleConfigModal(interaction);
@@ -135,14 +142,14 @@ export default {
             if (interaction.customId.startsWith('music_select_')) {
                 const banInfo = checkBan(interaction.user.id, interaction.guildId, interaction.channelId);
                 if (banInfo) {
-                    return interaction.reply({ content: '🛑 **ACESSO NEGADO:** Você está banido do sistema e não pode interagir.', ephemeral: true });
+                    return interaction.reply({ content: 'ðŸ›‘ **ACESSO NEGADO:** VocÃª estÃ¡ banido do sistema e nÃ£o pode interagir.', ephemeral: true });
                 }
                 const targetUserId = interaction.customId.replace('music_select_', '');
                 if (interaction.user.id !== targetUserId) {
-                    return interaction.reply({ content: '❌ Esta seleção pertence a outro usuário.', ephemeral: true });
+                    return interaction.reply({ content: 'âŒ Esta seleÃ§Ã£o pertence a outro usuÃ¡rio.', ephemeral: true });
                 }
                 const selectedIndex = interaction.values[0];
-                await interaction.update({ content: '🔄 **Processando download da faixa selecionada...**', embeds: [], components: [] });
+                await interaction.update({ content: 'ðŸ”„ **Processando download da faixa selecionada...**', embeds: [], components: [] });
                 const result = await handleMusicSearchAndDownload(null, selectedIndex, {
                     user: interaction.user,
                     userId: interaction.user.id,
@@ -150,12 +157,12 @@ export default {
                     guild: interaction.guild
                 });
                 if (result.error) {
-                    return await interaction.editReply({ content: `❌ ${result.error}` });
+                    return await interaction.editReply({ content: `âŒ ${result.error}` });
                 }
                 if (result.success) {
                     const keepEmbed = config.keepMusicEmbed !== false;
                     const replyPayload = {
-                        content: `✅ Música baixada: \`${result.track.title} - ${result.track.artist}\``,
+                        content: `âœ… MÃºsica baixada: \`${result.track.title} - ${result.track.artist}\``,
                         files: [result.attachment],
                     };
                     if (keepEmbed && result.infoEmbed) {
@@ -172,8 +179,8 @@ export default {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Yui.');
+                        .setTitle('âŒ Acesso Negado')
+                        .setDescription('Esta aÃ§Ã£o Ã© restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 return await handleConfigSelect(interaction);
@@ -182,8 +189,8 @@ export default {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Yui.');
+                        .setTitle('âŒ Acesso Negado')
+                        .setDescription('Esta aÃ§Ã£o Ã© restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 const parts = interaction.customId.split('_');
@@ -206,21 +213,21 @@ export default {
             if (cid.startsWith('music_cancel_')) {
                 const banInfo = checkBan(interaction.user.id, interaction.guildId, interaction.channelId);
                 if (banInfo) {
-                    return interaction.reply({ content: '🛑 **ACESSO NEGADO:** Você está banido do sistema e não pode interagir.', ephemeral: true });
+                    return interaction.reply({ content: 'ðŸ›‘ **ACESSO NEGADO:** VocÃª estÃ¡ banido do sistema e nÃ£o pode interagir.', ephemeral: true });
                 }
                 const targetUserId = cid.replace('music_cancel_', '');
                 if (interaction.user.id !== targetUserId) {
-                    return interaction.reply({ content: '❌ Esta ação pertence a outro usuário.', ephemeral: true });
+                    return interaction.reply({ content: 'âŒ Esta aÃ§Ã£o pertence a outro usuÃ¡rio.', ephemeral: true });
                 }
                 clearSession(interaction.user.id);
-                return await interaction.update({ content: '❌ **Pesquisa de música cancelada.**', embeds: [], components: [] });
+                return await interaction.update({ content: 'âŒ **Pesquisa de mÃºsica cancelada.**', embeds: [], components: [] });
             }
             if (cid.startsWith('cfgpanel_')) {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Yui.');
+                        .setTitle('âŒ Acesso Negado')
+                        .setDescription('Esta aÃ§Ã£o Ã© restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 return await handleConfigButton(interaction);
@@ -229,8 +236,8 @@ export default {
                 if (!config.isOwner(interaction.user.id)) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Acesso Negado')
-                        .setDescription('Esta ação é restrita ao criador da Yui.');
+                        .setTitle('âŒ Acesso Negado')
+                        .setDescription('Esta aÃ§Ã£o Ã© restrita ao criador da Yui.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
             }
@@ -242,12 +249,12 @@ export default {
                     const targetGuild = client.guilds.cache.get(guildId);
                     if (targetGuild) {
                         await targetGuild.leave();
-                        await interaction.update({ content: `✅ Saí do servidor \`${targetGuild.name}\` com sucesso.`, embeds: [], components: [] });
+                        await interaction.update({ content: `âœ… SaÃ­ do servidor \`${targetGuild.name}\` com sucesso.`, embeds: [], components: [] });
                     } else {
-                        await interaction.reply({ content: '❌ Servidor não encontrado ou já saí.', ephemeral: true });
+                        await interaction.reply({ content: 'âŒ Servidor nÃ£o encontrado ou jÃ¡ saÃ­.', ephemeral: true });
                     }
                 } else if (action === 'confirm') {
-                    await interaction.update({ content: '✅ Servidor confirmado e botão ignorado.', components: [] });
+                    await interaction.update({ content: 'âœ… Servidor confirmado e botÃ£o ignorado.', components: [] });
                 }
                 return;
             } else if (cid.startsWith('adm_remoteban_')) {
@@ -255,10 +262,10 @@ export default {
                 const type = parts[2];
                 const targetId = parts[3];
                 if (type === 'ignore') {
-                    await interaction.update({ content: '✅ Alerta ignorado.', components: [] });
+                    await interaction.update({ content: 'âœ… Alerta ignorado.', components: [] });
                 } else {
-                    addBan(type, targetId, "Banido remotamente pelo log de violações do sistema Yui.");
-                    await interaction.update({ content: `✅ Alvo \`${targetId}\` (${type}) banido com sucesso.`, components: [] });
+                    addBan(type, targetId, "Banido remotamente pelo log de violaÃ§Ãµes do sistema Yui.");
+                    await interaction.update({ content: `âœ… Alvo \`${targetId}\` (${type}) banido com sucesso.`, components: [] });
                 }
                 return;
             } else if (cid === 'banlist_home') {
@@ -275,7 +282,7 @@ export default {
                 const category = parts[2];
                 const targetId = parts[3];
                 if (targetId === 'none') {
-                    return await interaction.reply({ content: '❌ Sem mais registros.', ephemeral: true });
+                    return await interaction.reply({ content: 'âŒ Sem mais registros.', ephemeral: true });
                 }
                 const payload = await buildBanDetailPayload(client, category, targetId);
                 return await interaction.update(payload);
@@ -287,10 +294,10 @@ export default {
                 removeBan(apiType, targetId);
                 const embed = new EmbedBuilder()
                     .setColor(0x10B981)
-                    .setTitle('🔓 Desbanido com Sucesso')
+                    .setTitle('ðŸ”“ Desbanido com Sucesso')
                     .setDescription(`O alvo com ID \`${targetId}\` (${apiType}) foi desbanido do sistema.`);
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('banlist_home').setLabel('🏠 Início').setStyle(ButtonStyle.Primary)
+                    new ButtonBuilder().setCustomId('banlist_home').setLabel('ðŸ  InÃ­cio').setStyle(ButtonStyle.Primary)
                 );
                 return await interaction.update({ embeds: [embed], components: [row] });
             }
@@ -299,22 +306,22 @@ export default {
                 const fileId = cid.replace('compress_video_', '');
                 const pending = getPendingVideo(fileId);
                 if (!pending) {
-                    return interaction.reply({ content: '⏰ Este vídeo já expirou (limite de 6 horas). Faça o download novamente.', ephemeral: true });
+                    return interaction.reply({ content: 'â° Este vÃ­deo jÃ¡ expirou (limite de 6 horas). FaÃ§a o download novamente.', ephemeral: true });
                 }
                 const guild = interaction.guild;
                 const attachmentLimit = guild ? guild.premiumTier === 3 ? 100 * 1024 * 1024 : guild.premiumTier === 2 ? 50 * 1024 * 1024 : 25 * 1024 * 1024 : 25 * 1024 * 1024;
                 const isQueue = isCompressionActive();
                 const progressEmbed = new EmbedBuilder()
-                    .setFooter({ text: 'Yui Media • by oBraga' })
+                    .setFooter({ text: 'Yui Media â€¢ by oBraga' })
                     .setTimestamp();
                 if (isQueue) {
                     progressEmbed.setColor(0xF59E0B)
-                        .setTitle('⏳ Compressão na Fila')
-                        .setDescription('Já existe uma compressão de vídeo em andamento no bot. Seu vídeo foi adicionado à fila de espera e será processado automaticamente assim que a atual terminar!\n\nPor favor, aguarde...');
+                        .setTitle('â³ CompressÃ£o na Fila')
+                        .setDescription('JÃ¡ existe uma compressÃ£o de vÃ­deo em andamento no bot. Seu vÃ­deo foi adicionado Ã  fila de espera e serÃ¡ processado automaticamente assim que a atual terminar!\n\nPor favor, aguarde...');
                 } else {
                     progressEmbed.setColor(0x3B82F6)
-                        .setTitle('🔄 Comprimindo Vídeo...')
-                        .setDescription('Iniciando a compressão do vídeo para reduzir o tamanho do arquivo. Isso pode levar alguns minutos. Não se preocupe, estou trabalhando nisso!');
+                        .setTitle('ðŸ”„ Comprimindo VÃ­deo...')
+                        .setDescription('Iniciando a compressÃ£o do vÃ­deo para reduzir o tamanho do arquivo. Isso pode levar alguns minutos. NÃ£o se preocupe, estou trabalhando nisso!');
                 }
                 await interaction.update({ embeds: [progressEmbed], components: [] });
                 logCompressionAction({ user: interaction.user, guild: interaction.guild }, isQueue ? 'Fila' : 'Iniciado');
@@ -322,20 +329,20 @@ export default {
                     const result = await enqueueCompression(pending.filePath, attachmentLimit, interaction.user.id);
                     const attachment = new AttachmentBuilder(result.filePath, { name: 'video_compressed.mp4' });
                     const sizeMB = (result.fileSize / (1024 * 1024)).toFixed(1);
-                    await interaction.editReply({ content: `✅ **Vídeo comprimido com sucesso!** (${sizeMB} MB)`, embeds: [], files: [attachment], components: [] });
+                    await interaction.editReply({ content: `âœ… **VÃ­deo comprimido com sucesso!** (${sizeMB} MB)`, embeds: [], files: [attachment], components: [] });
                     logCompressionAction({ user: interaction.user, guild: interaction.guild }, 'Sucesso', `Tamanho: ${sizeMB} MB`);
                     try { if (fs.existsSync(result.filePath)) fs.unlinkSync(result.filePath); } catch (e) {}
                     removePendingVideo(fileId);
                 } catch (compressError) {
                     const errorEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Falha na Compressão')
-                        .setFooter({ text: 'Yui Media • by oBraga' })
+                        .setTitle('âŒ Falha na CompressÃ£o')
+                        .setFooter({ text: 'Yui Media â€¢ by oBraga' })
                         .setTimestamp();
                     if (compressError.message === 'MEMORY_ERROR') {
-                        errorEmbed.setDescription(`⚠️ Ocorreu um erro de falta de memória no servidor da host ao tentar comprimir o vídeo. Por favor, entre em contato com <@${config.ownerId}>.`);
+                        errorEmbed.setDescription(`âš ï¸ Ocorreu um erro de falta de memÃ³ria no servidor da host ao tentar comprimir o vÃ­deo. Por favor, entre em contato com <@${config.ownerId}>.`);
                     } else {
-                        errorEmbed.setDescription(`❌ Ocorreu um erro ao comprimir o vídeo: ${compressError.message}`);
+                        errorEmbed.setDescription(`âŒ Ocorreu um erro ao comprimir o vÃ­deo: ${compressError.message}`);
                     }
                     await interaction.editReply({ embeds: [errorEmbed], components: [] });
                     logCompressionAction({ user: interaction.user, guild: interaction.guild }, 'Erro', `Detalhe: ${compressError.message}`);
@@ -360,21 +367,21 @@ export default {
                 await checkAndInitializeUpdateChannel(interaction.guild, interaction.channel);
             }
             const sub = interaction.options.getSubcommand(false);
-            const cmdLog = `[LOG] Slash: /${interaction.commandName}${sub ? ' ' + sub : ''} | Usuário: ${interaction.user.tag} (${interaction.user.id}) | Local: {${interaction.guild?.name || 'DM'} - ${interaction.guildId || 'N/A'}}`;
+            const cmdLog = `[LOG] Slash: /${interaction.commandName}${sub ? ' ' + sub : ''} | UsuÃ¡rio: ${interaction.user.tag} (${interaction.user.id}) | Local: {${interaction.guild?.name || 'DM'} - ${interaction.guildId || 'N/A'}}`;
             console.log(cmdLog);
             const banInfo = checkBan(interaction.user.id, interaction.guildId, interaction.channelId);
             if (banInfo && interaction.commandName !== 'ajuda') {
                 const banEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
-                    .setTitle('🛑 ACESSO NEGADO — VOCÊ ESTÁ BANIDO!')
-                    .setDescription(`Sua tentativa de execução foi abortada. O acesso à **IA Yui** está permanentemente bloqueado para você.\n\n**DETALHES DO SEU BANIMENTO:**\n- **Tipo:** ${banInfo.typeName || banInfo.type}\n- **Motivo do Banimento:** ${banInfo.reason || "Violação severa dos Termos de Uso da IA Yui."}\n- **Status Atual:** 🔴 TOTALMENTE RESTRITO / SUSPENSO.\n\nVocê perdeu todos os privilégios de utilização dos nossos serviços. Não adianta insistir.\n\nSe você acredita que isso é um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})] ✨`)
-                    .setFooter({ text: 'Yui Security & Moderation • by oBraga' })
+                    .setTitle('ðŸ›‘ ACESSO NEGADO â€” VOCÃŠ ESTÃ BANIDO!')
+                    .setDescription(`Sua tentativa de execuÃ§Ã£o foi abortada. O acesso Ã  **IA Yui** estÃ¡ permanentemente bloqueado para vocÃª.\n\n**DETALHES DO SEU BANIMENTO:**\n- **Tipo:** ${banInfo.typeName || banInfo.type}\n- **Motivo do Banimento:** ${banInfo.reason || "ViolaÃ§Ã£o severa dos Termos de Uso da IA Yui."}\n- **Status Atual:** ðŸ”´ TOTALMENTE RESTRITO / SUSPENSO.\n\nVocÃª perdeu todos os privilÃ©gios de utilizaÃ§Ã£o dos nossos serviÃ§os. NÃ£o adianta insistir.\n\nSe vocÃª acredita que isso Ã© um erro ou deseja solicitar um desbanimento, entre em contato com o desenvolvedor: <@${config.ownerId}> [\[Abrir Perfil\](https://discord.com/users/${config.ownerId})] âœ¨`)
+                    .setFooter({ text: 'Yui Security & Moderation â€¢ by oBraga' })
                     .setTimestamp();
                 return interaction.reply({ embeds: [banEmbed], ephemeral: false });
             }
         }
         if (interaction.isAutocomplete()) {
-            if (interaction.commandName === 'ia_ferramentas' || interaction.commandName === 'config_criador') {
+            if (interaction.commandName === 'yui-ferramentas' || interaction.commandName === 'yui-criador') {
                 const focused = interaction.options.getFocused().toLowerCase();
                 const guildId = interaction.guildId;
                 const disabled = getDisabledTools(guildId);
@@ -385,13 +392,13 @@ export default {
                         if (t.function.name === 'join_voice_call') {
                             const isDisabled = disabled.includes('join_voice_call');
                             return {
-                                name: `${isDisabled ? '❌' : '✅'} 🎙️ Assistente de Voz (Call)`,
+                                name: `${isDisabled ? 'âŒ' : 'âœ…'} ðŸŽ™ï¸ Assistente de Voz (Call)`,
                                 value: 'join_voice_call'
                             };
                         }
                         const isDisabled = disabled.includes(t.function.name);
                         return {
-                            name: `${isDisabled ? '❌' : '✅'} ${t.meta.label}`,
+                            name: `${isDisabled ? 'âŒ' : 'âœ…'} ${t.meta.label}`,
                             value: t.function.name
                         };
                     })
@@ -401,31 +408,31 @@ export default {
             }
             if (interaction.commandName === 'converter_moeda') {
                 const CURRENCIES = [
-                    { name: '🇧🇷 BRL — Real Brasileiro',            value: 'BRL' },
-                    { name: '🇺🇸 USD — Dólar Americano',           value: 'USD' },
-                    { name: '🇪🇺 EUR — Euro',                       value: 'EUR' },
-                    { name: '🇬🇧 GBP — Libra Esterlina',            value: 'GBP' },
-                    { name: '💹 BTC — Bitcoin',                     value: 'BTC' },
-                    { name: '💸 ETH — Ethereum',                    value: 'ETH' },
-                    { name: '💵 USDT — Tether',                    value: 'USDT' },
-                    { name: '🇯🇵 JPY — Iene Japonês',              value: 'JPY' },
-                    { name: '🇨🇦 CAD — Dólar Canadense',           value: 'CAD' },
-                    { name: '🇨🇭 CHF — Franco Suíço',              value: 'CHF' },
-                    { name: '🇦🇺 AUD — Dólar Australiano',         value: 'AUD' },
-                    { name: '🇨🇳 CNY — Yuan Chinês',               value: 'CNY' },
-                    { name: '🇰🇷 KRW — Won Sul-Coreano',           value: 'KRW' },
-                    { name: '🇲🇽 MXN — Peso Mexicano',             value: 'MXN' },
-                    { name: '🇦🇷 ARS — Peso Argentino',             value: 'ARS' },
-                    { name: '🇨🇱 CLP — Peso Chileno',               value: 'CLP' },
-                    { name: '🇨🇴 COP — Peso Colombiano',            value: 'COP' },
-                    { name: '🇺🇾 UAH — Hryvnia Ucraniana',          value: 'UAH' },
-                    { name: '🇷🇺 RUB — Rublo Russo',                value: 'RUB' },
-                    { name: '🇮🇳 INR — Rupia Indiana',              value: 'INR' },
-                    { name: '🇳🇿 NZD — Dólar Neozelandês',         value: 'NZD' },
-                    { name: '🇸🇬 SGD — Dólar de Singapura',       value: 'SGD' },
-                    { name: '🇸🇦 SAR — Riyal Saudita',              value: 'SAR' },
-                    { name: '🧩 SOL — Solana',                      value: 'SOL' },
-                    { name: '🧩 BNB — BNB (Binance)',                value: 'BNB' },
+                    { name: 'ðŸ‡§ðŸ‡· BRL â€” Real Brasileiro',            value: 'BRL' },
+                    { name: 'ðŸ‡ºðŸ‡¸ USD â€” DÃ³lar Americano',           value: 'USD' },
+                    { name: 'ðŸ‡ªðŸ‡º EUR â€” Euro',                       value: 'EUR' },
+                    { name: 'ðŸ‡¬ðŸ‡§ GBP â€” Libra Esterlina',            value: 'GBP' },
+                    { name: 'ðŸ’¹ BTC â€” Bitcoin',                     value: 'BTC' },
+                    { name: 'ðŸ’¸ ETH â€” Ethereum',                    value: 'ETH' },
+                    { name: 'ðŸ’µ USDT â€” Tether',                    value: 'USDT' },
+                    { name: 'ðŸ‡¯ðŸ‡µ JPY â€” Iene JaponÃªs',              value: 'JPY' },
+                    { name: 'ðŸ‡¨ðŸ‡¦ CAD â€” DÃ³lar Canadense',           value: 'CAD' },
+                    { name: 'ðŸ‡¨ðŸ‡­ CHF â€” Franco SuÃ­Ã§o',              value: 'CHF' },
+                    { name: 'ðŸ‡¦ðŸ‡º AUD â€” DÃ³lar Australiano',         value: 'AUD' },
+                    { name: 'ðŸ‡¨ðŸ‡³ CNY â€” Yuan ChinÃªs',               value: 'CNY' },
+                    { name: 'ðŸ‡°ðŸ‡· KRW â€” Won Sul-Coreano',           value: 'KRW' },
+                    { name: 'ðŸ‡²ðŸ‡½ MXN â€” Peso Mexicano',             value: 'MXN' },
+                    { name: 'ðŸ‡¦ðŸ‡· ARS â€” Peso Argentino',             value: 'ARS' },
+                    { name: 'ðŸ‡¨ðŸ‡± CLP â€” Peso Chileno',               value: 'CLP' },
+                    { name: 'ðŸ‡¨ðŸ‡´ COP â€” Peso Colombiano',            value: 'COP' },
+                    { name: 'ðŸ‡ºðŸ‡¾ UAH â€” Hryvnia Ucraniana',          value: 'UAH' },
+                    { name: 'ðŸ‡·ðŸ‡º RUB â€” Rublo Russo',                value: 'RUB' },
+                    { name: 'ðŸ‡®ðŸ‡³ INR â€” Rupia Indiana',              value: 'INR' },
+                    { name: 'ðŸ‡³ðŸ‡¿ NZD â€” DÃ³lar NeozelandÃªs',         value: 'NZD' },
+                    { name: 'ðŸ‡¸ðŸ‡¬ SGD â€” DÃ³lar de Singapura',       value: 'SGD' },
+                    { name: 'ðŸ‡¸ðŸ‡¦ SAR â€” Riyal Saudita',              value: 'SAR' },
+                    { name: 'ðŸ§© SOL â€” Solana',                      value: 'SOL' },
+                    { name: 'ðŸ§© BNB â€” BNB (Binance)',                value: 'BNB' },
                 ];
                 const focused = interaction.options.getFocused().toUpperCase();
                 const filtered = CURRENCIES
@@ -452,16 +459,23 @@ export default {
             return;
         }
         const { commandName } = interaction;
-        if (commandName === 'ia_chat') {
-            const prompt = interaction.options.getString('prompt');
-            const visibility = interaction.options.getString('visibilidade');
-            const isPublic = visibility === 'public';
-            addToQueue(prompt, interaction, 'slash', { allowSearch: false, public: isPublic, guildId: interaction.guildId });
-        } else if (commandName === 'config_servidor') {
+        if (commandName === 'yui') {
+            await askCommand.execute(interaction);
+        } else if (commandName === 'gta-diario') {
+            await dailyCommand.execute(interaction);
+        } else if (commandName === 'gta-semanal') {
+            await weeklyCommand.execute(interaction);
+        } else if (commandName === 'gta-noticias') {
+            await newsCommand.execute(interaction);
+        } else if (commandName === 'yui-status') {
+            await statusCommand.execute(interaction);
+        } else if (commandName === 'yui-configurar') {
+            await setupCommand.execute(interaction);
+        } else if (commandName === 'yui-servidor') {
             return await handleServerAdminCommand(interaction);
-        } else if (commandName === 'ia_ferramentas') {
+        } else if (commandName === 'yui-ferramentas') {
             return await handleIaFerramentasCommand(interaction);
-        } else if (commandName === 'config_criador') {
+        } else if (commandName === 'yui-criador') {
             return await handleCreatorAdminCommand(interaction, client);
         } else if (commandName === 'aceitar_tos') {
             const hasPermission = !interaction.guild || (interaction.member && (
@@ -472,7 +486,7 @@ export default {
             if (!hasPermission) {
                 const errEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
-                    .setTitle('❌ Acesso Negado')
+                    .setTitle('âŒ Acesso Negado')
                     .setDescription('Apenas administradores do servidor podem aceitar os Termos de Uso.');
                 return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
@@ -480,9 +494,9 @@ export default {
             if (isServerAccepted(interaction.guildId)) {
                 const alreadyAcceptedEmbed = new EmbedBuilder()
                     .setColor(0x10B981)
-                    .setTitle('✅ Termos de Uso Já Aceitos')
-                    .setDescription('Os Termos de Uso da Yui já foram previamente aceitos e estão ativos neste servidor.')
-                    .setFooter({ text: 'Yui ToS • by oBraga' })
+                    .setTitle('âœ… Termos de Uso JÃ¡ Aceitos')
+                    .setDescription('Os Termos de Uso da Yui jÃ¡ foram previamente aceitos e estÃ£o ativos neste servidor.')
+                    .setFooter({ text: 'Yui ToS â€¢ by oBraga' })
                     .setTimestamp();
                 return interaction.reply({ embeds: [alreadyAcceptedEmbed], ephemeral: true });
             }
@@ -490,7 +504,7 @@ export default {
         } else if (commandName === 'ajuda') {
             const { buildHelpHomePayload } = await import('../handlers/helpPanelHandler.js');
             return await interaction.reply({ ...buildHelpHomePayload(), ephemeral: false });
-        } else if (commandName === 'ia_imagem') {
+        } else if (commandName === 'yui-imagem') {
             const prompt = interaction.options.getString('prompt');
             const negativePrompt = interaction.options.getString('negative_prompt') || '';
             const width = interaction.options.getInteger('width') || 1024;
@@ -502,14 +516,14 @@ export default {
                 if (imageData) {
                     const drawEmbed = new EmbedBuilder()
                         .setColor(0x7C3AED)
-                        .setTitle('🎨 Imagem Gerada')
-                        .setDescription('⚠️ **Aviso:** Eu apenas **gero** imagens novas a partir de texto. Eu **não edito** imagens e **não tenho visão computacional** para ver arquivos.')
+                        .setTitle('ðŸŽ¨ Imagem Gerada')
+                        .setDescription('âš ï¸ **Aviso:** Eu apenas **gero** imagens novas a partir de texto. Eu **nÃ£o edito** imagens e **nÃ£o tenho visÃ£o computacional** para ver arquivos.')
                         .addFields(
-                            { name: '🤖 Modelo', value: `\`${imageData.modelName || 'Desconhecido'}\``, inline: false },
-                            { name: '🌱 Seed', value: `\`${imageData.actualSeed}\``, inline: true },
-                            { name: '📐 Resolução', value: `\`${width}x${height}\``, inline: true }
+                            { name: 'ðŸ¤– Modelo', value: `\`${imageData.modelName || 'Desconhecido'}\``, inline: false },
+                            { name: 'ðŸŒ± Seed', value: `\`${imageData.actualSeed}\``, inline: true },
+                            { name: 'ðŸ“ ResoluÃ§Ã£o', value: `\`${width}x${height}\``, inline: true }
                         )
-                        .setFooter({ text: `Prompt: ${prompt.substring(0, 100)} • by oBraga` })
+                        .setFooter({ text: `Prompt: ${prompt.substring(0, 100)} â€¢ by oBraga` })
                         .setTimestamp();
                     const files = [];
                     if (imageData.imageUrl) {
@@ -524,101 +538,20 @@ export default {
                 } else {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Falha na Geração')
-                        .setDescription('Não consegui gerar a imagem.');
+                        .setTitle('âŒ Falha na GeraÃ§Ã£o')
+                        .setDescription('NÃ£o consegui gerar a imagem.');
                     await interaction.editReply({ embeds: [errEmbed] });
                 }
             } catch (error) {
                 console.error('Erro /draw:', error);
                 const errEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
-                    .setTitle('❌ Erro')
+                    .setTitle('âŒ Erro')
                     .setDescription(error.message);
                 await interaction.editReply({ embeds: [errEmbed] });
             }
         } else if (commandName === 'baixar_musica') {
-            const videoUrl = interaction.options.getString('url');
-            const userId = interaction.user.id;
-            if (!canBypass(userId) && isUserBusy(userId)) {
-                const waitEmbed = new EmbedBuilder()
-                    .setColor(0xF59E0B)
-                    .setTitle('⏳ Download em Andamento')
-                    .setDescription('Você já tem um download em execução. Por favor, aguarde ele terminar.');
-                return interaction.reply({ embeds: [waitEmbed], ephemeral: true });
-            }
-            await interaction.deferReply({ ephemeral: false });
-            lockUser(userId);
-            let downloadedAudioInfo = null;
-            try {
-                downloadedAudioInfo = await downloadAudio(videoUrl, { source: 'Slash', user: interaction.user, guild: interaction.guild });
-                if (downloadedAudioInfo && downloadedAudioInfo.filePath) {
-                    const { filePath, metadata } = downloadedAudioInfo;
-                    const displayFileName = sanitizeFilenameForDiscord(metadata.title || 'audio');
-                    const attachment = new AttachmentBuilder(filePath, { name: `${displayFileName}.mp3` });
-                    await interaction.editReply({ content: `🎵 Áudio baixado: \`${metadata.title}\``, files: [attachment] });
-                } else {
-                    const errEmbed = new EmbedBuilder()
-                        .setColor(0xE11D48)
-                        .setTitle('❌ Falha no Download')
-                        .setDescription('Não consegui baixar o áudio.');
-                    await interaction.editReply({ embeds: [errEmbed] });
-                }
-            } catch (error) {
-                console.error('[BaixarMusica]', error);
-                const errEmbed = new EmbedBuilder()
-                    .setColor(0xE11D48)
-                    .setTitle('❌ Erro')
-                    .setDescription(error.message);
-                await interaction.editReply({ embeds: [errEmbed] });
-            } finally {
-                unlockUser(userId);
-                if (downloadedAudioInfo && downloadedAudioInfo.filePath && fs.existsSync(downloadedAudioInfo.filePath)) {
-                    fs.unlink(downloadedAudioInfo.filePath, () => {});
-                }
-            }
-        } else if (commandName === 'baixar_musica_deezer') {
-            const query = interaction.options.getString('nome');
-            const userId = interaction.user.id;
-            if (!canBypass(userId) && isUserBusy(userId)) {
-                const waitEmbed = new EmbedBuilder()
-                    .setColor(0xF59E0B)
-                    .setTitle('⏳ Download em Andamento')
-                    .setDescription('Você já tem um download em execução. Por favor, aguarde ele terminar.');
-                return interaction.reply({ embeds: [waitEmbed], ephemeral: true });
-            }
-            await interaction.deferReply({ ephemeral: false });
-            lockUser(userId);
-            try {
-                const result = await handleMusicSearchAndDownload(query, null, {
-                    user: interaction.user,
-                    userId: interaction.user.id,
-                    userTag: interaction.user.tag,
-                    guild: interaction.guild
-                });
-
-                if (result.error) {
-                    await interaction.editReply({ content: `❌ ${result.error}` });
-                } else if (result.isAmbiguous) {
-                    await interaction.editReply({ content: '', embeds: [result.embed], components: result.components });
-                } else if (result.success) {
-                    await interaction.editReply({
-                        content: `✅ Música em alta qualidade baixada via Deezer: \`${result.track.title} - ${result.track.artist}\``,
-                        files: [result.attachment]
-                    });
-                    if (typeof result.cleanup === 'function') {
-                        result.cleanup();
-                    }
-                }
-            } catch (error) {
-                console.error('[BaixarMusicaDeezer]', error);
-                const errEmbed = new EmbedBuilder()
-                    .setColor(0xE11D48)
-                    .setTitle('❌ Erro')
-                    .setDescription(error.message);
-                await interaction.editReply({ embeds: [errEmbed] });
-            } finally {
-                unlockUser(userId);
-            }
+            await baixarMusicaCommand.execute(interaction);
         } else if (commandName === 'baixar_video') {
             const videoUrl = interaction.options.getString('url');
             const showDetails = interaction.options.getBoolean('descricao') || false;
@@ -626,8 +559,8 @@ export default {
             if (!canBypass(userId) && isUserBusy(userId)) {
                 const waitEmbed = new EmbedBuilder()
                     .setColor(0xF59E0B)
-                    .setTitle('⏳ Download em Andamento')
-                    .setDescription('Você já tem um download em execução. Por favor, aguarde ele terminar.');
+                    .setTitle('â³ Download em Andamento')
+                    .setDescription('VocÃª jÃ¡ tem um download em execuÃ§Ã£o. Por favor, aguarde ele terminar.');
                 return interaction.reply({ embeds: [waitEmbed], ephemeral: true });
             }
             await interaction.deferReply({ ephemeral: false });
@@ -648,12 +581,12 @@ export default {
                     const limitMB = (attachmentLimit / (1024 * 1024)).toFixed(0);
                     const compressEmbed = new EmbedBuilder()
                         .setColor(0xF39C12)
-                        .setTitle('📦 Vídeo Grande Demais')
-                        .setDescription(`O vídeo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor é **${limitMB} MB**.\n\nClique no botão abaixo para tentar comprimir o vídeo automaticamente.\n\n⏰ *O arquivo ficará disponível por 6 horas.*`)
-                        .setFooter({ text: 'Yui Media • by oBraga' })
+                        .setTitle('ðŸ“¦ VÃ­deo Grande Demais')
+                        .setDescription(`O vÃ­deo **${videoData.metadata.title}** tem **${sizeMB} MB**, mas o limite deste servidor Ã© **${limitMB} MB**.\n\nClique no botÃ£o abaixo para tentar comprimir o vÃ­deo automaticamente.\n\nâ° *O arquivo ficarÃ¡ disponÃ­vel por 6 horas.*`)
+                        .setFooter({ text: 'Yui Media â€¢ by oBraga' })
                         .setTimestamp();
                     const row = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`compress_video_${fileId}`).setLabel('🔄 Tentar Compressão').setStyle(ButtonStyle.Primary)
+                        new ButtonBuilder().setCustomId(`compress_video_${fileId}`).setLabel('ðŸ”„ Tentar CompressÃ£o').setStyle(ButtonStyle.Primary)
                     );
                     await interaction.editReply({ embeds: [compressEmbed], components: [row] });
                 }
@@ -661,7 +594,7 @@ export default {
                 console.error('[BaixarVideo]', error);
                 const errEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
-                    .setTitle('❌ Erro')
+                    .setTitle('âŒ Erro')
                     .setDescription(error.message);
                 await interaction.editReply({ embeds: [errEmbed] });
             } finally {
@@ -682,23 +615,23 @@ export default {
                         conversationLog += `[${time}] ${msg.author.username}: ${msg.content}\n`;
                     }
                 });
-                const summaryPrompt = `Faça um resumo: \n${conversationLog}`;
+                const summaryPrompt = `FaÃ§a um resumo: \n${conversationLog}`;
                 addToQueue(summaryPrompt, interaction, 'slash', { allowSearch: false, disableTools: true });
             } catch (error) {
                 console.error('summary:', error);
                 const errEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
-                    .setTitle('❌ Erro no Resumo')
-                    .setDescription('Não foi possível obter o histórico de mensagens ou gerar o resumo deste canal.');
+                    .setTitle('âŒ Erro no Resumo')
+                    .setDescription('NÃ£o foi possÃ­vel obter o histÃ³rico de mensagens ou gerar o resumo deste canal.');
                 await interaction.editReply({ embeds: [errEmbed] });
             }
         } else if (commandName === 'anime_origem') {
             await handleSauceCommand(interaction);
-        } else if (commandName === 'ia_config') {
+        } else if (commandName === 'yui-config_ia') {
             if (!config.isOwner(interaction.user.id)) {
                 const errEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
-                    .setTitle('❌ Acesso Negado')
+                    .setTitle('âŒ Acesso Negado')
                     .setDescription('Comando restrito ao criador da Yui.');
                 return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
@@ -709,20 +642,20 @@ export default {
                 if (!setting || value === null) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Dados Insuficientes')
-                        .setDescription('Para configurar um provedor de IA, especifique a configuração e o valor.');
+                        .setTitle('âŒ Dados Insuficientes')
+                        .setDescription('Para configurar um provedor de IA, especifique a configuraÃ§Ã£o e o valor.');
                     return interaction.reply({ embeds: [errEmbed], ephemeral: true });
                 }
                 updateProviderSetting(provider, setting, value);
             }
             const successEmbed = new EmbedBuilder()
                 .setColor(0x10B981)
-                .setTitle('⚙️ Configurações • Parâmetros de IA')
-                .setDescription('As variáveis operacionais dos modelos de IA foram ajustadas com sucesso.');
+                .setTitle('âš™ï¸ ConfiguraÃ§Ãµes â€¢ ParÃ¢metros de IA')
+                .setDescription('As variÃ¡veis operacionais dos modelos de IA foram ajustadas com sucesso.');
             if (provider) {
                 successEmbed.addFields(
                     { name: 'Provedor', value: provider, inline: true },
-                    { name: 'Configuração', value: setting, inline: true },
+                    { name: 'ConfiguraÃ§Ã£o', value: setting, inline: true },
                     { name: 'Valor', value: String(value), inline: true }
                 );
             }
@@ -735,12 +668,12 @@ export default {
                 if (steamInfo.error) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Erro na Steam')
+                        .setTitle('âŒ Erro na Steam')
                         .setDescription(steamInfo.error);
                     return await interaction.editReply({ embeds: [errEmbed] });
                 }
 
-                let finalDesc = steamInfo.description || "Sem sinopse válida.";
+                let finalDesc = steamInfo.description || "Sem sinopse vÃ¡lida.";
                 if (finalDesc.length > 3900) finalDesc = finalDesc.substring(0, 3900) + '...';
 
                 const steamEmbed = new EmbedBuilder()
@@ -749,25 +682,25 @@ export default {
                     .setURL(steamInfo.url)
                     .setDescription(finalDesc)
                     .addFields(
-                        { name: 'Preço', value: steamInfo.discount > 0 ? `~~${steamInfo.originalPrice}~~ **${steamInfo.price}** (-${steamInfo.discount}%)` : steamInfo.price, inline: true },
-                        { name: 'Lançamento', value: steamInfo.releaseDate, inline: true },
+                        { name: 'PreÃ§o', value: steamInfo.discount > 0 ? `~~${steamInfo.originalPrice}~~ **${steamInfo.price}** (-${steamInfo.discount}%)` : steamInfo.price, inline: true },
+                        { name: 'LanÃ§amento', value: steamInfo.releaseDate, inline: true },
                         { name: 'Desenvolvedor', value: steamInfo.developers, inline: true }
                     )
-                    .setFooter({ text: 'Fonte: Loja da Steam • Yui • by oBraga' })
+                    .setFooter({ text: 'Fonte: Loja da Steam â€¢ Yui â€¢ by oBraga' })
                     .setTimestamp();
 
                 if (steamInfo.headerImage) {
                     steamEmbed.setImage(steamInfo.headerImage);
                 }
                 if (steamInfo.metacritic) {
-                    steamEmbed.addFields({ name: 'Metacritic', value: `${steamInfo.metacritic}/100 🌟`, inline: true });
+                    steamEmbed.addFields({ name: 'Metacritic', value: `${steamInfo.metacritic}/100 ðŸŒŸ`, inline: true });
                 }
 
                 let yuiComment = "";
                 try {
-                    const commentPrompt = `Eu acabei de consultar o jogo "${steamInfo.name}" na Steam via comando manual. O preço atual é ${steamInfo.price}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
+                    const commentPrompt = `Eu acabei de consultar o jogo "${steamInfo.name}" na Steam via comando manual. O preÃ§o atual Ã© ${steamInfo.price}. FaÃ§a um comentÃ¡rio CURTO (mÃ¡ximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
                     const rawComment = await generateResponse(commentPrompt, interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true });
-                    if (rawComment && !rawComment.includes('⚠️ SYSTEM ERROR')) {
+                    if (rawComment && !rawComment.includes('âš ï¸ SYSTEM ERROR')) {
                         let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
                         const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
                         if (jsonMatch) {
@@ -779,7 +712,7 @@ export default {
                         yuiComment = cleanData;
                     }
                 } catch (e) {
-                    console.warn('[SteamCommand] Falha ao gerar comentário IA:', e.message);
+                    console.warn('[SteamCommand] Falha ao gerar comentÃ¡rio IA:', e.message);
                 }
 
                 await interaction.editReply({ content: yuiComment || null, embeds: [steamEmbed] });
@@ -787,7 +720,7 @@ export default {
                 console.error('Erro no comando steam_jogo:', error);
                 const errEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
-                    .setTitle('❌ Erro de Processamento')
+                    .setTitle('âŒ Erro de Processamento')
                     .setDescription('Erro ao processar a consulta da Steam.');
                 await interaction.editReply({ embeds: [errEmbed] });
             }
@@ -801,7 +734,7 @@ export default {
                 if (convInfo.error) {
                     const errEmbed = new EmbedBuilder()
                         .setColor(0xE11D48)
-                        .setTitle('❌ Erro na Conversão')
+                        .setTitle('âŒ Erro na ConversÃ£o')
                         .setDescription(convInfo.error);
                     return await interaction.editReply({ embeds: [errEmbed] });
                 }
@@ -812,20 +745,20 @@ export default {
                 
                 const convEmbed = new EmbedBuilder()
                     .setColor(0x10B981)
-                    .setTitle(`Conversão de Moedas: ${convInfo.name}`)
+                    .setTitle(`ConversÃ£o de Moedas: ${convInfo.name}`)
                     .setDescription(`**${amountFormatted} ${convInfo.from}** equivale a **${resultFormatted} ${convInfo.to}**`)
                     .addFields(
-                        { name: 'Cotação (' + convInfo.from + ')', value: `1 ${convInfo.from} = ${rateFormatted} ${convInfo.to}`, inline: true },
-                        { name: 'Última Atualização', value: convInfo.lastUpdate || 'Desconhecida', inline: true }
+                        { name: 'CotaÃ§Ã£o (' + convInfo.from + ')', value: `1 ${convInfo.from} = ${rateFormatted} ${convInfo.to}`, inline: true },
+                        { name: 'Ãšltima AtualizaÃ§Ã£o', value: convInfo.lastUpdate || 'Desconhecida', inline: true }
                     )
-                    .setFooter({ text: 'Fonte: AwesomeAPI • Yui • by oBraga' })
+                    .setFooter({ text: 'Fonte: AwesomeAPI â€¢ Yui â€¢ by oBraga' })
                     .setTimestamp();
                     
                 let yuiComment = "";
                 try {
-                    const commentPrompt = `Eu acabei de converter ${convInfo.amount} ${convInfo.from} para ${convInfo.to} via comando manual. O resultado foi ${resultFormatted}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
+                    const commentPrompt = `Eu acabei de converter ${convInfo.amount} ${convInfo.from} para ${convInfo.to} via comando manual. O resultado foi ${resultFormatted}. FaÃ§a um comentÃ¡rio CURTO (mÃ¡ximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
                     const rawComment = await generateResponse(commentPrompt, interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true });
-                    if (rawComment && !rawComment.includes('⚠️ SYSTEM ERROR')) {
+                    if (rawComment && !rawComment.includes('âš ï¸ SYSTEM ERROR')) {
                         let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
                         const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
                         if (jsonMatch) {
@@ -837,7 +770,7 @@ export default {
                         yuiComment = cleanData;
                     }
                 } catch (e) {
-                    console.warn('[CurrencyCommand] Falha ao gerar comentário IA:', e.message);
+                    console.warn('[CurrencyCommand] Falha ao gerar comentÃ¡rio IA:', e.message);
                 }
 
                 await interaction.editReply({ content: yuiComment || null, embeds: [convEmbed] });
@@ -845,7 +778,7 @@ export default {
                 console.error('Erro no comando converter_moeda:', error);
                 const errEmbed = new EmbedBuilder()
                     .setColor(0xE11D48)
-                    .setTitle('❌ Erro de Processamento')
+                    .setTitle('âŒ Erro de Processamento')
                     .setDescription('Erro ao tentar converter essa moeda.');
                 await interaction.editReply({ embeds: [errEmbed] });
             }
@@ -854,31 +787,31 @@ export default {
             await interaction.deferReply({ ephemeral: true });
             const result = await joinVoiceCall(interaction.member, interaction.channel);
             if (result) {
-                await interaction.editReply({ content: '✅ Processando entrada no canal de voz...' });
+                await interaction.editReply({ content: 'âœ… Processando entrada no canal de voz...' });
             } else {
-                await interaction.editReply({ content: '❌ Não foi possível entrar no canal de voz.' });
+                await interaction.editReply({ content: 'âŒ NÃ£o foi possÃ­vel entrar no canal de voz.' });
             }
         } else if (commandName === 'sair-call') {
             const { leaveVoiceCall } = await import('../handlers/voiceHandler.js');
             await interaction.deferReply({ ephemeral: true });
             const result = await leaveVoiceCall(interaction.guildId, interaction.channel);
             if (result) {
-                await interaction.editReply({ content: '✅ Saí do canal de voz.' });
+                await interaction.editReply({ content: 'âœ… SaÃ­ do canal de voz.' });
             } else {
-                await interaction.editReply({ content: '❌ Não estou em nenhum canal de voz neste servidor.' });
+                await interaction.editReply({ content: 'âŒ NÃ£o estou em nenhum canal de voz neste servidor.' });
             }
         } else if (commandName === 'modo-radio') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             try {
                 const result = await startRadioMode(interaction.member, interaction.channel, client);
                 if (result.success) {
-                    await interaction.editReply({ content: '📻 Modo Rádio ativado!' });
+                    await interaction.editReply({ content: 'ðŸ“» Modo RÃ¡dio ativado!' });
                 } else {
-                    await interaction.editReply({ content: result.error || '❌ Não foi possível ativar o Modo Rádio.' });
+                    await interaction.editReply({ content: result.error || 'âŒ NÃ£o foi possÃ­vel ativar o Modo RÃ¡dio.' });
                 }
             } catch (err) {
                 console.error('[ModoRadio]', err);
-                await interaction.editReply({ content: '❌ Erro ao iniciar o Modo Rádio.' });
+                await interaction.editReply({ content: 'âŒ Erro ao iniciar o Modo RÃ¡dio.' });
             }
         } else if (commandName === 'baixar_musica_atual') {
             await interaction.deferReply();
@@ -886,30 +819,30 @@ export default {
                 const targetInput = interaction.options.getString('usuario') || interaction.user.id;
                 const musicInfo = await getCurrentMusicFromUser(targetInput, client, interaction.guildId);
                 if (!musicInfo.success) {
-                    let msg = `🎵 ${musicInfo.message}`;
+                    let msg = `ðŸŽµ ${musicInfo.message}`;
                     if (musicInfo.helpInstructions || musicInfo.reason === 'no_presence') {
-                        msg += '\n\n> **Como ativar:**\n> Vá em **Configurações do Discord → Privacidade e Segurança → Atividade de Status** e ative **"Exibir atividade atual como mensagem de status"**.';
+                        msg += '\n\n> **Como ativar:**\n> VÃ¡ em **ConfiguraÃ§Ãµes do Discord â†’ Privacidade e SeguranÃ§a â†’ Atividade de Status** e ative **"Exibir atividade atual como mensagem de status"**.';
                     }
                     return await interaction.editReply({ content: msg });
                 }
                 const infoEmbed = new EmbedBuilder()
                     .setColor(0x1DB954)
-                    .setTitle(`${musicInfo.platformEmoji} Música Identificada`)
-                    .setDescription(`**${musicInfo.title}**\n🎤 ${musicInfo.artist}${musicInfo.album ? `\n📀 ${musicInfo.album}` : ''}`)
+                    .setTitle(`${musicInfo.platformEmoji} MÃºsica Identificada`)
+                    .setDescription(`**${musicInfo.title}**\nðŸŽ¤ ${musicInfo.artist}${musicInfo.album ? `\nðŸ“€ ${musicInfo.album}` : ''}`)
                     .addFields({ name: 'Plataforma', value: musicInfo.platformLabel, inline: true });
                 if (musicInfo.targetUser && musicInfo.targetUser.id !== interaction.user.id) {
-                    infoEmbed.addFields({ name: 'Usuário', value: `<@${musicInfo.targetUser.id}>`, inline: true });
+                    infoEmbed.addFields({ name: 'UsuÃ¡rio', value: `<@${musicInfo.targetUser.id}>`, inline: true });
                 }
-                infoEmbed.setFooter({ text: `Yui Music • ${musicInfo.platformLabel}` }).setTimestamp();
+                infoEmbed.setFooter({ text: `Yui Music â€¢ ${musicInfo.platformLabel}` }).setTimestamp();
                 if (musicInfo.coverUrl) infoEmbed.setThumbnail(musicInfo.coverUrl);
                 const userId = interaction.user.id;
                 if (!canBypass(userId) && isUserBusy(userId)) {
-                    return await interaction.editReply({ content: '⏳ Você já tem um download em andamento. Aguarde.' });
+                    return await interaction.editReply({ content: 'â³ VocÃª jÃ¡ tem um download em andamento. Aguarde.' });
                 }
                 const keepEmbed = config.keepMusicEmbed !== false;
                 const downloadingEmbed = EmbedBuilder.from(infoEmbed);
                 if (keepEmbed) {
-                    downloadingEmbed.addFields({ name: 'Status', value: '⏳ Baixando música, aguarde...', inline: true });
+                    downloadingEmbed.addFields({ name: 'Status', value: 'â³ Baixando mÃºsica, aguarde...', inline: true });
                 }
                 await interaction.editReply({ embeds: [downloadingEmbed] });
                 lockUser(userId);
@@ -920,14 +853,14 @@ export default {
                         { user: interaction.user, userId, userTag: interaction.user.tag, guild: interaction.guild }
                     );
                     if (musicResult.error) {
-                        await interaction.editReply({ content: `❌ ${musicResult.error}`, embeds: [] });
+                        await interaction.editReply({ content: `âŒ ${musicResult.error}`, embeds: [] });
                     } else if (musicResult.isAmbiguous) {
                         await interaction.editReply({ content: musicResult.textList, components: musicResult.components, embeds: [musicResult.embed] });
                     } else if (musicResult.success) {
                         if (keepEmbed) {
-                            await interaction.editReply({ content: `✅ \`${musicResult.track.title} - ${musicResult.track.artist}\``, embeds: [infoEmbed], files: [musicResult.attachment] });
+                            await interaction.editReply({ content: `âœ… \`${musicResult.track.title} - ${musicResult.track.artist}\``, embeds: [infoEmbed], files: [musicResult.attachment] });
                         } else {
-                            await interaction.editReply({ content: `✅ \`${musicResult.track.title} - ${musicResult.track.artist}\``, embeds: [], files: [musicResult.attachment] });
+                            await interaction.editReply({ content: `âœ… \`${musicResult.track.title} - ${musicResult.track.artist}\``, embeds: [], files: [musicResult.attachment] });
                         }
                         if (typeof musicResult.cleanup === 'function') musicResult.cleanup();
                     }

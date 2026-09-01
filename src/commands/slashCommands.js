@@ -3,7 +3,6 @@ import {
     ApplicationIntegrationType,
     InteractionContextType,
     PermissionFlagsBits,
-    Routes,
     ChannelType
 } from 'discord.js';
 
@@ -21,23 +20,6 @@ const setGlobalContext = (builder) => {
 };
 
 export const commands = [
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('ia_chat')
-            .setDescription('[User] Faça uma pergunta ou pedido à IA.')
-            .addStringOption(option =>
-                option.setName('prompt')
-                    .setDescription('Sua pergunta ou pedido para a IA.')
-                    .setRequired(true))
-            .addStringOption(option =>
-                option.setName('visibilidade')
-                    .setDescription('A resposta deve ser pública no chat? (Padrão: Não/Privado)')
-                    .setRequired(false)
-                    .addChoices(
-                        { name: 'Sim (Público)', value: 'public' },
-                        { name: 'Não (Privado)', value: 'private' }
-                    ))
-    ),
     setGlobalContext(
         new SlashCommandBuilder()
             .setName('ajuda')
@@ -64,7 +46,7 @@ export const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('ia_imagem')
+            .setName('yui-imagem')
             .setDescription('[User] Gera uma imagem nova a partir do texto.')
             .addStringOption(option =>
                 option.setName('prompt')
@@ -101,24 +83,6 @@ export const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('baixar_musica')
-            .setDescription('[User] Baixa o áudio de um vídeo em MP3.')
-            .addStringOption(option =>
-                option.setName('url')
-                    .setDescription('A URL do vídeo.')
-                    .setRequired(true))
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
-            .setName('baixar_musica_deezer')
-            .setDescription('[User] Baixa áudios de música em alta qualidade (Deezer).')
-            .addStringOption(option =>
-                option.setName('nome')
-                    .setDescription('O nome da música e/ou artista.')
-                    .setRequired(true))
-    ),
-    setGlobalContext(
-        new SlashCommandBuilder()
             .setName('baixar_video')
             .setDescription('[User] Baixa um vídeo em MP4.')
             .addStringOption(option =>
@@ -132,7 +96,7 @@ export const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('config_servidor')
+            .setName('yui-servidor')
             .setDescription('[Server Admin] Central de configurações do servidor e canal.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
             .addStringOption(opt => opt.setName('instrucao').setDescription('Nova instrução de comportamento para o canal.').setRequired(false))
@@ -163,7 +127,7 @@ export const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('ia_ferramentas')
+            .setName('yui-ferramentas')
             .setDescription('[Server Admin] Gerencie e ative/desative ferramentas (pesquisa, imagens, voz) neste servidor.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
             .addStringOption(option =>
@@ -204,7 +168,7 @@ export const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('ia_config')
+            .setName('yui-config_ia')
             .setDescription('[Creator] Configura timeouts e parâmetros dos modelos de IA.')
             .addStringOption(option =>
                 option.setName('provider')
@@ -233,7 +197,7 @@ export const commands = [
     ),
     setGlobalContext(
         new SlashCommandBuilder()
-            .setName('config_criador')
+            .setName('yui-criador')
             .setDescription('[Creator] Central de controle master do criador.')
             .addSubcommand(sub =>
                 sub.setName('modelo')
@@ -340,18 +304,3 @@ export const commands = [
                     .setRequired(false))
     ),
 ].map(command => command.toJSON());
-
-async function registerCommands(client, rest) {
-    try {
-        console.log('Iniciando o registro Global (User/Guild) dos comandos slash (/).');
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: commands },
-        );
-        console.log('Comandos slash (/) registrados com sucesso para todos os contextos!');
-    } catch (error) {
-        console.error('Erro ao registrar comandos slash:', error);
-    }
-}
-
-export default { commands, registerCommands };

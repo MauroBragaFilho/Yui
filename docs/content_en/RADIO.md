@@ -73,7 +73,7 @@ The visual Radio panel (`radioEmbed.js`) provides real-time interactive controls
   - `⏭️ Next` / `⏮️ Prev`: Navigates between queue/history tracks.
   - `🔀 Shuffle`: Toggles random queue order.
   - `🔁 Loop`: Cycles modes (Off ➔ Playlist ➔ Song).
-  - `⚡ Voice: Direct` / `🧠 Voice: AI` / `🔇 Voice: Off`: Cycles through all 3 voice modes (`OFF` ➔ `IA` ➔ `DIRECT` ➔ `OFF`). *(Disabled by default per server for token economy. If disabled, alerts the user to ask a Server Admin to enable `radio_voice_stt` via `/ia_ferramentas`).*
+  - `⚡ Voice: Direct` / `🧠 Voice: AI` / `🔇 Voice: Off`: Cycles through all 3 voice modes (`OFF` ➔ `IA` ➔ `DIRECT` ➔ `OFF`). *(Disabled by default per server for token economy. If disabled, alerts the user to ask a Server Admin to enable `radio_voice_stt` via `/yui-ferramentas`).*
   - `📋 Queue`: Displays ephemeral menu with upcoming tracks.
   - `👋 Leave`: Stops radio mode and disconnects the bot.
 - **Ambiguous Cancel**: The `Cancel` button on ambiguous search selections removes components and clears pending state.

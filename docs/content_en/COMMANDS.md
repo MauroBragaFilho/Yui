@@ -18,7 +18,7 @@ This document details all slash commands (/) available in Yui, their features, p
 
 ## 🧠 AI & Chat
 
-### `/ia_chat`
+### `/yui`
 
 The primary command for interacting with Yui's brain.
 
@@ -54,7 +54,7 @@ Configures Yui to intrude into conversations without being called.
 
 ## 🎨 Images & Art
 
-### `/ia_imagem`
+### `/yui-imagem`
 
 Generates images using various diffusion models.
 
@@ -70,17 +70,11 @@ Generates images using various diffusion models.
 
 ### `/baixar_musica`
 
-Extracts and converts video audio into MP3 format.
+Central music download command in MP3 — accepts a link or a search.
 
-- **URL:** The link to the video (YouTube, Instagram Reels, or TikTok).
-- **Advanced:** Uses `yt-dlp` to download the best audio stream and `ffmpeg` to cleanly convert it to MP3, deleting local temporary files afterward.
-
-### `/baixar_musica_deezer`
-
-Searches and downloads high quality music tracks directly from Deezer by song title or artist.
-
-- **nome:** The song name and/or artist you want to search and download.
-- **Advanced:** Uses Deezer REST API and `deemix` engine to download official studio audio in HQ MP3. Features a Match Confidence Score algorithm and presents an interactive select dropdown when ambiguous. Temporary MP3 files are automatically cleaned up right after sending.
+- **URL (optional):** Link from YouTube, Spotify, Instagram, or TikTok.
+- **Busca (optional):** Song name and/or artist (searches the Deezer catalog).
+- **Advanced:** Automatically detects the URL source. For YouTube/Instagram/TikTok it uses `yt-dlp` + `ffmpeg`; for Spotify it uses `spot-dlp` natively when available, falling back to `yt-dlp`; for name/artist it uses the Deezer REST API with the `deemix` engine in HQ MP3 (with an interactive selection menu when ambiguous). Detects the server upload limit and reports the file size. Temporary files are removed after sending.
 
 ### `/baixar_video`
 
@@ -133,7 +127,7 @@ Checks official information, price, and status in the Steam store.
 
 ## ⚙️ Configuration & Administration
 
-### `/config_servidor` (Server Admin)
+### `/yui-servidor` (Server Admin)
 
 Unified public dashboard for server configuration.
 
@@ -143,7 +137,7 @@ Unified public dashboard for server configuration.
 - **Mentions Response:** Toggles response to `@everyone` and `@here` mentions.
 - **MCP Tools:** Opens the interactive MCP Tool Manager with tool descriptions, status list, and toggle buttons.
 
-### `/config_criador` (Owner / Creator)
+### `/yui-criador` (Owner / Creator)
 
 Master Control Center for global Yui network management (hidden/ephemeral for creator).
 
@@ -154,7 +148,7 @@ Master Control Center for global Yui network management (hidden/ephemeral for cr
 - **MCP Tools:** Server MCP tool management.
 - **Bot Config:** AI runtime settings.
 
-### `/ia_ferramentas` (Server Admin)
+### `/yui-ferramentas` (Server Admin)
 
 Independent slash command for server admins to manage MCP tools.
 
@@ -166,7 +160,7 @@ Independent slash command for server admins to manage MCP tools.
 
 Displays and records acceptance of Yui Terms of Service to unlock bot features on the server.
 
-### `/ia_config` (Owner)
+### `/yui-config_ia` (Owner)
 
 Low-level technical configuration for AI models (`Timeout`, `Temperature`, `Max Tokens`).
 
@@ -174,8 +168,8 @@ Low-level technical configuration for AI models (`Timeout`, `Temperature`, `Max 
 
 ## 💡 Expert Tips
 
-- 💡 **Privacy First:** Use the `visibility: Private` parameter in the `/ia_chat` command to handle sensitive matters or avoid cluttering the chat with long AI texts.
-- 💡 **Image Quality:** When using `/ia_imagem`, put effort into the `negative_prompt` with terms like `blurry, deformed, low quality` to force the AI to generate sharper results.
+- 💡 **Privacy First:** Use the `visibility: Private` parameter in the `/yui` command to handle sensitive matters or avoid cluttering the chat with long AI texts.
+- 💡 **Image Quality:** When using `/yui-imagem`, put effort into the `negative_prompt` with terms like `blurry, deformed, low quality` to force the AI to generate sharper results.
 - 💡 **AI Diversity:** If an image provider is slow, try changing the `provider` manually. `Pollinations` is generally the most stable, while `Together` offers high-fidelity FLUX models.
 - 💡 **Context History:** Yui "remembers" the channel's latest messages. Use this to your advantage when asking for summaries or continuing a conversation without needing to repeat everything.
 

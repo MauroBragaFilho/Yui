@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { setGlobalContext } from '../setGlobalContext.js';
 import { config } from '../../config/index.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { getKnowledgeContext } from '../../utils/knowledgeBase.js';
@@ -178,20 +179,38 @@ function buildSystemPrompt(pergunta) {
 }
 
 export const askCommand = {
-  data: new SlashCommandBuilder()
-    .setName('yui-perguntar')
-    .setDescription('Converse com a Yui sobre GTA Online.')
-    .addStringOption((option) =>
-      option
-        .setName('mensagem')
-        .setDescription('O que você quer perguntar ou discutir sobre o GTA Online')
-        .setRequired(true)
-    ),
+  data: setGlobalContext(
+    new SlashCommandBuilder()
+      .setName('yui')
+      .setDescription('Converse com a Yui — IA especialista em GTA Online.')
+      .addStringOption((option) =>
+        option
+          .setName('mensagem')
+          .setDescription('Sua pergunta ou pedido para a Yui.')
+          .setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName('visibilidade')
+          .setDescription('Resposta pública ou privada? (Padrão: Privada)')
+          .setRequired(false)
+          .addChoices(
+            { name: 'Público', value: 'public' },
+            { name: 'Privado', value: 'private' }
+          )
+      )
+  ),
 
   async execute(interaction) {
-    await interaction.deferReply();
-
     const pergunta = interaction.options.getString('mensagem');
+    const visibility = interaction.options.getString('visibilidade');
+    const isDM = !interaction.guild;
+
+    // Em DM sempre responde como ephemeral (privado).
+    // Em servidor respeita a escolha do usuário (padrão: privado).
+    const ephemeral = isDM || visibility !== 'public';
+
+    await interaction.deferReply({ ephemeral });
 
     try {
       const resposta = await generateResponse(

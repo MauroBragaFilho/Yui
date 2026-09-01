@@ -90,7 +90,7 @@ async function joinVoiceCall(member, textChannel, replyFn = null) {
 
     const { isToolDisabled } = await import('./llmHandler.js');
     if (isToolDisabled(guildId, 'join_voice_call')) {
-        await sendOrReply('⚠️ As ferramentas de voz (**Yui Assistant**) estão desativadas neste servidor por padrão. Um administrador pode ativá-las usando o comando `/ia_ferramentas`.', textChannel, replyFn);
+        await sendOrReply('⚠️ As ferramentas de voz (**Yui Assistant**) estão desativadas neste servidor por padrão. Um administrador pode ativá-las usando o comando `/yui-ferramentas`.', textChannel, replyFn);
         return false;
     }
 

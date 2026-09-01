@@ -73,7 +73,7 @@ O painel visual do Rádio (`radioEmbed.js`) fornece controles interativos em tem
   - `⏭️ Próxima` / `⏮️ Anterior`: Navega entre faixas da fila/histórico.
   - `🔀 Embaralhar`: Ativa/desativa ordem aleatória.
   - `🔁 Loop`: Alterna modos (Off ➔ Playlist ➔ Música).
-  - `⚡ Voz: Direct` / `🧠 Voz: IA` / `🔇 Voz: Off`: Alterna ciclicamente entre os três modos de escuta por voz (`OFF` ➔ `IA` ➔ `DIRECT` ➔ `OFF`). *(Desativada por padrão no servidor para economia de recursos. Caso desativada, exibe aviso para que um Administrador ative a ferramenta `radio_voice_stt` via `/ia_ferramentas`).*
+  - `⚡ Voz: Direct` / `🧠 Voz: IA` / `🔇 Voz: Off`: Alterna ciclicamente entre os três modos de escuta por voz (`OFF` ➔ `IA` ➔ `DIRECT` ➔ `OFF`). *(Desativada por padrão no servidor para economia de recursos. Caso desativada, exibe aviso para que um Administrador ative a ferramenta `radio_voice_stt` via `/yui-ferramentas`).*
   - `📋 Fila`: Exibe menu efêmero com as próximas músicas.
   - `👋 Sair`: Encerra o modo rádio e desconecta o bot.
 - **Cancelamento Ambíguo**: O botão `Cancelar` nas escolhas de busca ambígua remove os botões da tela e limpa a pendência.

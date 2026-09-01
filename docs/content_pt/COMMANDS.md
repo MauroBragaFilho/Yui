@@ -18,7 +18,7 @@ Este documento detalha todos os comandos slash (/) disponíveis na Yui, suas fun
 
 ## 🧠 IA & Chat
 
-### `/ia_chat`
+### `/yui`
 
 O comando principal para interagir com o cérebro da Yui.
 
@@ -54,7 +54,7 @@ Configura a Yui para se intrometer nas conversas sem ser chamada.
 
 ## 🎨 Imagens & Arte
 
-### `/ia_imagem`
+### `/yui-imagem`
 
 Gera imagens usando diversos modelos de difusão.
 
@@ -86,17 +86,11 @@ Desconecta a Yui do canal de voz em que ela está conectada no servidor.
 
 ### `/baixar_musica`
 
-Extrai e converte o áudio de vídeos em formato MP3.
+Central de downloads de música em MP3 — aceita link ou busca.
 
-- **URL:** O link do vídeo (YouTube, Instagram Reels ou TikTok).
-- **Advanced:** Utiliza `yt-dlp` para baixar a melhor qualidade de áudio e `ffmpeg` para converter em MP3 de forma limpa, limpando os arquivos locais em seguida.
-
-### `/baixar_musica_deezer`
-
-Busca e baixa faixas de música de alta qualidade diretamente do catálogo Deezer pelo nome da música ou artista.
-
-- **Nome:** O nome da música e/ou artista que deseja pesquisar e baixar.
-- **Advanced:** Utiliza a API REST do Deezer e o motor `deemix` para baixar o áudio de estúdio oficial em MP3 HQ. Possui um algoritmo de pontuação de fidelidade (Match Confidence Score) e exibe um menu de seleção interativo caso haja ambiguidade. Os arquivos baixados são 100% temporários e removidos imediatamente após o envio.
+- **URL (opcional):** Link do YouTube, Spotify, Instagram ou TikTok.
+- **Busca (opcional):** Nome da música e/ou artista (busca no catálogo do Deezer).
+- **Advanced:** Detecta automaticamente a origem da URL. Para YouTube/Instagram/TikTok usa `yt-dlp` + `ffmpeg`; para Spotify usa `spot-dlp` nativamente quando disponível, com fallback para `yt-dlp`; para nome/artista usa a API REST do Deezer com o motor `deemix` em MP3 HQ (com menu de seleção interativo em caso de ambiguidade). Detecta o limite de upload do servidor e informa o tamanho do arquivo. Arquivos temporários são removidos após o envio.
 
 ### `/baixar_video`
 
@@ -149,7 +143,7 @@ Consulta informações oficiais, preço e status na loja da Steam.
 
 ## ⚙️ Configuração & Administração
 
-### `/config_servidor` (Server Admin)
+### `/yui-servidor` (Server Admin)
 
 Painel gráfico unificado e público no chat para administração do servidor.
 
@@ -159,7 +153,7 @@ Painel gráfico unificado e público no chat para administração do servidor.
 - **Respostas a Mentions:** Configura se a IA deve responder quando o servidor for mencionado em `@everyone` ou `@here`.
 - **Ferramentas MCP:** Abre o Gerenciador Gráfico de Ferramentas MCP com lista de ativas/desativadas, descrições detalhadas e botões de ativar/desativar.
 
-### `/config_criador` (Dono / Criador)
+### `/yui-criador` (Dono / Criador)
 
 Central de Controle Master para gerenciamento global da rede Yui (oculta e restrita ao criador).
 
@@ -170,7 +164,7 @@ Central de Controle Master para gerenciamento global da rede Yui (oculta e restr
 - **Ferramentas MCP:** Gerencia a ativação de ferramentas MCP por servidor.
 - **Bot Config:** Abre as configurações de Runtime da IA.
 
-### `/ia_ferramentas` (Server Admin)
+### `/yui-ferramentas` (Server Admin)
 
 Comando independente para administradores de servidor gerenciarem as ferramentas da IA.
 
@@ -182,7 +176,7 @@ Comando independente para administradores de servidor gerenciarem as ferramentas
 
 Exibe e registra o aceite dos Termos de Serviço da Yui para liberar e autorizar as funções do bot no servidor.
 
-### `/ia_config` (Dono)
+### `/yui-config_ia` (Dono)
 
 Ajusta parâmetros técnicos de baixo nível dos modelos de IA (`Timeout`, `Temperatura`, `Max Tokens`).
 
@@ -190,8 +184,8 @@ Ajusta parâmetros técnicos de baixo nível dos modelos de IA (`Timeout`, `Temp
 
 ## 💡 Dicas de Especialista
 
-- 💡 **Privacidade em Primeiro Lugar:** Use o parâmetro `visibilidade: Privado` no comando `/ia_chat` para tratar de assuntos sensíveis ou evitar poluir o chat com textos longos da IA.
-- 💡 **Qualidade de Imagem:** Ao usar `/ia_imagem`, capriche no `negative_prompt` com termos como `blurry, deformed, low quality` para forçar a IA a gerar resultados mais nítidos.
+- 💡 **Privacidade em Primeiro Lugar:** Use o parâmetro `visibilidade: Privado` no comando `/yui` para tratar de assuntos sensíveis ou evitar poluir o chat com textos longos da IA.
+- 💡 **Qualidade de Imagem:** Ao usar `/yui-imagem`, capriche no `negative_prompt` com termos como `blurry, deformed, low quality` para forçar a IA a gerar resultados mais nítidos.
 - 💡 **Multiversidade de IAs:** Se um provedor de imagem estiver lento, experimente trocar o `provider` manualmente. O `Pollinations` é geralmente o mais estável, enquanto o `Together` oferece modelos FLUX de alta fidelidade.
 - 💡 **Histórico de Contexto:** A Yui "lembra" das últimas mensagens do canal. Use isso a seu favor ao pedir resumos ou continuar uma conversa sem precisar repetir tudo.
 

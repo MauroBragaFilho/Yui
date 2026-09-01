@@ -89,7 +89,7 @@ async function handleRadioButton(interaction, client) {
             const { isToolDisabled } = await import('../handlers/llmHandler.js');
             if (isToolDisabled(guildId, 'radio_voice_stt')) {
                 return await interaction.reply({
-                    content: '⚠️ **Reconhecimento de Voz (STT) Desativado no Servidor:** A escuta por voz do Rádio está desativada neste servidor por padrão para economia de recursos. Peça a um Administrador do servidor para ativá-la usando o comando `/ia_ferramentas`.',
+                    content: '⚠️ **Reconhecimento de Voz (STT) Desativado no Servidor:** A escuta por voz do Rádio está desativada neste servidor por padrão para economia de recursos. Peça a um Administrador do servidor para ativá-la usando o comando `/yui-ferramentas`.',
                     flags: MessageFlags.Ephemeral
                 });
             }

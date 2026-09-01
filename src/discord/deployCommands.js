@@ -7,6 +7,7 @@ import { dailyCommand } from './commands/daily.js';
 import { weeklyCommand } from './commands/weekly.js';
 import { newsCommand } from './commands/news.js';
 import { askCommand } from './commands/ask.js';
+import { baixarMusicaCommand } from './commands/baixarMusica.js';
 import { commands as hikariCommands } from '../commands/slashCommands.js';
 
 const commands = [
@@ -16,6 +17,7 @@ const commands = [
   weeklyCommand.data.toJSON(),
   newsCommand.data.toJSON(),
   askCommand.data.toJSON(),
+  baixarMusicaCommand.data.toJSON(),
   ...hikariCommands.map((command) => typeof command.toJSON === 'function' ? command.toJSON() : command),
 ];
 

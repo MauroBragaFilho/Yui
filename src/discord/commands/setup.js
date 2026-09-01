@@ -1,32 +1,35 @@
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
+import { setGlobalContext } from '../setGlobalContext.js';
 import { guildRepository } from '../../database/repositories/guildRepo.js';
 
 export const setupCommand = {
-  data: new SlashCommandBuilder()
-    .setName('yui-configurar')
-    .setDescription('Configura os canais de transmissão da Yui neste servidor.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addChannelOption((option) =>
-      option
-        .setName('noticias')
-        .setDescription('Canal onde serão publicadas as notícias do Rockstar Newswire')
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        .setRequired(false)
-    )
-    .addChannelOption((option) =>
-      option
-        .setName('diario')
-        .setDescription('Canal onde serão publicados os resets diários (Gun Van, Dealers, etc.)')
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        .setRequired(false)
-    )
-    .addChannelOption((option) =>
-      option
-        .setName('semanal')
-        .setDescription('Canal onde serão publicadas as atualizações semanais (Bônus, Pódio, etc.)')
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        .setRequired(false)
-    ),
+  data: setGlobalContext(
+    new SlashCommandBuilder()
+      .setName('yui-configurar')
+      .setDescription('Configura os canais de transmissão da Yui neste servidor.')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addChannelOption((option) =>
+        option
+          .setName('noticias')
+          .setDescription('Canal onde serão publicadas as notícias do Rockstar Newswire')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(false)
+      )
+      .addChannelOption((option) =>
+        option
+          .setName('diario')
+          .setDescription('Canal onde serão publicados os resets diários (Gun Van, Dealers, etc.)')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(false)
+      )
+      .addChannelOption((option) =>
+        option
+          .setName('semanal')
+          .setDescription('Canal onde serão publicadas as atualizações semanais (Bônus, Pódio, etc.)')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(false)
+      )
+  ),
 
   async execute(interaction) {
     const newsChannel = interaction.options.getChannel('noticias');

@@ -1,20 +1,23 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { setGlobalContext } from '../setGlobalContext.js';
 import { newsRepository } from '../../database/repositories/newsRepo.js';
 import { newswireEngine } from '../../engines/newswire/index.js';
 import { createNewswireEmbed } from '../embeds/newswireEmbed.js';
 
 export const newsCommand = {
-  data: new SlashCommandBuilder()
-    .setName('gta-noticias')
-    .setDescription('Exibe as últimas notícias publicadas no Rockstar Newswire.')
-    .addIntegerOption((option) =>
-      option
-        .setName('quantidade')
-        .setDescription('Quantas notícias exibir (padrão: 2)')
-        .setMinValue(1)
-        .setMaxValue(5)
-        .setRequired(false)
-    ),
+  data: setGlobalContext(
+    new SlashCommandBuilder()
+      .setName('gta-noticias')
+      .setDescription('Exibe as últimas notícias publicadas no Rockstar Newswire.')
+      .addIntegerOption((option) =>
+        option
+          .setName('quantidade')
+          .setDescription('Quantas notícias exibir (padrão: 2)')
+          .setMinValue(1)
+          .setMaxValue(5)
+          .setRequired(false)
+      )
+  ),
 
   async execute(interaction) {
     await interaction.deferReply();

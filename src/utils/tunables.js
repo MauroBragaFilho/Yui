@@ -7,7 +7,6 @@ import { logger } from './logger.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const TUNABLES_PATH = path.join(__dirname, '../data/tunables-decrypted.json');
-const LABELS_PATH = path.join(__dirname, '../data/labels.json');
 const LABELS_PT_PATH = path.join(__dirname, '../data/labelsPT.json');
 
 // Fonte real e conhecida da comunidade GTA (RDO.GG Tunables, mantido por Senexis),
@@ -15,7 +14,6 @@ const LABELS_PT_PATH = path.join(__dirname, '../data/labelsPT.json');
 const TUNABLES_URL = 'https://api.rdo.gg/tunables/gta/pcros/';
 
 let tunablesData = null;
-const labelsData = JSON.parse(fs.readFileSync(LABELS_PATH, 'utf8'));
 const labelsDataPT = JSON.parse(fs.readFileSync(LABELS_PT_PATH, 'utf8'));
 
 function readTunablesFile() {
@@ -55,13 +53,9 @@ export function getTunable(tunable) {
 
   if (tunableValue !== undefined) {
     if (typeof tunableValue === 'string') {
-      // Prioriza o nome em português; se não houver tradução cadastrada,
-      // cai de volta para o nome original em inglês.
+      // Traduz a chave do tunable para português usando o labelsPT.json.
       if (labelsDataPT[tunableValue] !== undefined) {
         return labelsDataPT[tunableValue];
-      }
-      if (labelsData[tunableValue] !== undefined) {
-        return labelsData[tunableValue];
       }
     }
     return tunableValue;

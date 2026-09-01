@@ -1,7 +1,7 @@
 # Atualização — Dados de Veículos e Armas (gta-v-data-dumps)
 
 Integra o repositório [DurtyFree/gta-v-data-dumps](https://github.com/DurtyFree/gta-v-data-dumps)
-ao `/yui-perguntar`, permitindo que a IA responda com dados técnicos reais
+ao `/yui`, permitindo que a IA responda com dados técnicos reais
 de veículos e armas do jogo (classe, fabricante, categoria, etc.) em vez
 de depender só do conhecimento genérico de treinamento do modelo.
 
@@ -86,8 +86,8 @@ o cache local como fallback caso o GitHub esteja indisponível.
 Depois de reiniciar o bot, teste com:
 
 ```
-/yui-perguntar mensagem: qual a classe do Truffled Adder?
-/yui-perguntar mensagem: me fala sobre a Carbine Rifle
+/yui mensagem: qual a classe do Truffled Adder?
+/yui mensagem: me fala sobre a Carbine Rifle
 ```
 
 Se a IA responder com dados específicos (classe, fabricante, categoria)

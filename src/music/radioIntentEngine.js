@@ -62,6 +62,4 @@ function parseRadioIntent(text) {
     return null;
 }
 
-module.exports = {
-    parseRadioIntent
-};
+export { parseRadioIntent };

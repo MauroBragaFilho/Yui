@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "D:\\Projetos\\Yui\\logs\\.3a5ac170a539f7655f2b5798968a5ac930d06c0c-audit.json",
+    "files": [
+        {
+            "date": 1788270717178,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-09-01.log",
+            "hash": "e26322f331fd3bf6a41d3a68ae651445a02e09bcc958f9682ec2813f7a247546"
+        }
+    ],
+    "hashType": "sha256"
+}

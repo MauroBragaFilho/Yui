@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { setGlobalContext } from '../setGlobalContext.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { gtaoEngine } from '../../engines/gtao/index.js';
 import { buildWeeklyPaginatedEmbeds, buildWeeklyPaginationRow } from '../../engines/gtao/weeklyAnalysis.js';
@@ -12,9 +13,11 @@ function getCurrentWeekKey() {
 }
 
 export const weeklyCommand = {
-  data: new SlashCommandBuilder()
-    .setName('gta-semanal')
-    .setDescription('Consulta sob demanda os eventos, descontos e a análise da IA sobre a semana atual do GTA Online.'),
+  data: setGlobalContext(
+    new SlashCommandBuilder()
+      .setName('gta-semanal')
+      .setDescription('Consulta sob demanda os eventos, descontos e a análise da IA sobre a semana atual do GTA Online.')
+  ),
 
   async execute(interaction) {
     await interaction.deferReply();
