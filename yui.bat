@@ -1,6 +1,7 @@
+:: (linha em branco proposital acima para absorver o BOM UTF-8)
 @echo off
 chcp 65001 > nul
-title Yui - GTA Online Updates - Painel de Controle
+title Yui - Painel de Controle
 
 :: Habilita processamento ANSI/VT no console atual (Windows 10/11)
 :: e obtem o caractere ESC real de forma confiavel via PowerShell.
@@ -16,7 +17,7 @@ set "RESET=%ESC%[0m"
 cls
 echo %CYAN%
 echo ===================================================
-echo     Yui - GTA Online Updates - Painel de Controle
+echo     Yui - Painel de Controle
 echo ===================================================
 echo.
 
@@ -47,9 +48,11 @@ echo [1] Iniciar Yui (Producao/Desenvolvimento)
 echo [2] Testar Coleta do Newswire Engine (Puppeteer isolado)
 echo [3] Testar Coleta do GTAO Engine (Sistemas Diarios/Semanais)
 echo [4] Registrar / Atualizar Slash Commands no Discord
+echo [5] Conectar a Maquina SSH
+
 echo.
 set "opt="
-set /p "opt=Digite a opcao desejada [0-4]: "
+set /p "opt=Digite a opcao desejada [0-5]: "
 echo %RESET%
 
 if "%opt%"=="1" (
@@ -85,11 +88,17 @@ if "%opt%"=="4" (
     pause
     goto MENU
 )
+if "%opt%"=="5" (
+    echo.
+    echo %CYAN%[INFO] Conectando a maquina SSH...%RESET%
+    ssh -i "%USERPROFILE%\.ssh\Yui.pem" ubuntu@ec2-52-67-29-69.sa-east-1.compute.amazonaws.com
+    pause
+    goto MENU
+)
 if "%opt%"=="0" (
     echo %RESET%Encerrando...
     exit /b 0
 )
-
 echo %RED%Opcao invalida! Tente novamente.%RESET%
 echo.
 goto MENU
