@@ -6,6 +6,7 @@ import {
     StreamType
 } from '@discordjs/voice';
 import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -13,14 +14,37 @@ import { getSession, updateSession, nextTrack } from './radioDatabase.js';
 import { downloadTrackToDisk } from './radioProviders.js';
 import { buildRadioEmbed } from './radioEmbed.js';
 import { createYouTubeProgressiveStream } from './youtubeBufferStream.js';
+import { getFfmpegPath } from '../utils/binaries.js';
 
 const players = new Map();
 const activeStreams = new Map();
 const transitioningGuilds = new Set();
 const CHIME_PATH = path.join(__dirname, 'data', 'chime.opus');
+const PCM_SAMPLE_RATE = 48000;
+const PCM_CHANNELS = 2;
 
 function getPlayer(guildId) {
     return players.get(guildId) || null;
+}
+
+/**
+ * Encerra o stream ativo de um guild, lidando tanto com o YouTubeBufferStream
+ * (tem .destroy()) quanto com o handle { process, stream } do ffmpeg (Deezer).
+ */
+function destroyActiveStream(guildId) {
+    const active = activeStreams.get(guildId);
+    if (!active) return;
+    try {
+        if (active.process && typeof active.process.kill === 'function') {
+            try { active.process.kill('SIGKILL'); } catch (_) {}
+        }
+        if (active.stream) {
+            try { active.stream.destroy(); } catch (_) {}
+        } else if (typeof active.destroy === 'function') {
+            try { active.destroy(); } catch (_) {}
+        }
+    } catch (_) {}
+    activeStreams.delete(guildId);
 }
 
 function createChimeBuffer() {
@@ -54,10 +78,8 @@ async function playTrack(guildId, track, textChannel, client) {
 
     transitioningGuilds.add(guildId);
 
-    const existingStream = activeStreams.get(guildId);
-    if (existingStream) {
-        try { existingStream.destroy(); } catch (_) {}
-        activeStreams.delete(guildId);
+    if (activeStreams.get(guildId)) {
+        destroyActiveStream(guildId);
     }
 
     let player = players.get(guildId);
@@ -106,7 +128,10 @@ async function playTrack(guildId, track, textChannel, client) {
 
             updateSession(guildId, { status: 'PLAYING', currentTrack: { ...track, localPath: filePath } });
 
-            const resource = createAudioResource(filePath, { inlineVolume: false });
+            const pcmHandle = createFilePcmStream(filePath);
+            activeStreams.set(guildId, pcmHandle);
+            pcmHandle.stream.on('error', () => {});
+            const resource = createAudioResource(pcmHandle.stream, { inputType: StreamType.Raw });
             player.play(resource);
 
             await updateEmbed(guildId, textChannel, client);
@@ -136,11 +161,7 @@ async function handleTrackEnd(guildId, textChannel, client) {
     transitioningGuilds.add(guildId);
 
     try {
-        const activeStream = activeStreams.get(guildId);
-        if (activeStream) {
-            try { activeStream.destroy(); } catch (_) {}
-            activeStreams.delete(guildId);
-        }
+        destroyActiveStream(guildId);
 
         const session = getSession(guildId);
         if (!session || session._leaving || session.status === 'STOPPED') return;
@@ -176,11 +197,7 @@ async function resumePlayer(guildId) {
 }
 
 function stopPlayer(guildId) {
-    const activeStream = activeStreams.get(guildId);
-    if (activeStream) {
-        try { activeStream.destroy(); } catch (_) {}
-        activeStreams.delete(guildId);
-    }
+    destroyActiveStream(guildId);
 
     const player = players.get(guildId);
     if (player) {
@@ -227,6 +244,28 @@ async function updateEmbed(guildId, textChannel, client) {
     } finally {
         embedUpdateLocksMap.delete(guildId);
     }
+}
+
+/**
+ * Abre ffmpeg para decodificar um arquivo de áudio local em PCM s16le (48kHz estéreo).
+ * Usa StreamType.Raw (PCM), evitando a dependência de codec Opus nativo
+ * (@discordjs/opus / node-opus / opusscript) ausente em alguns ambientes de produção.
+ * Retorna um objeto { process, stream } para permitir o encerramento correto do ffmpeg.
+ */
+function createFilePcmStream(filePath) {
+    const ffmpegBin = getFfmpegPath();
+    const ffmpegArgs = [
+        '-i', filePath,
+        '-f', 's16le',
+        '-ac', String(PCM_CHANNELS),
+        '-ar', String(PCM_SAMPLE_RATE),
+        '-loglevel', 'quiet',
+        'pipe:1'
+    ];
+    const proc = spawn(ffmpegBin, ffmpegArgs);
+    proc.stdin?.on('error', () => {});
+    const stream = proc.stdout;
+    return { process: proc, stream };
 }
 
 export { playTrack, pausePlayer, resumePlayer, stopPlayer, playChime, updateEmbed, getPlayer };
