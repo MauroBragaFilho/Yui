@@ -67,3 +67,56 @@ export const GTA_WEEKLY_SCHEMA = `
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `;
+
+// social-youtube.db — monitoramento de canais do YouTube
+// (subscriptions por guilda + itens vistos para deduplicação/estado de live)
+export const YOUTUBE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS youtube_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    youtube_channel_id TEXT NOT NULL,
+    channel_name TEXT,
+    uploads_playlist_id TEXT,
+    discord_channel_id TEXT NOT NULL,
+    mention_role_id TEXT,
+    notify_videos INTEGER DEFAULT 1,
+    notify_shorts INTEGER DEFAULT 1,
+    notify_lives INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(guild_id, youtube_channel_id, discord_channel_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS youtube_seen_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id TEXT UNIQUE NOT NULL,
+    youtube_channel_id TEXT NOT NULL,
+    last_known_state TEXT NOT NULL DEFAULT 'video',
+    first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_yt_seen_channel ON youtube_seen_items (youtube_channel_id);
+`;
+
+// social-twitch.db — monitoramento de streamers da Twitch
+// (subscriptions por guilda + estado de stream para detecção online/offline)
+export const TWITCH_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS twitch_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    twitch_login TEXT NOT NULL,
+    twitch_user_id TEXT,
+    discord_channel_id TEXT NOT NULL,
+    mention_role_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(guild_id, twitch_login, discord_channel_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS twitch_stream_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    twitch_login TEXT UNIQUE NOT NULL,
+    is_live INTEGER DEFAULT 0,
+    last_stream_id TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`;

@@ -9,6 +9,10 @@ import { newsCommand } from './commands/news.js';
 import { askCommand } from './commands/ask.js';
 import { baixarMusicaCommand } from './commands/baixarMusica.js';
 import { commands as hikariCommands } from '../commands/slashCommands.js';
+import { seguirYoutubeCommand } from './commands/seguirYoutube.js';
+import { seguirTwitchCommand } from './commands/seguirTwitch.js';
+import { pararSeguirCommand } from './commands/pararSeguir.js';
+import { listarSeguindoCommand } from './commands/listarSeguindo.js';
 
 const commands = [
   setupCommand.data.toJSON(),
@@ -18,6 +22,10 @@ const commands = [
   newsCommand.data.toJSON(),
   askCommand.data.toJSON(),
   baixarMusicaCommand.data.toJSON(),
+  seguirYoutubeCommand.data.toJSON(),
+  seguirTwitchCommand.data.toJSON(),
+  pararSeguirCommand.data.toJSON(),
+  listarSeguindoCommand.data.toJSON(),
   ...hikariCommands.map((command) => typeof command.toJSON === 'function' ? command.toJSON() : command),
 ];
 

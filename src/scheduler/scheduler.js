@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { newswireEngine } from '../engines/newswire/index.js';
 import { gtaoEngine } from '../engines/gtao/index.js';
+import { youtubeEngine } from '../engines/youtube/index.js';
+import { twitchEngine } from '../engines/twitch/index.js';
 import { discordPublisher } from '../discord/publisher.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
@@ -74,6 +76,50 @@ export function startScheduler(client) {
     timezone: 'UTC',
   });
   logger.info('[Scheduler] Monitoramento semanal de eventos (quintas-feiras) ativo.');
+
+  // 5. Verificação periódica do YouTube (Default: a cada 5 minutos)
+  if (config.youtube.intervalMinutes > 0) {
+    const youtubeCronExpr = `*/${config.youtube.intervalMinutes} * * * *`;
+    cron.schedule(youtubeCronExpr, async () => {
+      try {
+        logger.info('[Scheduler] Disparando checagem agendada do YouTube...');
+        const events = await youtubeEngine.checkYoutubeChannels();
+        if (events.length > 0) {
+          logger.info(`[Scheduler] Publicando ${events.length} evento(s) do YouTube...`);
+          for (const event of events) {
+            await discordPublisher.publishYoutubeEvent(client, event);
+          }
+        }
+      } catch (err) {
+        logger.error(`[Scheduler] Erro na tarefa do YouTube: ${err.message}`);
+      }
+    });
+    logger.info(`[Scheduler] Monitoramento do YouTube configurado para rodar a cada ${config.youtube.intervalMinutes} minutos.`);
+  } else {
+    logger.warn('[Scheduler] YouTube monitoramento desativado (YOUTUBE_INTERVAL_MINUTES = 0).');
+  }
+
+  // 6. Verificação periódica da Twitch (Default: a cada 2 minutos)
+  if (config.twitch.intervalMinutes > 0) {
+    const twitchCronExpr = `*/${config.twitch.intervalMinutes} * * * *`;
+    cron.schedule(twitchCronExpr, async () => {
+      try {
+        logger.info('[Scheduler] Disparando checagem agendada da Twitch...');
+        const events = await twitchEngine.checkTwitchStreamers();
+        if (events.length > 0) {
+          logger.info(`[Scheduler] Publicando ${events.length} evento(s) da Twitch...`);
+          for (const event of events) {
+            await discordPublisher.publishTwitchEvent(client, event);
+          }
+        }
+      } catch (err) {
+        logger.error(`[Scheduler] Erro na tarefa da Twitch: ${err.message}`);
+      }
+    });
+    logger.info(`[Scheduler] Monitoramento da Twitch configurado para rodar a cada ${config.twitch.intervalMinutes} minutos.`);
+  } else {
+    logger.warn('[Scheduler] Twitch monitoramento desativado (TWITCH_INTERVAL_MINUTES = 0).');
+  }
 }
 
 export default { startScheduler };

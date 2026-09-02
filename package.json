@@ -9,7 +9,8 @@
     "dev": "node --watch src/index.js",
     "deploy:commands": "node src/discord/deployCommands.js",
     "test:newswire": "node tests/test-newswire.js",
-    "test:gtao": "node tests/test-gtao.js"
+    "test:gtao": "node tests/test-gtao.js",
+    "test:social": "node tests/test-social.js"
   },
   "keywords": [
     "discord",

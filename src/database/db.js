@@ -126,12 +126,17 @@ export function getDbWrapper(name) {
           } else {
             entry.db.run(sql, params);
           }
+          // Captura o contador ANTES de salvar em disco: o saveDatabase() chama
+          // db.export() (sqlite3_serialize do sql.js), que ZERA o contador
+          // interno de getRowsModified(). Sem essa ordem, `.changes` sempre
+          // retorna 0 para operações fora de transação.
+          const changes = entry.db.getRowsModified();
           // Dentro de uma transação, o salvamento em disco é feito UMA ÚNICA
           // VEZ, após o COMMIT (veja transaction() abaixo) — nunca a cada linha.
           if (!entry.inTransaction) {
             saveDatabase(name);
           }
-          return { changes: entry.db.getRowsModified() };
+          return { changes };
         },
       };
     },

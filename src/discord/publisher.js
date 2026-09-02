@@ -1,8 +1,12 @@
 import { guildRepository } from '../database/repositories/guildRepo.js';
 import { publicationRepository } from '../database/repositories/publicationRepo.js';
+import { youtubeRepository } from '../database/repositories/youtubeRepo.js';
+import { twitchRepository } from '../database/repositories/twitchRepo.js';
 import { gtaoRepository } from '../database/repositories/gtaoRepo.js';
 import { createNewswireEmbed } from './embeds/newswireEmbed.js';
 import { createDailyEmbed } from './embeds/dailyEmbed.js';
+import { createYoutubeVideoEmbed, createYoutubeLiveEmbed } from './embeds/youtubeEmbed.js';
+import { createTwitchLiveEmbed } from './embeds/twitchEmbed.js';
 import { buildWeeklyPaginatedEmbeds, buildWeeklyPaginationRow } from '../engines/gtao/weeklyAnalysis.js';
 import { logger } from '../utils/logger.js';
 
@@ -147,5 +151,126 @@ export const discordPublisher = {
         logger.error(`[Publisher] Falha ao enviar semanal para canal ${g.weekly_channel_id}: ${error.message}`);
       }
     }
+  },
+
+  /**
+   * Publica um evento do YouTube (vídeo/Short/live) em todas as guilda que
+   * acompanham aquele canal, respeitando as preferências de notificação.
+   *
+   * @param {import('discord.js').Client} client
+   * @param {object} event — evento normalizado pelo youtubeEngine
+   * @returns {Promise<number>} quantidade de mensagens enviadas
+   */
+  async publishYoutubeEvent(client, event) {
+    if (!event || !event.videoId) return 0;
+
+    const subscriptions = youtubeRepository.getSubscriptionsByChannel(event.channelId);
+    if (subscriptions.length === 0) return 0;
+
+    // O embed depende do tipo de evento
+    let embed;
+    if (event.type === 'video' || event.type === 'short') {
+      embed = createYoutubeVideoEmbed(event);
+    } else if (
+      event.type === 'live_scheduled' ||
+      event.type === 'live_started' ||
+      event.type === 'live_ended' ||
+      event.type === 'vod'
+    ) {
+      embed = createYoutubeLiveEmbed(event);
+    } else {
+      return 0;
+    }
+
+    let published = 0;
+
+    for (const sub of subscriptions) {
+      // Respeita preferência de notificação por tipo
+      if (event.type === 'video' && sub.notify_videos !== 1) continue;
+      if (event.type === 'short' && sub.notify_shorts !== 1) continue;
+      if (
+        (event.type === 'live_scheduled' ||
+          event.type === 'live_started' ||
+          event.type === 'live_ended' ||
+          event.type === 'vod') &&
+        sub.notify_lives !== 1
+      ) {
+        continue;
+      }
+
+      // Dedupe por guilda + canal do Discord
+      const contentId = `${event.videoId}:${event.type}`;
+      if (publicationRepository.isPublished('youtube', contentId, sub.guild_id)) {
+        continue;
+      }
+
+      try {
+        const channel = await client.channels.fetch(sub.discord_channel_id);
+        if (!channel || !channel.isTextBased()) continue;
+
+        const payload = { embeds: [embed] };
+
+        // Menção de cargo se configurado
+        if (sub.mention_role_id) {
+          payload.content = `📢 <@&${sub.mention_role_id}>`;
+        }
+
+        const msg = await channel.send(payload);
+        publicationRepository.recordPublication('youtube', contentId, sub.guild_id, sub.discord_channel_id, msg.id);
+        logger.info(`[Publisher] YouTube "${event.title}" publicado na guilda ${sub.guild_id}`);
+        published++;
+      } catch (error) {
+        logger.error(`[Publisher] Falha ao enviar YouTube para canal ${sub.discord_channel_id} (Guild: ${sub.guild_id}): ${error.message}`);
+      }
+    }
+
+    return published;
+  },
+
+  /**
+   * Publica um evento da Twitch (streamer entrou ao vivo) em todas as guilda
+   * que acompanham aquele streamer.
+   *
+   * @param {import('discord.js').Client} client
+   * @param {object} event — evento normalizado pelo twitchEngine
+   * @returns {Promise<number>} quantidade de mensagens enviadas
+   */
+  async publishTwitchEvent(client, event) {
+    if (!event || !event.login) return 0;
+
+    const subscriptions = twitchRepository.getSubscriptionsByLogin(event.login);
+    if (subscriptions.length === 0) return 0;
+
+    const embed = createTwitchLiveEmbed(event);
+    let published = 0;
+
+    for (const sub of subscriptions) {
+      // Dedupe por guilda + canal do Discord
+      const contentId = event.streamId || `${event.login}:${event.startedAt || Date.now()}`;
+      if (publicationRepository.isPublished('twitch', contentId, sub.guild_id)) {
+        continue;
+      }
+
+      try {
+        const channel = await client.channels.fetch(sub.discord_channel_id);
+        if (!channel || !channel.isTextBased()) continue;
+
+        const payload = { embeds: [embed] };
+
+        // Menção de cargo se configurado
+        if (sub.mention_role_id) {
+          payload.content = `📢 <@&${sub.mention_role_id}>`;
+        }
+
+        const msg = await channel.send(payload);
+        publicationRepository.recordPublication('twitch', contentId, sub.guild_id, sub.discord_channel_id, msg.id);
+        logger.info(`[Publisher] Twitch "${event.login}" está ao vivo — publicado na guilda ${sub.guild_id}`);
+        published++;
+      } catch (error) {
+        logger.error(`[Publisher] Falha ao enviar Twitch para canal ${sub.discord_channel_id} (Guild: ${sub.guild_id}): ${error.message}`);
+      }
+    }
+
+    return published;
   },
 };

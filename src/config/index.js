@@ -47,6 +47,17 @@ export const config = {
     ffmpegPath: process.env.FFMPEG_PATH || '',
     ffprobePath: process.env.FFPROBE_PATH || '',
   },
+  youtube: {
+    apiKey: process.env.YOUTUBE_API_KEY || '',
+    // Polling interval em minutos para checagem de canais cadastrados
+    intervalMinutes: parseInt(process.env.YOUTUBE_INTERVAL_MINUTES || '5', 10),
+  },
+  twitch: {
+    clientId: process.env.TWITCH_CLIENT_ID || '',
+    clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
+    // Polling interval em minutos para checagem de streamers (1-2 min recomendado)
+    intervalMinutes: parseInt(process.env.TWITCH_INTERVAL_MINUTES || '2', 10),
+  },
 };
 
 // Compatibilidade com os módulos legados da Hikari, que usam configuração

@@ -1,7 +1,7 @@
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { initDatabase } from './database/db.js';
-import { CORE_SCHEMA, NEWSWIRE_SCHEMA, GTA_DAILY_SCHEMA, GTA_WEEKLY_SCHEMA } from './database/schemas.js';
+import { CORE_SCHEMA, NEWSWIRE_SCHEMA, GTA_DAILY_SCHEMA, GTA_WEEKLY_SCHEMA, YOUTUBE_SCHEMA, TWITCH_SCHEMA } from './database/schemas.js';
 import { createDiscordClient } from './discord/client.js';
 import { startScheduler } from './scheduler/scheduler.js';
 import { deploySlashCommands } from './discord/deployCommands.js';
@@ -40,6 +40,8 @@ async function bootstrap() {
   await initDatabase('newswire', NEWSWIRE_SCHEMA);
   await initDatabase('gta-diario', GTA_DAILY_SCHEMA);
   await initDatabase('gta-semanal', GTA_WEEKLY_SCHEMA);
+  await initDatabase('social-youtube', YOUTUBE_SCHEMA);
+  await initDatabase('social-twitch', TWITCH_SCHEMA);
   logger.info('[Bootstrap] Todos os bancos de dados inicializados com sucesso.');
 
   // 1.1 Baixar/atualizar os tunables (RDO.GG) para a Van de Armas
