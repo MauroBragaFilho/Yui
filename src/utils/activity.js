@@ -233,5 +233,6 @@ function updateBotActivity(clientInstance, queueLength) {
     }
 }
 
+export { updateBotActivity, startActivityUpdater };
 export default { updateBotActivity, startActivityUpdater };
 

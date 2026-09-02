@@ -2,6 +2,8 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { handlePrefixCommand } from './prefixRouter.js';
+import { setDiscordClient, setOnQueueUpdate } from '../handlers/llmHandler.js';
+import { updateBotActivity } from '../utils/activity.js';
 
 export function createDiscordClient() {
   const client = new Client({
@@ -25,6 +27,10 @@ export function createDiscordClient() {
     if (config.discord.prefix) {
       logger.info(`[DiscordClient] Comandos por prefixo ativos: "${config.discord.prefix} <comando>"`);
     }
+
+    setDiscordClient(client);
+    setOnQueueUpdate((queueLength) => updateBotActivity(client, queueLength));
+    updateBotActivity(client, 0);
   });
 
   // Slash commands são processados em src/events/interactionCreate.js
