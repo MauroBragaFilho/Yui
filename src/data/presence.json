@@ -4,7 +4,7 @@
   "statuses": [
     {
       "type": "Custom",
-      "text": "Cuidando do GTA Online por aqui ✨",
+      "text": "Cuidando do Manicômio por aqui ✨",
       "status": "online"
     },
     {
@@ -25,12 +25,12 @@
     },
     {
       "type": "Custom",
-      "text": "use /yui-diario pra ver o reset de hoje",
+      "text": "use /gta-diario pra ver o reset de hoje",
       "status": "online"
     },
     {
       "type": "Competing",
-      "text": "Time Trials",
+      "text": "Desafio Contra o Tempo",
       "status": "idle"
     }
   ]
