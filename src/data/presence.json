@@ -1,6 +1,6 @@
 {
   "_comentario": "Edite esta lista livremente. 'type' aceita: Playing, Watching, Listening, Competing, Custom. 'intervalHours' é opcional e sobrescreve o intervalo padrão SÓ para este status específico (ex: 0.5 = 30min). Se omitido, usa o defaultIntervalHours abaixo.",
-  "defaultIntervalHours": 2,
+  "defaultIntervalHours": 0.5,
   "statuses": [
     {
       "type": "Custom",

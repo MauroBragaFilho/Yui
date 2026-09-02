@@ -2,10 +2,10 @@
   "_comentario": "Lista de pessoas cuja presença o bot monitora. 'priority' menor = mais importante (desempata se dois usuários estão ativos ao mesmo tempo). 'preferGuildId' é opcional — acelera a busca se você já sabe em qual servidor checar primeiro.",
   "users": [
     {
-      "userId": "SEU_USER_ID_AQUI",
-      "label": "Yui",
+      "userId": "369618206970609675",
+      "label": "Braga",
       "priority": 1,
-      "preferGuildId": null
+      "preferGuildId": 1471605845472182527
     }
   ]
 }

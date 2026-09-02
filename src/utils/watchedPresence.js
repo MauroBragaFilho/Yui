@@ -6,6 +6,8 @@ import { resolveMember, PLATFORM_PRIORITY } from '../services/activityMusicServi
 import { getAllSessions } from '../music/radioDatabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const WATCHED_PATH = path.join(__dirname, '../data/watchedUsers.json');
+const EVENTS_PATH  = path.join(__dirname, '../data/presenceEvents.json');
 
 function readJsonSafe(filePath) {
     try {

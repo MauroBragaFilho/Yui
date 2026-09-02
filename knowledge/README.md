@@ -2,7 +2,7 @@
 
 Coloque aqui arquivos `.txt` ou `.md` com qualquer informação que você
 queira que a Yui saiba ao responder no comando `/yui` (ou
-`+yui perguntar`): dicas, builds, melhores golpes/estratégias, buffs e
+`+yui`): dicas, builds, melhores golpes/estratégias, buffs e
 debuffs, guias de negócios, o que quiser.
 
 ## Como funciona

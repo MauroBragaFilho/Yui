@@ -82,6 +82,70 @@ A personalidade da Yui não é apenas texto; é um conjunto de diretrizes de seg
 
 ---
 
+## 📡 5. Feeds de Presença (Rich Presence Monitorado)
+
+O bot pode monitorar a atividade de usuários específicos no Discord (jogando, ouvindo música, em live) e refletir isso no **status próprio do bot** — por exemplo: *"Watching [usuário] jogando Elden Ring"*.
+
+**Arquivos envolvidos:**
+- `src/data/watchedUsers.json` — lista de usuários a monitorar (userId, label, prioridade).
+- `src/data/presenceEvents.json` — templates de texto por tipo de evento (streaming, playing, listening).
+- `src/data/presence.json` — ciclo normal de status do bot (quando nenhum evento monitorado está ativo).
+- `src/utils/watchedPresence.js` — lógica de detecção e resolução de templates.
+- `src/utils/activity.js` — ciclo normal + timer de checagem (a cada 30s).
+
+### Pré-requisitos manuais (não configurável por código)
+
+O Discord só envia os eventos de presença do bot se as seguintes condições estiverem satisfeitas:
+
+#### A) Privileged Gateway Intents (Developer Portal)
+1. Acesse o [Discord Developer Portal](https://discord.com/developers/applications).
+2. Selecione seu aplicativo → **Bot** → role até *Privileged Gateway Intents*.
+3. Ative:
+   - ✅ **Presence Intent**
+   - ✅ **Server Members Intent**
+4. Clique em **Save Changes**.
+5. Reinicie o bot após ativar.
+
+> **Nota:** Sem esses intents, o `member.presence` de todos os membros será `null`/`undefined` — o bot não tem como ver quem está jogando ou ouvindo música.
+
+#### B) Atividade de Status (conta de cada usuário monitorado)
+Cada usuário cuja presença será monitorada precisa ter:
+1. Abrir Discord → ⚙️ **Configurações** (ícone de engrenagem).
+2. **Privacidade e Segurança** → role até *Atividade de Status*.
+3. Ativar **"Exibir atividade atual como mensagem de status"**.
+
+> **Importante:** Isso é por **conta**. Se o usuário desativar essa opção, o bot não conseguirá ver suas atividades mesmo com os intents ligados.
+
+### Configuração de `watchedUsers.json`
+
+```json
+{
+  "_comentario": "Lista de pessoas cuja presença o bot monitora.",
+  "users": [
+    {
+      "userId": "1234567890123456789",   // ← seu ID de usuário Discord real (não @)
+      "label": "Yui",
+      "priority": 1,
+      "preferGuildId": null
+    }
+  ]
+}
+```
+
+- **`userId`**: ID numérico do Discord (clique com botão direito no perfil → *Copiar ID de Usuário* — requer "Modo Desenvolvedor" ativado).
+- **`label`**: Nome amigável que aparece no template (ex: *"Watching Yui jogando Valorant"*).
+- **`priority`**: Menor = mais importante (desempata se dois usuários estão ativos ao mesmo tempo).
+- **`preferGuildId`**: Opcional — ID de um servidor específico para agilizar a busca do membro.
+
+### Como funciona o fluxo
+
+1. A cada 30 segundos, `activity.js` → `runEventCheck()` chama `checkWatchedUsers()`.
+2. `checkWatchedUsers()` percorre `watchedUsers.json` por prioridade e busca a presença de cada um via `resolveMember()`.
+3. Se encontrar um evento (streaming, jogando, ouvindo), `resolveEventPresence()` aplica o template de `presenceEvents.json` no status do bot.
+4. Se nenhum evento for detectado por 3 ciclos consecutivos, o bot retoma o ciclo normal de `presence.json`.
+
+---
+
 ## 💡 Dicas de Desenvolvimento
 
 - 💡 **Logs de Pensamento (Thought Trace):** Observe o console. A Yui imprime o `"thought"` da IA antes de cada ação de ferramenta. Se ela estiver "alucinando", ajuste a descrição da ferramenta no JSON.
