@@ -193,7 +193,7 @@ export const askCommand = {
       .addStringOption((option) =>
         option
           .setName('visibilidade')
-          .setDescription('Resposta pública ou privada? (Padrão: Privada)')
+          .setDescription('Resposta pública ou privada? (Padrão: Pública)')
           .setRequired(false)
           .addChoices(
             { name: 'Público', value: 'public' },
@@ -205,11 +205,10 @@ export const askCommand = {
   async execute(interaction) {
     const pergunta = interaction.options.getString('mensagem');
     const visibility = interaction.options.getString('visibilidade');
-    const isDM = !interaction.guild;
 
-    // Em DM sempre responde como ephemeral (privado).
-    // Em servidor respeita a escolha do usuário (padrão: privado).
-    const ephemeral = isDM || visibility !== 'public';
+    // Em DM e servidor, o padrão é público (salvo no chat).
+    // Só fica privado (ephemeral) quando o usuário escolhe "Privado".
+    const ephemeral = visibility === 'private';
 
     await interaction.deferReply({ ephemeral });
 
