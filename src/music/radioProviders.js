@@ -220,12 +220,86 @@ function resolveYouTubePlaylist(url) {
     });
 }
 
+function searchYouTubeByName(query, limit = 5) {
+    return new Promise(async (resolve) => {
+        try {
+            const { default: config } = await import('../config.js');
+            const cookiesPath = config.ytdlpCookiesPath;
+            const cookieFlag = (cookiesPath && fs.existsSync(cookiesPath)) ? `--cookies "${cookiesPath}"` : '';
+            const ytdlpBin = getYtdlpPath();
+            const safeQuery = String(query || '').trim().replace(/"/g, '\\"');
+            const cmd = `"${ytdlpBin}" --no-warnings --no-update ${cookieFlag} --flat-playlist -j "ytsearch${limit}:${safeQuery}"`;
+
+            exec(cmd, { maxBuffer: 10 * 1024 * 1024, timeout: 20000 }, (err, stdout) => {
+                if (!stdout) return resolve([]);
+                const tracks = [];
+                const lines = stdout.split('\n');
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+                    try {
+                        const firstBrace = trimmed.indexOf('{');
+                        const lastBrace = trimmed.lastIndexOf('}');
+                        if (firstBrace === -1 || lastBrace <= firstBrace) continue;
+
+                        const jsonStr = trimmed.substring(firstBrace, lastBrace + 1);
+                        const parsed = JSON.parse(jsonStr);
+
+                        if (parsed.id && !parsed.title?.includes('[Private') && !parsed.title?.includes('[Deleted')) {
+                            tracks.push({
+                                id: parsed.id,
+                                title: parsed.title || 'Faixa YouTube',
+                                artist: parsed.uploader || parsed.channel || 'YouTube',
+                                album: '',
+                                duration: parsed.duration || 0,
+                                cover: parsed.thumbnails?.[0]?.url || `https://img.youtube.com/vi/${parsed.id}/hqdefault.jpg`,
+                                link: `https://www.youtube.com/watch?v=${parsed.id}`,
+                                source: 'youtube'
+                            });
+                        }
+                    } catch (_) {}
+
+                    if (tracks.length >= limit) break;
+                }
+
+                resolve(tracks);
+            });
+        } catch (_) {
+            resolve([]);
+        }
+    });
+}
+
+function cleanYouTubeSearchTitle(title) {
+    return String(title || '')
+        .replace(/\s*\(official\s+(audio|video|lyrics?|music).*?\)/gi, '')
+        .replace(/\s*\[official\s+(audio|video|lyrics?|music).*?\]/gi, '')
+        .replace(/\s*\(.*?\baudio\b.*?\)/gi, '')
+        .replace(/\s*\[.*?\baudio\b.*?\]/gi, '')
+        .replace(/\s*\(clipe\s+oficial.*?\)/gi, '')
+        .replace(/\s*\(vídeo\s+oficial.*?\)/gi, '')
+        .replace(/\s*\|.*$/gi, '')
+        .replace(/\(hd\)/gi, '')
+        .replace(/\(4k\)/gi, '')
+        .trim();
+}
+
 async function searchByName(query) {
-    const results = await searchDeezerTracks(query);
-    if (!results || results.length === 0) return { track: null, ambiguous: false, results: [] };
+    let results = await searchDeezerTracks(query);
+    let fromYouTube = false;
+
+    if (!results || results.length === 0) {
+        results = await searchYouTubeByName(query);
+        fromYouTube = results && results.length > 0;
+        if (!fromYouTube) return { track: null, ambiguous: false, results: [] };
+    }
 
     const top = results[0];
-    const score = calculateConfidenceScore(query, top);
+    const score = calculateConfidenceScore(
+        fromYouTube ? cleanYouTubeSearchTitle(top.title) : query,
+        top
+    );
 
     if (score >= 80) {
         return {
@@ -237,7 +311,7 @@ async function searchByName(query) {
                 duration: top.duration,
                 cover: top.cover,
                 link: top.link,
-                source: 'deezer'
+                source: fromYouTube ? 'youtube' : 'deezer'
             },
             ambiguous: false,
             results: []
@@ -255,7 +329,7 @@ async function searchByName(query) {
             duration: r.duration,
             cover: r.cover,
             link: r.link,
-            source: 'deezer'
+            source: fromYouTube ? 'youtube' : 'deezer'
         }))
     };
 }
@@ -571,11 +645,12 @@ async function resolveInput(input, guildId = null) {
     return { type: 'not_found' };
 }
 
-export { resolveInput, downloadTrackToDisk, searchByName };
+export { resolveInput, downloadTrackToDisk, searchByName, searchYouTubeByName };
 
 export default {
     resolveInput,
     downloadTrackToDisk,
     searchByName,
+    searchYouTubeByName,
     TEMP_RADIO_DIR
 };
