@@ -63,3 +63,4 @@ function parseRadioIntent(text) {
 }
 
 export { parseRadioIntent };
+export default { parseRadioIntent };
