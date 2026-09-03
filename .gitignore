@@ -24,7 +24,7 @@ dist/
 build/
 
 # Archives
-.zip
-.Backup/
-
+*.zip
+*.Backup/
+*.bat
 ```
