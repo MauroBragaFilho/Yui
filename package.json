@@ -10,7 +10,9 @@
     "deploy:commands": "node src/discord/deployCommands.js",
     "test:newswire": "node tests/test-newswire.js",
     "test:gtao": "node tests/test-gtao.js",
-    "test:social": "node tests/test-social.js"
+    "test:social": "node tests/test-social.js",
+    "test:weekly-gtaforums": "node tests/test-weekly-gtaforums.js",
+    "test:weekly-reddit": "node tests/test-weekly-reddit.js"
   },
   "keywords": [
     "discord",
@@ -23,15 +25,17 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "axios": "^1.19.0",
     "@discordjs/voice": "^0.19.0",
+    "axios": "^1.19.0",
     "cheerio": "^1.2.0",
     "discord.js": "^14.17.3",
     "dotenv": "^16.4.7",
     "form-data": "^4.0.0",
     "node-cron": "^3.0.3",
-    "puppeteer": "^24.3.0",
     "prism-media": "^1.3.5",
+    "puppeteer": "^24.3.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sql.js": "^1.12.0",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"

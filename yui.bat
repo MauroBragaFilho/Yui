@@ -49,10 +49,11 @@ echo [2] Testar Coleta do Newswire Engine (Puppeteer isolado)
 echo [3] Testar Coleta do GTAO Engine (Sistemas Diarios/Semanais)
 echo [4] Registrar / Atualizar Slash Commands no Discord
 echo [5] Conectar a Maquina SSH
+echo [6] Testar Evento Semanal (Reddit + Fallback Newswire)
 
 echo.
 set "opt="
-set /p "opt=Digite a opcao desejada [0-5]: "
+set /p "opt=Digite a opcao desejada [0-6]: "
 echo %RESET%
 
 if "%opt%"=="1" (
@@ -92,6 +93,13 @@ if "%opt%"=="5" (
     echo.
     echo %CYAN%[INFO] Conectando a maquina SSH...%RESET%
     ssh -i "%USERPROFILE%\.ssh\Yui.pem" ubuntu@ec2-52-67-29-69.sa-east-1.compute.amazonaws.com
+    pause
+    goto MENU
+)
+if "%opt%"=="6" (
+    echo.
+    echo %CYAN%[INFO] Executando teste isolado do Evento Semanal (Reddit + Fallback Newswire)...%RESET%
+    node tests/test-weekly-reddit.js
     pause
     goto MENU
 )

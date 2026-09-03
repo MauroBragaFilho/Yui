@@ -88,6 +88,7 @@ export default {
   hordeUrl: process.env.HORDE_URL || 'https://stablehorde.net/api/v2/generate/text/async',
   hordeApiKey: process.env.HORDE_API_KEY || '0000000000',
   braveApiKey: process.env.BRAVE_API_KEY || '',
+  redditUserAgent: process.env.REDDIT_USER_AGENT || 'nodejs:yui-gta-bot:1.0 (by /u/yui-bot-generic)',
   togetherApiKey: process.env.TOGETHER_API_KEY || '',
   stabilityApiKeys: (process.env.STABILITY_API_KEYS || '').split(',').map((key) => key.trim()).filter(Boolean),
   hordeImageApiKey: process.env.HORDE_IMAGE_API_KEY || '',

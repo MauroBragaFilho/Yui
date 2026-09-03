@@ -83,7 +83,31 @@ async function fetchArticleBodyGraphQL(articleId) {
     const post = json?.data?.post;
     if (!post) return { paragraphs: [], heroImageUrl: '' };
 
-    const rawContent = post.content || '';
+    // Corpo do artigo. A Rockstar migrou o formato: antes vinha em
+    // `post.content` (HTML); agora (2026+) vem em `post.tina.payload.content`
+    // (blocos + `_memoq.content` com HTML). Montamos o HTML bruto unindo
+    // todos os blocos de texto encontrados, com fallback para o legado.
+    let rawContent = post.content || '';
+
+    if (!rawContent && post.tina && post.tina.payload) {
+      const blocksArray = post.tina.payload.content;
+      const htmlParts = [];
+      const collectHtml = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node._template === 'HTMLElement') {
+          const c = node?._memoq?.content;
+          if (typeof c === 'string' && c.trim()) htmlParts.push(c.trim());
+        }
+        for (const k of Object.keys(node)) {
+          const v = node[k];
+          if (Array.isArray(v)) v.forEach(collectHtml);
+          else if (v && typeof v === 'object') collectHtml(v);
+        }
+      };
+      collectHtml(blocksArray);
+      rawContent = htmlParts.join('\n');
+    }
+
     const $ = cheerio.load(rawContent);
     const paragraphs = [];
     const seen = new Set();
@@ -96,8 +120,27 @@ async function fetchArticleBodyGraphQL(articleId) {
       }
     });
 
-    const heroImageUrl =
-      post.posts_hero?.desktop || post.posts_hero?.mobile || post.header_image || '';
+    // Hero image. Novo formato: `post.tina.payload.meta.preview_images`.
+    // Legado: `post.posts_hero` / `post.header_image` / primeiro bloco.
+    let heroImageUrl =
+      post?.tina?.payload?.meta?.preview_images?.en_us?.['newswire-block-16x9'] ||
+      post?.tina?.payload?.meta?.preview_images?.['newswire-block-16x9'] ||
+      '';
+
+    if (!heroImageUrl && rawContent) {
+      const firstImg = $(rawContent).find('img').first();
+      const src = firstImg.attr('src') || firstImg.attr('data-src') || '';
+      if (src) heroImageUrl = src.startsWith('http') ? src : `https://www.rockstargames.com${src}`;
+    }
+
+    if (!heroImageUrl) {
+      heroImageUrl =
+        post?.posts_hero?.desktop || post?.posts_hero?.mobile || post?.header_image || '';
+    }
+
+    if (heroImageUrl && !/^https?:/.test(heroImageUrl)) {
+      heroImageUrl = `https://www.rockstargames.com${heroImageUrl}`;
+    }
 
     return { paragraphs, heroImageUrl };
   } finally {

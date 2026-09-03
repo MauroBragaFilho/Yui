@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { CONSTANTS } from '../../config/constants.js';
+import { groupDiscountsByStore } from '../../data/gtaoVehicleStores.js';
 
 export function createWeeklyEmbed(weeklyData) {
   const embed = new EmbedBuilder()
@@ -43,7 +44,17 @@ export function createWeeklyEmbed(weeklyData) {
   }
 
   if (weeklyData.discounts && weeklyData.discounts.length > 0) {
-    const discTxt = weeklyData.discounts.slice(0, 6).map((d) => `• ${d}`).join('\n');
+    const groups = groupDiscountsByStore(weeklyData.discounts);
+    let discTxt;
+    if (groups.length > 0) {
+      discTxt = groups
+        .filter((g) => g.store !== 'Outros')
+        .slice(0, 4) // até 4 lojas no embed único
+        .map((g) => `**${g.store}**\n${g.vehicles.slice(0, 5).map((v) => `• ${v}`).join('\n')}`)
+        .join('\n\n');
+    } else {
+      discTxt = weeklyData.discounts.slice(0, 6).map((d) => `• ${d}`).join('\n');
+    }
     embed.addFields({
       name: '**🏷️ Descontos da Semana**',
       value: discTxt,

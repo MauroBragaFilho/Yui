@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import { generateResponse } from '../../handlers/llmHandler.js';
 import { logger } from '../../utils/logger.js';
 import { CONSTANTS } from '../../config/constants.js';
+import { groupDiscountsByStore } from '../../data/gtaoVehicleStores.js';
 
 /**
  * Monta o prompt de análise semanal para a IA. Diferente da versão
@@ -17,10 +18,12 @@ export function buildWeeklyAnalysisPrompt(weeklyData, dailyData) {
   const parts = [];
 
   parts.push(
-    `Você é a Yui, especialista em GTA Online. Analise o artigo semanal oficial abaixo e responda ` +
-    `ESTRITAMENTE em formato JSON válido, sem markdown code fences, sem texto antes ou depois, ` +
+    `Você é a Yui, especialista em GTA Online. O artigo abaixo está em INGLÊS. ` +
+    `Analise-o, extraia as informações E traduza tudo para português (Brasil) no resultado. ` +
+    `Responda ESTRITAMENTE em formato JSON válido, sem markdown code fences, sem texto antes ou depois, ` +
     `contendo exatamente estas chaves (todas como string, usando formatação Discord: negrito, listas com "•", emojis):\n\n` +
     `{\n` +
+    `  "titulo": "Título do artigo traduzido para português (frase curta, ex: 'Recompensas Triplas em Corridas de Transformação').",\n` +
     `  "destaques": "Resumo dos principais eventos, modos e novidades da semana.",\n` +
     `  "itensGratuitos": "Lista de tudo disponível de graça esta semana (roupas, veículos, RP, GTA$, GTA+ etc). Se não houver nada gratuito confirmado, diga isso explicitamente.",\n` +
     `  "veiculosDesconto": "Lista de veículos em desconto mencionados no artigo, com o percentual quando disponível (ex: '• Declasse Vigero ZX -40%'). Se o artigo não mencionar descontos de veículos, diga isso explicitamente — NUNCA invente.",\n` +
@@ -32,7 +35,7 @@ export function buildWeeklyAnalysisPrompt(weeklyData, dailyData) {
   );
 
   parts.push(
-    `\n--- ARTIGO OFICIAL DA SEMANA (traduzido) ---\nTítulo: ${weeklyData.title}\n\n${weeklyData.fullText || weeklyData.summary}`
+    `\n--- ARTIGO OFICIAL DA SEMANA (em inglês, traduza para PT-BR no resultado) ---\nTítulo original: ${weeklyData.title}\n\n${weeklyData.fullText || weeklyData.summary}`
   );
 
   if (dailyData) {
@@ -78,7 +81,7 @@ function extractJson(text) {
   }
 }
 
-const ANALYSIS_KEYS = ['destaques', 'itensGratuitos', 'veiculosDesconto', 'novidades', 'melhorFarm', 'avaliacao'];
+const ANALYSIS_KEYS = ['titulo', 'destaques', 'itensGratuitos', 'veiculosDesconto', 'novidades', 'melhorFarm', 'avaliacao'];
 
 function normalizeAnalysis(parsed) {
   if (!parsed) return null;
@@ -152,7 +155,7 @@ export function buildWeeklyPaginatedEmbeds(weeklyData, dailyData) {
   const baseEmbed = () =>
     new EmbedBuilder()
       .setColor(CONSTANTS.COLORS.WEEKLY_EVENT)
-      .setAuthor({ name: `🚨 GTA Online — ${weeklyData.title || 'Atualização Semanal'}`, url: weeklyData.url })
+      .setAuthor({ name: `🚨 GTA Online — ${analysis.titulo || weeklyData.title || 'Atualização Semanal'}`, url: weeklyData.url })
       .setThumbnail(weeklyData.thumbnailUrl || CONSTANTS.THUMBNAILS.GTA_LOGO)
       .setTimestamp();
 
@@ -174,11 +177,46 @@ export function buildWeeklyPaginatedEmbeds(weeklyData, dailyData) {
       ? discountedWeapons.map((w) => `• ${w.name} (-${w.discountPercent}%)`).join('\n')
       : '*Nenhuma arma com desconto ativo na Van de Armas hoje.*';
 
+  // Veículos com desconto agrupados por loja. Usa os dados estruturados do
+  // parser do Reddit (weeklyData.discounts) e o catálogo veículo→loja quando
+  // disponível; senão, cai no texto gerado pela IA.
+  const storeEmoji = {
+    'Legendary Motorsport': '🏎️',
+    'Dock Tease': '🛥️',
+    'Warstock Cache & Carry': '🛡️',
+    'Southern San Andreas Super Autos': '🚗',
+    "Premium Deluxe Motorsport": '🏁',
+    "Benny's Original Motor Works": '🔧',
+    "Elitás Travel": '✈️',
+    'Pedal & Metal': '🚲',
+    'Maze Bank Foreclosures': '🏢',
+  };
+
+  let vehiclesText;
+  if (weeklyData.discounts && weeklyData.discounts.length > 0) {
+    const groups = groupDiscountsByStore(weeklyData.discounts);
+    if (groups.length > 0) {
+      vehiclesText = groups
+        .filter((g) => g.store !== 'Outros')
+        .map((g) => {
+          const emoji = storeEmoji[g.store] || '🏪';
+          const lines = g.vehicles.map((v) => `• ${v}`).join('\n');
+          return `**${emoji} ${g.store}**\n${lines}`;
+        })
+        .join('\n\n');
+    }
+  }
+
+  // Se não foi possível agrupar por loja, usa o texto da IA.
+  if (!vehiclesText) {
+    vehiclesText = analysis.veiculosDesconto || '*Nenhuma informação de descontos disponível.*';
+  }
+
   pages.push(
     baseEmbed()
       .setTitle('🏷️ Página 2/4 — Descontos da Semana')
       .addFields(
-        { name: '🚗 Veículos com Desconto', value: truncateField(analysis.veiculosDesconto), inline: false },
+        { name: '🏷️ Itens com Desconto (por loja)', value: truncateField(vehiclesText), inline: false },
         { name: '🔫 Armas com Desconto (Van de Armas)', value: truncateField(weaponsText), inline: false }
       )
   );
