@@ -79,7 +79,7 @@ async function fetchWeeklyEventFromNewswire() {
 }
 
 /**
- * Ponto de entrada usado pelo resto do bot (comando /yui-semanal, scheduler,
+ * Ponto de entrada usado pelo resto do bot (comando /gta-semanal, scheduler,
  * e o cache em `gtaoRepository.saveWeekly`). Ordem de prioridade:
  *   1. Reddit r/gtaonline (fonte principal — posta geralmente na quarta-feira)
  *   2. Rockstar Newswire (fallback, mantido no código, não deletado)

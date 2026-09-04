@@ -6,6 +6,7 @@ import { twitchEngine } from '../engines/twitch/index.js';
 import { discordPublisher } from '../discord/publisher.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { getCurrentWeekKey } from '../utils/weekKey.js';
 
 export function startScheduler(client) {
   logger.info('[Scheduler] Inicializando agendador central de tarefas em UTC...');
@@ -55,18 +56,15 @@ export function startScheduler(client) {
   });
   logger.info('[Scheduler] Reset Diário do GTA Online agendado para 06:00 UTC.');
 
-  // 4. Verificação de Atualização Semanal (Todas as quintas-feiras a cada hora entre 09:00 e 15:00 UTC)
-  cron.schedule('0 9-15 * * 4', async () => {
+  // 4. Verificação de Atualização Semanal (quarta e quinta, a cada hora entre 09:00 e 20:00 UTC)
+  //    A fonte primária é o Reddit, que costuma postar na quarta-feira; a quinta cobre o Newswire
+  //    como fallback. Assim o post é pego assim que sair.
+  cron.schedule('0 9-20 * * 3,4', async () => {
     try {
-      logger.info('[Scheduler] Disparando checagem semanal de quinta-feira...');
+      logger.info('[Scheduler] Disparando checagem semanal (quarta/quinta)...');
       const weeklyData = await gtaoEngine.collectWeekly();
       if (weeklyData) {
-        const d = new Date();
-        const year = d.getUTCFullYear();
-        const onejan = new Date(year, 0, 1);
-        const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay() + 1) / 7);
-        const weekKey = `${year}-W${String(week).padStart(2, '0')}`;
-
+        const weekKey = getCurrentWeekKey();
         await discordPublisher.publishWeekly(client, weeklyData, weekKey);
       }
     } catch (err) {
@@ -75,7 +73,7 @@ export function startScheduler(client) {
   }, {
     timezone: 'UTC',
   });
-  logger.info('[Scheduler] Monitoramento semanal de eventos (quintas-feiras) ativo.');
+  logger.info('[Scheduler] Monitoramento semanal de eventos (quartas e quintas-feiras) ativo.');
 
   // 5. Verificação periódica do YouTube (Default: a cada 5 minutos)
   if (config.youtube.intervalMinutes > 0) {

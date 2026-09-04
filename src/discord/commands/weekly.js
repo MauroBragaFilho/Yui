@@ -3,14 +3,7 @@ import { setGlobalContext } from '../setGlobalContext.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { gtaoEngine } from '../../engines/gtao/index.js';
 import { buildWeeklyPaginatedEmbeds, buildWeeklyPaginationRow } from '../../engines/gtao/weeklyAnalysis.js';
-
-function getCurrentWeekKey() {
-  const d = new Date();
-  const year = d.getUTCFullYear();
-  const onejan = new Date(year, 0, 1);
-  const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay() + 1) / 7);
-  return `${year}-W${String(week).padStart(2, '0')}`;
-}
+import { getCurrentWeekKey } from '../../utils/weekKey.js';
 
 export const weeklyCommand = {
   data: setGlobalContext(
@@ -26,11 +19,10 @@ export const weeklyCommand = {
     const latest = gtaoRepository.getLatestWeekly();
     let weeklyData = latest?.data;
 
-    // Só reaproveita o cache se ele for realmente da semana atual — evita
-    // a Yui ficar presa numa atualização antiga já salva no banco.
-    if (!weeklyData || latest.event_week !== currentWeekKey) {
-      const fresh = await gtaoEngine.collectWeekly();
-      if (fresh) weeklyData = fresh;
+    // Só reutiliza o cache se ele for da semana ATUAL. Se for de uma
+    // semana anterior (ou não existir nada ainda), coleta de novo.
+    if (!latest || latest.event_week !== currentWeekKey) {
+      weeklyData = await gtaoEngine.collectWeekly();
     }
 
     if (!weeklyData) {

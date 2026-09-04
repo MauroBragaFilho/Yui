@@ -6,6 +6,7 @@ import { fetchWeeklyEvent } from './systems/weeklyEvents.js';
 import { generateWeeklyAnalysis } from './weeklyAnalysis.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { logger } from '../../utils/logger.js';
+import { getCurrentWeekKey } from '../../utils/weekKey.js';
 
 export const gtaoEngine = {
   /**
@@ -43,12 +44,7 @@ export const gtaoEngine = {
    * /gta-semanal não precisa chamar a IA de novo a cada uso, só lê o cache.
    */
   async collectWeekly() {
-    const d = new Date();
-    // Identificador aproximado do ano e semana
-    const year = d.getUTCFullYear();
-    const onejan = new Date(year, 0, 1);
-    const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay() + 1) / 7);
-    const weekKey = `${year}-W${String(week).padStart(2, '0')}`;
+    const weekKey = getCurrentWeekKey();
 
     logger.info(`[GTAOEngine] Iniciando coleta semanal para a semana: ${weekKey}`);
     const weeklyData = await fetchWeeklyEvent();
@@ -60,7 +56,7 @@ export const gtaoEngine = {
     // Usa o snapshot diário já salvo (ou coleta um novo se ainda não existir
     // hoje) para dar contexto de Van de Armas / Comerciantes / Desafios
     // Contra o Relógio à IA, e para extrair as armas com desconto ativo.
-    const todayStr = d.toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
     let dailyData = gtaoRepository.getDaily(todayStr)?.data;
     if (!dailyData) {
       dailyData = await this.collectDaily();
