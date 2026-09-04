@@ -115,7 +115,7 @@ export const weeklyService = {
     }
 
     logger.info(`[Weekly] Post encontrado: ${post.id}`);
-    const parsed = parseWeekly(post.selftext);
+    const parsed = parseWeekly(post.selftext, post.title);
     if (!isValidWeekly(parsed, post)) {
       return null;
     }
@@ -153,7 +153,7 @@ export const weeklyService = {
     }
 
     logger.info('[Weekly] Novo Weekly detectado.');
-    const parsed = parseWeekly(post.selftext);
+    const parsed = parseWeekly(post.selftext, post.title);
     if (!isValidWeekly(parsed, post)) {
       return { status: 'invalid', id: post.id };
     }

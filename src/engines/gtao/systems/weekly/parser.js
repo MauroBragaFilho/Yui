@@ -1,29 +1,18 @@
 import { logger } from '../../../../utils/logger.js';
 
 /**
- * Parser do selftext do post semanal do r/gtaonline ("Weekly Bonuses and
- * Discounts").
- *
- * Trabalha por SEÇÕES/TÍTULOS, não por posições fixas de linha:
- *   1. identifica uma seção (ex: "3X GTA$ & RP", "Discounts", "Podium
- *      Vehicle");
- *   2. coleta o conteúdo até a próxima seção;
- *   3. interpreta o conteúdo.
- *
- * Assim é tolerante a pequenas alterações de formatação e à ordem das
- * seções no post.
- *
- * Regras:
- *  - Não depende de número fixo de linhas.
- *  - Não inventa o período: se não conseguir identificar, deixa null.
- *  - Se não identificar NENHUMA seção válida, retorna dados vazios que
- *    poderão ser rejeitados pela validação do serviço.
+ * Parser do selftext do post semanal do r/gtaonline.
+ * Suporta dois formatos: **Header** / * Item e # Header / * [Key](url): Value.
  */
 
 // ── Utilidades de texto ───────────────────────────────────────────────
-/** Remove marcação markdown (negrito, itálico, code) de uma linha. */
+
+function stripLinks(text) {
+  return (text || '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+}
+
 function stripMarkdown(text) {
-  return (text || '')
+  return stripLinks(text || '')
     .replace(/\*\*/g, '')
     .replace(/\*/g, '')
     .replace(/~~/g, '')
@@ -32,21 +21,24 @@ function stripMarkdown(text) {
     .trim();
 }
 
-/** Deduplica linhas lendo as opções ("* X" / "• X" / "- X"). */
+function isBulletLine(rawLine) {
+  return /^\s*[\-*\u2022\u25AA]\s/.test(rawLine);
+}
+
 function cleanBulletLines(lines) {
   const seen = new Set();
   const out = [];
   for (const raw of lines) {
-    const item = stripMarkdown(raw).replace(/^[•\-*▪]\s*/, '').trim();
-    if (!item) continue;
-    if (seen.has(item)) continue;
+    const item = stripMarkdown(raw).replace(/^[\u2022\-*\u25AA]\s*/, '').trim();
+    if (!item || seen.has(item)) continue;
     seen.add(item);
     out.push(item);
   }
   return out;
 }
 
-// ── Período ───────────────────────────────────────────────────────────
+// ── Periodo ───────────────────────────────────────────────────────────
+
 const MONTHS = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
@@ -57,18 +49,26 @@ function monthNumber(name) {
   return MONTHS[name.toLowerCase().slice(0, 3)] ?? null;
 }
 
-/** Reconhece "August 27, 2026" -> "2026-08-27" (ou nulo). */
-function parseMonthNameDate(text) {
-  const m = text.match(/([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?[,]?\s*(\d{4})/i);
-  if (!m) return null;
-  const month = monthNumber(m[1]);
-  const day = parseInt(m[2], 10);
-  const year = parseInt(m[3], 10);
-  if (!month || !day || !year || day > 31) return null;
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+function parseMonthNameDate(text, yearHint) {
+  let m = text.match(/([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?[,]?\s*(\d{4})/i);
+  if (m) {
+    const month = monthNumber(m[1]);
+    const day = parseInt(m[2], 10);
+    const year = parseInt(m[3], 10);
+    if (!month || !day || !year || day > 31) return null;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  m = text.match(/([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?(?:[,\s]|$)/i);
+  if (m) {
+    const month = monthNumber(m[1]);
+    const day = parseInt(m[2], 10);
+    const year = yearHint || new Date().getFullYear();
+    if (!month || !day || day > 31) return null;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return null;
 }
 
-/** Reconhece "27/08/2026" ou "27-08-2026" -> "2026-08-27" (ou nulo). */
 function parseNumericDate(text) {
   const m = text.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
   if (!m) return null;
@@ -79,215 +79,220 @@ function parseNumericDate(text) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-/**
- * Extrai o período da semana. Procura por um par de datas no texto com um
- * separador de intervalo ("-", "to", "through", "until"). Retorna
- * { inicio, fim } com "YYYY-MM-DD" ou null em cada campo não encontrado.
- */
-function extractPeriod(text) {
-  const yearGuess = null; // usaremos apenas datas explícitas no texto
-  const dateSpans = text.match(
-    /([A-Za-z]{3,9}\s+\d{1,2}[a-z]*[,]?\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/gi
-  );
-  if (!dateSpans || dateSpans.length < 2) {
-    return { inicio: null, fim: null };
+export function extractPeriod(text) {
+  if (!text) return { inicio: null, fim: null };
+  const yearMatch = text.match(/\b(20\d{2})\b/);
+  const yearHint = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+
+  const rangePattern = /([A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?(?:[,]?\s+\d{4})?)\s+(?:to|through|until|-|\u2013|\u2014)\s+([A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?(?:[,]?\s+\d{4})?)/gi;
+  const rangeMatch = rangePattern.exec(text);
+  if (rangeMatch) {
+    const inicio = parseMonthNameDate(rangeMatch[1], yearHint) || parseNumericDate(rangeMatch[1]);
+    const fim = parseMonthNameDate(rangeMatch[2], yearHint) || parseNumericDate(rangeMatch[2]);
+    if (inicio && fim) return { inicio, fim };
   }
 
-  const dates = dateSpans.map((d) => parseMonthNameDate(d) || parseNumericDate(d)).filter(Boolean);
-  if (dates.length < 2) {
-    return { inicio: null, fim: null };
+  const datePattern = /([A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?(?:[,]?\s+\d{4})?|\d{1,2}[/-]\d{1,2}[/-]\d{4})/gi;
+  const allDates = [];
+  let match;
+  while ((match = datePattern.exec(text)) !== null) {
+    const d = parseMonthNameDate(match[1], yearHint) || parseNumericDate(match[1]);
+    if (d) allDates.push({ date: d, index: match.index });
   }
-
-  // Ordena e assume o menor como início e o maior como fim.
-  dates.sort();
-  return { inicio: dates[0], fim: dates[dates.length - 1] };
+  if (allDates.length >= 2) {
+    allDates.sort((a, b) => a.date.localeCompare(b.date));
+    return { inicio: allDates[0].date, fim: allDates[allDates.length - 1].date };
+  }
+  return { inicio: null, fim: null };
 }
 
-export { extractPeriod, cleanBulletLines };
+// ── Classificacao de cabecalhos ───────────────────────────────────────
 
-// ── Reconhecimento de seções ──────────────────────────────────────────
-// Cada seção é definida por um teste de cabeçalho e um parser de conteúdo.
-// O fluxo principal percorre as linhas, e toda vez que uma linha "abre"
-// uma seção, o conteúdo subsequente até a próxima seção é coletado.
-
-/**
- * Identifica se uma linha é um cabeçalho de multiplicador de bônus
- * ("[N]X GTA$ & RP"). Retorna o multiplicador ou null.
- */
-function matchBonusHeader(line) {
-  const m = line.match(/^\s*(\d{1,2})\s*[xX]\s*GTA\$?/i);
+function matchBonusHeader(text) {
+  const m = text.match(/(\d+[Xx])\s*(?:GTA\$|RP|GTA\$\s*&\s*RP)/i);
   if (!m) return null;
   const mult = parseInt(m[1], 10);
-  // Números absurdos (>10) no título provavelmente não são multiplicadores
-  // reais do formato de bônus do post; ainda assim aceitamos até 12.
-  return mult >= 2 && mult <= 12 ? mult : null;
+  return Number.isFinite(mult) && mult > 0 ? { key: 'bonus', mult } : null;
 }
 
-/**
- * Identifica se o conteúdo de um bloco de "Discounts" contém um par
- * "veículo - X%" e separa nome/percentual.
- */
-function parseDiscountLine(line) {
-  const m = line.match(/^(.*?)[:\-–—]\s*(\d{1,3}\s*%)$/i);
-  if (!m) return null;
-  const name = stripMarkdown(m[1]).trim();
-  const pct = m[2].trim();
-  if (!name || /\d{4}/.test(name)) return null;
-  return { name, pct };
-}
+function classifyHeader(rawLine, strippedLine) {
+  if (isBulletLine(rawLine)) return null;
+  const lower = strippedLine.toLowerCase().trim();
+  if (!lower) return null;
 
-// ── Roteador de seções ────────────────────────────────────────────────
-/**
- * Dado o texto limpo de uma seção (sem cabeçalho) e a chave da seção,
- * interpreta o conteúdo. Retorna um objeto com campos específicos.
- */
-function interpretSection(key, blockLines) {
-  const clean = cleanBulletLines(blockLines);
+  const bonus = matchBonusHeader(lower);
+  if (bonus) return bonus;
 
-  switch (key) {
-    case 'podium': {
-      // Linha(s) descrevendo o veículo do pódio.
-      const v = clean.map((l) => l.replace(/^podium\s*:\s*/i, '').trim()).find(Boolean);
-      return { vehicle: v || null };
-    }
-    case 'prizeRide': {
-      const v = clean.map((l) => l.replace(/^prize\s*ride\s*:\s*/i, '').trim()).find(Boolean);
-      return { vehicle: v || null };
-    }
-    case 'gunVan': {
-      return { items: clean };
-    }
-    case 'gtaPlus': {
-      return { items: clean };
-    }
-    case 'discounts': {
-      const discounts = [];
-      for (const line of clean) {
-        const parsed = parseDiscountLine(line);
-        if (parsed) {
-          discounts.push(`${parsed.name} (${parsed.pct})`);
-        } else {
-          discounts.push(line);
-        }
-      }
-      return { items: discounts };
-    }
-    case 'challenge':
-    case 'rewards':
-    case 'desafios':
-    case 'recompensas':
-    default: {
-      return { items: clean };
-    }
-  }
-}
-
-
-/**
- * Classifica um cabeçalho de seção (linha limpa) em uma chave conhecida,
- * ou retorna null se não for um cabeçalho de seção. Também retorna o
- * multiplicador quando a seção é de bônus.
- */
-function classifyHeader(line) {
-  const l = line.trim();
-
-  // Multiplicador de bônus primeiro (ex: "3X GTA$ & RP").
-  const mult = matchBonusHeader(l);
-  if (mult) {
-    return { key: 'bonus', mult };
-  }
-
-  const lower = l.toLowerCase();
-
-  if (/podium\s*(vehicle)?/i.test(lower) && /(\bvehicle\b|podium)/i.test(lower)) {
-    return { key: 'podium' };
-  }
-  if (/prize\s*ride/i.test(lower)) {
-    return { key: 'prizeRide' };
-  }
-  if (/discount/i.test(lower)) {
-    return { key: 'discounts' };
-  }
-  if (/gun\s*van/i.test(lower)) {
-    return { key: 'gunVan' };
-  }
-  if (/gta\s*\+/i.test(lower)) {
-    return { key: 'gtaPlus' };
-  }
-  if (/weekly\s*challenge/i.test(lower) || /challenge/i.test(lower)) {
+  if (/^podium\s*(vehicle)?$/i.test(lower)) return { key: 'podium' };
+  if (/^prize\s*ride/i.test(lower)) return { key: 'prizeRide' };
+  if (/^discounts?$/i.test(lower)) return { key: 'discounts' };
+  if (/gun\s*van/i.test(lower)) return { key: 'gunVan' };
+  if (/gta\s*\+/i.test(lower)) return { key: 'gtaPlus' };
+  if (/^weekly\s+challenge$/i.test(lower) || /this\s*week'?s?\s*challenge/i.test(lower)) {
     return { key: 'challenge' };
   }
-  if (/reward/i.test(lower)) {
+  if (/\brewards?\b/i.test(lower) && /\blogin\b/i.test(lower)) {
     return { key: 'rewards' };
   }
+
+  // Headers genericos do post real (absorvem conteudo sem afetar output)
+  if (/weekly\s+challenges?\s+and\s+vehicles/i.test(lower)) return { key: 'info' };
+  if (/this\s*week'?s?\s+(?:most\s+wanted|fib|salvage|kortz)/i.test(lower)) return { key: 'info' };
+  if (/luxury\s*autos/i.test(lower)) return { key: 'info' };
+  if (/premium\s*deluxe\s*motorsports/i.test(lower)) return { key: 'info' };
+  if (/daily\s*objectives?/i.test(lower)) return { key: 'info' };
+
+  // Footer / recursos: ignora
+  if (/other\s*resources?/i.test(lower)) return { key: 'ignore' };
+  if (/official\s*rockstar/i.test(lower)) return { key: 'ignore' };
+  if (/thanks\s*to/i.test(lower)) return { key: 'ignore' };
+
   return null;
 }
 
-/**
- * Converte a lista bruta de seções interpretadas no JSON final do Weekly.
- */
-function assembleResult({ period, bonusMap, podium, prizeRide, discounts, gunVan, gtaPlus, desafios, recompensas }) {
-  const bonus = [...bonusMap.entries()]
-    .filter(([, acts]) => acts.length > 0)
-    .map(([mult, atividades]) => ({ multiplicador: mult, atividades }))
-    .sort((a, b) => b.multiplicador - a.multiplicador);
+// ── Extracao de itens-chave do conteudo ───────────────────────────────
 
+function extractKeyValueItems(allLines) {
+  const map = new Map();
+  for (const raw of allLines) {
+    const stripped = stripMarkdown(raw).replace(/^[\u2022\-*\u25AA]\s*/, '').trim();
+    const kvMatch = stripped.match(/^([^:]+?):\s*(.+)$/);
+    if (kvMatch) {
+      const key = kvMatch[1].trim().toLowerCase();
+      const val = kvMatch[2].trim();
+      if (val && !map.has(key)) map.set(key, val);
+    }
+  }
+  return map;
+}
+
+function interpretDiscounts(rawLines) {
+  const items = [];
+  let currentDiscount = null;
+
+  for (const raw of rawLines) {
+    const stripped = stripMarkdown(raw).replace(/^[\u2022\-*\u25AA]\s*/, '').trim();
+    if (!stripped) continue;
+
+    const discountHeaderMatch = stripped.match(/^(free|\d{1,3}%\s*off)$/i);
+    if (discountHeaderMatch) {
+      currentDiscount = discountHeaderMatch[1].trim();
+      continue;
+    }
+
+    const inlineMatch = stripped.match(/^(\d{1,3}%\s*off)\s*[\u2013\u2014\-]\s*(.+)$/i);
+    if (inlineMatch) {
+      items.push(`${inlineMatch[2].trim()} - ${inlineMatch[1].trim()}`);
+      continue;
+    }
+
+    if (currentDiscount) {
+      items.push(`${stripped} - ${currentDiscount}`);
+      continue;
+    }
+
+    items.push(stripped);
+  }
+
+  return items;
+}
+
+// ── Interpretacao de secoes ───────────────────────────────────────────
+
+function interpretSection(key, rawLines) {
+  const clean = cleanBulletLines(rawLines);
+
+  switch (key) {
+    case 'bonus':
+      return { items: clean };
+    case 'podium': {
+      const v = clean.find(Boolean) || null;
+      return { vehicle: v };
+    }
+    case 'prizeRide': {
+      const v = clean.find(Boolean) || null;
+      return { vehicle: v };
+    }
+    case 'discounts': {
+      const paired = interpretDiscounts(rawLines);
+      return { items: paired.length > 0 ? paired : clean };
+    }
+    case 'gunVan':
+      return { items: clean };
+    case 'gtaPlus': {
+      const filtered = clean.filter((item) => {
+        if (/^https?:\/\//i.test(item)) return false;
+        if (/^\-+$/.test(item)) return false;
+        if (/^\\?\-+$/.test(item)) return false;
+        if (/^[\\/]+$/.test(item)) return false;
+        return true;
+      });
+      return { items: filtered };
+    }
+    case 'challenge': {
+      const filtered = clean.filter((item) => {
+        if (/^tba$/i.test(item)) return false;
+        if (/^\-+$/.test(item)) return false;
+        if (/^\*+$/.test(item)) return false;
+        return true;
+      });
+      return { items: filtered };
+    }
+    case 'rewards':
+      return { items: clean };
+    default:
+      return { items: clean };
+  }
+}
+
+// ── Montagem do resultado ─────────────────────────────────────────────
+
+function assembleResult({
+  period, bonusMap, podium, prizeRide, discounts,
+  gunVan, gtaPlus, desafios, recompensas,
+}) {
+  const bonus = [];
+  for (const [mult, activities] of bonusMap) {
+    bonus.push({ multiplicador: mult, atividades: activities });
+  }
   return {
     periodo: period,
     bonus,
-    desafios: desafios,
-    recompensas: recompensas,
+    veiculos: { podium, prizeRide },
     descontos: discounts,
-    veiculos: {
-      podium: podium || null,
-      prizeRide: prizeRide || null,
-    },
-    gunVan: gunVan,
-    gtaPlus: gtaPlus,
+    gunVan,
+    gtaPlus,
+    desafios,
+    recompensas,
     atualizadoEm: new Date().toISOString(),
   };
 }
 
-/**
- * Ponto de entrada: transforma o `selftext` (string) em dados estruturados.
- *
- * @param {string} selftext
- * @returns {object} JSON normalizado do Weekly (ver assembleResult).
- */
-export function parseWeekly(selftext) {
-  const text = (selftext || '').trim();
-  if (!text) {
-    logger.warn('[Weekly][Parser] selftext vazio.');
+// ── API publica ───────────────────────────────────────────────────────
+
+export function parseWeekly(text, titleText) {
+  if (!text || typeof text !== 'string') {
+    logger.warn('[Weekly][Parser] text vazio ou invalido.');
     return assembleResult({
       period: { inicio: null, fim: null },
       bonusMap: new Map(),
-      podium: null,
-      prizeRide: null,
-      discounts: [],
-      gunVan: [],
-      gtaPlus: {},
-      desafios: [],
-      recompensas: [],
+      podium: null, prizeRide: null, discounts: [],
+      gunVan: [], gtaPlus: {}, desafios: [], recompensas: [],
     });
   }
 
-  const period = extractPeriod(text);
-
+  const periodText = (titleText ? titleText + '\n' : '') + text;
+  const period = extractPeriod(periodText);
   const bonusMap = new Map();
-  const sections = []; // { header, key, mult, lines[] }
-
+  const sections = [];
+  const allContentLines = [];
   let current = null;
   const lines = text.split('\n');
 
   for (const rawLine of lines) {
-    const line = stripMarkdown(rawLine);
-
-    // Tenta classificar a linha como cabeçalho de seção.
-    const header = classifyHeader(line);
+    const stripped = stripMarkdown(rawLine);
+    const header = classifyHeader(rawLine, stripped);
     if (header) {
-      // Fecha a seção anterior e abre a nova. Se a seção é de bônus com
-      // mesmo multiplicador, acumulamos (pode aparecer "3X GTA$ & RP" mais
-      // de uma vez com sub-bloco).
       sections.push({
         key: header.key === 'bonus' ? 'bonus' : header.key,
         mult: header.mult || null,
@@ -296,16 +301,11 @@ export function parseWeekly(selftext) {
       current = sections[sections.length - 1];
       continue;
     }
-
-    // Caso ainda não haja seção aberta, ignora (cabeçalho do post, etc).
-    if (!current) continue;
-
-    // Linha de conteúdo deve ter algum texto relevante.
-    if (!line || line.length === 0) continue;
-    current.lines.push(rawLine);
+    if (!stripped || stripped.length === 0) continue;
+    allContentLines.push(rawLine);
+    if (current) current.lines.push(rawLine);
   }
 
-  // ── Interpretação ────────────────────────────────────────────────────
   let podium = null;
   let prizeRide = null;
   const discounts = [];
@@ -316,7 +316,6 @@ export function parseWeekly(selftext) {
 
   for (const section of sections) {
     const interpreted = interpretSection(section.key, section.lines);
-
     switch (section.key) {
       case 'bonus': {
         if (section.mult) {
@@ -325,59 +324,62 @@ export function parseWeekly(selftext) {
         }
         break;
       }
-      case 'podium': {
+      case 'podium':
         if (interpreted.vehicle) podium = interpreted.vehicle;
         break;
-      }
-      case 'prizeRide': {
+      case 'prizeRide':
         if (interpreted.vehicle) prizeRide = interpreted.vehicle;
         break;
-      }
-      case 'discounts': {
+      case 'discounts':
         discounts.push(...interpreted.items);
         break;
-      }
-      case 'gunVan': {
+      case 'gunVan':
         gunVan.push(...interpreted.items);
         break;
-      }
-      case 'gtaPlus': {
-        gtaPlus.items = gtaPlus.items ? [...gtaPlus.items, ...interpreted.items] : interpreted.items;
+      case 'gtaPlus':
+        gtaPlus.items = gtaPlus.items
+          ? [...gtaPlus.items, ...interpreted.items]
+          : interpreted.items;
         break;
-      }
-      case 'challenge': {
+      case 'challenge':
         desafios.push(...interpreted.items);
         break;
-      }
-      case 'rewards': {
+      case 'rewards':
         recompensas.push(...interpreted.items);
         break;
-      }
       default:
         break;
     }
   }
 
+  // Extracao pos-secao: pares chave-valor como [Podium Vehicle](url): Name
+  const kvMap = extractKeyValueItems(allContentLines);
+  if (!podium) {
+    for (const [key, val] of kvMap) {
+      if (/podium\s*(vehicle)?/i.test(key)) { podium = val; break; }
+    }
+  }
+  if (!prizeRide) {
+    for (const [key, val] of kvMap) {
+      if (/^prize\s*ride(?:\s+vehicle)?$/i.test(key)) { prizeRide = val; break; }
+    }
+  }
+
   const result = assembleResult({
-    period,
-    bonusMap,
-    podium,
-    prizeRide,
-    discounts,
-    gunVan,
-    gtaPlus,
-    desafios,
-    recompensas,
+    period, bonusMap, podium, prizeRide, discounts,
+    gunVan, gtaPlus, desafios, recompensas,
   });
 
   const hasAny = result.bonus.length > 0 || result.descontos.length > 0 ||
     result.veiculos.podium || result.veiculos.prizeRide || result.gunVan.length > 0;
   if (!hasAny) {
-    logger.warn('[Weekly][Parser] Nenhuma seção válida identificada no post.');
+    logger.warn('[Weekly][Parser] Nenhuma secao valida identificada no post.');
   } else {
-    logger.info(`[Weekly][Parser] Parser concluído (${result.bonus.length} bônus, ${result.descontos.length} descontos).`);
+    logger.info(
+      `[Weekly][Parser] Parser concluido (${result.bonus.length} bonus, ` +
+      `${result.descontos.length} descontos).`
+    );
   }
-
   return result;
 }
 
