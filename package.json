@@ -11,7 +11,8 @@
     "test:newswire": "node tests/test-newswire.js",
     "test:gtao": "node tests/test-gtao.js",
     "test:social": "node tests/test-social.js",
-    "test:weekly-gtaforums": "node tests/test-weekly-gtaforums.js"
+    "test:weekly-gtaforums": "node tests/test-weekly-gtaforums.js",
+    "test:weekly-reddit": "node tests/test-weekly-reddit.js"
   },
   "keywords": [
     "discord",

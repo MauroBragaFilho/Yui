@@ -7,6 +7,7 @@ import { createNewswireEmbed } from './embeds/newswireEmbed.js';
 import { createDailyEmbed } from './embeds/dailyEmbed.js';
 import { createYoutubeVideoEmbed, createYoutubeLiveEmbed } from './embeds/youtubeEmbed.js';
 import { createTwitchLiveEmbed } from './embeds/twitchEmbed.js';
+import { createWeeklyRedditEmbed } from './embeds/weeklyRedditEmbed.js';
 import { buildWeeklyPaginatedEmbeds, buildWeeklyPaginationRow } from '../engines/gtao/weeklyAnalysis.js';
 import { logger } from '../utils/logger.js';
 
@@ -152,6 +153,52 @@ export const discordPublisher = {
       }
     }
   },
+
+  /**
+   * Publica o Weekly do r/gtaonline (fonte Reddit) em todos os servidores
+   * configurados, usando o embed enxuto. O ID do post é usado como chave
+   * de deduplicação (por guilda), evitando republicação após reinício.
+   */
+  async publishWeeklyReddit(client, weekly) {
+    if (!weekly) return 0;
+
+    const embed = createWeeklyRedditEmbed(weekly);
+    const guilds = guildRepository.getAll();
+    let published = 0;
+
+    for (const g of guilds) {
+      if (!g.weekly_channel_id) continue;
+
+      const contentId = `reddit:${weekly.id}`;
+      if (publicationRepository.isPublished('weekly', contentId, g.guild_id)) {
+        continue;
+      }
+
+      try {
+        const channel = await client.channels.fetch(g.weekly_channel_id);
+        if (channel && channel.isTextBased()) {
+          const msg = await channel.send({ embeds: [embed] });
+          publicationRepository.recordPublication(
+            'weekly',
+            contentId,
+            g.guild_id,
+            g.weekly_channel_id,
+            msg.id
+          );
+          logger.info(`[Publisher] Weekly Reddit [${weekly.id}] publicado na guilda ${g.guild_id}`);
+          published++;
+        }
+      } catch (error) {
+        logger.error(
+          `[Publisher] Falha ao enviar Weekly Reddit para canal ${g.weekly_channel_id} (Guild: ${g.guild_id}): ${error.message}`
+        );
+      }
+    }
+
+    return published;
+  },
+
+
 
   /**
    * Publica um evento do YouTube (vídeo/Short/live) em todas as guilda que

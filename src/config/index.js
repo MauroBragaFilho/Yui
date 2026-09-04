@@ -24,6 +24,10 @@ export const config = {
   },
   environment: process.env.NODE_ENV || 'development',
   newswire: {
+    // Habilita/desabilita a verificação automática do Rockstar Newswire
+    // no scheduler. Padrão: false (desativado). O motor continua disponível
+    // para uso manual via /gta-semanal fonte:newswire.
+    enabled: process.env.NEWSWIRE_ENABLED === 'true',
     intervalMinutes: parseInt(process.env.NEWSWIRE_INTERVAL_MINUTES || '30', 10),
   },
   ai: {
@@ -57,6 +61,16 @@ export const config = {
     clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
     // Polling interval em minutos para checagem de streamers (1-2 min recomendado)
     intervalMinutes: parseInt(process.env.TWITCH_INTERVAL_MINUTES || '2', 10),
+  },
+  weekly: {
+    // Habilita/desabilita a busca semanal do r/gtaonline via Reddit.
+    enabled: process.env.GTA_WEEKLY_ENABLED !== 'false',
+    // Frequência de verificação em minutos (default: 30).
+    intervalMinutes: parseInt(process.env.GTA_WEEKLY_INTERVAL_MINUTES || '30', 10),
+    // User-Agent identificável exigido pelo Reddit.
+    userAgent:
+      process.env.REDDIT_USER_AGENT ||
+      'nodejs:yui-gta-bot:1.0 (by /u/your_reddit_username)',
   },
 };
 
