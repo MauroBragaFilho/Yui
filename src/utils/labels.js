@@ -23,6 +23,14 @@ export function getWeaponLabelPT(key) {
   if (!key) return 'Desconhecido';
   if (labelsPT[key]) return labelsPT[key];
 
+  // Se o valor já veio traduzido/legível (não é uma chave interna crua do
+  // tipo "WEAPON_ASSAULTRIFLE_MK2" nem um identificador em maiúsculas),
+  // retorna como está. Evita "retraduzir" um label que o getTunable já
+  // resolveu para PT-BR (ex: "Arma de Choque" viraria "Arma De Choque").
+  if (typeof key === 'string' && !key.includes('_') && !/^[A-Z0-9 ]+$/.test(key)) {
+    return key;
+  }
+
   // Fallback: WEAPON_ASSAULTRIFLE_MK2 -> "Assaultrifle Mk2"
   const humanized = key
     .replace(/^WEAPON_/, '')

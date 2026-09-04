@@ -228,6 +228,7 @@ const providerSettings = {
     cloudflare:   { timeout: 30000, temperature: 0.7, max_tokens: 1024 },
     pollinations: { timeout: 60000, temperature: 0.7, max_tokens: 1024 },
     hf:           { timeout: 60000, temperature: 0.7, max_tokens: 512 },
+    groq:         { timeout: 30000, temperature: 0.7, max_tokens: 1024 },
     horde:        { timeout: 60000, temperature: 0.7, max_tokens: 256 }
 };
 const channelSettingsPath = path.join(__dirname, '../data/channel_settings.json');
@@ -1197,7 +1198,7 @@ async function tryPollinations(prompt, systemPrompt) {
     throw new Error('Pollinations falhou em ambos métodos');
 }
 async function tryHuggingFace(prompt, systemPrompt, options = {}) {
-    console.log(`[IA] 4/5 Tentando HuggingFace Public (Router)...`);
+    console.log(`[IA] Tentando HuggingFace Public (Router)...`);
     const headers = { 'Content-Type': 'application/json' };
     if (config.hfToken && config.hfToken.length > 5) {
         headers['Authorization'] = `Bearer ${config.hfToken}`;
@@ -1227,8 +1228,65 @@ async function tryHuggingFace(prompt, systemPrompt, options = {}) {
     }
     throw new Error('HF retornou formato inválido');
 }
+async function tryGroq(prompt, systemPrompt, options = {}) {
+    console.log(`[IA] Tentando GROQ...`);
+    const apiKeys = config.groqApiKeys;
+    if (apiKeys.length === 0) {
+        throw new Error('Nenhuma chave GROQ configurada (GROQ_API_KEY)');
+    }
+    const modelName = config.groqModel || 'meta-llama/llama-4-scout-17b-16e-instruct';
+    let lastError = null;
+    for (let i = 0; i < apiKeys.length; i++) {
+        const currentKey = apiKeys[i];
+        if (geminiCooldowns[`groq_${currentKey}`] && Date.now() < geminiCooldowns[`groq_${currentKey}`]) {
+            console.log(`[GROQ] Ignorando chave ${i + 1}/${apiKeys.length} (cooldown ativo).`);
+            continue;
+        }
+        try {
+            if (apiKeys.length > 1) {
+                console.log(`[GROQ] Usando chave ${i + 1}/${apiKeys.length} com modelo ${modelName}...`);
+            }
+            const response = await axios.post(config.groqApiUrl, {
+                model: modelName,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    ...options.history || [],
+                    { role: 'user', content: prompt }
+                ],
+                max_tokens: providerSettings.groq.max_tokens,
+                temperature: providerSettings.groq.temperature,
+                stream: false
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${currentKey}`
+                },
+                timeout: providerSettings.groq.timeout
+            });
+            if (response.data?.choices?.[0]?.message?.content) {
+                if (apiKeys.length > 1) {
+                    console.log(`[GROQ] Resposta recebida via chave ${i + 1}/${apiKeys.length}.`);
+                }
+                return {
+                    text: response.data.choices[0].message.content,
+                    modelName: `GROQ (${modelName})`
+                };
+            }
+        } catch (error) {
+            const status = error.response ? error.response.status : 'Unknown';
+            const msg = error.response?.data?.error?.message || error.message;
+            console.warn(`[GROQ] Falha na chave ${i + 1} (Status: ${status}): ${msg}`);
+            if (status === 429) {
+                geminiCooldowns[`groq_${currentKey}`] = Date.now() + 120000;
+                console.log(`[GROQ] Chave ${i + 1} em cooldown de 2 minutos.`);
+            }
+            lastError = new Error(`Chave ${i + 1}: ${msg}`);
+        }
+    }
+    throw new Error(`Todas as chaves GROQ falharam. Último erro: ${lastError ? lastError.message : 'Nenhuma chave válida'}`);
+}
 async function tryKoboldHorde(prompt, systemPrompt) {
-    console.log(`[IA] 5/5 Tentando Kobold Horde...`);
+    console.log(`[IA] Tentando Kobold Horde...`);
     const hordeHeaders = {
         'Content-Type': 'application/json',
         'Client-Agent': 'YuiBot:2.1:Maint'
@@ -1275,10 +1333,11 @@ async function tryKoboldHorde(prompt, systemPrompt) {
 async function generateResponse(prompt, channelId = null, options = {}) {
     const providers = [
         { func: tryLocal, supportsSearch: true },
+        { func: tryHuggingFace, supportsSearch: false },
+        { func: tryGroq, supportsSearch: false },
         { func: tryGemini, supportsSearch: true },
         { func: tryCloudflare, supportsSearch: false },
         { func: tryPollinations, supportsSearch: false },
-        { func: tryHuggingFace, supportsSearch: false },
         { func: tryKoboldHorde, supportsSearch: false }
     ];
     const guildId = options.guildId || options.guild?.id || null;
@@ -1337,10 +1396,11 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
         }
         try {
             const providerKey = provider.func === tryLocal ? 'local' :
+                                provider.func === tryHuggingFace ? 'hf' :
+                                provider.func === tryGroq ? `groq 1/${config.groqApiKeys.length || 1}` :
                                 provider.func === tryGemini ? `gemini 1/${config.geminiApiKeys.length || 1}` :
                                 provider.func === tryCloudflare ? 'cloudflare' :
                                 provider.func === tryPollinations ? 'pollinations' :
-                                provider.func === tryHuggingFace ? 'hf' :
                                 provider.func === tryKoboldHorde ? 'horde' : 'unknown';
             if (options.onProviderAttempt) {
                 try {

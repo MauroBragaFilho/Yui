@@ -33,7 +33,9 @@ export async function fetchGunVan(offsetDays = 0) {
     for (let i = 0; i <= 9; i++) {
       const name = getTunable(`XM22_GUN_VAN_SLOT_WEAPON_TYPE_${i}`);
       const discount = getTunable(`XM22_GUN_VAN_SLOT_WEAPON_DISCOUNT_${i}`);
-      if (name !== 'invalid') {
+      // Slots sem arma retornam 0/null (não uma string) — ignora para não
+      // exibir "Desconhecido" no embed.
+      if (typeof name === 'string' && name.trim() && name !== 'invalid') {
         weapons.push({
           name: getWeaponLabelPT(name),
           discountPercent: typeof discount === 'number' ? discount * 100 : null,
@@ -45,7 +47,7 @@ export async function fetchGunVan(offsetDays = 0) {
     for (let i = 0; i <= 2; i++) {
       const name = getTunable(`XM22_GUN_VAN_SLOT_THROWABLE_TYPE_${i}`);
       const discount = getTunable(`XM22_GUN_VAN_SLOT_THROWABLE_DISCOUNT_${i}`);
-      if (name !== 'invalid') {
+      if (typeof name === 'string' && name.trim() && name !== 'invalid') {
         throwables.push({
           name: getWeaponLabelPT(name),
           discountPercent: typeof discount === 'number' ? discount * 100 : null,

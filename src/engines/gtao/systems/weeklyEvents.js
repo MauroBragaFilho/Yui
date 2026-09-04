@@ -1,10 +1,19 @@
 import { scrapeNewswireArticles, scrapeArticleBody } from '../../newswire/scraper.js';
-import { fetchWeeklyEventFromReddit } from './redditWeeklyScraper.js';
 import { translateToPortuguese } from '../../../utils/translate.js';
 import { logger } from '../../../utils/logger.js';
 
-// Deixe 'false': Reddit é a fonte principal, Newswire é fallback (não apagado).
-const NEWSWIRE_AS_PRIMARY = false;
+/**
+ * Os bônus/descontos/veículos da ATUALIZAÇÃO SEMANAL do GTA Online não
+ * seguem um algoritmo de seed determinístico — eles são escolhidos
+ * manualmente pela Rockstar e só se tornam públicos quando ela publica
+ * o artigo semanal no Newswire (geralmente às terças/quintas).
+ *
+ * Esta função busca o artigo semanal mais recente no Newswire, lê o
+ * conteúdo completo, traduz para PT-BR e monta os dados usados pelo
+ * comando /gta-semanal, pelo /yui-resumo-semanal e pelo scheduler
+ * automático. O Newswire é a única fonte do evento semanal (o antigo
+ * scraper do Reddit foi removido e não é mais usado).
+ */
 
 const WEEKLY_TITLE_KEYWORDS = [
   'bonus',
@@ -12,22 +21,47 @@ const WEEKLY_TITLE_KEYWORDS = [
   'podium',
   'prize ride',
   'discount',
+  'discounts',
   'now available in gta online',
   'gta$',
   'twitch prime',
   'prime gaming',
+  'reward',
+  'rewards',
+  'triple',
+  'double',
+  '2x',
+  '3x',
+  'this week',
+  'this week in',
+  'weekly',
+  'week in gta online',
+  'gta+ member',
+  'gta+ members',
+  'free this week',
+  'gta online this week',
+  'races',
+  'time trial',
 ];
 
-function looksLikeWeeklyArticle(title) {
+/**
+ * Verifica se um artigo tem "cara" de atualização semanal, seja pelo
+ * título (lista de palavras-chave conhecidas) ou pela categoria oficial
+ * do post ("GTA Online" / "GTA V"), que costuma acompanhar esses artigos
+ * mesmo quando o título é bem genérico.
+ */
+function looksLikeWeeklyArticle(title, category) {
   const lower = (title || '').toLowerCase();
-  return WEEKLY_TITLE_KEYWORDS.some((kw) => lower.includes(kw));
+  const lowerCategory = (category || '').toLowerCase();
+  if (WEEKLY_TITLE_KEYWORDS.some((kw) => lower.includes(kw))) return true;
+  return lowerCategory.includes('gta online') || lowerCategory.includes('gta v');
 }
 
 /**
- * FONTE DE FALLBACK (Rockstar Newswire). Mantida intacta — só é chamada
- * se o Reddit falhar (fora do ar, bloqueio, post ainda não publicado, etc).
+ * Busca e monta os dados do evento semanal a partir do Rockstar Newswire.
+ * É a fonte principal (e única) do evento semanal.
  */
-async function fetchWeeklyEventFromNewswire() {
+export async function fetchWeeklyEventFromNewswire() {
   try {
     const articles = await scrapeNewswireArticles();
 
@@ -36,20 +70,30 @@ async function fetchWeeklyEventFromNewswire() {
       return null;
     }
 
-    const weeklyArticle = articles.find((a) => looksLikeWeeklyArticle(a.title));
+    // Os artigos vêm ordenados do mais recente para o mais antigo.
+    let weeklyArticle = articles.find((a) => looksLikeWeeklyArticle(a.title, a.category));
 
+    // Fallback: se nenhum título/categoria bateu com as keywords conhecidas,
+    // assume o artigo mais recente. A Rockstar publica a atualização semanal
+    // quase sempre como o post mais novo do Newswire nas quintas-feiras, e os
+    // títulos variam demais para depender só de uma lista fixa de termos.
     if (!weeklyArticle) {
-      logger.info('[GTAO] fetchWeeklyEventFromNewswire(): nenhum artigo com cara de atualização semanal encontrado.');
-      return null;
+      logger.warn(
+        `[GTAO] fetchWeeklyEventFromNewswire(): nenhum título reconhecido pelas keywords. Usando fallback (artigo mais recente): "${articles[0].title}"`
+      );
+      weeklyArticle = articles[0];
     }
 
+    // Lê o corpo completo do artigo (a listagem só traz o título)
     const { paragraphs, heroImageUrl } = await scrapeArticleBody(weeklyArticle.url);
 
     if (!paragraphs || paragraphs.length === 0) {
-      logger.warn('[GTAO] fetchWeeklyEventFromNewswire(): artigo encontrado, mas sem parágrafos legíveis.');
+      logger.warn('[GTAO] fetchWeeklyEventFromNewswire(): artigo semanal encontrado, mas sem parágrafos legíveis.');
       return null;
     }
 
+    // Traduz o título e cada parágrafo individualmente para PT-BR
+    // (a API de tradução tem limite de tamanho por requisição).
     const translatedTitle = await translateToPortuguese(weeklyArticle.title);
 
     const translatedParagraphs = [];
@@ -58,19 +102,23 @@ async function fetchWeeklyEventFromNewswire() {
       translatedParagraphs.push(await translateToPortuguese(paragraph));
     }
 
+    // Texto completo (usado pela análise da IA) e versão cortada (usada no
+    // embed do Discord, que tem limite de 1024 caracteres por campo).
     const fullSummary = translatedParagraphs.join('\n\n');
-    const summary = fullSummary.length > 1000 ? `${fullSummary.slice(0, 1000).trim()}…` : fullSummary;
+    const summary =
+      fullSummary.length > 1000 ? `${fullSummary.slice(0, 1000).trim()}…` : fullSummary;
 
     const weeklyData = {
       title: translatedTitle,
       url: weeklyArticle.url,
       summary,
+      fullText: fullSummary,
       thumbnailUrl: heroImageUrl || weeklyArticle.thumbnailUrl || '',
       publishedAt: weeklyArticle.publishedAt,
       source: 'newswire',
     };
 
-    logger.info(`[GTAO] fetchWeeklyEventFromNewswire(): artigo semanal capturado — "${translatedTitle}"`);
+    logger.info(`[GTAO] fetchWeeklyEventFromNewswire(): artigo semanal capturado e traduzido — "${translatedTitle}"`);
     return weeklyData;
   } catch (error) {
     logger.error(`[GTAO] fetchWeeklyEventFromNewswire(): erro inesperado: ${error.message}`);
@@ -80,20 +128,9 @@ async function fetchWeeklyEventFromNewswire() {
 
 /**
  * Ponto de entrada usado pelo resto do bot (comando /gta-semanal, scheduler,
- * e o cache em `gtaoRepository.saveWeekly`). Ordem de prioridade:
- *   1. Reddit r/gtaonline (fonte principal — posta geralmente na quarta-feira)
- *   2. Rockstar Newswire (fallback, mantido no código, não deletado)
+ * e o cache em `gtaoRepository.saveWeekly`). O Newswire é a única fonte do
+ * evento semanal.
  */
 export async function fetchWeeklyEvent() {
-  if (NEWSWIRE_AS_PRIMARY) {
-    return fetchWeeklyEventFromNewswire();
-  }
-
-  const fromReddit = await fetchWeeklyEventFromReddit();
-  if (fromReddit) return fromReddit;
-
-  logger.warn('[GTAO] Reddit indisponível ou sem post novo — caindo para o fallback do Newswire.');
   return fetchWeeklyEventFromNewswire();
 }
-
-export { fetchWeeklyEventFromNewswire };
