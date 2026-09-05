@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { CONSTANTS } from '../../config/constants.js';
+import { translateText } from '../../engines/gtao/systems/weekly/translate.js';
 
 function formatLocationList(items, emoji = '📍') {
   if (!items || items.length === 0) return 'N/A';
@@ -20,7 +21,7 @@ export function createDailyEmbed(dailyData) {
     const gv = dailyData.gunVan;
     const weaponsList = (gv.weapons || [])
       .slice(0, 5)
-      .map((w) => `- ${w.discountPercent ? `${w.name} (-${w.discountPercent}%)` : w.name}`)
+      .map((w) => `- ${w.discountPercent ? `${translateText(w.name)} (-${w.discountPercent}%)` : translateText(w.name)}`)
       .join('\n') || 'N/A';
 
     embed.addFields({

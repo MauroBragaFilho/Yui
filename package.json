@@ -12,7 +12,9 @@
     "test:gtao": "node tests/test-gtao.js",
     "test:social": "node tests/test-social.js",
     "test:weekly-gtaforums": "node tests/test-weekly-gtaforums.js",
-    "test:weekly-reddit": "node tests/test-weekly-reddit.js"
+    "test:weekly-reddit": "node tests/test-weekly-reddit.js",
+    "test:gtacars": "node tests/test-gtacars.js",
+    "test:ask-gtacars": "node tests/test-ask-gtacars.js"
   },
   "keywords": [
     "discord",

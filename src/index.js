@@ -8,6 +8,7 @@ import { deploySlashCommands } from './discord/deployCommands.js';
 import { downloadTunables } from './utils/tunables.js';
 import { downloadVehicleData } from './utils/vehicleData.js';
 import { downloadWeaponData } from './utils/weaponData.js';
+import { updateVehicles as updateGtaCarsVehicles } from './services/gta/vehicles/gtacars/service.js';
 import { validateMediaTools } from './utils/binaries.js';
 
 async function registerHikariEvents(client) {
@@ -61,6 +62,17 @@ async function bootstrap() {
     await downloadWeaponData();
   } catch (err) {
     logger.warn(`[Bootstrap] Weapon data indisponível, seguindo sem: ${err.message}`);
+  }
+
+  // 1.2.1 Atualizar base de veículos do GTACars (fonte independente). O cache
+  // já é carregado no import do service; este update garante frescor (24h).
+  try {
+    const report = await updateGtaCarsVehicles();
+    if (!report?.ok) {
+      logger.warn(`[Bootstrap] GTACars sem atualização: ${report?.reason || 'desconhecido'} (${report?.error || ''})`);
+    }
+  } catch (err) {
+    logger.warn(`[Bootstrap] GTACars indisponível, seguindo com o cache local: ${err.message}`);
   }
 
   // 1.3 Validação e Auto-Download de ferramentas de mídia (yt-dlp, ffmpeg)

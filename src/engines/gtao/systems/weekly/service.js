@@ -65,6 +65,8 @@ function buildWeeklyOutput(post, parsed) {
     id: post.id,
     url: post.url,
     title: post.title,
+    // Timestamp do post (epoch UTC) usado no rodapé do embed enxuto.
+    createdUtc: post.createdUtc,
     // selftext cru preservado para que a IA possa analisar o post original
     // (prompt de análise semanal em weeklyAnalysis.js usa fullText || summary).
     fullText: post.selftext || '',
@@ -75,7 +77,7 @@ function buildWeeklyOutput(post, parsed) {
     recompensas: parsed.recompensas,
     // descontos no formato do parser (array de strings como "Grotti Turismo R - 30%").
     descontos: parsed.descontos,
-    // Alias "discounts" usado pelo buildWeeklyPaginatedEmbeds para agrupar
+    // Alias "discounts" usado pelo buildWeeklyCombinedEmbeds para agrupar
     // por loja via groupDiscountsByStore(). Mesmo conteúdo, nome em inglês
     // para compatibilidade com o embed builder existente.
     discounts: parsed.descontos,

@@ -7,8 +7,9 @@ import { createNewswireEmbed } from './embeds/newswireEmbed.js';
 import { createDailyEmbed } from './embeds/dailyEmbed.js';
 import { createYoutubeVideoEmbed, createYoutubeLiveEmbed } from './embeds/youtubeEmbed.js';
 import { createTwitchLiveEmbed } from './embeds/twitchEmbed.js';
-import { createWeeklyRedditEmbed } from './embeds/weeklyRedditEmbed.js';
-import { buildWeeklyPaginatedEmbeds, buildWeeklyPaginationRow } from '../engines/gtao/weeklyAnalysis.js';
+import { gtaoEngine } from '../engines/gtao/index.js';
+import { buildWeeklyCombinedEmbeds, buildWeeklyPaginationRow } from '../engines/gtao/weeklyAnalysis.js';
+import { translateWeeklyForEmbed } from '../engines/gtao/systems/weekly/aiTranslate.js';
 import { logger } from '../utils/logger.js';
 
 // Tempo que os botões de paginação do embed semanal automático ficam
@@ -92,10 +93,10 @@ export const discordPublisher = {
   },
 
   /**
-   * Publica o evento semanal em todos os servidores configurados como um
-   * embed paginado (4 páginas: destaques/gratuitos, descontos, farm/novidades,
-   * avaliação), com a análise da IA já pré-calculada e salva em weeklyData
-   * pelo gtaoEngine.collectWeekly() — não faz nenhuma chamada de IA aqui.
+   * Publica o evento semanal em todos os servidores configurados como a
+   * composição única (resumo enxuto do r/gtaonline + páginas da análise da IA),
+   * com a análise da IA já pré-calculada e salva em weeklyData pelo
+   * gtaoEngine.collectWeekly() — não faz nenhuma chamada de IA aqui.
    */
   async publishWeekly(client, weeklyData, weekKey) {
     if (!weeklyData) return;
@@ -107,7 +108,7 @@ export const discordPublisher = {
     }
 
     const dailyData = gtaoRepository.getLatestDaily()?.data;
-    const pages = buildWeeklyPaginatedEmbeds(weeklyData, dailyData);
+    const pages = buildWeeklyCombinedEmbeds(weeklyData, dailyData);
 
     for (const g of guilds) {
       if (!g.weekly_channel_id) continue;
@@ -125,7 +126,7 @@ export const discordPublisher = {
             components: [buildWeeklyPaginationRow(currentPage, pages.length)],
           });
           publicationRepository.recordPublication('weekly', weekKey, g.guild_id, g.weekly_channel_id, msg.id);
-          logger.info(`[Publisher] Evento Semanal [${weekKey}] (paginado, com análise da IA) publicado na guilda ${g.guild_id}`);
+          logger.info(`[Publisher] Evento Semanal [${weekKey}] (enxuto + análise da IA) publicado na guilda ${g.guild_id}`);
 
           const collector = msg.createMessageComponentCollector({ time: WEEKLY_PAGINATION_ACTIVE_MS });
 
@@ -156,20 +157,43 @@ export const discordPublisher = {
 
   /**
    * Publica o Weekly do r/gtaonline (fonte Reddit) em todos os servidores
-   * configurados, usando o embed enxuto. O ID do post é usado como chave
-   * de deduplicação (por guilda), evitando republicação após reinício.
+   * configurados, usando a MESMA composição do /gta-semanal (resumo enxuto +
+   * páginas da análise da IA). O ID do post é usado como chave de
+   * deduplicação (por guilda), evitando republicação após reinício.
    */
   async publishWeeklyReddit(client, weekly) {
     if (!weekly) return 0;
 
-    const embed = createWeeklyRedditEmbed(weekly);
+    // Refaz a coleta completa (dados + análise da IA) para que a publicação
+    // automática entregue o mesmo conteúdo combinado do comando — inclusive a
+    // análise da IA que antes só existia no /gta-semanal.
+    let weeklyData = weekly;
+    try {
+      const collected = await gtaoEngine.collectWeekly({ source: 'reddit' });
+      if (collected) {
+        weeklyData = collected;
+      } else {
+        logger.warn('[Publisher] collectWeekly retornou null na publicação automática; publicando sem análise da IA.');
+      }
+    } catch (err) {
+      logger.warn(`[Publisher] Falha ao coletar análise da IA para o Weekly Reddit: ${err.message}`);
+    }
+
+    // Traduz o conteúdo (título, bônus, descontos, Van de Armas, GTA+,
+    // desafio) para PT-BR via IA — preservando nomes de veículos/prédios em
+    // inglês. Se a IA estiver indisponível, cai para o glossário
+    // determinístico; nunca bloqueia a publicação.
+    const translated = await translateWeeklyForEmbed(weeklyData).catch(() => weeklyData);
+    const pages = buildWeeklyCombinedEmbeds(translated, gtaoRepository.getLatestDaily()?.data);
+    if (pages.length === 0) return 0;
+
     const guilds = guildRepository.getAll();
     let published = 0;
 
     for (const g of guilds) {
       if (!g.weekly_channel_id) continue;
 
-      const contentId = `reddit:${weekly.id}`;
+      const contentId = `reddit:${weeklyData.id || weekly.id}`;
       if (publicationRepository.isPublished('weekly', contentId, g.guild_id)) {
         continue;
       }
@@ -177,7 +201,11 @@ export const discordPublisher = {
       try {
         const channel = await client.channels.fetch(g.weekly_channel_id);
         if (channel && channel.isTextBased()) {
-          const msg = await channel.send({ embeds: [embed] });
+          let currentPage = 0;
+          const msg = await channel.send({
+            embeds: [pages[currentPage]],
+            components: [buildWeeklyPaginationRow(currentPage, pages.length)],
+          });
           publicationRepository.recordPublication(
             'weekly',
             contentId,
@@ -185,8 +213,29 @@ export const discordPublisher = {
             g.weekly_channel_id,
             msg.id
           );
-          logger.info(`[Publisher] Weekly Reddit [${weekly.id}] publicado na guilda ${g.guild_id}`);
+          logger.info(`[Publisher] Weekly Reddit [${weeklyData.id || weekly.id}] publicado na guilda ${g.guild_id}`);
           published++;
+
+          const collector = msg.createMessageComponentCollector({ time: WEEKLY_PAGINATION_ACTIVE_MS });
+
+          collector.on('collect', async (i) => {
+            if (i.customId.startsWith('weekly_page_prev_')) {
+              currentPage = Math.max(0, currentPage - 1);
+            } else if (i.customId.startsWith('weekly_page_next_')) {
+              currentPage = Math.min(pages.length - 1, currentPage + 1);
+            } else {
+              return i.deferUpdate().catch(() => null);
+            }
+
+            await i.update({
+              embeds: [pages[currentPage]],
+              components: [buildWeeklyPaginationRow(currentPage, pages.length)],
+            });
+          });
+
+          collector.on('end', () => {
+            msg.edit({ components: [] }).catch(() => null);
+          });
         }
       } catch (error) {
         logger.error(

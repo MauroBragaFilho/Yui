@@ -3,6 +3,8 @@ import { generateResponse } from '../../handlers/llmHandler.js';
 import { logger } from '../../utils/logger.js';
 import { CONSTANTS } from '../../config/constants.js';
 import { groupDiscountsByStore } from '../../data/gtaoVehicleStores.js';
+import { translateTitle } from './systems/weekly/translate.js';
+import { createWeeklyRedditEmbed } from '../../discord/embeds/weeklyRedditEmbed.js';
 
 /**
  * Monta o prompt de análise semanal para a IA. Diferente da versão
@@ -140,104 +142,151 @@ function truncateField(text, maxLen = 1000) {
 }
 
 /**
- * Monta as 4 páginas do embed semanal:
- *   Página 1 — Destaques da Semana + Itens Gratuitos
- *   Página 2 — Veículos com Desconto + Armas com Desconto (Van de Armas)
- *   Página 3 — Melhores Pontos de Farm + Novidades da Semana
- *   Página 4 — Avaliação da Semana
+ * Composição ÚNICA do embed semanal, usada tanto no /gta-semanal quanto nas
+ * publicações automáticas (Reddit e Newswire):
  *
- * Retorna um array de 4 EmbedBuilder, prontos para navegação por botão.
+ *   Página 1 (quando há dados estruturados — Reddit) — resumo enxuto no
+ *     formato do r/gtaonline: título com datas, bônus, veículos, descontos
+ *     agrupados por loja e Van de Armas.
+ *   Páginas seguintes — análise da IA (destaques/gratuitos, descontos da IA
+ *     somente quando a página 1 não os cobriu, farm/novidades, avaliação).
+ *
+ * Retorna um array de EmbedBuilder prontos para navegação por botão.
  */
-export function buildWeeklyPaginatedEmbeds(weeklyData, dailyData) {
+export function buildWeeklyCombinedEmbeds(weeklyData, dailyData = null) {
   const analysis = weeklyData.analysis || {};
   const discountedWeapons = getGunVanDiscountedWeapons(dailyData);
+
+  // A página 1 (resumo enxuto) só existe quando a fonte trouxe dados
+  // estruturados (Reddit). Para a Newswire — que chega como texto traduzido —
+  // a análise da IA lidera a paginação.
+  const hasStructuredData = Boolean(
+    (weeklyData.bonus && weeklyData.bonus.length) ||
+      (weeklyData.descontos && weeklyData.descontos.length) ||
+      (weeklyData.gunVan && weeklyData.gunVan.length) ||
+      (weeklyData.veiculos && (weeklyData.veiculos.podium || weeklyData.veiculos.prizeRide))
+  );
+  const hasStructuredDiscounts = Boolean(weeklyData.descontos && weeklyData.descontos.length);
+
+  const pages = hasStructuredData
+    ? [createWeeklyRedditEmbed(weeklyData, { dailyData })]
+    : [];
 
   const baseEmbed = () =>
     new EmbedBuilder()
       .setColor(CONSTANTS.COLORS.WEEKLY_EVENT)
-      .setAuthor({ name: `🚨 GTA Online — ${analysis.titulo || weeklyData.title || 'Atualização Semanal'}`, url: weeklyData.url })
+      .setAuthor({
+        name: `🚨 GTA Online — ${analysis.titulo || translateTitle(weeklyData.title) || 'Atualização Semanal'}`,
+        url: weeklyData.url,
+      })
       .setThumbnail(weeklyData.thumbnailUrl || CONSTANTS.THUMBNAILS.GTA_LOGO)
       .setTimestamp();
 
-  const pages = [];
-
-  // Página 1 — Destaques + Itens Gratuitos
-  pages.push(
-    baseEmbed()
-      .setTitle('📰 Página 1/4 — Destaques & Itens Gratuitos')
-      .addFields(
-        { name: '🎉 Destaques da Semana', value: truncateField(analysis.destaques), inline: false },
-        { name: '🎁 Itens Gratuitos / Recompensas', value: truncateField(analysis.itensGratuitos), inline: false }
-      )
-  );
-
-  // Página 2 — Veículos em desconto + Armas em desconto (Van de Armas)
-  const weaponsText =
-    discountedWeapons.length > 0
-      ? discountedWeapons.map((w) => `• ${w.name} (-${w.discountPercent}%)`).join('\n')
-      : '*Nenhuma arma com desconto ativo na Van de Armas hoje.*';
-
-  // Veículos com desconto agrupados por loja. Usa os dados estruturados do
-  // parser do Reddit (weeklyData.discounts) e o catálogo veículo→loja quando
-  // disponível; senão, cai no texto gerado pela IA.
   const storeEmoji = {
     'Legendary Motorsport': '🏎️',
     'Dock Tease': '🛥️',
     'Warstock Cache & Carry': '🛡️',
     'Southern San Andreas Super Autos': '🚗',
-    "Premium Deluxe Motorsport": '🏁',
+    'Premium Deluxe Motorsport': '🏁',
     "Benny's Original Motor Works": '🔧',
-    "Elitás Travel": '✈️',
+    'Elitás Travel': '✈️',
     'Pedal & Metal': '🚲',
     'Maze Bank Foreclosures': '🏢',
   };
 
-  let vehiclesText;
-  if (weeklyData.discounts && weeklyData.discounts.length > 0) {
-    const groups = groupDiscountsByStore(weeklyData.discounts);
-    if (groups.length > 0) {
-      vehiclesText = groups
-        .filter((g) => g.store !== 'Outros')
-        .map((g) => {
-          const emoji = storeEmoji[g.store] || '🏪';
-          const lines = g.vehicles.map((v) => `• ${v}`).join('\n');
-          return `**${emoji} ${g.store}**\n${lines}`;
-        })
-        .join('\n\n');
+  // ── Páginas da análise da IA ─────────────────────────────────────────────
+  const aiSections = [];
+
+  if (analysis.destaques || analysis.itensGratuitos) {
+    aiSections.push({
+      emoji: '📰',
+      title: 'Destaques & Itens Gratuitos',
+      fields: [
+        { name: '🎉 Destaques da Semana', value: truncateField(analysis.destaques), inline: false },
+        { name: '🎁 Itens Gratuitos / Recompensas', value: truncateField(analysis.itensGratuitos), inline: false },
+      ],
+    });
+  }
+
+  // Página de descontos/armas da IA só entra quando a página 1 (resumo
+  // enxuto) não cobriu os descontos estruturados (ex.: fonte Newswire).
+  if (!hasStructuredDiscounts) {
+    const weaponsActive = discountedWeapons.length > 0;
+    const hasStoreDiscounts = Boolean(weeklyData.discounts && weeklyData.discounts.length);
+    const hasAiDiscounts = Boolean(analysis.veiculosDesconto);
+    if (weaponsActive || hasStoreDiscounts || hasAiDiscounts) {
+      let vehiclesText;
+      if (hasStoreDiscounts) {
+        const groups = groupDiscountsByStore(weeklyData.discounts);
+        if (groups.length > 0) {
+          vehiclesText = groups
+            .filter((g) => g.store !== 'Outros')
+            .map((g) => {
+              const emoji = storeEmoji[g.store] || '🏪';
+              return `**${emoji} ${g.store}**\n${g.vehicles.map((v) => `• ${v}`).join('\n')}`;
+            })
+            .join('\n\n');
+        }
+      }
+      if (!vehiclesText) vehiclesText = analysis.veiculosDesconto || '*Nenhuma informação disponível.*';
+
+      const weaponsText =
+        discountedWeapons.length > 0
+          ? discountedWeapons.map((w) => `• ${w.name} (-${w.discountPercent}%)`).join('\n')
+          : '*Nenhuma arma com desconto ativo na Van de Armas hoje.*';
+
+      aiSections.push({
+        emoji: '🏷️',
+        title: 'Descontos da Semana',
+        fields: [
+          { name: '🏷️ Itens com Desconto (por loja)', value: truncateField(vehiclesText), inline: false },
+          { name: '🔫 Armas com Desconto (Van de Armas)', value: truncateField(weaponsText), inline: false },
+        ],
+      });
     }
   }
 
-  // Se não foi possível agrupar por loja, usa o texto da IA.
-  if (!vehiclesText) {
-    vehiclesText = analysis.veiculosDesconto || '*Nenhuma informação de descontos disponível.*';
+  if (analysis.melhorFarm || analysis.novidades) {
+    aiSections.push({
+      emoji: '💰',
+      title: 'Farm & Novidades',
+      fields: [
+        { name: '💰 Melhores Pontos de Farm', value: truncateField(analysis.melhorFarm), inline: false },
+        { name: '✨ Novidades da Semana', value: truncateField(analysis.novidades), inline: false },
+      ],
+    });
   }
 
-  pages.push(
-    baseEmbed()
-      .setTitle('🏷️ Página 2/4 — Descontos da Semana')
-      .addFields(
-        { name: '🏷️ Itens com Desconto (por loja)', value: truncateField(vehiclesText), inline: false },
-        { name: '🔫 Armas com Desconto (Van de Armas)', value: truncateField(weaponsText), inline: false }
-      )
-  );
+  if (analysis.avaliacao) {
+    aiSections.push({
+      emoji: '📊',
+      title: 'Avaliação da Semana',
+      fields: [{ name: '📊 Nota da Yui', value: truncateField(analysis.avaliacao), inline: false }],
+      footerText: 'Análise feita pela Yui com base no artigo oficial da Rockstar',
+    });
+  }
 
-  // Página 3 — Melhor farm + Novidades
-  pages.push(
-    baseEmbed()
-      .setTitle('💰 Página 3/4 — Farm & Novidades')
-      .addFields(
-        { name: '💰 Melhores Pontos de Farm', value: truncateField(analysis.melhorFarm), inline: false },
-        { name: '✨ Novidades da Semana', value: truncateField(analysis.novidades), inline: false }
-      )
-  );
+  const total = pages.length + aiSections.length;
+  const startPage = pages.length; // congela a base antes do loop (pages cresce ao push)
+  aiSections.forEach((s, i) => {
+    const num = startPage + i + 1;
+    let embed = baseEmbed()
+      .setTitle(`${s.emoji} Página ${num}/${total} — ${s.title}`)
+      .addFields(...s.fields);
+    if (s.footerText) embed = embed.setFooter({ text: s.footerText });
+    pages.push(embed);
+  });
 
-  // Página 4 — Avaliação da semana
-  pages.push(
-    baseEmbed()
-      .setTitle('📊 Página 4/4 — Avaliação da Semana')
-      .addFields({ name: '📊 Nota da Yui', value: truncateField(analysis.avaliacao), inline: false })
-      .setFooter({ text: 'Análise feita pela Yui com base no artigo oficial da Rockstar' })
-  );
+  // Garante que sempre haja ao menos uma página navegável.
+  if (pages.length === 0) {
+    pages.push(
+      new EmbedBuilder()
+        .setColor(CONSTANTS.COLORS.WEEKLY_EVENT)
+        .setTitle('🔎 GTA Online — Sem dados disponíveis')
+        .setDescription('Nenhuma informação semanal disponível no momento.')
+        .setTimestamp()
+    );
+  }
 
   return pages;
 }

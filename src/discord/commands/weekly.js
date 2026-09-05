@@ -3,7 +3,7 @@ import { setGlobalContext } from '../setGlobalContext.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { gtaoEngine } from '../../engines/gtao/index.js';
 import { weeklyService } from '../../engines/gtao/systems/weekly/service.js';
-import { buildWeeklyPaginatedEmbeds, buildWeeklyPaginationRow } from '../../engines/gtao/weeklyAnalysis.js';
+import { buildWeeklyCombinedEmbeds, buildWeeklyPaginationRow } from '../../engines/gtao/weeklyAnalysis.js';
 import { getCurrentWeekKey } from '../../utils/weekKey.js';
 import { logger } from '../../utils/logger.js';
 
@@ -85,7 +85,7 @@ export const weeklyCommand = {
     // banco, mesmo que a semana já tenha sido coletada em outro dia.
     const dailyData = gtaoRepository.getLatestDaily()?.data;
 
-    const pages = buildWeeklyPaginatedEmbeds(weeklyData, dailyData);
+    const pages = buildWeeklyCombinedEmbeds(weeklyData, dailyData);
     let currentPage = 0;
 
     const message = await interaction.editReply({

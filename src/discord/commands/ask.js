@@ -6,6 +6,47 @@ import { getKnowledgeContext } from '../../utils/knowledgeBase.js';
 import { generateResponse } from '../../handlers/llmHandler.js';
 import { searchVehicles } from '../../utils/vehicleData.js';
 import { searchWeapons } from '../../utils/weaponData.js';
+import {
+  searchVehicles as searchGtaCarsVehicles,
+  updateVehicles as updateGtaCarsVehicles,
+} from '../../services/gta/vehicles/gtacars/service.js';
+import { normalizeName } from '../../services/gta/vehicles/gtacars/parser.js';
+
+/**
+ * Filtra candidatos do GTACars exigindo correspondência REAL com o termo.
+ *
+ * O searchVehicles do GTACars ordena por score e aceita score mínimo de 0.25 —
+ * o que deixa passar falsos positivos por prefixo curto (ex.: "velocidade"
+ * casa por prefixo com "v" de "V-65 Molotok", e "qual" está DENTRO de
+ * "Shitzu Squalo"). Aqui exigimos cobertura por TOKENS do nome oficial:
+ * cada token do termo precisa casar com o COMEÇO de um token do nome
+ * (ou ser igual a ele). Isso mantém "10F" → Obey 10F e "sultan rs" →
+ * Karin Sultan RS, mas descarta ruído lexical.
+ */
+function isRelevantMatch(vehicle, term) {
+  const normTerm = normalizeName(term);
+  if (!normTerm) return false;
+
+  // Campos do GTACars (normalizedName) ou do dump DurtyFree (name bruto).
+  const rawName = vehicle.normalizedName || vehicle.name || '';
+  const name = normalizeName(rawName);
+  if (!name) return false;
+
+  // Casamento por identificador (id/slug) ou nome curto exato (GTACars).
+  if (vehicle.id === normTerm || vehicle.slug === normTerm) return true;
+  const short = normalizeName(vehicle.shortName);
+  if (short === normTerm) return true;
+
+  // Cobertura total: cada token do termo (2+ letras) tem que casar com o
+  // começo de um token do nome oficial (ou ser idêntico a ele).
+  const termTokens = normTerm.split(' ').filter((t) => t.length >= 2);
+  if (termTokens.length === 0) return false;
+
+  const nameTokens = name.split(' ');
+  return termTokens.every((tk) =>
+    nameTokens.some((tok) => tok === tk || tok.startsWith(tk))
+  );
+}
 
 function buildGtaDataContext() {
   const parts = [];
@@ -49,7 +90,7 @@ function buildGtaDataContext() {
  * a IA responda com dados técnicos reais (classe, fabricante, categoria,
  * etc) em vez de "chutar" com conhecimento genérico de treinamento.
  */
-function buildVehicleWeaponContext(pergunta) {
+export function buildVehicleWeaponContext(pergunta) {
   const parts = [];
 
   const words = pergunta
@@ -74,7 +115,17 @@ function buildVehicleWeaponContext(pergunta) {
 
   for (const term of candidates) {
     if (vehicleResults.length < 3) {
-      for (const v of searchVehicles(term, 3)) {
+      // Fonte primária: GTACars (busca fuzzy por nome/id/fabricante).
+      // Fonte secundária: dump DurtyFree (fallback para itens ausentes no
+      // GTACars, ex.: alguns veículos especiais).
+      const primary = searchGtaCarsVehicles(term, 5)
+        .filter((v) => isRelevantMatch(v, term))
+        .slice(0, 3);
+      const used =
+        primary.length > 0
+          ? primary
+          : searchVehicles(term, 5).filter((v) => isRelevantMatch(v, term)).slice(0, 3);
+      for (const v of used) {
         if (!seenVehicles.has(v.name)) {
           seenVehicles.add(v.name);
           vehicleResults.push(v);
@@ -95,10 +146,17 @@ function buildVehicleWeaponContext(pergunta) {
   if (vehicleResults.length > 0) {
     const txt = vehicleResults
       .map((v) => {
-        // Fórmula oficial confirmada na GTAMods Wiki (referência técnica
-        // da comunidade de modding para o handling.meta do jogo):
-        // multiplicar o valor bruto de MaxSpeed (fInitialDriveMaxFlatVel)
-        // por 1.32 dá a velocidade em km/h. Fonte: https://gtamods.com/wiki/Handling.meta
+        if (v.source === 'gtacars') {
+          // Fonte GTACars: já traz topSpeed em km/h, preço, tração, DLC e link.
+          const preco = v.price ? `R$${v.price.toLocaleString('pt-BR')} (GTA$)` : 'N/A';
+          return (
+            `- ${v.name} (classe: ${v.class || 'N/A'}, fabricante: ${v.manufacturer || 'Desconhecido'}, tipo: ${v.type || 'N/A'})` +
+            ` | Vel. máx: ${v.topSpeed ?? 'N/A'} km/h | Assentos: ${v.seats ?? 'N/A'} | Tração: ${v.drivetrain || 'N/A'}` +
+            ` | Preço: ${preco} | DLC: ${v.dlc || 'N/A'} | Link: ${v.url}`
+          );
+        }
+        // Fonte DurtyFree (fallback): topSpeed bruto do handling × 1.32.
+        // Fórmula oficial confirmada na GTAMods Wiki (handling.meta).
         const kmh = v.maxSpeed ? (v.maxSpeed * 1.32).toFixed(0) : 'N/A';
         return (
           `- ${v.displayNamePT} (classe: ${v.class || 'N/A'}, fabricante: ${v.manufacturer || 'Desconhecido'}, tipo: ${v.type || 'N/A'})` +
@@ -107,8 +165,8 @@ function buildVehicleWeaponContext(pergunta) {
       })
       .join('\n');
     parts.push(
-      `DADOS TÉCNICOS DE VEÍCULOS ENCONTRADOS (fonte: dump oficial do jogo, valores brutos do handling):\n${txt}\n` +
-        `(Nota: a velocidade em km/h é calculada a partir do valor bruto de handling do jogo (MaxSpeed × 1.32, fórmula documentada pela comunidade de modding), é o valor teórico máximo em pista plana e pode divergir levemente do que aparece no HUD do jogo em condições reais de estrada/tração.)`
+      `DADOS TÉCNICOS DE VEÍCULOS ENCONTRADOS (fonte: GTACars, com fallback para dump oficial do jogo — valores brutos do handling onde aplicável):\n${txt}\n` +
+        `(Nota: a velocidade em km/h vem do próprio GTACars quando disponível; itens vindos do dump são calculados a partir do valor bruto de handling do jogo (MaxSpeed × 1.32, fórmula documentada pela comunidade de modding), é o valor teórico máximo em pista plana e pode divergir levemente do que aparece no HUD do jogo em condições reais de estrada/tração.)`
     );
   }
 
@@ -155,10 +213,12 @@ function buildSystemPrompt(pergunta) {
   const vehicleWeaponData = buildVehicleWeaponContext(pergunta);
   if (vehicleWeaponData) {
     sections.push(
-      `\nDados técnicos oficiais extraídos diretamente dos arquivos do jogo (fonte: gta-v-data-dumps). ` +
-        `Use-os quando o usuário perguntar sobre estatísticas, classe, fabricante ou velocidade de veículos, ` +
-        `ou sobre categoria/tipo de dano de armas específicas. Não invente números que não estejam aqui — ` +
-        `se não encontrar o dado exato ou a estimativa parecer estranha, avise o usuário que é aproximado:\n${vehicleWeaponData}`
+      `\nDados técnicos de veículos e armas extraídos do GTACars (fonte principal, com preço, DLC, tração e ` +
+        `link da página) e do dump oficial do jogo gta-v-data-dumps (fallback para veículos/armas ausentes). ` +
+        `Use-os quando o usuário perguntar sobre estatísticas, classe, fabricante, preço, DLC ou velocidade de ` +
+        `veículos, ou sobre categoria/tipo de dano de armas específicas. Não invente números que não estejam ` +
+        `aqui — se não encontrar o dado exato ou a estimativa parecer estranha, avise o usuário que é ` +
+        `aproximado:\n${vehicleWeaponData}`
     );
   }
 
