@@ -10,6 +10,8 @@ import { downloadVehicleData } from './utils/vehicleData.js';
 import { downloadWeaponData } from './utils/weaponData.js';
 import { updateVehicles as updateGtaCarsVehicles } from './services/gta/vehicles/gtacars/service.js';
 import { validateMediaTools } from './utils/binaries.js';
+import { initMemory } from './core/index.js';
+import { startApi } from './core/api/server.js';
 
 async function registerHikariEvents(client) {
   const eventFiles = [
@@ -43,6 +45,7 @@ async function bootstrap() {
   await initDatabase('gta-semanal', GTA_WEEKLY_SCHEMA);
   await initDatabase('social-youtube', YOUTUBE_SCHEMA);
   await initDatabase('social-twitch', TWITCH_SCHEMA);
+  await initMemory();
   logger.info('[Bootstrap] Todos os bancos de dados inicializados com sucesso.');
 
   // 1.1 Baixar/atualizar os tunables (RDO.GG) para a Van de Armas
@@ -107,6 +110,9 @@ async function bootstrap() {
 
   // 4. Iniciar Agendador Central (Cron + Newswire com delay de inicialização)
   startScheduler(client);
+
+  // 5. Yui API (opcional; YUI_API_ENABLED=true) — interface HTTP do Core para os apps
+  startApi();
 
   logger.info('✅ Yui inicializada e pronta com sucesso!');
 }

@@ -64,33 +64,53 @@ function assert(cond, label) {
 console.log('=== [TESTE] COMPOSIÇÃO ÚNICA DO EMBED SEMANAL (ENXUTO + IA) ===\n');
 
 // ── 1. Fonte Reddit (dados estruturados + análise da IA) ────────────────
-console.log('1. Reddit → resumo enxuto + páginas da IA:');
+console.log('1. Reddit → resumo enxuto + detalhes + páginas da IA:');
 const redditPages = buildWeeklyCombinedEmbeds(weeklyReddit);
-assert(redditPages.length === 4, `composição tem ${redditPages.length} páginas (esperado 4)`);
+console.log('   Títulos:');
+for (const [i, p] of redditPages.entries()) console.log(`   [${i + 1}] ${p.data.title}`);
+assert(redditPages.length === 6, `composição tem ${redditPages.length} páginas (esperado 6)`);
 assert(
   redditPages[0].data.title.startsWith('🎉 GTA Online —'),
   'página 1 é o resumo enxuto (formato r/gtaonline)'
 );
-const discF = redditPages[0].data.fields.find((f) => f.name === '🏷️ Descontos');
-assert(discF && discF.value.includes('**🏎️ Legendary Motorsport**'), 'página 1 agrupa descontos por loja');
-assert(discF && discF.value.includes('**🏪 Outros**'), 'página 1 mantém grupo Outros');
-console.log('   Títulos:');
-for (const [i, p] of redditPages.entries()) console.log(`   [${i + 1}] ${p.data.title}`);
 assert(
-  redditPages[1].data.title === '📰 Página 2/4 — Destaques & Itens Gratuitos',
-  'página 2 é Destaques & Itens Gratuitos'
+  !redditPages[0].data.fields.some((f) => f.name.includes('Legendary') || f.name === '🏷️ Descontos'),
+  'página 1 NÃO traz a lista completa de descontos por loja'
 );
 assert(
-  redditPages[2].data.title === '💰 Página 3/4 — Farm & Novidades',
-  'página 3 é Farm & Novidades'
+  redditPages[0].data.fields.some((f) => f.name === '🔥 Destaques de Desconto'),
+  'página 1 traz só os destaques de desconto'
+);
+const discPage = redditPages.find((p) => p.data.title.includes('Página') && p.data.title.includes('Descontos da Semana'));
+assert(Boolean(discPage), 'existe uma página de descontos completos');
+assert(
+  discPage.data.fields.some((f) => f.name === '🏎️ Legendary Motorsport' && f.value.includes('Coil Cyclone II')),
+  'descontos completos agrupados por loja na página de detalhe'
+);
+assert(discPage.data.fields.some((f) => f.name === '🏪 Outros'), 'página de detalhe mantém o grupo Outros');
+assert(
+  redditPages[1].data.title === '🏷️ Página 2/6 — Descontos da Semana',
+  'página 2 é Descontos da Semana (detalhe)'
 );
 assert(
-  redditPages[3].data.title === '📊 Página 4/4 — Avaliação da Semana',
-  'página 4 é Avaliação da Semana'
+  redditPages[2].data.title === '🛻 Página 3/6 — Van de Armas, GTA+ e Desafios',
+  'página 3 é Van de Armas, GTA+ e Desafios (detalhe)'
 );
 assert(
-  !redditPages.some((p) => p.data.title.startsWith('🏷️')),
-  'página de descontos da IA NÃO entra quando a página 1 já cobriu (evita duplicidade)'
+  redditPages[3].data.title === '📰 Página 4/6 — Destaques & Itens Gratuitos',
+  'página 4 é Destaques & Itens Gratuitos (IA)'
+);
+assert(
+  redditPages[4].data.title === '💰 Página 5/6 — Farm & Novidades',
+  'página 5 é Farm & Novidades (IA)'
+);
+assert(
+  redditPages[5].data.title === '📊 Página 6/6 — Avaliação da Semana',
+  'página 6 é Avaliação da Semana (IA)'
+);
+assert(
+  redditPages.filter((p) => p.data.title.includes('Página') && p.data.title.includes('Descontos da Semana')).length === 1,
+  'página de descontos da IA NÃO entra quando já há descontos estruturados (evita duplicidade)'
 );
 
 // ── 2. Fonte Newswire (sem dados estruturados) ───────────────────────────
@@ -113,12 +133,12 @@ assert(
 );
 
 // ── 3. Reddit sem análise da IA → só o resumo enxuto ─────────────────────
-console.log('\n3. Reddit sem análise → apenas resumo enxuto:');
+console.log('\n3. Reddit sem análise → resumo enxuto + páginas de detalhe:');
 const noAnalysisPages = buildWeeklyCombinedEmbeds({ ...weeklyReddit, analysis: null });
-assert(noAnalysisPages.length === 1, `composição tem ${noAnalysisPages.length} página (esperado 1)`);
+assert(noAnalysisPages.length === 3, `composição tem ${noAnalysisPages.length} páginas (esperado 3: resumo + 2 de detalhe)`);
 assert(
   noAnalysisPages[0].data.title.startsWith('🎉 GTA Online —'),
-  'página única é o resumo enxuto'
+  'a primeira página é o resumo enxuto'
 );
 
 // ── 4. Sem dados nenhum → página de fallback ─────────────────────────────
@@ -143,3 +163,4 @@ console.log('\n=== RESULTADO ===');
 console.log(`   Pass: ${pass} | Fail: ${fail}`);
 if (fail > 0) process.exitCode = 1;
 else console.log('   ✅ TODOS OS TESTES PASSARAM');
+process.exit(process.exitCode ?? 0);

@@ -238,6 +238,17 @@ export const commands = [
                     .addStringOption(opt => opt.setName('servidor_id').setDescription('ID do servidor target (opcional).').setRequired(false))
             )
             .addSubcommand(sub =>
+                sub.setName('memorias')
+                    .setDescription('[Creator] Administra a memória temporária dos usuários (só metadados).')
+                    .addStringOption(opt => opt.setName('acao').setDescription('Ação desejada').setRequired(true).addChoices(
+                        { name: 'Listar usuários com memória', value: 'listar' },
+                        { name: 'Ver metadados de um usuário', value: 'ver' },
+                        { name: 'Apagar uma lembrança', value: 'apagar' },
+                        { name: 'Apagar tudo de um usuário', value: 'apagar_usuario' }))
+                    .addStringOption(opt => opt.setName('usuario_id').setDescription('ID do usuário (ver/apagar).').setRequired(false))
+                    .addIntegerOption(opt => opt.setName('memoria_id').setDescription('Número da lembrança (apagar).').setRequired(false))
+            )
+            .addSubcommand(sub =>
                 sub.setName('bot_config')
                     .setDescription('[Creator] Painel de configuração de runtime do bot.')
             )

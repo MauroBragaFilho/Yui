@@ -17,6 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../../../../utils/logger.js';
+import { findBrowserExecutable } from './reddit-browser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COOKIES_CACHE_FILE = path.join(__dirname, 'reddit-cookies-cache.json');
@@ -58,8 +59,10 @@ async function getBrowser() {
   if (browser) return browser;
   logger.info('[Weekly][Cookies] Iniciando Puppeteer...');
   const puppeteer = await import('puppeteer');
+  const executablePath = findBrowserExecutable();
   browser = await puppeteer.default.launch({
     headless: true,
+    ...(executablePath ? { executablePath } : {}),
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
   });
   logger.info('[Weekly][Cookies] Puppeteer iniciado.');
@@ -131,8 +134,12 @@ export async function getCookies(forceRefresh = false) {
     const data = { cookies: cookieStr, fetchedAt: Date.now() };
     cachedCookies = data;
     saveCookiesToDisk(data);
+    // Fecha o navegador logo após obter os cookies (antes ficava residente e
+    // consumia RAM por dias).
+    await closeBrowser();
     return cookieStr;
   } catch (err) {
+    await closeBrowser();
     logger.error(`[Weekly][Cookies] Falha Puppeteer: ${err.message}`);
     if (cachedCookies?.cookies) {
       logger.warn('[Weekly][Cookies] Usando cookies antigos como fallback.');

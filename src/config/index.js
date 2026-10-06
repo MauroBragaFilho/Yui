@@ -101,7 +101,7 @@ export default {
   hfToken: process.env.HF_TOKEN || '',
   groqApiKeys: (process.env.GROQ_API_KEY || '').split(',').map((key) => key.trim()).filter(Boolean),
   groqApiUrl: process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions',
-  groqModel: process.env.GROQ_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct',
+  groqModel: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
   hordeUrl: process.env.HORDE_URL || 'https://stablehorde.net/api/v2/generate/text/async',
   hordeApiKey: process.env.HORDE_API_KEY || '0000000000',
   braveApiKey: process.env.BRAVE_API_KEY || '',

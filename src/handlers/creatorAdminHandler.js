@@ -30,6 +30,7 @@ import {
 } from './llmHandler.js';
 import { handleConfigCommand } from './configPanelHandler.js';
 import { sendMcpToolsManager } from './mcpToolPanelHandler.js';
+import { handleMemoriasAdmin } from './memoryAdminHandler.js';
 
 async function handleCreatorAdminCommand(interaction, client) {
     if (!config.isOwner(interaction.user.id)) {
@@ -159,6 +160,10 @@ async function handleCreatorAdminCommand(interaction, client) {
                 .setDescription(`Desabilitadas no servidor \`${targetGuildId}\`: ${disabled.length > 0 ? disabled.map(d => `\`${d}\``).join(', ') : 'Nenhuma'}`);
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
+    }
+
+    if (sub === 'memorias') {
+        return handleMemoriasAdmin(interaction);
     }
 
     if (sub === 'bot_config') {

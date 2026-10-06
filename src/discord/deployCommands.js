@@ -13,6 +13,7 @@ import { seguirYoutubeCommand } from './commands/seguirYoutube.js';
 import { seguirTwitchCommand } from './commands/seguirTwitch.js';
 import { pararSeguirCommand } from './commands/pararSeguir.js';
 import { listarSeguindoCommand } from './commands/listarSeguindo.js';
+import { memoriaCommand } from './commands/memoria.js';
 
 const commands = [
   setupCommand.data.toJSON(),
@@ -26,6 +27,7 @@ const commands = [
   seguirTwitchCommand.data.toJSON(),
   pararSeguirCommand.data.toJSON(),
   listarSeguindoCommand.data.toJSON(),
+  memoriaCommand.data.toJSON(),
   ...hikariCommands.map((command) => typeof command.toJSON === 'function' ? command.toJSON() : command),
 ];
 

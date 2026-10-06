@@ -1,0 +1,54 @@
+{"ts":"2026-10-06T17:27:28.521Z","event":"agent.tool.ok","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.ping","ms":0}
+{"ts":"2026-10-06T17:27:28.537Z","event":"agent.tool.pending","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:27:28.555Z","event":"agent.tool.ok","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar","ms":0}
+{"ts":"2026-10-06T17:27:28.600Z","event":"agent.tool.pending","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:27:28.625Z","event":"agent.tool.cancelled","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:27:28.634Z","event":"agent.tool.denied","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"pc.formatar","reason":"ferramenta inexistente"}
+{"ts":"2026-10-06T17:27:28.651Z","event":"memory.write","userId":"111","role":"OWNER","platform":"api","channelKind":"dm","scope":"personal","type":"project"}
+{"ts":"2026-10-06T17:27:28.707Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:27:28.727Z","event":"memory.forget","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","id":1}
+{"ts":"2026-10-06T17:27:28.761Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:27:28.784Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:27:28.806Z","event":"memory.forgetAll","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","removed":2}
+{"ts":"2026-10-06T17:33:18.438Z","event":"agent.tool.ok","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.ping","ms":0}
+{"ts":"2026-10-06T17:33:18.448Z","event":"agent.tool.pending","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:33:18.458Z","event":"agent.tool.ok","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar","ms":0}
+{"ts":"2026-10-06T17:33:18.489Z","event":"agent.tool.pending","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:33:18.493Z","event":"agent.tool.cancelled","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:33:18.518Z","event":"agent.tool.denied","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"pc.formatar","reason":"ferramenta inexistente"}
+{"ts":"2026-10-06T17:33:18.542Z","event":"memory.write","userId":"111","role":"OWNER","platform":"api","channelKind":"dm","scope":"personal","type":"project"}
+{"ts":"2026-10-06T17:33:18.574Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:33:18.587Z","event":"memory.forget","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","id":1}
+{"ts":"2026-10-06T17:33:18.606Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:33:18.623Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:33:18.637Z","event":"memory.forgetAll","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","removed":2}
+{"ts":"2026-10-06T17:36:30.369Z","event":"agent.tool.ok","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.ping","ms":0}
+{"ts":"2026-10-06T17:36:30.379Z","event":"agent.tool.pending","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:36:30.382Z","event":"agent.tool.ok","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar","ms":0}
+{"ts":"2026-10-06T17:36:30.392Z","event":"agent.tool.pending","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:36:30.394Z","event":"agent.tool.cancelled","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T17:36:30.400Z","event":"agent.tool.denied","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"pc.formatar","reason":"ferramenta inexistente"}
+{"ts":"2026-10-06T17:36:30.410Z","event":"memory.write","userId":"111","role":"OWNER","platform":"api","channelKind":"dm","scope":"personal","type":"project"}
+{"ts":"2026-10-06T17:36:30.423Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:36:30.429Z","event":"memory.forget","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","id":1}
+{"ts":"2026-10-06T17:36:30.437Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:36:30.445Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T17:36:30.449Z","event":"memory.forgetAll","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","removed":2}
+{"ts":"2026-10-06T18:10:29.024Z","event":"memory.write","userId":"111","role":"OWNER","platform":"api","channelKind":"dm","scope":"personal","type":"project"}
+{"ts":"2026-10-06T18:10:29.060Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T18:10:29.069Z","event":"memory.forget","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","id":1}
+{"ts":"2026-10-06T18:10:29.080Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T18:10:29.098Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T18:10:29.107Z","event":"memory.forgetAll","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","removed":2}
+{"ts":"2026-10-06T18:10:42.832Z","event":"agent.tool.ok","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.ping","ms":0}
+{"ts":"2026-10-06T18:10:42.841Z","event":"agent.tool.pending","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T18:10:42.846Z","event":"agent.tool.ok","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar","ms":0}
+{"ts":"2026-10-06T18:10:42.861Z","event":"agent.tool.pending","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T18:10:42.865Z","event":"agent.tool.cancelled","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"demo.apagar"}
+{"ts":"2026-10-06T18:10:42.872Z","event":"agent.tool.denied","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","tool":"pc.formatar","reason":"ferramenta inexistente"}
+{"ts":"2026-10-06T18:10:42.883Z","event":"memory.write","userId":"111","role":"OWNER","platform":"api","channelKind":"dm","scope":"personal","type":"project"}
+{"ts":"2026-10-06T18:10:42.908Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T18:10:42.916Z","event":"memory.forget","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","id":1}
+{"ts":"2026-10-06T18:10:42.926Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T18:10:42.938Z","event":"memory.write","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","scope":"public","type":"note"}
+{"ts":"2026-10-06T18:10:42.944Z","event":"memory.forgetAll","userId":"222","role":"MEMBER","platform":"api","channelKind":"dm","removed":2}

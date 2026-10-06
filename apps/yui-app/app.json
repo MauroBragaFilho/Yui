@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Yui",
+    "slug": "yui-app",
+    "scheme": "yui",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0e0e14",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "br.dev.braga.yui",
+      "adaptiveIcon": {
+        "backgroundColor": "#0e0e14",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}

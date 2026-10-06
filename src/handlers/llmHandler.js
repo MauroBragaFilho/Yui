@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { contextFromDiscord, buildMemoryBlock, captureFromUserText } from '../core/discordAdapter.js';
+import { resolveMentions, SAFE_ALLOWED_MENTIONS } from '../discord/mentions.js';
+import { applyPersona, buildPersonaPrompt } from '../core/persona.js';
 import * as cheerio from 'cheerio';
 import fs from 'fs';
 import path from 'path';
@@ -1234,7 +1237,7 @@ async function tryGroq(prompt, systemPrompt, options = {}) {
     if (apiKeys.length === 0) {
         throw new Error('Nenhuma chave GROQ configurada (GROQ_API_KEY)');
     }
-    const modelName = config.groqModel || 'meta-llama/llama-4-scout-17b-16e-instruct';
+    const modelName = config.groqModel || 'openai/gpt-oss-120b';
     let lastError = null;
     for (let i = 0; i < apiKeys.length; i++) {
         const currentKey = apiKeys[i];
@@ -1343,6 +1346,9 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     const guildId = options.guildId || options.guild?.id || null;
     const serverCustomPrompt = getServerPrompt(guildId);
     let baseSystemPrompt = (serverCustomPrompt || config.systemPrompt || "") + "\n[IDENTIDADE — REGRA DE PRIORIDADE MÁXIMA]: Você é a amiga gamer do servidor, uma companheira de jogo que vive naquele universo. NUNCA se refira a si mesma como 'assistente virtual', 'IA', 'inteligência artificial', 'bot', 'modelo', 'sistema', 'ferramenta' ou qualquer variação desses termos — nem para confirmar, nem para negar, nem indiretamente (ex: 'não sou uma IA, sou...' também é proibido). Se perguntarem se você é uma IA ou bot, desvie naturalmente e se apresente como a parceira de jogo do servidor. Use linguagem de identidade como 'sou sua parceira de jogo', 'tô aqui contigo', 'bora jogar isso junto'. Nunca fale 'fui projetada para', 'meu propósito é', 'como assistente/IA/sistema'.\n[IMAGEM/VISÃO]: Você CONSEGUE gerar imagens novas do zero usando a ferramenta generate_image — basta o usuário descrever o que quer. Se o pedido for vago (ex: 'faz uma imagem do server'), crie um prompt criativo baseado no contexto (nome do server, tema da conversa, etc.) e gere a imagem. Porém, você NÃO tem visão computacional: não consegue ver, analisar, editar ou descrever imagens que os usuários enviam. Se pedirem para editar/alterar uma imagem existente, explique que só pode gerar artes novas.\n[ANTI-REPETIÇÃO]: NUNCA repita a mesma frase ou resposta idêntica em mensagens consecutivas. Se já disse algo parecido antes, reformule completamente usando palavras diferentes. Varie seu vocabulário e estrutura. Respostas repetitivas são proibidas.";
+    // Personalidade por contexto (Yui Core): só há override para o dono em DM/canal
+    // privado e para o app; no Discord público segue a persona original.
+    baseSystemPrompt = applyPersona(baseSystemPrompt, options.persona);
     if (config.sendEnvironmentInfo && (options.guildName || options.channelName)) {
         baseSystemPrompt += `\n[CONTEXTO DO AMBIENTE]: Você está conversando no servidor Discord "${options.guildName || 'DM'}" no canal/chat "#${options.channelName || 'Chat'}".`;
     }
@@ -1387,6 +1393,9 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
             overrideMsg += `====================================================================================\n`;
             baseSystemPrompt += overrideMsg;
         }
+    }
+    if (options.memoryBlock) {
+        baseSystemPrompt += options.memoryBlock;
     }
     let lastError = null;
     for (const provider of providers) {
@@ -1520,7 +1529,12 @@ async function processQueue() {
                 content = `<@${userId}> ${content}`;
             }
         }
-        const payload = { content, files, components, embeds };
+        // Converte "@usuario" escrito pela IA em menção real (<@ID>) e permite
+        // notificar apenas usuários (nunca @everyone/@here nem cargos).
+        if (typeof content === 'string' && content.includes('@')) {
+            try { content = await resolveMentions(content, interaction?.guild); } catch (_) {}
+        }
+        const payload = { content, files, components, embeds, allowedMentions: SAFE_ALLOWED_MENTIONS };
         try {
             if (type === 'mention') {
                 if (!replyMessage) {
@@ -1635,6 +1649,14 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         let rawResponse;
         let isBlocked = false;
         let attemptsLeft = getErrorRetries();
+        // Yui Core: contexto (papel/canal/escopo) decidido pelo backend + memória relevante.
+        const coreCtx = contextFromDiscord({
+            userId,
+            guildId: guildId || null,
+            channelId,
+            isBlocked: Boolean(checkBan(userId, guildId || null, null)),
+        });
+        const memoryBlock = options.radioMode ? '' : buildMemoryBlock(coreCtx, options.searchPrompt || prompt);
         const thoughtLeakRegex = /\{\s*"thought"\s*:/i;
         let lastAttemptTime = 0;
         let lastAttemptKey = '';
@@ -1644,6 +1666,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 guildId: options.guildId || guildId,
                 allowSearch: false,
                 userId,
+                memoryBlock,
+                persona: buildPersonaPrompt(coreCtx),
                 guildName,
                 channelName,
                 onProviderAttempt: async (providerKey) => {
@@ -2909,6 +2933,7 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
             const cleanResponseForHistory = processedResponse.replace(/\n-# .*$/, '');
             addToHistory(channelId, 'assistant', cleanResponseForHistory);
             await unifiedReply(processedResponse);
+            if (!options.radioMode) captureFromUserText(coreCtx, options.searchPrompt || prompt);
             console.log(`[LOG] Resposta IA: "${processedResponse.substring(0, 500)}${processedResponse.length > 500 ? '...' : ''}" | Duração: ${duration}`);
             savePromptToHistory(prompt, userTag, userId, processedResponse, interaction);
 

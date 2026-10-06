@@ -63,6 +63,7 @@ import { seguirYoutubeCommand } from '../discord/commands/seguirYoutube.js';
 import { seguirTwitchCommand } from '../discord/commands/seguirTwitch.js';
 import { pararSeguirCommand } from '../discord/commands/pararSeguir.js';
 import { listarSeguindoCommand } from '../discord/commands/listarSeguindo.js';
+import { memoriaCommand } from '../discord/commands/memoria.js';
 
 function getHelpRegrasPages(regrasAnswer) {
     if (!regrasAnswer) return [];
@@ -483,6 +484,8 @@ export default {
             await pararSeguirCommand.execute(interaction);
         } else if (commandName === 'yui-listar-seguindo') {
             await listarSeguindoCommand.execute(interaction);
+        } else if (commandName === 'yui-memoria') {
+            await memoriaCommand.execute(interaction);
         } else if (commandName === 'yui-servidor') {
             return await handleServerAdminCommand(interaction);
         } else if (commandName === 'yui-ferramentas') {

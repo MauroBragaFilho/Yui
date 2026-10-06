@@ -1,6 +1,7 @@
 import { logger } from '../../../../utils/logger.js';
 import { config } from '../../../../config/index.js';
 import { getCookies, refreshCookies } from './reddit-cookies.js';
+import { fetchWeeklyFeedViaBrowser } from './reddit-browser.js';
 
 /**
  * Cliente isolado de acesso ao Reddit para o Weekly do GTA Online.
@@ -159,18 +160,32 @@ export async function searchWeeklyPosts() {
   try {
     logger.info('[Weekly] Consultando Reddit (r/gtaonline) por Weekly Bonuses and Discounts...');
 
-    // 1ª tentativa com cookies do cache.
-    let cookieStr = await getCookies();
-    let res = await rawFetch(cookieStr);
-
-    // Se 403, renova cookies e tenta uma vez mais.
-    if (res.status === 403) {
-      logger.warn('[Weekly] Reddit retornou 403; renovando cookies...');
-      cookieStr = await refreshCookies();
-      res = await rawFetch(cookieStr);
+    // Modo padrão: navegador real (Puppeteer) lendo o feed RSS, que o Reddit
+    // não bloqueia. REDDIT_FETCH_MODE=cookies usa só o método antigo.
+    let children = null;
+    const mode = (process.env.REDDIT_FETCH_MODE || 'browser').toLowerCase();
+    if (mode === 'browser') {
+      try {
+        children = (await fetchWeeklyFeedViaBrowser()).map((data) => ({ data }));
+      } catch (browserErr) {
+        logger.warn(`[Weekly] Via navegador falhou (${browserErr.message}); tentando o método de cookies...`);
+      }
     }
 
-    const children = await parseResponse(res);
+    if (!children) {
+      // Método anterior: 1ª tentativa com cookies do cache.
+      let cookieStr = await getCookies();
+      let res = await rawFetch(cookieStr);
+
+      // Se 403, renova cookies e tenta uma vez mais.
+      if (res.status === 403) {
+        logger.warn('[Weekly] Reddit retornou 403; renovando cookies...');
+        cookieStr = await refreshCookies();
+        res = await rawFetch(cookieStr);
+      }
+
+      children = await parseResponse(res);
+    }
 
     const normalized = [];
     for (const child of children) {

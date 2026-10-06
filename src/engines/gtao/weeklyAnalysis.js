@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger.js';
 import { CONSTANTS } from '../../config/constants.js';
 import { groupDiscountsByStore } from '../../data/gtaoVehicleStores.js';
 import { translateTitle } from './systems/weekly/translate.js';
-import { createWeeklyRedditEmbed } from '../../discord/embeds/weeklyRedditEmbed.js';
+import { createWeeklyRedditEmbed, buildWeeklyDetailSections } from '../../discord/embeds/weeklyRedditEmbed.js';
 
 /**
  * Monta o prompt de análise semanal para a IA. Diferente da versão
@@ -266,9 +266,14 @@ export function buildWeeklyCombinedEmbeds(weeklyData, dailyData = null) {
     });
   }
 
-  const total = pages.length + aiSections.length;
+  // Páginas de detalhe do resumo (descontos completos por loja, Van de Armas,
+  // GTA+ e desafios) vêm logo depois da página 1 e antes da análise da IA.
+  const detailSections = hasStructuredData ? buildWeeklyDetailSections(weeklyData, { dailyData }) : [];
+  const sections = [...detailSections, ...aiSections];
+
+  const total = pages.length + sections.length;
   const startPage = pages.length; // congela a base antes do loop (pages cresce ao push)
-  aiSections.forEach((s, i) => {
+  sections.forEach((s, i) => {
     const num = startPage + i + 1;
     let embed = baseEmbed()
       .setTitle(`${s.emoji} Página ${num}/${total} — ${s.title}`)

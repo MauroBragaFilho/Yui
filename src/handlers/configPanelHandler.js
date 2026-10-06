@@ -461,7 +461,7 @@ const CONFIG_PAGES = [
         persistence: 'json',
         configKey: 'groqModel',
         summary: 'Modelo no GROQ (LPU Inference).',
-        description: 'Identificador do modelo no GROQ. Ex: "meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.3-70b-versatile". O GROQ é extremamente rápido por usar hardware LPU próprio. Modelos populares: llama-4-scout, llama-3.3-70b, gemma2-9b-it.',
+        description: 'Identificador do modelo no GROQ. Ex: "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b". O GROQ é extremamente rápido por usar hardware LPU próprio.',
     },
     {
         key: 'groqApiUrl',

@@ -6,24 +6,14 @@
     "auditLog": "D:\\Projetos\\Yui\\logs\\.ee1b69ad210d37de904350371e2b1b4c743e571e-audit.json",
     "files": [
         {
-            "date": 1788270717181,
-            "name": "D:\\Projetos\\Yui\\logs\\error-2026-09-01.log",
-            "hash": "7d3d78bcdd76f2f232809d0fd49b4182dff049d0dc2ee391c7ebd200cccba68a"
+            "date": 1789652827535,
+            "name": "D:\\Projetos\\Yui\\logs\\error-2026-09-17.log",
+            "hash": "cc4a154f08bf2e4a255f7a3ebfd86002f307fa7b30772f064e38b86b2f87a889"
         },
         {
-            "date": 1788319984207,
-            "name": "D:\\Projetos\\Yui\\logs\\error-2026-09-02.log",
-            "hash": "2cf3448c1434d2f105254e553b126a2acd97f3c3e94d4a339e7c2e132455415c"
-        },
-        {
-            "date": 1788427047361,
-            "name": "D:\\Projetos\\Yui\\logs\\error-2026-09-03.log",
-            "hash": "52833e214a501b228f69d7b62adde631b3a261d0cc8a8ab1746df8b4a6182cb0"
-        },
-        {
-            "date": 1788517894588,
-            "name": "D:\\Projetos\\Yui\\logs\\error-2026-09-04.log",
-            "hash": "bf4b9691dc2cb3d76abe8896fefd929f0e1a2ef0a00e0ed59f8a3522ad9a0050"
+            "date": 1791301674903,
+            "name": "D:\\Projetos\\Yui\\logs\\error-2026-10-06.log",
+            "hash": "a5f0d888f1aee40743a3ef6a5f6ab451070683d0dd75c19817380f97d053701d"
         }
     ],
     "hashType": "sha256"

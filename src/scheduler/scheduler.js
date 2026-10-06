@@ -8,6 +8,7 @@ import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { getCurrentWeekKey } from '../utils/weekKey.js';
 import { weeklyService } from '../engines/gtao/systems/weekly/service.js';
+import { memory } from '../core/index.js';
 
 export function startScheduler(client) {
   logger.info('[Scheduler] Inicializando agendador central de tarefas em UTC...');
@@ -47,6 +48,16 @@ export function startScheduler(client) {
   } else {
     logger.info('[Scheduler] Newswire automático desativado (NEWSWIRE_ENABLED=false). Disponível via /gta-semanal fonte:newswire.');
   }
+
+  // 2.5 Limpeza diária da memória temporária expirada (Yui Core)
+  cron.schedule('30 5 * * *', () => {
+    try {
+      const removed = memory.purgeExpired();
+      logger.info(`[Scheduler] Memória temporária: ${removed} lembrança(s) expirada(s) removida(s).`);
+    } catch (err) {
+      logger.error(`[Scheduler] Erro ao limpar memória expirada: ${err.message}`);
+    }
+  }, { timezone: 'UTC' });
 
   // 3. Reset Diário do GTA Online às 06:00 UTC pontualmente
   cron.schedule('0 6 * * *', async () => {

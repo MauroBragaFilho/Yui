@@ -58,12 +58,26 @@ Este guia explica cada entrada do arquivo `.env` e as configurações internas d
 
 ---
 
+## 🟠 Reddit (Evento Semanal do GTA Online)
+
+O Reddit bloqueia (403) requisições HTTP comuns e o endpoint `.json`. Por isso a Yui lê o **feed RSS** da busca do r/gtaonline por meio de um **navegador real** (Puppeteer), converte o HTML do post para o formato do parser e fecha o navegador em seguida (ele só fica aberto durante a consulta).
+
+- **`REDDIT_FETCH_MODE`**: `browser` (padrão) usa o navegador e, se falhar, cai no método antigo de cookies; `cookies` usa só o método antigo.
+- **`REDDIT_BROWSER_PATH`**: caminho do Chrome/Edge a usar. Opcional: sem ele, a Yui procura o Chrome ou o Edge instalados (Windows, macOS e Linux) e, por último, usa o Chrome do próprio Puppeteer (`npx puppeteer browsers install chrome`).
+- **`REDDIT_USER_AGENT`**: usado no método de cookies.
+
+> 💡 Se o Reddit responder 429 (limite de requisições), aguarde: a consulta automática roda a cada `GTA_WEEKLY_INTERVAL_MINUTES` (120 por padrão). Evite rodar testes ao vivo em sequência.
+
+---
+
 ## 👑 Governança e Preferências
 
 - **`OWNER_ID`**: Seu ID de usuário do Discord (ou vários separados por vírgula). Esse ID é o dono do bot, e só ele poderá usar comandos com flag Dono.
 - **`PREFIX`**: Prefixo para comandos legados (se houver). Padrão: `@`.
 - **`BOT_NAME`**: O nome que a Yui reconhecerá como sendo dela.
 - **`REQUIRE_TOS`**: Se `true`, novos servidores precisam aceitar os termos de uso antes de usar o bot.
+- **`YUI_OWNER_NAME`**: nome pelo qual a Yui trata você no perfil pessoal (DM, canal privado e app).
+- **`YUI_PERSONA_PERSONAL_FILE`**: caminho de um arquivo de texto que substitui a personalidade pessoal (`{nome}` vira o nome do dono). Opcional; só vale para o dono.
 - **`SAVE_HISTORY`**: Salva o histórico de mensagens em `src/data/historico.txt` para depuração.
 
 ---

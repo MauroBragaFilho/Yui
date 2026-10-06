@@ -57,14 +57,7 @@ echo %RESET%
 
 if "%opt%"=="1" (
     cls
-    echo %RED%
-    echo ===================================================
-    echo     Yui esta rodando... ^(Ctrl+C para encerrar^)
-    echo ===================================================
-    echo.
-    node src/index.js
-    echo %RESET%
-    pause
+    call :START_YUI
     goto MENU
 )
 if "%opt%"=="2" (
@@ -102,3 +95,60 @@ if "%opt%"=="0" (
 echo %RED%Opcao invalida! Tente novamente.%RESET%
 echo.
 goto MENU
+
+:: ===================================================================
+::  Iniciar a Yui (opcao 1): sobe o app web junto e NAO duplica o bot
+:: ===================================================================
+:START_YUI
+set "WEB_STARTED="
+set "WEB_PIDFILE=%TEMP%\yui-web.pid"
+if exist "%WEB_PIDFILE%" del "%WEB_PIDFILE%" > nul 2>&1
+
+:: 1) App web (http://localhost:8081): garante que esteja no ar (teste por conexao TCP real).
+powershell -NoProfile -Command "try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',8081); $c.Close(); exit 0 } catch { exit 1 }"
+if not errorlevel 1 goto WEB_OK
+if not exist "apps\yui-app\node_modules\" goto WEB_SKIP
+if exist "apps\yui-app\dist\index.html" goto WEB_START
+echo [INFO] Gerando o app web pela primeira vez, pode levar alguns minutos...
+pushd apps\yui-app
+call npm run web:build
+popd
+:WEB_START
+if not exist "apps\yui-app\dist\index.html" goto WEB_SKIP
+powershell -NoProfile -Command "$p = Start-Process node -ArgumentList 'apps\yui-app\scripts\serve-web.mjs' -WindowStyle Minimized -PassThru; Set-Content -Path $env:TEMP\yui-web.pid -Value $p.Id"
+set "WEB_STARTED=1"
+echo [OK] App web iniciado: http://localhost:8081
+goto WEB_DONE
+:WEB_OK
+echo [OK] App web ja esta no ar: http://localhost:8081
+goto WEB_DONE
+:WEB_SKIP
+echo [AVISO] App web indisponivel. Rode "npm install" e "npm run web:build" em apps\yui-app.
+:WEB_DONE
+echo.
+
+:: 2) Nao duplica o bot: se a Yui ja esta rodando (ex.: tarefa YuiBot), nao inicia outra.
+powershell -NoProfile -Command "if (Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -match 'src.index.js' }) { exit 1 } else { exit 0 }"
+if errorlevel 1 goto YUI_ALREADY
+
+echo %RED%
+echo ===================================================
+echo     Yui esta rodando... ^(Ctrl+C para encerrar^)
+echo ===================================================
+echo.
+node src/index.js
+
+:: 3) Ao encerrar a Yui, fecha o app web SO se ele foi iniciado por esta janela (pelo PID guardado).
+if defined WEB_STARTED powershell -NoProfile -Command "if (Test-Path $env:TEMP\yui-web.pid) { Stop-Process -Id ([int](Get-Content $env:TEMP\yui-web.pid)) -Force -ErrorAction SilentlyContinue; Remove-Item $env:TEMP\yui-web.pid -ErrorAction SilentlyContinue }"
+echo %RESET%
+pause
+exit /b 0
+
+:YUI_ALREADY
+echo %RED%[AVISO] A Yui ja esta rodando em segundo plano ^(tarefa YuiBot^).
+echo        Iniciar outra instancia duplicaria as respostas no Discord.
+echo        Para reiniciar: Stop-ScheduledTask YuiBot; Start-ScheduledTask YuiBot%RESET%
+echo.
+echo App web: http://localhost:8081
+pause
+exit /b 0
