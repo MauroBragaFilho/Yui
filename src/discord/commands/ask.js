@@ -3,7 +3,27 @@ import { setGlobalContext } from '../setGlobalContext.js';
 import { config } from '../../config/index.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { getKnowledgeContext } from '../../utils/knowledgeBase.js';
-import { generateResponse } from '../../handlers/llmHandler.js';
+import { generateResponse, runResearchFor, isToolDisabled, stripThinking, isSystemReply } from '../../handlers/llmHandler.js';
+import { contextFromDiscord } from '../../core/discordAdapter.js';
+import { isOwnerId } from '../../core/permissions.js';
+import { buildWebContextPrompt } from '../../handlers/llmSafety.js';
+// Pesquisa na web: o /yui e o +yui usam o MESMO agente da fila (Porta A: pré-rota; Portas C e D: promessa vazia e guarda final).
+import { routeExplicitResearch, reviewResearchReply } from '../../core/ai/manager.js';
+// Lista de mods (Minecraft): o CÓDIGO procura cada nome no Modrinth (a IA não inventa link). Fora da fila, como o resto do /yui.
+import { routeModList } from '../../handlers/modListResolver.js';
+import { routeLists } from '../../handlers/listAssistant.js';
+import { SAFE_ALLOWED_MENTIONS } from '../mentions.js';
+import { sendLongReply, parseMaxParts, formatDeliveryLog, createProgressReporter } from '../longReply.js';
+import {
+  resolveContextTarget,
+  initContextStore,
+  runWithContext,
+  recordContextExchange,
+  isErrorReply,
+  isUnsafeForContext,
+  ERROR_MARKER,
+} from '../../core/context/contextStore.js';
+import { logger } from '../../utils/logger.js';
 import { searchVehicles } from '../../utils/vehicleData.js';
 import { searchWeapons } from '../../utils/weaponData.js';
 import {
@@ -47,6 +67,8 @@ function isRelevantMatch(vehicle, term) {
     nameTokens.some((tok) => tok === tk || tok.startsWith(tk))
   );
 }
+
+const MAX_QUESTION_WORDS = 40;
 
 function buildGtaDataContext() {
   const parts = [];
@@ -93,11 +115,14 @@ function buildGtaDataContext() {
 export function buildVehicleWeaponContext(pergunta) {
   const parts = [];
 
-  const words = pergunta
+  // Só as primeiras 40 palavras entram na busca: cada termo custa uma varredura nos dumps de veículos e armas
+  // (cerca de 0,17 ms) e uma pergunta de 6000 caracteres travava o laço de eventos por mais de 1 s.
+  const words = String(pergunta ?? '')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter((w) => w.length >= 3);
+    .filter((w) => w.length >= 3)
+    .slice(0, MAX_QUESTION_WORDS);
 
   const bigrams = [];
   for (let i = 0; i < words.length - 1; i++) {
@@ -107,7 +132,8 @@ export function buildVehicleWeaponContext(pergunta) {
   // Bigramas primeiro: nomes de veículos/armas costumam ter mais de uma
   // palavra (ex: "banshee 900r", "carbine rifle"), então tentamos casar
   // frases de 2 palavras antes de cair para termos isolados.
-  const candidates = [...bigrams, ...words];
+  // Termo repetido não acrescenta nada (os resultados já são deduplicados por nome): só custaria outra varredura.
+  const candidates = [...new Set([...bigrams, ...words])];
   const seenVehicles = new Set();
   const seenWeapons = new Set();
   const vehicleResults = [];
@@ -182,61 +208,176 @@ export function buildVehicleWeaponContext(pergunta) {
   return parts.length > 0 ? parts.join('\n\n') : null;
 }
 
-function buildSystemPrompt(pergunta) {
-  // Se AI_SYSTEM_PROMPT estiver definido no .env, ele TEM PRIORIDADE total
-  // (permite customizar a personalidade inteira sem tocar em código).
-  const basePrompt = config.ai.systemPrompt
-    ? config.ai.systemPrompt
-    : (() => {
-        const nome = config.ai.botName;
-        return (
-          `Seu nome é ${nome}. Sempre que alguém perguntar seu nome, quem você é, ou se referir a você, ` +
-          `responda usando exatamente esse nome (${nome}) — nunca diga que é "um assistente de IA genérico" ` +
-          `ou "um modelo de linguagem". Você é a ${nome}, a amiga gamer e companheira de jogo do servidor. ` +
-          `Você vive o universo dos jogos junto com os usuários, ajuda com GTA Online (negócios, veículos, ` +
-          `dinheiro, missões, eventos e mecânicas do jogo) e também com qualquer outro jogo em geral. ` +
-          `Responda sempre em português (Brasil), de forma direta, amigável e casual.`
-        );
-      })();
+// Assuntos de GTA Online: só nesses casos injetamos os dados do jogo e o conhecimento
+// de GTA no prompt (em conversa sobre outros jogos eles só gastariam tokens e puxariam o tema).
+const GTA_TOPIC =
+  /\b(gta\w*|rockstar|los santos|golpes?|cayo|perico|van de armas|gun van|traficantes?|comerciantes?|naufr[aá]gio|colecion[aá]veis|contra o rel[oó]gio|time trials?|bandito|junk energy|semanal|nightclub|bunker|acid lab|p[oó]dio|reset)\b/i;
 
-  const sections = [basePrompt];
+export function isGtaTopic(pergunta) {
+  return GTA_TOPIC.test(pergunta || '');
+}
 
-  const gtaData = buildGtaDataContext();
-  if (gtaData) {
-    sections.push(
-      `\nVocê tem acesso aos seguintes dados REAIS e ATUALIZADOS do servidor sobre o GTA Online neste ` +
-        `momento. Use-os para responder perguntas sobre localização da Van de Armas, Comerciantes, Desafios ` +
-        `Contra o Relógio, etc. Nunca invente uma localização diferente da listada aqui:\n${gtaData}`
-    );
-  }
+/**
+ * Monta SÓ o contexto extra da pergunta. A personalidade já é aplicada pelo llmHandler
+ * (persona/yui-publica.md); repeti-la aqui duplicaria os tokens. AI_SYSTEM_PROMPT, se
+ * definido no .env, entra como texto extra no início.
+ */
+export function buildSystemPrompt(pergunta) {
+  const sections = [];
+  if (config.ai.systemPrompt) sections.push(config.ai.systemPrompt);
 
   const vehicleWeaponData = buildVehicleWeaponContext(pergunta);
+  const gta = isGtaTopic(pergunta) || Boolean(vehicleWeaponData);
+
+  if (gta) {
+    const gtaData = buildGtaDataContext();
+    if (gtaData) {
+      sections.push(
+        `Dados REAIS e atuais do GTA Online (use para Van de Armas, Comerciantes, Contra o Relógio, bônus da semana etc.; não invente localização diferente):\n${gtaData}`
+      );
+    }
+  }
+
   if (vehicleWeaponData) {
     sections.push(
-      `\nDados técnicos de veículos e armas extraídos do GTACars (fonte principal, com preço, DLC, tração e ` +
-        `link da página) e do dump oficial do jogo gta-v-data-dumps (fallback para veículos/armas ausentes). ` +
-        `Use-os quando o usuário perguntar sobre estatísticas, classe, fabricante, preço, DLC ou velocidade de ` +
-        `veículos, ou sobre categoria/tipo de dano de armas específicas. Não invente números que não estejam ` +
-        `aqui — se não encontrar o dado exato ou a estimativa parecer estranha, avise o usuário que é ` +
-        `aproximado:\n${vehicleWeaponData}`
+      `Dados técnicos de veículos/armas (GTACars e dump do jogo). Não invente números que não estejam aqui; se parecer estranho ou faltar, avise que é aproximado:\n${vehicleWeaponData}`
     );
   }
 
-  const knowledge = getKnowledgeContext(config.ai.knowledgeDir);
+  const knowledge = getKnowledgeContext(config.ai.knowledgeDir, { gta });
   if (knowledge.content) {
     sections.push(
-      `\nVocê também tem acesso à seguinte base de conhecimento adicional (dicas, builds, estratégias, ` +
-        `buffs/debuffs, etc, fornecida pelo administrador do servidor). Priorize essas informações quando ` +
-        `forem relevantes para a pergunta:\n${knowledge.content}`
+      `Base de conhecimento do administrador (priorize quando for relevante):\n${knowledge.content}`
     );
   }
 
-  sections.push(
-    `\nSe não tiver certeza sobre algo muito específico ou recente que não esteja nos dados acima, avise ` +
-      `o usuário em vez de inventar informação.`
-  );
+  return sections.join('\n\n');
+}
 
-  return sections.join('\n');
+/**
+ * Conversa sensível = a mesma regra do chat por menção: o dono em DM ou em canal privado
+ * (escopo de memória "personal"). Nela a Yui não usa provedores anônimos e só pesquisa na web se o
+ * YUI_PRIVATE_SEARCH liberar (e, então, só em pedido explícito e com as proteções do modo privado).
+ * Na dúvida (erro ao montar o contexto), trata como sensível.
+ */
+export function isSensitiveInteraction(interaction) {
+  try {
+    const ctx = contextFromDiscord({
+      userId: interaction?.user?.id,
+      guildId: interaction?.guildId ?? null,
+      channelId: interaction?.channelId ?? null,
+    });
+    return ctx.memoryScope === 'personal';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Conversa PRIVADA para a PESQUISA na web: a sensível (dono em DM ou canal privado) e também a DM de QUALQUER pessoa (decisão do dono: "DM e app para todos, com as
+ * proteções"). Aqui o YUI_PRIVATE_SEARCH decide se pesquisa e valem as proteções do modo privado (pedido explícito, consulta literal, síntese sem provedor anônimo,
+ * nada gravado). Só a pesquisa usa isto: a cadeia de provedores e a memória seguem o isSensitiveInteraction. Na dúvida, privada.
+ */
+export function isPrivateResearchInteraction(interaction) {
+  try {
+    return isSensitiveInteraction(interaction) || !interaction?.guildId;
+  } catch {
+    return true;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Limites da pergunta e uma resposta por vez por pessoa (TG-10, TG-13, TG-14, D2)
+// ---------------------------------------------------------------------------------------------
+
+const DEFAULT_ASK_MAX_CHARS = 4000;
+const ASK_STALE_MS = 10 * 60 * 1000; // um registro "em andamento" mais velho que isto é tratado como esquecido
+const NOTICE_EVERY_MS = 30 * 1000; // no prefixo, o aviso de recusa sai no máximo 1 vez a cada 30 s por pessoa
+
+/** Máximo de caracteres da pergunta: YUI_ASK_MAX_CHARS (padrão 4000, faixa 100 a 20000). */
+export function askMaxChars(env = process.env) {
+  const n = Number.parseInt(String(env?.YUI_ASK_MAX_CHARS ?? ''), 10);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_ASK_MAX_CHARS;
+  return Math.min(Math.max(n, 100), 20000);
+}
+
+/**
+ * Valida a pergunta ANTES de qualquer trabalho. Vazia ou grande demais é recusada com uma frase que diz o que fazer
+ * (texto grande: mandar como mensagem normal mencionando a Yui, com um anexo .txt ou .md, que ela lê).
+ */
+export function checkAskText(pergunta, { max = askMaxChars(), prefix = config.discord.prefix, viaPrefix = false } = {}) {
+  const text = String(pergunta ?? '');
+  if (!text.trim()) {
+    const message = viaPrefix
+      ? `Faltou a pergunta. Use \`${prefix} perguntar <sua pergunta>\`.`
+      : 'Escreva a sua pergunta no campo "mensagem".';
+    return { ok: false, reason: 'empty', size: 0, max, message };
+  }
+  const size = Array.from(text).length;
+  if (size > max) {
+    return {
+      ok: false,
+      reason: 'too-long',
+      size,
+      max,
+      message: `Texto grande demais (${size} caracteres). O máximo aqui é ${max}. Mande o texto como uma mensagem normal me mencionando e anexe um arquivo .txt ou .md, que eu leio.`,
+    };
+  }
+  return { ok: true, reason: '', size, max, message: '' };
+}
+
+const activeAsks = new Map(); // quem pergunta -> { at, token }
+const lastNotice = new Map(); // quem pergunta -> instante do último aviso de recusa (só no prefixo)
+let askToken = 0;
+
+/** Identifica quem pergunta: o /yui traz `user`; o adaptador do prefixo (+yui perguntar) traz `authorId`. */
+export function askerKey(interaction) {
+  const id = interaction?.user?.id ?? interaction?.authorId ?? null;
+  return id ? String(id) : null;
+}
+
+/**
+ * Reserva a vaga de "uma resposta por vez" da pessoa. Devolve o recibo (para liberar) ou null se ela já tem um /yui
+ * em andamento. Sem identificar quem pergunta não há como limitar: segue sem vaga.
+ */
+export function tryAcquireAsk(key, now = Date.now()) {
+  if (!key) return { token: 0 };
+  const current = activeAsks.get(key);
+  if (current && now - current.at < ASK_STALE_MS) return null;
+  const slot = { at: now, token: ++askToken };
+  activeAsks.set(key, slot);
+  return slot;
+}
+
+/** Libera a vaga (só se ainda for a mesma reserva: uma vaga esquecida e reassumida não é solta por engano). */
+export function releaseAsk(key, slot) {
+  if (!key || !slot) return;
+  if (activeAsks.get(key)?.token === slot.token) activeAsks.delete(key);
+}
+
+function shouldNotice(key, now = Date.now()) {
+  if (!key) return true;
+  const last = lastNotice.get(key);
+  if (last !== undefined && now - last < NOTICE_EVERY_MS) return false;
+  lastNotice.set(key, now);
+  if (lastNotice.size > 500) {
+    for (const [k, t] of lastNotice) if (now - t >= NOTICE_EVERY_MS) lastNotice.delete(k);
+  }
+  return true;
+}
+
+/**
+ * Responde a recusa antes do deferReply: efêmera no /yui (só quem pediu vê) e sem menções. No prefixo a resposta é uma
+ * mensagem normal, então o aviso é limitado a 1 por 30 s por pessoa (o resto só vai para o log).
+ */
+async function refuseAsk(interaction, content, { asker, always }) {
+  if (!always && !shouldNotice(asker)) return null;
+  try {
+    return await interaction.reply({ content, ephemeral: true, allowedMentions: { parse: [] } });
+  } catch (err) {
+    logger.warn(`[Ask] Não consegui avisar a recusa: ${String(err?.message ?? err).slice(0, 120)}`);
+    return null;
+  }
 }
 
 export const askCommand = {
@@ -270,27 +411,181 @@ export const askCommand = {
     // Só fica privado (ephemeral) quando o usuário escolhe "Privado".
     const ephemeral = visibility === 'private';
 
-    await interaction.deferReply({ ephemeral });
+    // O prefixo (+yui perguntar) passa por um adaptador de mensagem, sem isChatInputCommand: lá a recusa é uma mensagem normal.
+    const isSlash = typeof interaction.isChatInputCommand === 'function';
+    const asker = askerKey(interaction);
+
+    // Antes do deferReply e de qualquer trabalho: pergunta vazia ou grande demais é recusada com a orientação (D2).
+    const check = checkAskText(pergunta, { viaPrefix: !isSlash });
+    if (!check.ok) {
+      logger.info(`[Ask] Pergunta recusada (${check.reason}${check.size ? `, ${check.size} caracteres` : ''}).`);
+      return refuseAsk(interaction, check.message, { asker, always: isSlash });
+    }
+
+    // Uma resposta por vez por pessoa: o /yui não passa pela fila da IA e cada pedido gasta CPU e cota de provedor.
+    const slot = tryAcquireAsk(asker);
+    if (!slot) {
+      logger.info('[Ask] Pedido recusado: a pessoa já tem um /yui em andamento.');
+      return refuseAsk(interaction, 'Espere a resposta anterior terminar antes de mandar outra pergunta.', { asker, always: isSlash });
+    }
 
     try {
-      const resposta = await generateResponse(
-        `${buildSystemPrompt(pergunta)}\n\nPergunta do usuário: ${pergunta}`,
-        interaction.channelId,
-        {
-          guildId: interaction.guildId,
-          allowSearch: true,
-          disableTools: false,
-          userId: interaction.user.id,
-        }
-      );
+      await interaction.deferReply({ ephemeral });
+    } catch (deferError) {
+      releaseAsk(asker, slot);
+      throw deferError;
+    }
 
-      // Discord limita mensagens a 2000 caracteres.
-      const truncated = resposta.length > 1900 ? `${resposta.slice(0, 1900)}...` : resposta;
-      return interaction.editReply({ content: truncated });
-    } catch (error) {
-      return interaction.editReply({
-        content: `❌ Não consigo te responder agora: ${error.message}`,
+    let progress = null; // progresso da pesquisa na mensagem "Processando..." (createProgressReporter)
+    try {
+      const startedAt = Date.now();
+      let meta = {};
+      const ctx = buildSystemPrompt(pergunta);
+      // Contexto por horas (desligado por padrão; ver src/core/context/contextStore.js): o /yui lê o fio de QUEM pergunta e,
+      // numa resposta pública entregue e sem busca na web, grava a troca. A resposta privada (efêmera) só lê.
+      let contextTarget = null;
+      try {
+        const target = resolveContextTarget({
+          userId: interaction.user?.id,
+          channelId: interaction.channelId,
+          guildId: interaction.guildId,
+          personal: isSensitiveInteraction(interaction),
+          record: !ephemeral,
+          userText: pergunta,
+        });
+        if (target.active) {
+          await initContextStore();
+          contextTarget = target;
+        }
+      } catch (contextError) {
+        logger.warn(`[Ask] Contexto por horas indisponível, seguindo sem ele: ${String(contextError?.message ?? contextError).slice(0, 100)}`);
+      }
+      // Pesquisa na web (agente de pesquisa, o MESMO da fila): quem pergunta (SÓ a fala dela, nunca `ctx`), onde e se a conversa é privada.
+      // O /yui nunca tem ferramentas, e a busca automática do generateResponse não roda em conversa privada: por isso, só aí, um pedido
+      // EXPLÍCITO sem promessa também é pesquisado pelo código (searchIfExplicit). O progresso reaproveita a mensagem "Processando...".
+      const sensitive = isSensitiveInteraction(interaction);
+      const privateChat = isPrivateResearchInteraction(interaction); // a sensível + a DM de qualquer pessoa: só para a PESQUISA
+      progress = createProgressReporter((text) => interaction.editReply({ content: text, allowedMentions: { parse: [] } }), { logger });
+      const entry = {
+        text: pergunta, sensitive: privateChat, isOwner: isOwnerId(interaction.user?.id), userId: interaction.user?.id ?? null,
+        guildId: interaction.guildId ?? null, channelId: interaction.channelId ?? null, searchIfExplicit: privateChat, progress: progress.show,
+      };
+      const deps = { llm: { runResearchFor, isToolDisabled } };
+
+      let resposta;
+      let researchHandled = false; // o agente respondeu: a troca não vai ao contexto por horas (resultado derivado da web)
+      // Porta M (lista de mods): 5+ linhas de nomes + "mods" + pedido de link/download/lista => o código resolve no Modrinth, sem consultar o modelo.
+      // YUI_MODLIST_ENABLED=false desliga; conversa normal devolve { handled: false } na hora (mesmo contrato da Porta A, researched: true).
+      // Porta L (listas pessoais: "anota na lista X: ...", "mostra a lista X"): o código executa; a lista é dado pessoal e não vai ao contexto.
+      const listRouted = await routeLists(entry);
+      const modRouted = listRouted.handled ? listRouted : await routeModList(entry, deps);
+      // Porta A (só com YUI_RESEARCH_PRE_ROUTE=true): pedido explícito e estrito pesquisa por código, sem consultar o modelo.
+      const routed = modRouted.handled ? modRouted : await routeExplicitResearch(entry, deps);
+      if (routed.handled) {
+        resposta = routed.text;
+        researchHandled = routed.researched === true;
+      } else {
+        resposta = await runWithContext(contextTarget, () => generateResponse(
+          (ctx ? `${ctx}\n\nPergunta do usuário: ${pergunta}` : pergunta),
+          interaction.channelId,
+          {
+            guildId: interaction.guildId,
+            // A busca automática (otimizador antigo) não roda em conversa privada (a pesquisa privada é do agente: pedido explícito, consulta literal).
+            allowSearch: !privateChat,
+            // O gatilho de busca olha SÓ a pergunta (o prompt também carrega a base de conhecimento, que tem
+            // palavras como "search" e abria a busca em toda pergunta).
+            searchPrompt: pergunta,
+            // O /yui só devolve texto: nunca executa ferramenta. Sem tools a resposta não vira JSON cru e um
+            // texto da web com instruções não tem ferramenta para acionar (o generateResponse também as desliga
+            // quando a busca foi usada).
+            disableTools: true,
+            userId: interaction.user?.id,
+            sensitive: isSensitiveInteraction(interaction),
+            onMeta: (m) => { meta = m; },
+          }
+        ));
+        // Portas C e D: se o modelo só PROMETEU pesquisar ("Vou pesquisar isso!") isso vira pesquisa de verdade, recusa honesta ou a resposta final;
+        // o que ainda for só promessa nunca chega à pessoa. Resposta com a busca automática já feita (meta.usedSearch) não pesquisa de novo.
+        const reviewed = await reviewResearchReply({
+          ...entry, reply: resposta, usedSearch: meta.usedSearch === true,
+          // a busca automática JÁ foi tentada e falhou: o agente não pesquisa de novo (3 buscas num pedido), só diz o motivo; JSON de ferramenta cru nunca é resposta
+          searchFailure: meta.searchFailure || '', searchRetryAfterMs: meta.searchRetryAfterMs || 0, rejectToolJson: true,
+          // a busca automática trouxe a web, mas a síntese só prometeu: nova resposta COM a mesma web (os links já achados não se perdem)
+          regenerateWithWeb: async (retryPrompt) => {
+            if (!meta.webContext) return '';
+            const again = await runWithContext(contextTarget, () => generateResponse(
+              buildWebContextPrompt({ context: meta.webContext, userPrompt: ctx ? `${ctx}\n\n${retryPrompt}` : retryPrompt }),
+              interaction.channelId,
+              { guildId: interaction.guildId, allowSearch: false, disableTools: true, userId: interaction.user?.id, sensitive }
+            ));
+            const clean = stripThinking(String(again ?? '')).trim();
+            return clean && !isSystemReply(clean) ? clean : '';
+          },
+          regenerate: async (retryPrompt) => {
+            const again = await runWithContext(contextTarget, () => generateResponse(
+              (ctx ? `${ctx}\n\n${retryPrompt}` : retryPrompt),
+              interaction.channelId,
+              { guildId: interaction.guildId, allowSearch: false, disableTools: true, userId: interaction.user?.id, sensitive }
+            ));
+            const clean = stripThinking(String(again ?? '')).trim();
+            return clean && !isSystemReply(clean) ? clean : '';
+          },
+        }, deps);
+        resposta = reviewed.text;
+        researchHandled = reviewed.researched === true;
+      }
+      // Nenhuma edição de progresso pode sobrescrever a resposta final.
+      await progress.settle();
+
+      // Nada de corte seco em 1900: o divisor entrega a resposta INTEIRA (várias mensagens ou, se for enorme,
+      // uma introdução + o texto completo em anexo). Resposta efêmera ("Privado") nunca vai para o canal.
+      // Nada de @everyone/@here/cargos: texto vindo da web pode levar o modelo a escrevê-los.
+      const delivery = await sendLongReply({
+        kind: 'slash',
+        interaction,
+        text: resposta,
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
+        maxParts: parseMaxParts(),
+        logger,
       });
+      logger.info(formatDeliveryLog({
+        chars: String(resposta ?? '').length,
+        parts: delivery.parts,
+        sentParts: delivery.sentParts,
+        mode: delivery.mode,
+        ok: delivery.ok,
+        channelKind: interaction.guildId ? 'servidor' : 'DM',
+        durationMs: Date.now() - startedAt,
+        deliveryMs: delivery.durationMs,
+        provider: meta.provider,
+        model: meta.model,
+        finishReason: meta.finishReason,
+        continuations: meta.continuations ?? 0,
+        partial: delivery.partial === true,
+        retried: delivery.retried ?? 0,
+      }));
+      // Só depois da entrega confirmada. Resposta com busca na web (a automática ou a do agente de pesquisa) ou com marcador de ferramenta não vai para o contexto.
+      if (contextTarget?.record && delivery.ok && meta.usedSearch !== true && !researchHandled && !/^-# .*🔎/m.test(String(resposta ?? '')) && !isUnsafeForContext(resposta)) {
+        recordContextExchange(contextTarget, { userText: pergunta, assistantText: isErrorReply(resposta) ? ERROR_MARKER : String(resposta ?? '') });
+      }
+      // Entrega PARCIAL (as partes 2+ não saíram, mas a parte 1 já avisa disso): não é erro. Lançar aqui trocaria a parte 1 (e o aviso) por "❌ Não consigo te responder".
+      if (!delivery.ok && !delivery.partial) throw new Error('entrega da resposta falhou');
+      return delivery.message;
+    } catch (error) {
+      progress?.close();
+      // Detalhe técnico só no log; o usuário recebe uma frase curta.
+      logger.error(`[Ask] Falha ao responder o /yui: ${String(error?.message ?? error).slice(0, 200)}`);
+      try {
+        return await interaction.editReply({
+          content: '❌ Não consigo te responder agora. Tente de novo em instantes.',
+          allowedMentions: SAFE_ALLOWED_MENTIONS,
+        });
+      } catch (replyError) {
+        logger.error(`[Ask] Também não consegui avisar o erro: ${String(replyError?.message ?? replyError).slice(0, 120)}`);
+        return null;
+      }
+    } finally {
+      releaseAsk(asker, slot);
     }
   },
 };

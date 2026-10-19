@@ -1,0 +1,138 @@
+{
+ "request": "/v2/projects?ids=%5B%22lhGA9TYQ%22%2C%22oEhQIkOs%22%2C%22OWSRM4vD%22%2C%22MBAkmtvl%22%2C%22T8TGycIQ%22%2C%22J81TRJWm%22%2C%22CVT4pFB2%22%2C%22vvuO3ImH%22%2C%22PYQD8noM%22%2C%22jJfV67b1%22%5D",
+ "status": 200,
+ "note": "10 projetos required fora da lista (so campos usados)",
+ "body": [
+  {
+   "id": "OWSRM4vD",
+   "slug": "cofh-core",
+   "title": "CoFH Core",
+   "project_type": "mod",
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "client_side": "required",
+   "server_side": "required"
+  },
+  {
+   "id": "vvuO3ImH",
+   "slug": "curios",
+   "title": "Curios API",
+   "project_type": "mod",
+   "loaders": [
+    "fabric",
+    "forge",
+    "neoforge"
+   ],
+   "client_side": "required",
+   "server_side": "required"
+  },
+  {
+   "id": "oEhQIkOs",
+   "slug": "cryonicconfig",
+   "title": "Cryonic Config",
+   "project_type": "mod",
+   "loaders": [
+    "babric",
+    "fabric",
+    "forge",
+    "neoforge",
+    "quilt"
+   ],
+   "client_side": "optional",
+   "server_side": "optional"
+  },
+  {
+   "id": "MBAkmtvl",
+   "slug": "balm",
+   "title": "Balm",
+   "project_type": "mod",
+   "loaders": [
+    "fabric",
+    "forge",
+    "neoforge"
+   ],
+   "client_side": "optional",
+   "server_side": "optional"
+  },
+  {
+   "id": "CVT4pFB2",
+   "slug": "melody",
+   "title": "Melody",
+   "project_type": "mod",
+   "loaders": [
+    "fabric",
+    "forge",
+    "neoforge"
+   ],
+   "client_side": "unknown",
+   "server_side": "unknown"
+  },
+  {
+   "id": "J81TRJWm",
+   "slug": "konkrete",
+   "title": "Konkrete",
+   "project_type": "mod",
+   "loaders": [
+    "fabric",
+    "forge",
+    "neoforge"
+   ],
+   "client_side": "optional",
+   "server_side": "optional"
+  },
+  {
+   "id": "PYQD8noM",
+   "slug": "majrusz-library",
+   "title": "Majrusz Library",
+   "project_type": "mod",
+   "loaders": [
+    "fabric",
+    "forge",
+    "neoforge",
+    "quilt"
+   ],
+   "client_side": "required",
+   "server_side": "required"
+  },
+  {
+   "id": "jJfV67b1",
+   "slug": "citadel",
+   "title": "Citadel",
+   "project_type": "mod",
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "client_side": "required",
+   "server_side": "required"
+  },
+  {
+   "id": "T8TGycIQ",
+   "slug": "structure-gel-api",
+   "title": "Structure Gel API",
+   "project_type": "mod",
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "client_side": "required",
+   "server_side": "required"
+  },
+  {
+   "id": "lhGA9TYQ",
+   "slug": "architectury-api",
+   "title": "Architectury API",
+   "project_type": "mod",
+   "loaders": [
+    "fabric",
+    "forge",
+    "neoforge",
+    "quilt"
+   ],
+   "client_side": "required",
+   "server_side": "required"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "request": "/v2/search?query=Suplementaries&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+ "status": 200,
+ "note": "erro de digitacao: a busca NAO tolera, 0 hits",
+ "reducedFrom": 0,
+ "body": {
+  "hits": [],
+  "offset": 0,
+  "limit": 10,
+  "total_hits": 0
+ }
+}

@@ -3,7 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import config from '../config.js';
-const BANS_FILE = path.join(__dirname, '../data/bans.json');
+// YUI_BANS_FILE existe só para os testes não tocarem o bans.json real.
+const BANS_FILE = process.env.YUI_BANS_FILE ? path.resolve(process.env.YUI_BANS_FILE) : path.join(__dirname, '../data/bans.json');
 if (!fs.existsSync(path.dirname(BANS_FILE))) {
     fs.mkdirSync(path.dirname(BANS_FILE), { recursive: true });
 }
@@ -41,16 +42,25 @@ function setAutoBlock(guildId, val) {
     return true;
 }
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
+import { clampText } from '../discord/embedLimits.js';
+// Teto do motivo de banimento (TG-19). Vale ao gravar (addBan) e ao exibir (checkBan), porque o motivo
+// pode vir da IA (ia_automod) ou do modal do dono e acaba em campos de embed e em avisos.
+const BAN_REASON_MAX = 300;
+function clampBanReason(reason) {
+    return clampText(String(reason ?? ''), BAN_REASON_MAX);
+}
 function saveBans() {
     fs.writeFileSync(BANS_FILE, JSON.stringify(bans, null, 2));
 }
 function checkBan(userId, guildId, channelId) {
     const sanitize = (r) => {
         if (!r) return null;
+        r = String(r);
         if (r.includes('Identificado termo proibido no') && r.includes(':')) {
             return r.split(':')[0] + '.';
         }
-        return r;
+        // Registros antigos podem ter motivo enorme: quem exibe (embeds de "banido") recebe o texto já cortado.
+        return clampBanReason(r);
     };
     if (bans.users[userId]) return { type: 'user', typeName: 'Usuário', reason: sanitize(bans.users[userId].reason) };
     if (guildId && bans.guilds[guildId]) return { type: 'guild', typeName: 'Servidor', reason: sanitize(bans.guilds[guildId].reason) };
@@ -58,7 +68,7 @@ function checkBan(userId, guildId, channelId) {
     return null;
 }
 function addBan(type, id, reason = "Violação dos Termos de Uso.") {
-    const banInfo = { reason, timestamp: new Date().toISOString() };
+    const banInfo = { reason: clampBanReason(reason), timestamp: new Date().toISOString() };
     if (type === 'user') bans.users[id] = banInfo;
     else if (type === 'guild') bans.guilds[id] = banInfo;
     else if (type === 'channel') bans.channels[id] = banInfo;
@@ -189,7 +199,7 @@ async function handleBanInteraction(interaction, client) {
     }
 }
 export const getBans = () => bans;
-export { checkBan, addBan, removeBan, setAutoBlock, checkAutoBan, handleBanInteraction, getAutoBlock, getAutoBlockMode, forbiddenKeywords };
+export { checkBan, addBan, removeBan, setAutoBlock, checkAutoBan, handleBanInteraction, getAutoBlock, getAutoBlockMode, forbiddenKeywords, clampBanReason, BAN_REASON_MAX };
 
 export default {
     checkBan,

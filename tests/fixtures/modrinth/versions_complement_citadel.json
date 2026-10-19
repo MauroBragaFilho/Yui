@@ -1,0 +1,58 @@
+{
+ "request": "/v2/project/jJfV67b1/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "complemento obrigatorio de: Rats",
+ "reducedFrom": 14,
+ "body": [
+  {
+   "id": "lTAAe4sZ",
+   "project_id": "jJfV67b1",
+   "name": "Citadel 2.6.3",
+   "version_number": "2.6.3",
+   "version_type": "release",
+   "date_published": "2026-01-17T18:17:35.005213Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/jJfV67b1/versions/lTAAe4sZ/citadel-2.6.3-1.20.1.jar",
+     "filename": "citadel-2.6.3-1.20.1.jar",
+     "primary": true,
+     "size": 3185275
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "oD1qDb1C",
+   "project_id": "jJfV67b1",
+   "name": "Citadel 2.6.2",
+   "version_number": "2.6.2",
+   "version_type": "release",
+   "date_published": "2025-06-27T17:45:17.457640Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/jJfV67b1/versions/oD1qDb1C/citadel-2.6.2-1.20.1.jar",
+     "filename": "citadel-2.6.2-1.20.1.jar",
+     "primary": true,
+     "size": 3185379
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

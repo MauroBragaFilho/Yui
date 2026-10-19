@@ -41,6 +41,11 @@ A resolução de mídia (`radioProviders.js`) suporta múltiplos formatos com ex
   - Músicas (`deezer.com/.../track/ID`), Playlists (`deezer.com/.../playlist/ID`) e Álbuns (`deezer.com/.../album/ID`).
 - **Busca por Nome (Texto Livre)**:
   - Buscas sem link utilizam a API do Deezer com cálculo de confiança fonética. Se o score for `>= 80%`, adiciona a faixa; se for ambíguo, apresenta um menu de escolha no Discord.
+- **Segurança e limites dos links**:
+  - Só links de **YouTube, Deezer e Spotify** são aceitos; o link é validado (sem aspas, caracteres de controle nem `usuário:senha`) e os programas externos (`yt-dlp`, `deemix`) rodam sem shell, com tempo limite.
+  - O download pelo Deezer da rádio tem teto de 60 s por faixa (ou o valor de `YUI_DEEZER_TIMEOUT_S`, se menor). Pedidos simultâneos da mesma faixa (pré-carga e player) compartilham um único processo.
+  - O Modo Rádio **não** tem o limite de duração dos downloads por comando (`YUI_DL_MAX_MINUTES`), porque toca sets e faixas longas de propósito. A regra de "playlist baixa só um item" também **não** vale aqui: a rádio continua enfileirando a playlist inteira.
+  - O Modo Rádio exige o codificador Opus; sem ele é recusado com aviso. Se o ambiente de áudio quebrar (2 falhas seguidas) ou 5 faixas seguidas não tocarem, a rádio para sozinha e avisa no canal.
 
 ---
 

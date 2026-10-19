@@ -1,0 +1,179 @@
+{
+ "request": "/v2/search?query=majrusz&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=25&index=relevance",
+ "status": 200,
+ "note": "token: 7 hits, Majrusz's Accessories entre eles",
+ "reducedFrom": 7,
+ "body": {
+  "hits": [
+   {
+    "project_id": "PYQD8noM",
+    "slug": "majrusz-library",
+    "title": "Majrusz Library",
+    "description": "Library with common code for some of my modifications.",
+    "versions": [
+     "1.18.2",
+     "1.19.2",
+     "1.19.3",
+     "1.19.4",
+     "1.20",
+     "1.20.1",
+     "1.20.2"
+    ],
+    "categories": [
+     "fabric",
+     "forge",
+     "game-mechanics",
+     "library",
+     "neoforge",
+     "quilt",
+     "utility"
+    ],
+    "display_categories": [
+     "fabric",
+     "forge",
+     "game-mechanics",
+     "library",
+     "neoforge",
+     "quilt",
+     "utility"
+    ],
+    "downloads": 2195517,
+    "follows": 67,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "O67H6VJD",
+    "license": "MIT",
+    "project_type": "mod",
+    "date_modified": "2024-04-29T20:47:44.509073+00:00",
+    "author": "Majrusz"
+   },
+   {
+    "project_id": "GGDBwjOg",
+    "slug": "majruszs-progressive-difficulty",
+    "title": "Majrusz's Progressive Difficulty",
+    "description": "Mod that progressively increases the game difficulty over time.",
+    "versions": [
+     "1.18.2",
+     "1.19.2",
+     "1.19.3",
+     "1.19.4",
+     "1.20",
+     "1.20.1"
+    ],
+    "categories": [
+     "adventure",
+     "fabric",
+     "forge",
+     "game-mechanics",
+     "mobs",
+     "neoforge",
+     "quilt"
+    ],
+    "display_categories": [
+     "adventure",
+     "fabric",
+     "forge",
+     "game-mechanics",
+     "mobs",
+     "neoforge",
+     "quilt"
+    ],
+    "downloads": 1116777,
+    "follows": 378,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "4QlCUN5g",
+    "license": "MIT",
+    "project_type": "mod",
+    "date_modified": "2024-04-26T17:00:53.922485+00:00",
+    "author": "Majrusz"
+   },
+   {
+    "project_id": "jJthQvHv",
+    "slug": "majruszs-enchantments",
+    "title": "Majrusz's Enchantments",
+    "description": "Mod that adds plenty of unique and balanced enchantments to the game.",
+    "versions": [
+     "1.18.2",
+     "1.19.2",
+     "1.19.3",
+     "1.19.4",
+     "1.20",
+     "1.20.1"
+    ],
+    "categories": [
+     "fabric",
+     "forge",
+     "game-mechanics",
+     "magic",
+     "neoforge",
+     "quilt",
+     "utility"
+    ],
+    "display_categories": [
+     "fabric",
+     "forge",
+     "game-mechanics",
+     "magic",
+     "neoforge",
+     "quilt",
+     "utility"
+    ],
+    "downloads": 1026696,
+    "follows": 185,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "Pk7dUGrq",
+    "license": "MIT",
+    "project_type": "mod",
+    "date_modified": "2024-04-26T21:19:02.433763+00:00",
+    "author": "Majrusz"
+   },
+   {
+    "project_id": "6roN0iTa",
+    "slug": "majruszs-accessories",
+    "title": "Majrusz's Accessories",
+    "description": "Mod that adds new special accessories to make certain aspects of the game more enjoyable.",
+    "versions": [
+     "1.18.2",
+     "1.19.2",
+     "1.19.3",
+     "1.19.4",
+     "1.20",
+     "1.20.1",
+     "1.20.2"
+    ],
+    "categories": [
+     "equipment",
+     "fabric",
+     "forge",
+     "game-mechanics",
+     "magic",
+     "neoforge",
+     "quilt"
+    ],
+    "display_categories": [
+     "equipment",
+     "fabric",
+     "forge",
+     "game-mechanics",
+     "magic",
+     "neoforge",
+     "quilt"
+    ],
+    "downloads": 215548,
+    "follows": 154,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "D19XHNOR",
+    "license": "MIT",
+    "project_type": "mod",
+    "date_modified": "2024-04-26T16:54:22.532234+00:00",
+    "author": "Majrusz"
+   }
+  ],
+  "offset": 0,
+  "limit": 25,
+  "total_hits": 7
+ }
+}

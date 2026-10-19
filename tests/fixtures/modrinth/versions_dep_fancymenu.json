@@ -1,0 +1,82 @@
+{
+ "request": "/v2/project/Wq5SjeWM/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "required: Melody + Konkrete",
+ "reducedFrom": 53,
+ "body": [
+  {
+   "id": "2mNmkn9s",
+   "project_id": "Wq5SjeWM",
+   "name": "[Forge] v3.9.14 MC 1.20.1",
+   "version_number": "3.9.14-1.20.1-forge",
+   "version_type": "release",
+   "date_published": "2026-09-28T19:46:48.577050Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/Wq5SjeWM/versions/2mNmkn9s/fancymenu_forge_3.9.14_MC_1.20.1.jar",
+     "filename": "fancymenu_forge_3.9.14_MC_1.20.1.jar",
+     "primary": true,
+     "size": 26191988
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "J81TRJWm",
+     "file_name": null,
+     "dependency_type": "required"
+    },
+    {
+     "version_id": null,
+     "project_id": "CVT4pFB2",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  },
+  {
+   "id": "ucAaUjAE",
+   "project_id": "Wq5SjeWM",
+   "name": "[Forge] v3.9.12 MC 1.20.1",
+   "version_number": "3.9.12-1.20.1-forge",
+   "version_type": "release",
+   "date_published": "2026-08-28T07:15:04.450568Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/Wq5SjeWM/versions/ucAaUjAE/fancymenu_forge_3.9.12_MC_1.20.1.jar",
+     "filename": "fancymenu_forge_3.9.12_MC_1.20.1.jar",
+     "primary": true,
+     "size": 26181250
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "J81TRJWm",
+     "file_name": null,
+     "dependency_type": "required"
+    },
+    {
+     "version_id": null,
+     "project_id": "CVT4pFB2",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  }
+ ]
+}

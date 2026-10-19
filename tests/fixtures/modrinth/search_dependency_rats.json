@@ -1,0 +1,181 @@
+{
+ "request": "/v2/search?query=Rats&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+ "status": 200,
+ "note": "achado; versao exige Citadel",
+ "reducedFrom": 10,
+ "body": {
+  "hits": [
+   {
+    "project_id": "CETpiisl",
+    "slug": "rats",
+    "title": "Rats",
+    "description": "Adorable little pests that can be tamed and trained in combat, automation, resource gathering, cooking and more",
+    "versions": [
+     "1.12.2",
+     "1.15.2",
+     "1.16.5",
+     "1.19.4",
+     "1.20.1"
+    ],
+    "categories": [
+     "adventure",
+     "cursed",
+     "equipment",
+     "food",
+     "forge",
+     "game-mechanics",
+     "mobs",
+     "neoforge",
+     "technology",
+     "utility",
+     "worldgen"
+    ],
+    "display_categories": [
+     "cursed",
+     "forge",
+     "mobs",
+     "neoforge",
+     "technology"
+    ],
+    "downloads": 378527,
+    "follows": 375,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "EbBp44Gs",
+    "license": "LGPL-3.0-only",
+    "project_type": "mod",
+    "date_modified": "2024-11-15T04:30:21.038650+00:00",
+    "author": "AlexModGuy"
+   },
+   {
+    "project_id": "K7YhuIBe",
+    "slug": "ctov-rats-compat",
+    "title": "CTOV - Rats Compat",
+    "description": "Compatibility datapack between ChoiceTheorem's overhauled village and Rats mod",
+    "versions": [
+     "1.20",
+     "1.20.1",
+     "1.20.2"
+    ],
+    "categories": [
+     "datapack",
+     "economy",
+     "forge",
+     "mobs",
+     "worldgen"
+    ],
+    "display_categories": [
+     "datapack",
+     "economy",
+     "forge",
+     "mobs",
+     "worldgen"
+    ],
+    "downloads": 10161,
+    "follows": 14,
+    "client_side": "optional",
+    "server_side": "required",
+    "latest_version": "2i1OZ2Ai",
+    "license": "CC-BY-NC-ND-4.0",
+    "project_type": "mod",
+    "date_modified": "2023-10-24T14:01:23.526441+00:00",
+    "author": "ChoiceTheorem"
+   },
+   {
+    "project_id": "USfcIkVh",
+    "slug": "rats-pack",
+    "title": "Rats Pack",
+    "description": "this project was created for minecraft 1.21.1 neoforge. The mod adds new food and its crafting, as well as the rats themselves",
+    "versions": [
+     "1.21.1"
+    ],
+    "categories": [
+     "food",
+     "mobs",
+     "neoforge"
+    ],
+    "display_categories": [
+     "food",
+     "mobs",
+     "neoforge"
+    ],
+    "downloads": 2441,
+    "follows": 4,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "JUZ7B1c0",
+    "license": "LicenseRef-All-Rights-Reserved",
+    "project_type": "mod",
+    "date_modified": "2024-10-20T10:05:03.272116+00:00",
+    "author": "Burju1ka"
+   },
+   {
+    "project_id": "vrcp8B0I",
+    "slug": "rats-and-traps",
+    "title": "Rats and Traps",
+    "description": "This is a Minecraft mod with rats and traps, and LOTS of cheese. Eat some cheese make a cheese house and go to the cheese dimension to get F",
+    "versions": [
+     "1.20.1"
+    ],
+    "categories": [
+     "adventure",
+     "equipment",
+     "food",
+     "forge",
+     "mobs"
+    ],
+    "display_categories": [
+     "adventure",
+     "food",
+     "forge",
+     "mobs"
+    ],
+    "downloads": 1890,
+    "follows": 15,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "8x1hgrjr",
+    "license": "CC0-1.0",
+    "project_type": "mod",
+    "date_modified": "2023-11-19T16:38:41.379411+00:00",
+    "author": "MaoBunny"
+   },
+   {
+    "project_id": "ZNU4679s",
+    "slug": "felixs-rats",
+    "title": "Felix's rats",
+    "description": "A mod that adds some cute little monsters :)",
+    "versions": [
+     "1.21.6",
+     "1.21.7",
+     "1.21.8",
+     "26.2"
+    ],
+    "categories": [
+     "adventure",
+     "cursed",
+     "fabric",
+     "mobs",
+     "quilt"
+    ],
+    "display_categories": [
+     "fabric",
+     "mobs",
+     "quilt"
+    ],
+    "downloads": 1333,
+    "follows": 7,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "4gSFgOki",
+    "license": "MIT",
+    "project_type": "mod",
+    "date_modified": "2026-08-11T11:05:25.092271+00:00",
+    "author": "ItsFelix5"
+   }
+  ],
+  "offset": 0,
+  "limit": 10,
+  "total_hits": 25
+ }
+}

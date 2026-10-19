@@ -39,7 +39,7 @@ O sistema de AutoMod analisa prompts e contextos em busca de padrões proibidos 
 O bloqueio do usuário pode ser ativado por dois métodos simultâneos:
 1. **Filtro de Gatilhos Rápido (Keyword Trigger):** Bloqueio imediato caso o prompt contenha termos sensíveis ou proibidos (ex: crimes graves, termos explícitos).
 2. **Análise Cognitiva da IA (AI AutoMod MCP):** O modelo avalia a intenção do chat de forma autônoma. Se identificar abusos verbais, assédio, xingamentos à Yui ou tentativas persistentes de manipulação (jailbreak), a IA executará a ferramenta `ia_automod` de forma autônoma, aplicando o banimento global definitivo.
-3. **Moderação em Canais de Voz (Voice AutoMod):** As interações recebidas por voz em chamadas (`/entrar-call`) são transcritas e submetidas às mesmas regras de AutoMod. Além disso, usuários banidos são sumariamente ignorados e impedidos de acionar o bot por voz ou conectar a Yui em canais de voz.
+3. **Moderação em Canais de Voz (Voice AutoMod):** As interações recebidas por voz em chamadas (`/entrar-call`) são transcritas e passam pelo AutoMod, com uma diferença no **modo voz** (quando **🔊 Resposta por Voz (TTS)** está ligado no servidor): o filtro de gatilhos **só alerta o dono** (aviso no webhook, com os botões de banir ou ignorar) e **não bane sozinho**, porque a transcrição erra e um banimento global por uma palavra mal ouvida seria injusto (decisão provisória). Nesse modo a Yui também não usa ferramentas por voz (a menos que `YUI_VOICE_TOOLS=true`), então a ferramenta `ia_automod` não é executada. Com o 🔊 desligado (o padrão) a voz segue as regras de sempre e a frase transcrita pode banir. Em qualquer modo, usuários banidos são sumariamente ignorados e impedidos de acionar o bot por voz ou conectar a Yui em canais de voz.
 
 ---
 
@@ -47,10 +47,12 @@ O bloqueio do usuário pode ser ativado por dois métodos simultâneos:
 
 Todo alerta de segurança enviado via Webhook possui botões de ação imediata. Isso é processado de forma assíncrona.
 
-- `/adm_banir type:[user|guild] id:[ID] motivo:[texto]`
-- `/adm_desbanir`
-- `/adm_lista_bans`
-- `/adm_automod id:[ID] modo:[off|trigger|mcp|both]` - Permite que os administradores mudem dinamicamente o comportamento de segurança de cada servidor individualmente:
+São subcomandos do `/yui-criador` (restrito ao dono), com equivalentes no painel do app (**Admin → Servidores / Banimentos**):
+
+- `/yui-criador banir tipo:[user|guild|channel] id:[ID] motivo:[texto]` (o dono nunca pode ser banido; o motivo é gravado e mostrado com no máximo 300 caracteres)
+- `/yui-criador desbanir tipo: id:`
+- `/yui-criador bans_lista`
+- `/yui-criador automod servidor_id:[ID] modo:[off|trigger|mcp|both]` - Permite que os administradores mudem dinamicamente o comportamento de segurança de cada servidor individualmente:
   - `off`: Desativa qualquer AutoMod.
   - `trigger`: Ativa apenas o Filtro de Gatilhos Rápido.
   - `mcp`: Ativa apenas a moderação cognitiva da IA.
@@ -61,7 +63,9 @@ Todo alerta de segurança enviado via Webhook possui botões de ação imediata.
 ## 💡 Dicas de Moderação e Segurança
 
 - 💡 **Script enable_automod.js:** Você pode rodar `node enable_automod.js` no terminal da aplicação para atualizar síncronamente todos os servidores para o modo `both`, excluir servidores específicos via lista de exclusão (whitelist) e disparar um anúncio formal com botão do GitHub aos chats gerais dos servidores cadastrados.
-- 💡 **ID do Canal de Apelação:** Configure `APPEAL_CHANNEL_ID` no `.env`. Usuários banidos receberão um link para este canal para tentar reverter a punição.
+- 💡 **Apelação:** a variável `APPEAL_CHANNEL_ID` não é mais lida pelo código; combine a apelação diretamente com o dono.
+- 💡 **Memória dos usuários:** o dono vê quem tem memória e quantas lembranças (nunca o conteúdo) e pode apagar lembranças ou tudo de um usuário por `/yui-criador memorias` ou pelo app (**Admin → Memória**). Cada usuário controla a sua com `/yui-memoria`.
+- 💡 **Painel e auditoria:** as ações administrativas feitas pelo app (AutoMod, banimentos, apagar memória, reiniciar) exigem o papel de dono no backend e ficam em `logs/core-audit.jsonl`. Veja [Yui API](YUI_API.md#-5-painel-de-administração).
 - 💡 **Remoção Silenciosa:** Se você clicar no botão `Remover Bot` no webhook administrativo, a Yui sairá do servidor de destino sem emitir nenhum aviso, evitando atritos desnecessários.
 - 💡 **Trigger Word:** O log de aviso agora exibe exatamente a **Palavra Chave** que ativou o AutoMod, facilitando o discernimento entre ataques reais e falsos positivos.
 

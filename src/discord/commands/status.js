@@ -5,10 +5,12 @@ import { CONSTANTS } from '../../config/constants.js';
 import { getProviderSettings } from '../../handlers/llmHandler.js';
 import { getAllSessions } from '../../music/radioDatabase.js';
 import { getAutoBlockMode } from '../../handlers/banHandler.js';
+import { describeTtsReason, getTtsStatus } from '../../services/tts/index.js';
 
 // Mapa de nomes amigáveis para os provedores de IA.
 const PROVIDER_NAMES = {
   local: '🐧 LM Studio / Ollama',
+  gateway: '🧭 Yui Gateway',
   gemini: '🔮 Google Gemini',
   cloudflare: '☁️ Cloudflare',
   pollinations: '🎨 Pollinations',
@@ -24,6 +26,26 @@ function getRadioActiveSessions() {
     return 0;
   } catch {
     return 0;
+  }
+}
+
+// Uma linha sobre a voz falada (TTS). Só contagens e nomes de provedor: nunca texto de ninguém nem IDs de servidor
+// (por isso NÃO usa getTtsStatus({ detailed: true }), que lista os servidores). Nunca lança.
+export function formatTtsStatusLine(status) {
+  try {
+    if (!status?.initialized || !status.enabled) {
+      return `🔇 **Voz falada (TTS):** desligada${status?.reason ? ` (${describeTtsReason(status.reason)})` : ''}`;
+    }
+    const providers = (status.engine?.providers || [])
+      .map((p) => `${p.name}${p.breaker?.state === 'open' ? ' (em pausa)' : p.probe?.ok === false ? ' (indisponível)' : ''}`)
+      .join(', ') || 'nenhum';
+    const refused = Object.values(status.counters?.skipped || {}).reduce((sum, n) => sum + (Number(n) || 0), 0);
+    return (
+      `🔊 **Voz falada (TTS):** ativa • provedor: ${providers} • ${status.counters?.spoken ?? 0} falas • ` +
+      `${refused} recusadas • falando agora em ${status.output?.speaking ?? 0} servidor(es)`
+    );
+  } catch {
+    return '🔇 **Voz falada (TTS):** estado indisponível';
   }
 }
 
@@ -80,7 +102,7 @@ export const statusCommand = {
         },
         {
           name: '🏢 Rede & Comunidade',
-          value: `👥 **Servidores:** ${serverCount}\n📻 **Sessões de Rádio Ativas:** ${radioSessions}\n🛡️ **AutoMod:** ${automodLabel}`,
+          value: `👥 **Servidores:** ${serverCount}\n📻 **Sessões de Rádio Ativas:** ${radioSessions}\n🛡️ **AutoMod:** ${automodLabel}\n${formatTtsStatusLine(getTtsStatus())}`,
           inline: true,
         },
         {

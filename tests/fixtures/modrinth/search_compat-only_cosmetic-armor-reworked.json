@@ -1,0 +1,81 @@
+{
+ "request": "/v2/search?query=Cosmetic%20Armor%20Reworked&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+ "status": 200,
+ "note": "so existem o fork e um addon de compat",
+ "reducedFrom": 2,
+ "body": {
+  "hits": [
+   {
+    "project_id": "VrbUxhCI",
+    "slug": "corpse-x-cosmetic-armor-reworked-compat",
+    "title": "Corpse x Cosmetic Armor Reworked Compat",
+    "description": "This little mod allows you to directly equip your Cosmetic Armor items to the respective slots",
+    "versions": [
+     "1.19.2",
+     "1.19.3",
+     "1.19.4",
+     "1.20",
+     "1.20.1",
+     "1.20.2",
+     "1.20.3",
+     "1.20.4",
+     "1.21.1"
+    ],
+    "categories": [
+     "forge",
+     "neoforge",
+     "utility"
+    ],
+    "display_categories": [
+     "forge",
+     "neoforge",
+     "utility"
+    ],
+    "downloads": 209744,
+    "follows": 18,
+    "client_side": "unknown",
+    "server_side": "unknown",
+    "latest_version": "OrzWgnrD",
+    "license": "MIT",
+    "project_type": "mod",
+    "date_modified": "2026-04-07T20:13:59.739675+00:00",
+    "author": "Leclowndu93150"
+   },
+   {
+    "project_id": "6cpT8CUC",
+    "slug": "cosmetic-armor-reworked-forked",
+    "title": "Cosmetic Armor Reworked Forked",
+    "description": "This mod allows you to wear two sets of armor, one for display, one for function.",
+    "versions": [
+     "1.21.1"
+    ],
+    "categories": [
+     "decoration",
+     "equipment",
+     "fabric",
+     "neoforge",
+     "utility"
+    ],
+    "display_categories": [
+     "decoration",
+     "equipment",
+     "fabric",
+     "neoforge",
+     "utility"
+    ],
+    "downloads": 177961,
+    "follows": 32,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "U6kExSSz",
+    "license": "LicenseRef-MMPL",
+    "project_type": "mod",
+    "date_modified": "2026-02-27T13:32:44.337392+00:00",
+    "author": "zzik2"
+   }
+  ],
+  "offset": 0,
+  "limit": 10,
+  "total_hits": 2
+ }
+}

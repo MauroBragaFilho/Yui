@@ -1,0 +1,8 @@
+# Dependências do spotdl (Spotify, opcional). Ambiente isolado: py -3.12 -m venv .venv-spotdl
+# Instalar com as versões testadas (recomendado):
+#   .venv-spotdl/Scripts/python.exe -m pip install --only-binary=:all: -c requirements-spotdl.lock.txt -r requirements-spotdl.txt
+# Sem o lock as dependências indiretas variam: pip install --only-binary=:all: -r requirements-spotdl.txt
+# O spotdl traz o yt-dlp[default] (2026.07.04 a 2026.x) e o yt-dlp-ejs. O yt-dlp deste ambiente é independente do da Yui.
+# Atualizar só o yt-dlp do ambiente: .venv-spotdl/Scripts/python.exe -m pip install -U "yt-dlp[default]"
+# Se algo quebrar depois de atualizar, reinstale com o lock acima.
+spotdl==4.5.2

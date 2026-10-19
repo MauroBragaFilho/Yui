@@ -4,19 +4,57 @@ import { youtubeRepository } from '../database/repositories/youtubeRepo.js';
 import { twitchRepository } from '../database/repositories/twitchRepo.js';
 import { gtaoRepository } from '../database/repositories/gtaoRepo.js';
 import { createNewswireEmbed } from './embeds/newswireEmbed.js';
-import { createDailyEmbed } from './embeds/dailyEmbed.js';
+import { createDailyEmbed, createMinimalDailyEmbed } from './embeds/dailyEmbed.js';
 import { createYoutubeVideoEmbed, createYoutubeLiveEmbed } from './embeds/youtubeEmbed.js';
 import { createTwitchLiveEmbed } from './embeds/twitchEmbed.js';
 import { gtaoEngine } from '../engines/gtao/index.js';
-import { buildWeeklyCombinedEmbeds, buildWeeklyPaginationRow } from '../engines/gtao/weeklyAnalysis.js';
+import { buildWeeklyCombinedEmbeds, buildWeeklyPaginationRow, buildMinimalWeeklyEmbed } from '../engines/gtao/weeklyAnalysis.js';
 import { translateWeeklyForEmbed } from '../engines/gtao/systems/weekly/aiTranslate.js';
 import { logger } from '../utils/logger.js';
+import { clampText } from './embedLimits.js';
 
 // Tempo que os botões de paginação do embed semanal automático ficam
 // ativos após a publicação. Depois disso, os botões são desativados
 // (a mensagem continua visível, só a navegação para de funcionar —
 // o histórico completo sempre pode ser revisto com /gta-semanal).
 const WEEKLY_PAGINATION_ACTIVE_MS = 24 * 60 * 60 * 1000; // 24h
+
+/**
+ * Monta um embed sem nunca lançar: erro vira null e uma linha no log. Um item ruim (título enorme,
+ * link inválido, dado estranho) não pode derrubar o lote inteiro (TG-18): os itens seguintes já foram
+ * gravados no banco e nunca mais seriam publicados.
+ */
+function tryBuild(label, build) {
+  try {
+    return build();
+  } catch (error) {
+    logger.error(`[Publisher] ${label} ignorado: não consegui montar o embed (${error?.name || 'Error'}: ${clampText(error?.message, 160)})`);
+    return null;
+  }
+}
+
+function latestDailyData() {
+  try {
+    return gtaoRepository.getLatestDaily()?.data;
+  } catch (error) {
+    logger.warn(`[Publisher] Não consegui ler o último diário: ${clampText(error?.message, 160)}`);
+    return undefined;
+  }
+}
+
+/**
+ * Páginas do semanal sem nunca lançar: se a montagem falhar (ou vier vazia), publica a versão mínima
+ * (título e link) em vez de repetir o erro a cada ciclo.
+ */
+function safeWeeklyPages(weeklyData) {
+  try {
+    const pages = buildWeeklyCombinedEmbeds(weeklyData, latestDailyData());
+    if (Array.isArray(pages) && pages.length > 0) return pages;
+  } catch (error) {
+    logger.warn(`[Publisher] Falha ao montar o semanal (${error?.name || 'Error'}): ${clampText(error?.message, 160)}. Publicando a versão mínima.`);
+  }
+  return [buildMinimalWeeklyEmbed(weeklyData)];
+}
 
 export const discordPublisher = {
   /**
@@ -29,16 +67,24 @@ export const discordPublisher = {
     // como notícia crua com link — ele já é coberto pelo embed paginado com
     // análise da IA em publishWeekly(), então publicá-lo aqui de novo seria
     // duplicado.
-    const latestWeeklyUrl = gtaoRepository.getLatestWeekly()?.data?.url || null;
+    let latestWeeklyUrl = null;
+    try {
+      latestWeeklyUrl = gtaoRepository.getLatestWeekly()?.data?.url || null;
+    } catch (error) {
+      logger.warn(`[Publisher] Não consegui ler o último semanal; publicando as notícias mesmo assim: ${clampText(error?.message, 160)}`);
+    }
 
     const guilds = guildRepository.getAll();
     for (const article of articles) {
+      if (!article) continue;
+
       if (latestWeeklyUrl && article.url === latestWeeklyUrl) {
         logger.info(`[Publisher] Pulando publicação como notícia comum (já coberto pelo resumo semanal): ${article.url}`);
         continue;
       }
 
-      const embed = createNewswireEmbed(article);
+      const embed = tryBuild(`Artigo ${clampText(article.id, 40)}`, () => createNewswireEmbed(article));
+      if (!embed) continue;
 
       for (const g of guilds) {
         if (!g.news_channel_id) continue;
@@ -69,7 +115,10 @@ export const discordPublisher = {
     if (!dailyData) return;
 
     const guilds = guildRepository.getAll();
-    const embed = createDailyEmbed(dailyData);
+    const embed =
+      tryBuild('Diário', () => createDailyEmbed(dailyData)) ||
+      tryBuild('Diário (versão mínima)', () => createMinimalDailyEmbed(dailyData));
+    if (!embed) return;
     const dateKey = dailyData.date || new Date().toISOString().split('T')[0];
 
     for (const g of guilds) {
@@ -107,8 +156,7 @@ export const discordPublisher = {
       logger.warn('[Publisher] weeklyData sem análise da IA anexada — publicando mesmo assim com aviso nos campos.');
     }
 
-    const dailyData = gtaoRepository.getLatestDaily()?.data;
-    const pages = buildWeeklyCombinedEmbeds(weeklyData, dailyData);
+    const pages = safeWeeklyPages(weeklyData);
 
     for (const g of guilds) {
       if (!g.weekly_channel_id) continue;
@@ -167,12 +215,15 @@ export const discordPublisher = {
     // Refaz a coleta completa (dados + análise da IA) para que a publicação
     // automática entregue o mesmo conteúdo combinado do comando — inclusive a
     // análise da IA que antes só existia no /gta-semanal.
+    // `weekly.minimal` vem de weekly/service.js na 3ª falha seguida: publica só o título e o link,
+    // sem refazer a coleta nem a tradução (TG-18).
+    const minimalOnly = weekly.minimal === true;
     let weeklyData = weekly;
     try {
-      const collected = await gtaoEngine.collectWeekly({ source: 'reddit' });
+      const collected = minimalOnly ? null : await gtaoEngine.collectWeekly({ source: 'reddit' });
       if (collected) {
         weeklyData = collected;
-      } else {
+      } else if (!minimalOnly) {
         logger.warn('[Publisher] collectWeekly retornou null na publicação automática; publicando sem análise da IA.');
       }
     } catch (err) {
@@ -183,8 +234,8 @@ export const discordPublisher = {
     // desafio) para PT-BR via IA — preservando nomes de veículos/prédios em
     // inglês. Se a IA estiver indisponível, cai para o glossário
     // determinístico; nunca bloqueia a publicação.
-    const translated = await translateWeeklyForEmbed(weeklyData).catch(() => weeklyData);
-    const pages = buildWeeklyCombinedEmbeds(translated, gtaoRepository.getLatestDaily()?.data);
+    const translated = minimalOnly ? weeklyData : await translateWeeklyForEmbed(weeklyData).catch(() => weeklyData);
+    const pages = minimalOnly ? [buildMinimalWeeklyEmbed(weeklyData)] : safeWeeklyPages(translated);
     if (pages.length === 0) return 0;
 
     const guilds = guildRepository.getAll();
@@ -266,17 +317,18 @@ export const discordPublisher = {
     // O embed depende do tipo de evento
     let embed;
     if (event.type === 'video' || event.type === 'short') {
-      embed = createYoutubeVideoEmbed(event);
+      embed = tryBuild(`Vídeo ${clampText(event.videoId, 20)}`, () => createYoutubeVideoEmbed(event));
     } else if (
       event.type === 'live_scheduled' ||
       event.type === 'live_started' ||
       event.type === 'live_ended' ||
       event.type === 'vod'
     ) {
-      embed = createYoutubeLiveEmbed(event);
+      embed = tryBuild(`Live ${clampText(event.videoId, 20)}`, () => createYoutubeLiveEmbed(event));
     } else {
       return 0;
     }
+    if (!embed) return 0;
 
     let published = 0;
 
@@ -337,7 +389,8 @@ export const discordPublisher = {
     const subscriptions = twitchRepository.getSubscriptionsByLogin(event.login);
     if (subscriptions.length === 0) return 0;
 
-    const embed = createTwitchLiveEmbed(event);
+    const embed = tryBuild(`Live da Twitch ${clampText(event.login, 30)}`, () => createTwitchLiveEmbed(event));
+    if (!embed) return 0;
     let published = 0;
 
     for (const sub of subscriptions) {

@@ -1,0 +1,82 @@
+{
+ "request": "/v2/project/6roN0iTa/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "required: Majrusz Library; optional",
+ "reducedFrom": 13,
+ "body": [
+  {
+   "id": "ij9jeX6n",
+   "project_id": "6roN0iTa",
+   "name": "Majrusz's Accessories 1.5.3",
+   "version_number": "1.5.3",
+   "version_type": "release",
+   "date_published": "2024-04-26T16:54:05.717423Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/6roN0iTa/versions/ij9jeX6n/majruszs-accessories-forge-1.20.1-1.5.3.jar",
+     "filename": "majruszs-accessories-forge-1.20.1-1.5.3.jar",
+     "primary": true,
+     "size": 316337
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "vvuO3ImH",
+     "file_name": null,
+     "dependency_type": "optional"
+    },
+    {
+     "version_id": null,
+     "project_id": "PYQD8noM",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  },
+  {
+   "id": "5leEHT8k",
+   "project_id": "6roN0iTa",
+   "name": "Majrusz's Accessories 1.5.2",
+   "version_number": "1.5.2",
+   "version_type": "release",
+   "date_published": "2024-03-02T12:13:30.132024Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/6roN0iTa/versions/5leEHT8k/majruszs-accessories-forge-1.20.1-1.5.2.jar",
+     "filename": "majruszs-accessories-forge-1.20.1-1.5.2.jar",
+     "primary": true,
+     "size": 313516
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "PYQD8noM",
+     "file_name": null,
+     "dependency_type": "required"
+    },
+    {
+     "version_id": null,
+     "project_id": "vvuO3ImH",
+     "file_name": null,
+     "dependency_type": "optional"
+    }
+   ]
+  }
+ ]
+}

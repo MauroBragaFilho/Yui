@@ -1,5 +1,17 @@
 ﻿import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+
+// Convite para o dono de OUTRO servidor adicionar a Yui (o Discord exige Gerenciar Servidor para autorizar).
+const INVITE_PERMISSIONS = '3525696'; // ver canais, enviar, embeds, anexos, histórico, reações, emojis externos, conectar e falar
+function inviteUrl() {
+    const id = String(process.env.DISCORD_CLIENT_ID || '').trim();
+    return /^\d{15,25}$/.test(id) ? `https://discord.com/oauth2/authorize?client_id=${id}&scope=bot%20applications.commands&permissions=${INVITE_PERMISSIONS}` : null;
+}
+function inviteButtons() {
+    const url = inviteUrl();
+    return url ? [new ButtonBuilder().setLabel('➕ Adicionar ao seu servidor').setURL(url).setStyle(ButtonStyle.Link)] : [];
+}
 import { getTosPages } from './tosHandler.js';
+import { makeEmbed, chunkLines, clampOptions, clampText } from '../discord/embedLimits.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -163,7 +175,7 @@ const COMMAND_DETAILS = {
         name: '/entrar-call',
         category: '🎙️ Voz & Calls',
         permission: '👥 Todos os Usuários',
-        description: 'Faz a Yui entrar no seu canal de voz atual para interagir, responder a gatilhos de voz e atuar como assistente falante.',
+        description: 'Faz a Yui entrar no seu canal de voz atual para interagir, responder a gatilhos de voz e atuar como assistente falante. Por padrão ela responde só no chat de texto; para responder falando na call, um admin liga a ferramenta **Resposta por Voz (TTS)** em `/yui-ferramentas` (vem desligada).',
         syntax: '/entrar-call',
         options: [],
         examples: [
@@ -225,10 +237,10 @@ const COMMAND_DETAILS = {
         name: '/baixar_musica',
         category: '🎵 Multimídia & Downloads',
         permission: '👥 Todos os Usuários',
-        description: 'Central de downloads de música em MP3: baixa por link (YouTube, Spotify, Instagram ou TikTok) ou busca por nome/artista no Deezer.',
+        description: 'Central de downloads de música em MP3: baixa por link (YouTube, Spotify, Instagram ou TikTok) ou busca por nome/artista no Deezer. Link com playlist baixa só o vídeo (playlist pura, só o 1º item); no Spotify, só links de faixa.',
         syntax: '/baixar_musica url:<link> | busca:<nome_ou_artista>',
         options: [
-            { name: 'url', desc: 'Link do YouTube, Spotify, Instagram ou TikTok.', required: false },
+            { name: 'url', desc: 'Link do YouTube, Spotify (só faixa), Instagram ou TikTok. Se o link tiver uma playlist, baixa só o vídeo (ou só o 1º item).', required: false },
             { name: 'busca', desc: 'Nome da música ou artista (busca no Deezer).', required: false }
         ],
         examples: [
@@ -244,7 +256,7 @@ const COMMAND_DETAILS = {
         description: 'Baixa vídeos e envia em MP4 no chat, com compressão automática (FFMPEG) se exceder o limite de upload do servidor.',
         syntax: '/baixar_video url:<link> [descricao:<true|false>]',
         options: [
-            { name: 'url', desc: 'Link do vídeo (YouTube Shorts, Instagram Reels, TikTok).', required: true },
+            { name: 'url', desc: 'Link do vídeo (YouTube Shorts, Instagram Reels, TikTok). Se o link tiver uma playlist, baixa só o vídeo (ou só o 1º item).', required: true },
             { name: 'descricao', desc: 'Exibir autor e descrição do vídeo original (padrão: false).', required: false }
         ],
         examples: [
@@ -338,6 +350,58 @@ function getMainCategorySelectMenu(currentActive = 'home') {
     );
 }
 
+// Menu de comandos (TG-17): um menu aceita 25 opções e a mensagem tem 5 linhas (1 do menu de seções + até 4 menus de comandos).
+// Hoje são 24 comandos: documentar mais um ou dois não pode derrubar o painel, então passando de 25 o menu se divide por categoria.
+const COMMAND_MENU_SIZE = 25;
+const MAX_COMMAND_MENUS = 4;
+
+/** Reparte os comandos em menus de até 25 opções. Até 25 comandos: um menu só, na ordem do dicionário. */
+function groupCommandOptions(details) {
+    const entries = Object.entries(details || {}).map(([key, item]) => ({
+        category: item.category || 'Outros',
+        option: { label: item.name, description: item.description, value: key }
+    }));
+    if (entries.length <= COMMAND_MENU_SIZE) {
+        return entries.length ? [{ options: entries.map(e => e.option), categories: [] }] : [];
+    }
+    const byCategory = new Map();
+    for (const e of entries) {
+        if (!byCategory.has(e.category)) byCategory.set(e.category, []);
+        byCategory.get(e.category).push(e.option);
+    }
+    const groups = [];
+    let current = null;
+    for (const [category, options] of byCategory) {
+        // A categoria inteira vai para o mesmo menu quando cabe; se for maior que um menu, continua no seguinte.
+        if (!current || (current.options.length > 0 && current.options.length + options.length > COMMAND_MENU_SIZE)) {
+            current = { options: [], categories: [] };
+            groups.push(current);
+        }
+        current.categories.push(category);
+        for (const option of options) {
+            if (current.options.length >= COMMAND_MENU_SIZE) {
+                current = { options: [], categories: [category] };
+                groups.push(current);
+            }
+            current.options.push(option);
+        }
+    }
+    return groups.slice(0, MAX_COMMAND_MENUS);
+}
+
+/** Linhas de menu para inspecionar comandos: help_command_select (o de sempre) e help_command_select_2, _3... se passar de 25. */
+function buildCommandMenus(details = COMMAND_DETAILS) {
+    const groups = groupCommandOptions(details);
+    return groups.map((group, i) => new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId(i === 0 ? 'help_command_select' : `help_command_select_${i + 1}`)
+            .setPlaceholder(groups.length > 1
+                ? clampText(`🔍 Comandos (${i + 1}/${groups.length}): ${group.categories.join(' · ')}`, 150)
+                : '🔍 Selecione um comando para inspecionar em detalhes')
+            .addOptions(clampOptions(group.options, { max: COMMAND_MENU_SIZE }))
+    ));
+}
+
 function buildHelpHomePayload() {
     const embed = new EmbedBuilder()
         .setColor(0x7C3AED)
@@ -352,6 +416,7 @@ function buildHelpHomePayload() {
         .setTimestamp();
 
     const linkButtons = new ActionRowBuilder().addComponents(
+        ...inviteButtons(),
         new ButtonBuilder().setLabel('🚀 GitHub').setURL('https://github.com/MauroBragaFilho/Yui').setStyle(ButtonStyle.Link),
         new ButtonBuilder().setLabel('🌐 Redes Sociais').setURL('https://bio.site/oBraga').setStyle(ButtonStyle.Link),
         new ButtonBuilder().setLabel('💖 Apoiar no LivePix').setURL('https://livepix.gg/obragafilho').setStyle(ButtonStyle.Link)
@@ -361,11 +426,11 @@ function buildHelpHomePayload() {
 }
 
 function buildHelpCommandListPayload() {
-    const embed = new EmbedBuilder()
-        .setColor(0x7C3AED)
-        .setTitle('🤖 Lista Geral de Comandos')
-        .setDescription('Confira abaixo a lista completa de comandos da Yui. Selecione qualquer comando no menu abaixo para abrir sua **inspeção técnica detalhada** com exemplos e opções!\n\n📖 **[Documentação Online](https://github.com/MauroBragaFilho/Yui/blob/main/docs/content_pt/COMMANDS.md)**')
-        .addFields(
+    const embed = makeEmbed({
+        color: 0x7C3AED,
+        title: '🤖 Lista Geral de Comandos',
+        description: 'Confira abaixo a lista completa de comandos da Yui. Selecione qualquer comando no menu abaixo para abrir sua **inspeção técnica detalhada** com exemplos e opções!\n\n📖 **[Documentação Online](https://github.com/MauroBragaFilho/Yui/blob/main/docs/content_pt/COMMANDS.md)**',
+        fields: [
             {
                 name: '🧠 Inteligência Artificial & Chat',
                 value: '• `/yui` — Converse com a Yui sobre GTA Online (Suporta DMs, User Install e visibilidade Privada).'
@@ -390,51 +455,39 @@ function buildHelpCommandListPayload() {
                 name: '👑 Painel do Criador',
                 value: '• `/yui-criador` — Central de Controle Master para o dono do bot.\n• `/yui-config_ia` — Ajusta parâmetros técnicos de baixo nível da IA.'
             }
-        )
-        .setFooter({ text: '💡 Selecione um comando no menu suspenso abaixo para ver a análise aprofundada' });
-
-    const commandOptions = Object.keys(COMMAND_DETAILS).map(key => {
-        const item = COMMAND_DETAILS[key];
-        return {
-            label: item.name,
-            description: item.description.substring(0, 95),
-            value: key
-        };
+        ],
+        footer: '💡 Selecione um comando no menu suspenso abaixo para ver a análise aprofundada'
     });
 
-    const cmdSelectMenu = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-            .setCustomId('help_command_select')
-            .setPlaceholder('🔍 Selecione um comando para inspecionar em detalhes')
-            .addOptions(commandOptions)
-    );
-
-    return { embeds: [embed], components: [getMainCategorySelectMenu('commands_list'), cmdSelectMenu] };
+    return { embeds: [embed], components: [getMainCategorySelectMenu('commands_list'), ...buildCommandMenus()] };
 }
 
 function buildHelpCommandDetailPayload(commandId) {
-    const cmd = COMMAND_DETAILS[commandId];
+    const cmd = Object.hasOwn(COMMAND_DETAILS, commandId) ? COMMAND_DETAILS[commandId] : null;
     if (!cmd) return buildHelpCommandListPayload();
 
-    const embed = new EmbedBuilder()
-        .setColor(0x7C3AED)
-        .setTitle(`🔍 Inspeção Técnica: ${cmd.name}`)
-        .setDescription(`**Categoria:** ${cmd.category}\n**Permissão Mínima:** ${cmd.permission}\n\n**📄 Descrição:**\n${cmd.description}\n\n**💻 Sintaxe do Comando:**\n\`\`\`bash\n${cmd.syntax}\n\`\`\``)
-        .setTimestamp();
-
+    // Campos de 1024: opções e exemplos de um comando com muita coisa documentada viram vários campos em vez de derrubar o painel.
+    const fields = [];
     if (cmd.options && cmd.options.length > 0) {
-        const optText = cmd.options.map(o => `• \`${o.name}\` (${o.required ? 'Obrigatório' : 'Opcional'}): ${o.desc}`).join('\n');
-        embed.addFields({ name: '🛠️ Parâmetros & Opções', value: optText, inline: false });
+        const optLines = cmd.options.map(o => `• \`${o.name}\` (${o.required ? 'Obrigatório' : 'Opcional'}): ${o.desc}`);
+        chunkLines(optLines, 1000).forEach((value, i) => fields.push({ name: i === 0 ? '🛠️ Parâmetros & Opções' : '🛠️ Parâmetros & Opções (cont.)', value, inline: false }));
     } else {
-        embed.addFields({ name: '🛠️ Parâmetros & Opções', value: '*Este comando não exige parâmetros adicionais.*', inline: false });
+        fields.push({ name: '🛠️ Parâmetros & Opções', value: '*Este comando não exige parâmetros adicionais.*', inline: false });
     }
 
     if (cmd.examples && cmd.examples.length > 0) {
-        const exText = cmd.examples.map(e => `\`\`\`bash\n${e}\n\`\`\``).join('\n');
-        embed.addFields({ name: '💡 Exemplos Práticos de Uso', value: exText, inline: false });
+        const exLines = cmd.examples.map(e => `\`\`\`bash\n${clampText(e, 200)}\n\`\`\``);
+        chunkLines(exLines, 1000).forEach((value, i) => fields.push({ name: i === 0 ? '💡 Exemplos Práticos de Uso' : '💡 Exemplos Práticos de Uso (cont.)', value, inline: false }));
     }
 
-    embed.setFooter({ text: 'Yui Command Inspector • Use os botões para navegar' });
+    const embed = makeEmbed({
+        color: 0x7C3AED,
+        title: `🔍 Inspeção Técnica: ${cmd.name}`,
+        description: `**Categoria:** ${cmd.category}\n**Permissão Mínima:** ${cmd.permission}\n\n**📄 Descrição:**\n${clampText(cmd.description, 2000)}\n\n**💻 Sintaxe do Comando:**\n\`\`\`bash\n${clampText(cmd.syntax, 400)}\n\`\`\``,
+        fields,
+        footer: 'Yui Command Inspector • Use os botões para navegar',
+        timestamp: true
+    });
 
     const btnRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('help_btn_cmd_list').setLabel('⬅️ Voltar à Lista de Comandos').setStyle(ButtonStyle.Primary),
@@ -449,12 +502,13 @@ function buildHelpRulesPayload(pageIndex = 0) {
     const safeIndex = Math.max(0, Math.min(pageIndex, pages.length - 1));
     const currentPage = pages[safeIndex];
 
-    const embed = new EmbedBuilder()
-        .setColor(0x7C3AED)
-        .setTitle(currentPage.title)
-        .setDescription(currentPage.content)
-        .setFooter({ text: `Página ${safeIndex + 1} de ${pages.length} • Diretrizes & TOS Yui • by oBraga` })
-        .setTimestamp();
+    const embed = makeEmbed({
+        color: 0x7C3AED,
+        title: currentPage.title,
+        description: currentPage.content,
+        footer: `Página ${safeIndex + 1} de ${pages.length} • Diretrizes & TOS Yui • by oBraga`,
+        timestamp: true
+    });
 
     const btnRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -522,7 +576,8 @@ async function handleHelpInteraction(interaction) {
         return await interaction.update(payload);
     }
 
-    if (customId === 'help_command_select') {
+    // help_command_select é o 1º menu; com mais de 25 comandos os seguintes são help_command_select_2, _3...
+    if (customId === 'help_command_select' || customId.startsWith('help_command_select_')) {
         const commandId = interaction.values[0];
         const payload = buildHelpCommandDetailPayload(commandId);
         return await interaction.update(payload);
@@ -547,7 +602,8 @@ async function handleHelpInteraction(interaction) {
 
 export {
     buildHelpHomePayload, buildHelpCommandListPayload, buildHelpCommandDetailPayload,
-    buildHelpRulesPayload, buildHelpCreatorPayload, handleHelpInteraction
+    buildHelpRulesPayload, buildHelpCreatorPayload, handleHelpInteraction,
+    buildCommandMenus
 };
 
 export default {

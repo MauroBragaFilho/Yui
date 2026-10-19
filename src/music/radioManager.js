@@ -29,9 +29,33 @@ import { playTrack, pausePlayer, resumePlayer, stopPlayer, updateEmbed } from '.
 import { buildRadioEmbed } from './radioEmbed.js';
 import { resolveInput } from './radioProviders.js';
 import { prefetchNextTrack, cleanupSessionAudioFiles } from './radioPrefetcher.js';
+import { logger } from '../utils/logger.js';
+import { neutralizeMassMentions } from '../discord/mentions.js';
+import { isOpusAvailable } from '../utils/binaries.js';
+import { interruptSpeech } from '../services/tts/index.js';
+import {
+    VOICE_UNAVAILABLE_MESSAGE,
+    attachConnectionSafety,
+    attachSpeakingListener,
+    createSpeakerGuard,
+    errMsg
+} from '../utils/voiceSafety.js';
 
 const radioAmbiguousSessions = new Map();
 const userLastVoiceCommand = new Map();
+
+// As mensagens que o rádio manda no canal levam eco de dados externos (título e artista da faixa, busca vinda da voz ou do modelo).
+// Só quem deu o comando (o autor, marcado no começo do texto) pode ser notificado: @everyone, @here, cargo (<@&id>) e outro usuário
+// no título nunca notificam (M3). `users` só aceita um ID de verdade (15 a 25 dígitos); qualquer outra coisa não notifica ninguém.
+function radioAllowedMentions(userId) {
+    const id = String(userId ?? '');
+    return { parse: [], users: /^\d{15,25}$/.test(id) ? [id] : [] };
+}
+
+/** Texto do rádio sem marcação em massa (insere um caractere invisível em @everyone e @here). */
+function radioSafeText(text) {
+    return neutralizeMassMentions(String(text ?? ''));
+}
 
 const RADIO_TRIGGER_REGEX = /\b(yui|yuin|yuis|yuih|yuii|yuie|yuia|yuio|yukari|yukare|yukary|yukarii|yukarie|yukaris|yucari|yucare|yucary|yucarii|yucaris|yucario|yucaru|yukar|yukar|ikari|ikare|ikary|ikarii|ikaris|icari|icare|icaro|icary|icarii|icaris|icara|icaras|icaros|ikario|icario|ikaru|icaru|ikar|icar|ricardo|ricard|ricardi|ricari|ricare|rikari|rikare|ricario|ricarto|recari|recaro|ricar|ricardin|ricardinho|ficari|ficare|vicari|vicare|ficardo|vicardo|dicari|dicare|kikari|kicari|ticari|ih\s*cari|e\s*cari|eh\s*cari|i\s*cari|re\s*cari|ri\s*cari|hi\s*cari|he\s*cari|a\s*cari|o\s*cari|ei\s*cari|oh\s*cari|oi\s*cari)\b/i;
 
@@ -71,6 +95,14 @@ async function startRadioMode(member, textChannel, client) {
     if (!voiceChannel) return { success: false, error: '⚠️ Você precisa estar em um canal de voz para ativar o Modo Rádio.' };
 
     const guildId = voiceChannel.guild.id;
+
+    // Sem o codificador Opus o rádio quebra na primeira música: recusa agora, com aviso claro.
+    if (!isOpusAvailable()) {
+        logger.error(`[Radio] Modo Rádio recusado: voz sem codificador Opus (usuário ${member?.id}, servidor ${guildId}).`);
+        return { success: false, error: VOICE_UNAVAILABLE_MESSAGE };
+    }
+
+    logger.info(`[Radio] Modo Rádio pedido por ${member?.id} no servidor ${guildId} (canal de voz ${voiceChannel.id}).`);
     const existingSession = getSession(guildId);
 
     const existingConn = getVoiceConnection(guildId);
@@ -78,6 +110,17 @@ async function startRadioMode(member, textChannel, client) {
     if (existingSession) {
         if (existingSession.voiceChannelId !== voiceChannel.id) {
             return { success: false, error: '⚠️ Já estou em outro canal de voz em modo rádio neste servidor.' };
+        }
+
+        // Se a escuta por voz foi desligada por falhas seguidas, pedir o Modo Rádio de novo a religa.
+        try {
+            const anterior = existingConn && radioReceiverListeners.get(existingConn.receiver);
+            if (anterior?.handle.guard.isDisabled()) {
+                setupRadioVoiceReceiver(existingConn, guildId, textChannel, client, voiceChannel);
+                logger.info(`[Radio] Escuta por voz religada a pedido de ${member?.id} (servidor ${guildId}).`);
+            }
+        } catch (err) {
+            logger.warn(`[Radio] Não foi possível religar a escuta por voz (servidor ${guildId}): ${errMsg(err)}`);
         }
 
         const { embeds, components } = buildRadioEmbed(existingSession);
@@ -105,16 +148,22 @@ async function startRadioMode(member, textChannel, client) {
         selfDeaf: false,
         selfMute: false
     });
+    // Sem ouvinte de 'error', um erro de rede de voz vira uncaughtException ("Erro grave").
+    attachConnectionSafety(connection, { label: 'Radio', guildId, log: logger });
 
     try {
         await entersState(connection, VoiceConnectionStatus.Ready, 15000);
     } catch (err) {
+        logger.warn(`[Radio] Conexão de voz não ficou pronta (servidor ${guildId}): ${errMsg(err)}`);
         try { connection.destroy(); } catch (_) {}
         return { success: false, error: '❌ Não foi possível conectar ao canal de voz (tempo limite esgotado ou desconectado).' };
     }
 
     const { isToolDisabled } = await import('../handlers/llmHandler.js');
     const session = createSession(guildId, voiceChannel.id, textChannel.id);
+    // A Yui nunca fala por cima da música: se havia resposta falada em curso na call de IA, ela para agora (e com a
+    // sessão criada o TTS recusa as próximas). Nunca atrapalha o rádio.
+    try { interruptSpeech(guildId, 'radio'); } catch (_) {}
     if (isToolDisabled(guildId, 'radio_voice_stt')) {
         updateSession(guildId, { voiceListening: false, voiceMode: 'OFF' });
     }
@@ -123,17 +172,23 @@ async function startRadioMode(member, textChannel, client) {
     updateSession(guildId, { embedMessageId: msg.id });
 
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
-        const s = getSession(guildId);
-        if (s && !s._leaving) {
-            stopPlayer(guildId);
-            if (s.embedMessageId && textChannel) {
-                try {
-                    const embedMsg = await textChannel.messages.fetch(s.embedMessageId);
-                    await embedMsg?.delete?.().catch(() => {});
-                } catch (_) {}
+        // Handler async: qualquer exceção aqui viraria Unhandled Rejection, então fica tudo em try/catch.
+        try {
+            const s = getSession(guildId);
+            if (s && !s._leaving) {
+                logger.info(`[Radio] Desconectada do canal de voz (servidor ${guildId}); encerrando a sessão do rádio.`);
+                stopPlayer(guildId);
+                if (s.embedMessageId && textChannel) {
+                    try {
+                        const embedMsg = await textChannel.messages.fetch(s.embedMessageId);
+                        await embedMsg?.delete?.().catch(() => {});
+                    } catch (_) {}
+                }
+                cleanupSessionAudioFiles(s);
+                destroySession(guildId);
             }
-            cleanupSessionAudioFiles(s);
-            destroySession(guildId);
+        } catch (err) {
+            logger.warn(`[Radio] Falha ao encerrar a sessão após desconexão (servidor ${guildId}): ${errMsg(err)}`);
         }
     });
 
@@ -147,147 +202,171 @@ async function startRadioMode(member, textChannel, client) {
     return { success: true };
 }
 
+// Ouvinte de fala por receiver: evita empilhar ouvintes 'start' se o receiver for configurado de novo.
+const radioReceiverListeners = new WeakMap();
+
 function setupRadioVoiceReceiver(connection, guildId, textChannel, client, voiceChannel) {
-    const activeStreams = new Set();
     const receiver = connection.receiver;
 
-    receiver.speaking.on('start', async (userId) => {
-        const { isToolDisabled } = await import('../handlers/llmHandler.js');
-        if (isToolDisabled(guildId, 'radio_voice_stt')) return;
+    // Já configurado e ainda ativo: reaproveita. Se foi desligado por falhas seguidas, cria outro do zero.
+    const existing = radioReceiverListeners.get(receiver);
+    if (existing && !existing.handle.guard.isDisabled()) return existing.handle;
 
-        const session = getSession(guildId);
-        const currentVoiceMode = session?.voiceMode || (session?.voiceListening ? 'IA' : 'OFF');
-        if (!session || currentVoiceMode === 'OFF') return;
+    const ctx = { textChannel };
+    const guard = createSpeakerGuard();
 
-        const streamKey = `${guildId}_${userId}`;
-        if (activeStreams.has(streamKey)) return;
-        activeStreams.add(streamKey);
+    // O ouvinte nunca propaga exceção (antes, uma falha aqui virava Unhandled Rejection e a chave do
+    // usuário ficava presa), trata erro de stream/decoder, aplica backoff por usuário e desliga a
+    // escuta desta sessão depois de falhas seguidas (ver utils/voiceSafety.js).
+    const handle = attachSpeakingListener(receiver, {
+        label: 'RadioVoice',
+        guildId,
+        guard,
+        log: logger,
+        createDecoder: () => new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 }),
+        subscribe: (userId) => receiver.subscribe(userId, {
+            end: { behavior: EndBehaviorType.AfterSilence, duration: 1200 }
+        }),
+        precheck: async (userId) => {
+            const { isToolDisabled } = await import('../handlers/llmHandler.js');
+            if (isToolDisabled(guildId, 'radio_voice_stt')) return false;
 
-        const member = voiceChannel.members?.get(userId);
-        if (member && (member.voice.selfMute || member.voice.serverMute)) {
-            activeStreams.delete(streamKey);
-            return;
+            const session = getSession(guildId);
+            const currentVoiceMode = session?.voiceMode || (session?.voiceListening ? 'IA' : 'OFF');
+            if (!session || currentVoiceMode === 'OFF') return false;
+
+            const member = voiceChannel.members?.get(userId);
+            if (member && (member.voice.selfMute || member.voice.serverMute)) return false;
+            return true;
+        },
+        onAudio: (userId, pcmBuffer) => handleRadioCapturedAudio(pcmBuffer, userId, guildId, ctx.textChannel, client),
+        onTrip: async () => {
+            try {
+                if (!ctx.textChannel) return;
+                const msg = await ctx.textChannel.send('⚠️ Tive problemas repetidos para captar o áudio e desliguei a escuta por voz do Rádio nesta sessão. Para tentar de novo, reative o Modo Rádio.');
+                setTimeout(() => { msg?.delete?.().catch(() => {}); }, 30000);
+            } catch (_) {}
+        }
+    });
+
+    radioReceiverListeners.set(receiver, { handle, ctx });
+    return handle;
+}
+
+// Processa a fala já decodificada (PCM): filtros, transcrição, gatilho e comando.
+async function handleRadioCapturedAudio(pcmBuffer, userId, guildId, textChannel, client) {
+    if (pcmBuffer.length < 9600) return;
+
+    const rms = calculatePcmRms(pcmBuffer);
+    if (rms < 250) return;
+
+    const wavHeader = createWavHeader(pcmBuffer.length);
+    const wavBuffer = Buffer.concat([wavHeader, pcmBuffer]);
+    const result = await transcribeAudio(wavBuffer);
+    if (!result) return;
+
+    if (typeof result === 'object' && result.isRateLimit) {
+        logger.warn(`[RadioVoice] Limite de API Whisper/Groq atingido (${result.status}) no servidor ${guildId}. Desativando escuta por 1 minuto.`);
+        updateSession(guildId, { voiceListening: false, voiceMode: 'OFF' });
+        await updateEmbed(guildId, textChannel, client);
+
+        if (textChannel) {
+            try {
+                const msg = await textChannel.send('⚠️ **Limite de requisições da API de voz (Whisper) atingido!** A escuta por voz do Rádio foi desativada temporariamente por **1 minuto**.');
+                setTimeout(() => { msg?.delete?.().catch(() => {}); }, 15000);
+            } catch (_) {}
         }
 
-        const opusStream = receiver.subscribe(userId, {
-            end: { behavior: EndBehaviorType.AfterSilence, duration: 1200 }
-        });
-
-        const decoder = new prism.opus.Decoder({ frameSize: 960, channels: 2, rate: 48000 });
-        const pcmChunks = [];
-
-        opusStream.pipe(decoder);
-        decoder.on('data', chunk => pcmChunks.push(chunk));
-
-        decoder.on('end', async () => {
-            activeStreams.delete(streamKey);
-            const pcmBuffer = Buffer.concat(pcmChunks);
-            if (pcmBuffer.length < 9600) return;
-
-            const rms = calculatePcmRms(pcmBuffer);
-            if (rms < 250) return;
-
-            const wavHeader = createWavHeader(pcmBuffer.length);
-            const wavBuffer = Buffer.concat([wavHeader, pcmBuffer]);
-            const result = await transcribeAudio(wavBuffer);
-            if (!result) return;
-
-            if (typeof result === 'object' && result.isRateLimit) {
-                console.warn(`[RadioVoice] ⚠️ Limite de API Whisper/Groq atingido (${result.status}). Desativando escuta por 1 minuto.`);
-                updateSession(guildId, { voiceListening: false, voiceMode: 'OFF' });
-                await updateEmbed(guildId, textChannel, client);
-
-                if (textChannel) {
-                    try {
-                        const msg = await textChannel.send('⚠️ **Limite de requisições da API de voz (Whisper) atingido!** A escuta por voz do Rádio foi desativada temporariamente por **1 minuto**.');
-                        setTimeout(() => { msg?.delete?.().catch(() => {}); }, 15000);
-                    } catch (_) {}
-                }
-
-                setTimeout(async () => {
-                    const currentSession = getSession(guildId);
-                    if (currentSession) {
-                        updateSession(guildId, { voiceListening: true, voiceMode: 'DIRECT' });
-                        await updateEmbed(guildId, textChannel, client);
-                        if (textChannel) {
-                            try {
-                                const msg = await textChannel.send('✅ **Escuta de voz do Rádio reativada!** Você já pode enviar comandos por voz novamente.');
-                                setTimeout(() => { msg?.delete?.().catch(() => {}); }, 10000);
-                            } catch (_) {}
-                        }
+        setTimeout(async () => {
+            try {
+                const currentSession = getSession(guildId);
+                if (currentSession) {
+                    updateSession(guildId, { voiceListening: true, voiceMode: 'DIRECT' });
+                    await updateEmbed(guildId, textChannel, client);
+                    if (textChannel) {
+                        try {
+                            const msg = await textChannel.send('✅ **Escuta de voz do Rádio reativada!** Você já pode enviar comandos por voz novamente.');
+                            setTimeout(() => { msg?.delete?.().catch(() => {}); }, 10000);
+                        } catch (_) {}
                     }
-                }, 60000);
-
-                return;
+                }
+            } catch (err) {
+                logger.warn(`[RadioVoice] Falha ao reativar a escuta de voz (servidor ${guildId}): ${errMsg(err)}`);
             }
+        }, 60000);
 
-            const text = typeof result === 'string' ? result : '';
-            if (!text) return;
+        return;
+    }
 
-            const lower = text.toLowerCase();
+    const text = typeof result === 'string' ? result : '';
+    if (!text) return;
 
-            const STT_HALLUCINATIONS = [
-                'assistente virtual',
-                'legendas pela comunidade',
-                'subtítulos',
-                'subtitulos',
-                'obrigado por assistir',
-                'inscreva-se',
-                'curta e compartilhe',
-                'transcrição',
-                'transcricao',
-                'amara.org',
-                'fale com a yui',
-                'fale com yui',
-                'falar com a yui',
-                'falar com yui',
-                'conversar com a yui',
-                'conversar com yui',
-                'fale com a',
-                'falar com a',
-                'fale com o',
-                'falar com o'
-            ];
+    const lower = text.toLowerCase();
 
-            if (STT_HALLUCINATIONS.some(h => lower.includes(h))) {
-                console.log(`[RadioVoice] 🔇 Alucinação de STT/ruído ignorada: "${text}"`);
-                return;
-            }
+    const STT_HALLUCINATIONS = [
+        'assistente virtual',
+        'legendas pela comunidade',
+        'subtítulos',
+        'subtitulos',
+        'obrigado por assistir',
+        'inscreva-se',
+        'curta e compartilhe',
+        'transcrição',
+        'transcricao',
+        'amara.org',
+        'fale com a yui',
+        'fale com yui',
+        'falar com a yui',
+        'falar com yui',
+        'conversar com a yui',
+        'conversar com yui',
+        'fale com a',
+        'falar com a',
+        'fale com o',
+        'falar com o'
+    ];
 
-            const triggerMatch = lower.match(RADIO_TRIGGER_REGEX);
-            if (!triggerMatch) return;
+    // Os logs de voz não guardam o texto transcrito (privacidade): só tamanhos e metadados.
+    if (STT_HALLUCINATIONS.some(h => lower.includes(h))) {
+        logger.info(`[RadioVoice] Alucinação de STT/ruído ignorada (${text.length} caracteres, servidor ${guildId}).`);
+        return;
+    }
 
-            const matchedWord = triggerMatch[0];
-            console.log(`[RadioVoice] 🎯 Gatilho RADIO_TRIGGER_REGEX ativado por: "${matchedWord}" | Transcrição: "${text}"`);
+    const triggerMatch = lower.match(RADIO_TRIGGER_REGEX);
+    if (!triggerMatch) return;
 
-            const userKey = `${guildId}_${userId}`;
-            const now = Date.now();
-            const lastTime = userLastVoiceCommand.get(userKey) || 0;
-            if (now - lastTime < 3000) {
-                console.log(`[RadioVoice] ⏳ Comando de voz de ${userId} ignorado por debounce (menos de 3s).`);
-                return;
-            }
+    const matchedWord = triggerMatch[0];
+    logger.info(`[RadioVoice] Gatilho acionado por "${matchedWord}" (usuário ${userId}, servidor ${guildId}).`);
 
-            const matchIndex = triggerMatch.index;
-            let prompt = text.substring(matchIndex + matchedWord.length).replace(/^[,\s.!?-]+/, '').trim();
-            prompt = prompt.replace(RADIO_TRIGGER_REGEX, '').replace(/^[,\s.!?-]+/, '').trim();
+    const userKey = `${guildId}_${userId}`;
+    const now = Date.now();
+    const lastTime = userLastVoiceCommand.get(userKey) || 0;
+    if (now - lastTime < 3000) {
+        logger.info(`[RadioVoice] Comando de voz de ${userId} ignorado por debounce (menos de 3s).`);
+        return;
+    }
 
-            if (!prompt || prompt.length < 2) {
-                console.log(`[RadioVoice] ℹ️ Prompt sem comando após gatilho ignorado: "${text}"`);
-                return;
-            }
+    const matchIndex = triggerMatch.index;
+    let prompt = text.substring(matchIndex + matchedWord.length).replace(/^[,\s.!?-]+/, '').trim();
+    prompt = prompt.replace(RADIO_TRIGGER_REGEX, '').replace(/^[,\s.!?-]+/, '').trim();
 
-            userLastVoiceCommand.set(userKey, now);
-            const activeMode = session.voiceMode || (session.voiceListening ? 'IA' : 'OFF');
-            if (activeMode === 'DIRECT') {
-                await processDirectRadioVoiceCommand(prompt, userId, guildId, textChannel, client);
-            } else {
-                await processRadioVoiceCommand(prompt, userId, guildId, textChannel, client);
-            }
-        });
+    if (!prompt || prompt.length < 2) {
+        logger.info(`[RadioVoice] Gatilho sem comando depois dele, ignorado (usuário ${userId}, servidor ${guildId}).`);
+        return;
+    }
 
-        decoder.on('error', () => activeStreams.delete(streamKey));
-    });
+    userLastVoiceCommand.set(userKey, now);
+    // Relê a sessão: o modo pode ter mudado enquanto a fala era transcrita.
+    const session = getSession(guildId);
+    if (!session) return;
+    const activeMode = session.voiceMode || (session.voiceListening ? 'IA' : 'OFF');
+    if (activeMode === 'OFF') return;
+    logger.info(`[RadioVoice] Comando de voz (${activeMode}, ${prompt.length} caracteres) de ${userId} no servidor ${guildId}.`);
+    if (activeMode === 'DIRECT') {
+        await processDirectRadioVoiceCommand(prompt, userId, guildId, textChannel, client);
+    } else {
+        await processRadioVoiceCommand(prompt, userId, guildId, textChannel, client);
+    }
 }
 
 async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChannel, client) {
@@ -301,7 +380,7 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
     const sendNotify = async (msgText) => {
         if (!textChannel) return;
         try {
-            const msg = await textChannel.send(`<@${userId}> [⚡] ${msgText}`);
+            const msg = await textChannel.send({ content: `<@${userId}> [⚡] ${radioSafeText(msgText)}`, allowedMentions: radioAllowedMentions(userId) });
             setTimeout(() => { msg?.delete?.().catch(() => {}); }, 4000);
         } catch (_) {}
     };
@@ -417,7 +496,7 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
         const embed = buildQueueEmbed(session);
         if (textChannel) {
             try {
-                const msg = await textChannel.send({ content: `<@${userId}> 📜 **Fila do Rádio:**`, embeds: [embed] });
+                const msg = await textChannel.send({ content: `<@${userId}> 📜 **Fila do Rádio:**`, embeds: [embed], allowedMentions: radioAllowedMentions(userId) });
                 setTimeout(() => { msg?.delete?.().catch(() => {}); }, 10000);
             } catch (_) {}
         }
@@ -511,7 +590,8 @@ async function processRadioVoiceCommand(prompt, userId, guildId, textChannel, cl
             const content = typeof payload === 'string' ? payload : payload?.content || '';
             if (content) {
                 try {
-                    const msg = await textChannel.send({ content });
+                    // O texto vem da IA / do resultado da ferramenta (com título de faixa): só o autor do comando pode ser notificado.
+                    const msg = await textChannel.send({ content: radioSafeText(content), allowedMentions: radioAllowedMentions(userId) });
                     setTimeout(() => { msg.delete().catch(() => {}); }, 5000);
                     return msg;
                 } catch (_) {}
@@ -570,7 +650,9 @@ function monitorEmptyChannel(guildId, voiceChannel, textChannel) {
         const humanMembers = voiceChannel.members?.filter(m => !m.user.bot) || new Map();
         if (humanMembers.size === 0) {
             clearInterval(interval);
-            leaveRadioCall(guildId, textChannel);
+            leaveRadioCall(guildId, textChannel).catch((err) => {
+                logger.warn(`[Radio] Falha ao sair do canal vazio (servidor ${guildId}): ${errMsg(err)}`);
+            });
         }
     }, CHECK_INTERVAL);
 }
@@ -587,14 +669,16 @@ function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
         try {
             if (messageTarget && typeof messageTarget.edit === 'function') {
                 await messageTarget.edit({
-                    content: `⏱️ **Tempo esgotado (10s).** Selecionada automaticamente a 1ª opção: **${firstTrack.title}**`,
+                    content: `⏱️ **Tempo esgotado (10s).** Selecionada automaticamente a 1ª opção: **${radioSafeText(firstTrack.title)}**`,
+                    allowedMentions: { parse: [] }, // o título vem de um site externo
                     embeds: [],
                     components: []
                 });
                 setTimeout(() => { messageTarget.delete().catch(() => {}); }, 5000);
             } else if (messageTarget && typeof messageTarget.editReply === 'function') {
                 await messageTarget.editReply({
-                    content: `⏱️ **Tempo esgotado (10s).** Selecionada automaticamente a 1ª opção: **${firstTrack.title}**`,
+                    content: `⏱️ **Tempo esgotado (10s).** Selecionada automaticamente a 1ª opção: **${radioSafeText(firstTrack.title)}**`,
+                    allowedMentions: { parse: [] }, // o título vem de um site externo
                     embeds: [],
                     components: []
                 });
@@ -620,6 +704,8 @@ function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
 }
 
 export { startRadioMode, leaveRadioCall, setupRadioVoiceReceiver, radioAmbiguousSessions, scheduleAmbiguousAutoSelect };
+// Só para os testes (M3): os caminhos que enviam texto com eco de título/busca ao canal e a regra de menção deles.
+export { processDirectRadioVoiceCommand, processRadioVoiceCommand, radioAllowedMentions };
 
 export default {
     startRadioMode,

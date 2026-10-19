@@ -8,6 +8,8 @@ import path from 'path';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-api-'));
 process.env.DATABASE_DIR = tmp;
+// Auditoria num arquivo temporário (antes de importar os módulos): sem isto os eventos falsos iam para logs/core-audit.jsonl REAL.
+process.env.YUI_AUDIT_FILE = path.join(tmp, 'audit.jsonl');
 process.env.YUI_OWNER_ID = '111';
 process.env.YUI_MEMORY_ENABLED = 'true';
 process.env.MEMORY_RETENTION_DAYS = '30';
@@ -120,10 +122,13 @@ await test('CORS: só origens da allowlist; pré-verificação OPTIONS sem token
   // padrão: sem YUI_API_CORS_ORIGINS não há CORS
   assert.equal(parseCorsOrigins('').size, 0);
 });
-await test('rate limit por usuário (30/min)', async () => {
+await test('rate limit: 30/min nas rotas de IA e 240/min no resto (painel, status)', async () => {
   let last = 0;
-  for (let i = 0; i < 40; i++) last = (await call('GET', '/v1/me', { token: MEMBER })).status;
-  assert.equal(last, 429);
+  for (let i = 0; i < 40; i++) last = (await call('POST', '/v1/chat', { token: MEMBER, body: { message: `oi ${i}` } })).status;
+  assert.equal(last, 429, 'o chat é limitado a 30/min');
+  // as rotas de consulta não são afetadas pelo limite do chat e têm um limite maior
+  for (let i = 0; i < 60; i++) last = (await call('GET', '/v1/me', { token: MEMBER })).status;
+  assert.equal(last, 200, 'consultas normais passam de 30/min');
 });
 
 console.log('AI Manager');

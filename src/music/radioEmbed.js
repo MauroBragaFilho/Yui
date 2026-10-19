@@ -1,4 +1,14 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { makeEmbed, clampText } from '../discord/embedLimits.js';
+
+// Limites de texto (TG-04/TG-34): título e artista vêm de provedores externos e não têm teto; os cortes ficam aqui, num lugar só.
+const TITLE_MAX = 100;
+const ARTIST_MAX = 80;
+const ALBUM_MAX = 100;
+// A fila mostra uma janela de faixas ao redor da atual (descrição do embed: 4096 caracteres).
+const QUEUE_WINDOW = 25;
+const QUEUE_BEFORE = 5;
+const QUEUE_DESC_BUDGET = 3900;
 
 function formatDuration(seconds) {
     if (!seconds || isNaN(seconds)) return '?:??';
@@ -30,6 +40,9 @@ function voiceButtonStyle(mode) {
     return ButtonStyle.Danger;
 }
 
+const titleOf = (t) => clampText(t?.title || 'Sem título', TITLE_MAX);
+const artistOf = (t) => clampText(t?.artist || 'Artista desconhecido', ARTIST_MAX);
+
 function buildRadioEmbed(session) {
     const track = session.currentTrack;
     const status = session.status;
@@ -41,30 +54,34 @@ function buildRadioEmbed(session) {
 
     const currentVoiceMode = session.voiceMode || (session.voiceListening ? 'IA' : 'OFF');
 
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setTitle('📻 Modo Rádio — Yui')
-        .setFooter({ text: 'Yui Radio • Use os botões abaixo para controlar' });
-
     const isFast = session.streamMode === 'FAST';
     const streamModeText = isFast ? '⚡ Rápido (Converte YT ➔ Deezer)' : '⚖️ Híbrido (Padrão)';
 
+    const embedData = {
+        color,
+        title: '📻 Modo Rádio — Yui',
+        footer: 'Yui Radio • Use os botões abaixo para controlar',
+    };
+
     if (track) {
-        embed.setDescription(`**${statusLabel}** (Faixa #${currentPos} de ${playlist.length})`)
-            .addFields(
-                { name: '🎵 Faixa Atual', value: `**#${currentPos}. ${track.title}** - ${track.artist}\n\n`, inline: false },
-                { name: '⏱️ Duração', value: formatDuration(track.duration), inline: true },
-                { name: '📂 Álbum', value: track.album || '—', inline: true },
-                { name: '📋 Playlist Total', value: `${playlist.length} faixa(s)`, inline: true },
-                { name: '🎲 Shuffle', value: session.shuffle ? '✅ Ativo' : '❌ Off', inline: true },
-                { name: '🔁 Loop', value: loopLabel(session.loopMode), inline: true },
-                { name: '🚀 Busca', value: streamModeText, inline: true }
-            );
-        if (track.cover) embed.setThumbnail(track.cover);
-        if (track.addedBy) embed.addFields({ name: '➕ Adicionada por', value: `<@${track.addedBy}>`, inline: true });
+        embedData.description = `**${statusLabel}** (Faixa #${currentPos} de ${playlist.length})`;
+        embedData.fields = [
+            { name: '🎵 Faixa Atual', value: `**#${currentPos}. ${titleOf(track)}** - ${artistOf(track)}\n\n`, inline: false },
+            { name: '⏱️ Duração', value: formatDuration(track.duration), inline: true },
+            { name: '📂 Álbum', value: clampText(track.album || '—', ALBUM_MAX), inline: true },
+            { name: '📋 Playlist Total', value: `${playlist.length} faixa(s)`, inline: true },
+            { name: '🎲 Shuffle', value: session.shuffle ? '✅ Ativo' : '❌ Off', inline: true },
+            { name: '🔁 Loop', value: loopLabel(session.loopMode), inline: true },
+            { name: '🚀 Busca', value: streamModeText, inline: true },
+        ];
+        if (track.addedBy) embedData.fields.push({ name: '➕ Adicionada por', value: `<@${track.addedBy}>`, inline: true });
+        // makeEmbed descarta capa que não seja http(s): uma URL ruim do provedor não derruba mais o painel.
+        embedData.thumbnail = track.cover;
     } else {
-        embed.setDescription(`**${statusLabel}**\n\nNenhuma faixa tocando. Playlist com ${playlist.length} música(s). Use ➕ para adicionar!\n🚀 **Modo de Busca:** ${streamModeText}`);
+        embedData.description = `**${statusLabel}**\n\nNenhuma faixa tocando. Playlist com ${playlist.length} música(s). Use ➕ para adicionar!\n🚀 **Modo de Busca:** ${streamModeText}`;
     }
+
+    const embed = makeEmbed(embedData);
 
     const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('radio_prev').setLabel('⏮️').setStyle(ButtonStyle.Secondary),
@@ -94,57 +111,77 @@ function buildRadioEmbed(session) {
 function buildQueueEmbed(session) {
     const playlist = session.playlist || [];
     const currentIdx = typeof session.currentIndex === 'number' ? session.currentIndex : -1;
+    const total = playlist.length;
 
-    const embed = new EmbedBuilder()
-        .setColor(0x7C3AED)
-        .setTitle('📋 Fila Permanente do Rádio')
-        .setFooter({ text: `${playlist.length} faixa(s) cadastradas nesta sessão de rádio` });
-
-    let desc = '';
-    playlist.forEach((t, i) => {
+    const lineCache = new Map();
+    const lineAt = (i) => {
+        if (lineCache.has(i)) return lineCache.get(i);
+        const t = playlist[i];
         const pos = i + 1;
-        const dur = formatDuration(t.duration);
+        const title = titleOf(t);
+        const artist = artistOf(t);
+        let line;
         if (i === currentIdx && session.status === 'PLAYING') {
-            desc += `**▶️ #${pos}. ${t.title} — ${t.artist}** (tocando agora)\n`;
+            line = `**▶️ #${pos}. ${title} — ${artist}** (tocando agora)\n`;
         } else if (i === currentIdx && session.status === 'PAUSED') {
-            desc += `**⏸️ #${pos}. ${t.title} — ${t.artist}** (pausada)\n`;
+            line = `**⏸️ #${pos}. ${title} — ${artist}** (pausada)\n`;
         } else if (i < currentIdx) {
-            desc += `~~#${pos}. ${t.title} — ${t.artist}~~\n`;
+            line = `~~#${pos}. ${title} — ${artist}~~\n`;
         } else {
-            desc += `**#${pos}.** ${t.title} — ${t.artist} (${dur})\n`;
+            line = `**#${pos}.** ${title} — ${artist} (${formatDuration(t?.duration)})\n`;
         }
-    });
+        lineCache.set(i, line);
+        return line;
+    };
 
-    embed.setDescription(desc || 'Fila vazia.');
-    return embed;
+    // Janela de até QUEUE_WINDOW faixas: algumas antes da atual e o resto depois (a posição de cada linha é a real da fila).
+    let start = Math.max(0, Math.min(currentIdx >= 0 ? currentIdx - QUEUE_BEFORE : 0, total - QUEUE_WINDOW));
+    let end = Math.min(total, start + QUEUE_WINDOW);
+    const render = () => {
+        let desc = '';
+        if (start > 0) desc += `… ${start} faixa(s) antes\n`;
+        for (let i = start; i < end; i++) desc += lineAt(i);
+        if (end < total) desc += `… e mais ${total - end} faixa(s)\n`;
+        return desc;
+    };
+    let desc = render();
+    // Títulos longos podem passar do orçamento da descrição: encurta a janela pelo fim (ou pelo começo, se o fim é a faixa atual).
+    while (desc.length > QUEUE_DESC_BUDGET && end - start > 1) {
+        if (end - 1 > currentIdx) end -= 1; else start += 1;
+        desc = render();
+    }
+
+    return makeEmbed({
+        color: 0x7C3AED,
+        title: '📋 Fila Permanente do Rádio',
+        footer: `${total} faixa(s) cadastradas nesta sessão de rádio`,
+        description: desc.trimEnd() || 'Fila vazia.',
+    });
 }
 
 function buildAmbiguousEmbed(results) {
-    const embed = new EmbedBuilder()
-        .setColor(0x9B59B6)
-        .setTitle('🎵 Qual música você quer?')
-        .setDescription('Não achei a correta com certeza. Escolha uma das opções abaixo:')
-        .setFooter({ text: 'Powered by Deezer' });
-
-    if (results[0]?.cover) embed.setThumbnail(results[0].cover);
-
-    results.forEach((t, i) => {
-        embed.addFields({
-            name: `${i + 1}. ${t.title}`,
-            value: `👤 ${t.artist} | ⏱️ ${formatDuration(t.duration)}`,
-            inline: false
-        });
+    const list = Array.isArray(results) ? results : [];
+    return makeEmbed({
+        color: 0x9B59B6,
+        title: '🎵 Qual música você quer?',
+        description: 'Não achei a correta com certeza. Escolha uma das opções abaixo:',
+        footer: 'Powered by Deezer',
+        thumbnail: list[0]?.cover,
+        fields: list.map((t, i) => ({
+            name: `${i + 1}. ${titleOf(t)}`,
+            value: `👤 ${artistOf(t)} | ⏱️ ${formatDuration(t?.duration)}`,
+            inline: false,
+        })),
     });
-
-    return embed;
 }
 
 function buildNotFoundEmbed(query) {
-    return new EmbedBuilder()
-        .setColor(0xE11D48)
-        .setTitle('❌ Música não encontrada')
-        .setDescription(`Não consegui encontrar **"${query}"** no Deezer.`)
-        .setFooter({ text: 'Yui Radio' });
+    return makeEmbed({
+        color: 0xE11D48,
+        title: '❌ Música não encontrada',
+        description: `Não consegui encontrar **"${clampText(query, 100)}"** no Deezer.`,
+        footer: 'Yui Radio',
+    });
 }
 
 export { buildRadioEmbed, buildQueueEmbed, buildAmbiguousEmbed, buildNotFoundEmbed, formatDuration };

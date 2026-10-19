@@ -7,6 +7,8 @@ import path from 'path';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-core-'));
 process.env.DATABASE_DIR = tmp;
+// Auditoria num arquivo temporário (antes de importar os módulos): sem isto os eventos falsos iam para logs/core-audit.jsonl REAL.
+process.env.YUI_AUDIT_FILE = path.join(tmp, 'audit.jsonl');
 process.env.YUI_OWNER_ID = '111';
 process.env.YUI_PRIVATE_CHANNEL_IDS = 'priv1';
 process.env.YUI_TRUSTED_IDS = '333';

@@ -4,7 +4,8 @@
     "enabled": [
       "join_voice_call",
       "leave_voice_call",
-      "radio_voice_stt"
+      "radio_voice_stt",
+      "voice_tts"
     ]
   }
 }

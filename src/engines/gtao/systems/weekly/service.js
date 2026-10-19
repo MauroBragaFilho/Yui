@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../../../../utils/logger.js';
+import { alertOwner } from '../../../../core/alerts.js';
 import { getLatestWeekly, searchWeeklyPosts } from './reddit.js';
 import { parseWeekly } from './parser.js';
 import { isValidWeekly } from './validator.js';
@@ -26,13 +27,18 @@ const CACHE_FILE = path.join(__dirname, 'cache.json');
 
 const DEFAULT_CACHE = { postId: null, updatedAt: null };
 
+// Falhas SEGUIDAS de publicação do mesmo post (TG-18). Fica só em memória: reiniciar zera a conta, o
+// que é aceitável (o objetivo é não repetir o mesmo erro para sempre dentro de uma execução).
+const MAX_PUBLISH_FAILURES = 3;
+let publishFailures = { id: null, count: 0 };
+
 /** Lê o cache do disco; se ausente/corrompido, retorna vazio. */
-export function readCache() {
+export function readCache(file = CACHE_FILE) {
   try {
-    if (!fs.existsSync(CACHE_FILE)) {
+    if (!fs.existsSync(file)) {
       return { ...DEFAULT_CACHE };
     }
-    const raw = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
       postId: raw.postId ?? null,
       updatedAt: raw.updatedAt ?? null,
@@ -44,10 +50,10 @@ export function readCache() {
 }
 
 /** Salva o cache no disco (best-effort; nunca derruba o processo). */
-export function writeCache({ postId, updatedAt }) {
+export function writeCache({ postId, updatedAt }, file = CACHE_FILE) {
   try {
     const payload = { postId, updatedAt: updatedAt || new Date().toISOString() };
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(payload, null, 2), 'utf8');
+    fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
     logger.info(`[Weekly][Cache] Estado atualizado: postId=${payload.postId}.`);
     return payload;
   } catch (err) {
@@ -86,6 +92,41 @@ function buildWeeklyOutput(post, parsed) {
     gtaPlus: parsed.gtaPlus,
     atualizadoEm: parsed.atualizadoEm,
   };
+}
+
+/**
+ * 3ª falha seguida de publicação do mesmo post: avisa o dono, tenta UMA vez publicar só o título e o
+ * link (versão mínima) e marca o post como processado, para o mesmo erro não se repetir a cada ciclo.
+ */
+async function giveUpPublishing(weekly, onNew, { alert, cacheFile, lastError }) {
+  publishFailures = { id: null, count: 0 };
+
+  let minimal = false;
+  try {
+    await onNew({ ...weekly, minimal: true });
+    minimal = true;
+  } catch (err) {
+    logger.error(`[Weekly] A versão mínima também falhou: ${String(err?.message ?? err).slice(0, 200)}`);
+  }
+
+  writeCache({ postId: weekly.id }, cacheFile);
+  logger.warn(
+    `[Weekly] Post ${weekly.id}: ${MAX_PUBLISH_FAILURES} falhas seguidas de publicação; ` +
+      (minimal ? 'publicado só com título e link' : 'desisti desta semana') +
+      ' e marcado como processado.'
+  );
+  try {
+    alert(
+      'weekly-publish',
+      'Não consegui publicar o Weekly',
+      `O post ${weekly.id} falhou ${MAX_PUBLISH_FAILURES} vezes seguidas (${lastError}). ` +
+        (minimal ? 'Publiquei só o título e o link.' : 'Desisti desta semana para não repetir o erro.'),
+      { level: 'error', cooldownMinutes: 360 }
+    );
+  } catch {
+    /* aviso nunca derruba o ciclo */
+  }
+  return { status: minimal ? 'published-minimal' : 'publish-abandoned', id: weekly.id };
 }
 
 export const weeklyService = {
@@ -132,12 +173,15 @@ export const weeklyService = {
    * @param {object} opts
    * @param {(weekly: object) => Promise<void>} [opts.onNew] — callback de
    *   publicação/acréscimo chamado para posts novos válidos.
+   * @param {Function} [opts.alert] — aviso ao dono (padrão: alertOwner). Injetável para teste.
+   * @param {string} [opts.cacheFile] — arquivo do cache (padrão: cache.json). Injetável para teste.
+   * @param {Function} [opts.fetchLatest] — busca do post mais recente (padrão: Reddit). Injetável para teste.
    */
-  async checkForUpdates({ onNew } = {}) {
-    const cache = readCache();
+  async checkForUpdates({ onNew, alert = alertOwner, cacheFile = CACHE_FILE, fetchLatest = getLatestWeekly } = {}) {
+    const cache = readCache(cacheFile);
     let post;
     try {
-      post = await getLatestWeekly();
+      post = await fetchLatest();
     } catch (err) {
       logger.error(`[Weekly] Erro ao consultar Reddit: ${err.message}`);
       // Reddit indisponível: NÃO toca no cache e não publica nada.
@@ -167,14 +211,23 @@ export const weeklyService = {
     if (typeof onNew === 'function') {
       try {
         await onNew(weekly);
+        publishFailures = { id: null, count: 0 };
       } catch (err) {
-        logger.error(`[Weekly] Falha no callback de publicação: ${err.message}`);
+        // Conta as falhas seguidas do MESMO post. Falhar sempre igual, ciclo após ciclo, deixaria o
+        // Weekly sem sair para sempre e sem ninguém saber (TG-18).
+        const count = publishFailures.id === post.id ? publishFailures.count + 1 : 1;
+        publishFailures = { id: post.id, count };
+        const lastError = String(err?.message ?? err).slice(0, 160);
+        logger.error(`[Weekly] Falha no callback de publicação (${count} de ${MAX_PUBLISH_FAILURES}): ${lastError}`);
+        if (count >= MAX_PUBLISH_FAILURES) {
+          return giveUpPublishing(weekly, onNew, { alert, cacheFile, lastError });
+        }
         // Não marca como processado, pois a publicação falhou.
-        return { status: 'publish-error', id: post.id };
+        return { status: 'publish-error', id: post.id, failures: count };
       }
     }
 
-    writeCache({ postId: post.id });
+    writeCache({ postId: post.id }, cacheFile);
     logger.info('[Weekly] Dados atualizados.');
     return { status: 'published', id: post.id };
   },

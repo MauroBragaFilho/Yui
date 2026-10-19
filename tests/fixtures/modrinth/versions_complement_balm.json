@@ -1,0 +1,58 @@
+{
+ "request": "/v2/project/MBAkmtvl/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "complemento obrigatorio de: Cooking for Blockheads, TrashSlot, Waystones",
+ "reducedFrom": 49,
+ "body": [
+  {
+   "id": "dDN38ae7",
+   "project_id": "MBAkmtvl",
+   "name": "7.3.44+forge-1.20.1",
+   "version_number": "7.3.44+forge-1.20.1",
+   "version_type": "release",
+   "date_published": "2026-09-25T05:55:37.282932Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/MBAkmtvl/versions/dDN38ae7/balm-forge-1.20.1-7.3.44.jar",
+     "filename": "balm-forge-1.20.1-7.3.44.jar",
+     "primary": true,
+     "size": 561741
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "1VlYVa3k",
+   "project_id": "MBAkmtvl",
+   "name": "7.3.43+forge-1.20.1",
+   "version_number": "7.3.43+forge-1.20.1",
+   "version_type": "release",
+   "date_published": "2026-09-12T04:34:18.698358Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/MBAkmtvl/versions/1VlYVa3k/balm-forge-1.20.1-7.3.43.jar",
+     "filename": "balm-forge-1.20.1-7.3.43.jar",
+     "primary": true,
+     "size": 561741
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

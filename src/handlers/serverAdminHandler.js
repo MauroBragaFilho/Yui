@@ -23,6 +23,18 @@ import {
     resetServerTools
 } from './llmHandler.js';
 import { sendMcpToolsManager } from './mcpToolPanelHandler.js';
+import { makeEmbed, chunkLines, clampText } from '../discord/embedLimits.js';
+
+// Tetos dos textos do canal (TG-19). A opção do comando de barra aceita até 6000 caracteres e o modal até 4000, e esses textos
+// entram no prompt da IA a cada resposta do canal: gravar só o que cabe e ecoar menos ainda (o eco passa por embed de 4096).
+const PERSONA_INSTRUCTION_MAX = 1500;
+const PERSONA_MOOD_MAX = 100;
+const ECHO_MAX = 100;
+
+// Corte para GRAVAR: sem reticências (o texto continua sendo uma instrução utilizável) e sem partir emoji.
+const clampStored = (text, max) => (typeof text === 'string' ? clampText(text, max, { ellipsis: '' }) : text);
+// Eco numa linha de código inline: sem crase (fecharia o trecho) e sem quebra de linha.
+const echoInline = (text, max = ECHO_MAX) => clampText(String(text ?? '').replace(/`/g, "'").replace(/\s+/g, ' ').trim(), max);
 
 async function handleServerAdminCommand(interaction) {
     const hasPermission = !interaction.guild || (interaction.member && (
@@ -58,8 +70,12 @@ async function handleServerAdminCommand(interaction) {
             setChannelPersona(interaction.channelId, { reset: true });
             results.push('🔄 **Humor & Personalidade:** Reseta dos para o padrão neste canal.');
         } else if (instrucao !== null || mood !== null) {
-            setChannelPersona(interaction.channelId, { instruction: instrucao || undefined, mood: mood || undefined });
-            results.push(`🎭 **Humor & Personalidade:** Atualizado neste canal. (Mood: \`${mood || 'Não alterado'}\`)`);
+            const storedMood = clampStored(mood || undefined, PERSONA_MOOD_MAX);
+            setChannelPersona(interaction.channelId, {
+                instruction: clampStored(instrucao || undefined, PERSONA_INSTRUCTION_MAX),
+                mood: storedMood
+            });
+            results.push(`🎭 **Humor & Personalidade:** Atualizado neste canal. (Mood: \`${storedMood ? echoInline(storedMood) : 'Não alterado'}\`)`);
         }
 
         if (espontaneoEstado !== null || espontaneoFrequencia !== null || espontaneoPorcentagem !== null) {
@@ -165,6 +181,7 @@ async function handleServerAdminInteraction(interaction) {
             .setLabel('Instrução de Comportamento (Prompt)')
             .setStyle(TextInputStyle.Paragraph)
             .setPlaceholder('Ex: Seja muito irônica, fale com gírias e responda rápido.')
+            .setMaxLength(PERSONA_INSTRUCTION_MAX)
             .setRequired(false);
 
         const moodInput = new TextInputBuilder()
@@ -172,6 +189,7 @@ async function handleServerAdminInteraction(interaction) {
             .setLabel('Humor / Estado Emocional')
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('Ex: Engraçada, Séria, Debochada')
+            .setMaxLength(PERSONA_MOOD_MAX)
             .setRequired(false);
 
         const resetInput = new TextInputBuilder()
@@ -246,8 +264,9 @@ async function handleServerAdminInteraction(interaction) {
     }
 
     if (customId === 'srvcfg_modal_humor') {
-        const instrucao = interaction.fields.getTextInputValue('instrucao') || undefined;
-        const mood = interaction.fields.getTextInputValue('mood') || undefined;
+        // O modal já limita o tamanho; o corte aqui vale também para quem monta o envio por fora (e para o que for gravado).
+        const instrucao = clampStored(interaction.fields.getTextInputValue('instrucao') || undefined, PERSONA_INSTRUCTION_MAX);
+        const mood = clampStored(interaction.fields.getTextInputValue('mood') || undefined, PERSONA_MOOD_MAX);
         const resetText = (interaction.fields.getTextInputValue('reset') || '').toUpperCase();
 
         if (resetText === 'SIM') {
@@ -260,13 +279,16 @@ async function handleServerAdminInteraction(interaction) {
         }
 
         setChannelPersona(interaction.channelId, { instruction: instrucao, mood: mood });
-        const embed = new EmbedBuilder()
-            .setColor(0x10B981)
-            .setTitle('🎭 Personalidade Atualizada')
-            .addFields(
-                { name: 'Humor', value: `\`${mood || 'Não alterado'}\``, inline: true },
-                { name: 'Instrução', value: instrucao ? `\`\`\`\n${instrucao.substring(0, 500)}\`\`\`` : '*Não alterado*', inline: false }
-            );
+        // Eco curto e sem crase: o texto do usuário não pode fechar o bloco de código nem estourar o campo de 1024.
+        const instrucaoEco = instrucao ? clampText(instrucao.replace(/```/g, "'''"), 500) : '';
+        const embed = makeEmbed({
+            color: 0x10B981,
+            title: '🎭 Personalidade Atualizada',
+            fields: [
+                { name: 'Humor', value: `\`${mood ? echoInline(mood) : 'Não alterado'}\``, inline: true },
+                { name: 'Instrução', value: instrucaoEco ? `\`\`\`\n${instrucaoEco}\n\`\`\`` : '*Não alterado*', inline: false }
+            ]
+        });
         return interaction.reply({ embeds: [embed], ephemeral: false });
     }
 
@@ -351,16 +373,22 @@ async function handleIaFerramentasCommand(interaction) {
             }
         }
 
-        const embed = new EmbedBuilder()
-            .setColor(0x7C3AED)
-            .setTitle('🔧 Status das Ferramentas MCP — Servidor')
-            .setDescription(`Configuração de ferramentas para o servidor **${interaction.guild?.name || targetGuildId}**`)
-            .addFields(
-                { name: '🟢 Ativas', value: activeList.length > 0 ? activeList.join('\n') : '*Nenhuma ferramenta ativa*', inline: false },
-                { name: '🔴 Desativadas', value: disabledList.length > 0 ? disabledList.join('\n') : '*Nenhuma ferramenta desativada*', inline: false }
-            )
-            .setFooter({ text: 'Yui MCP Manager • by oBraga' })
-            .setTimestamp();
+        // Cada lista vira quantos campos de 1024 forem precisos (TG-17): com muitas ferramentas um campo único estourava e o comando não respondia.
+        const toFields = (label, lines, emptyText) => (lines.length > 0
+            ? chunkLines(lines, 1000).map((value, i) => ({ name: i === 0 ? `${label} (${lines.length})` : `${label} (cont.)`, value, inline: false }))
+            : [{ name: label, value: emptyText, inline: false }]);
+
+        const embed = makeEmbed({
+            color: 0x7C3AED,
+            title: '🔧 Status das Ferramentas MCP — Servidor',
+            description: `Configuração de ferramentas para o servidor **${interaction.guild?.name || targetGuildId}**`,
+            fields: [
+                ...toFields('🟢 Ativas', activeList, '*Nenhuma ferramenta ativa*'),
+                ...toFields('🔴 Desativadas', disabledList, '*Nenhuma ferramenta desativada*')
+            ],
+            footer: 'Yui MCP Manager • by oBraga',
+            timestamp: true
+        });
 
         return interaction.reply({ embeds: [embed], ephemeral: false });
     }
@@ -375,7 +403,7 @@ async function handleIaFerramentasCommand(interaction) {
         if (!tool) tool = allTools.find(t => toolInput.includes(t.function.name) || toolInput.includes(t.meta?.label));
 
         if (!tool) {
-            return interaction.reply({ content: `❌ Ferramenta \`${toolInput}\` não encontrada.`, ephemeral: true });
+            return interaction.reply({ content: `❌ Ferramenta \`${echoInline(toolInput)}\` não encontrada.`, ephemeral: true });
         }
 
         const disabled = getDisabledTools(targetGuildId);

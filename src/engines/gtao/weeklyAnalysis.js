@@ -5,6 +5,7 @@ import { CONSTANTS } from '../../config/constants.js';
 import { groupDiscountsByStore } from '../../data/gtaoVehicleStores.js';
 import { translateTitle } from './systems/weekly/translate.js';
 import { createWeeklyRedditEmbed, buildWeeklyDetailSections } from '../../discord/embeds/weeklyRedditEmbed.js';
+import { makeEmbed, clampText, isHttpUrl } from '../../discord/embedLimits.js';
 
 /**
  * Monta o prompt de análise semanal para a IA. Diferente da versão
@@ -137,8 +138,8 @@ function getGunVanDiscountedWeapons(dailyData) {
 
 function truncateField(text, maxLen = 1000) {
   if (!text) return '*Nenhuma informação confirmada pela Yui para esta seção.*';
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 1).trim()}…`;
+  // clampText corta sem partir emoji nem par substituto (o slice antigo podia deixar meio emoji).
+  return clampText(text, maxLen);
 }
 
 /**
@@ -154,7 +155,18 @@ function truncateField(text, maxLen = 1000) {
  * Retorna um array de EmbedBuilder prontos para navegação por botão.
  */
 export function buildWeeklyCombinedEmbeds(weeklyData, dailyData = null) {
+  try {
+    return buildWeeklyPages(weeklyData ?? {}, dailyData);
+  } catch (err) {
+    // Rede de segurança (TG-18): erro de montagem nenhum pode impedir a publicação do semanal.
+    logger.warn(`[WeeklyAnalysis] Falha ao montar as páginas do semanal (${err?.name || 'Error'}): ${clampText(err?.message, 160)}. Publicando a versão mínima.`);
+    return [buildMinimalWeeklyEmbed(weeklyData)];
+  }
+}
+
+function buildWeeklyPages(weeklyData, dailyData) {
   const analysis = weeklyData.analysis || {};
+  let partsFailed = 0;
   const discountedWeapons = getGunVanDiscountedWeapons(dailyData);
 
   // A página 1 (resumo enxuto) só existe quando a fonte trouxe dados
@@ -168,19 +180,38 @@ export function buildWeeklyCombinedEmbeds(weeklyData, dailyData = null) {
   );
   const hasStructuredDiscounts = Boolean(weeklyData.descontos && weeklyData.descontos.length);
 
-  const pages = hasStructuredData
-    ? [createWeeklyRedditEmbed(weeklyData, { dailyData })]
-    : [];
+  // A página 1 usa setTitle/setURL por dentro (lançam com título acima de 256 ou link inválido): recebe
+  // uma cópia com o título limitado e o link validado, e uma falha tira só essa página (as demais seguem).
+  const pages = [];
+  if (hasStructuredData) {
+    try {
+      const forFirstPage = {
+        ...weeklyData,
+        title: typeof weeklyData.title === 'string' ? clampText(weeklyData.title, 200) : weeklyData.title,
+        url: isHttpUrl(weeklyData.url) ? weeklyData.url : null,
+      };
+      pages.push(createWeeklyRedditEmbed(forFirstPage, { dailyData }));
+    } catch (err) {
+      partsFailed++;
+      logger.warn(`[WeeklyAnalysis] Página de resumo ignorada (${err?.name || 'Error'}): ${clampText(err?.message, 160)}`);
+    }
+  }
 
-  const baseEmbed = () =>
-    new EmbedBuilder()
-      .setColor(CONSTANTS.COLORS.WEEKLY_EVENT)
-      .setAuthor({
-        name: `🚨 GTA Online — ${analysis.titulo || translateTitle(weeklyData.title) || 'Atualização Semanal'}`,
-        url: weeklyData.url,
-      })
-      .setThumbnail(weeklyData.thumbnailUrl || CONSTANTS.THUMBNAILS.GTA_LOGO)
-      .setTimestamp();
+  let headerTitle = 'Atualização Semanal';
+  try {
+    headerTitle = analysis.titulo || translateTitle(weeklyData.title) || 'Atualização Semanal';
+  } catch {
+    /* mantém o título padrão */
+  }
+
+  // Moldura comum das páginas de detalhe e da análise da IA. O makeEmbed corta o autor em 256 e
+  // valida os links (antes setAuthor lançava com título longo e derrubava a publicação inteira).
+  const pageFrame = {
+    color: CONSTANTS.COLORS.WEEKLY_EVENT,
+    author: { name: `🚨 GTA Online — ${headerTitle}`, url: weeklyData.url },
+    thumbnail: isHttpUrl(weeklyData.thumbnailUrl) ? weeklyData.thumbnailUrl : CONSTANTS.THUMBNAILS.GTA_LOGO,
+    timestamp: true,
+  };
 
   const storeEmoji = {
     'Legendary Motorsport': '🏎️',
@@ -268,19 +299,35 @@ export function buildWeeklyCombinedEmbeds(weeklyData, dailyData = null) {
 
   // Páginas de detalhe do resumo (descontos completos por loja, Van de Armas,
   // GTA+ e desafios) vêm logo depois da página 1 e antes da análise da IA.
-  const detailSections = hasStructuredData ? buildWeeklyDetailSections(weeklyData, { dailyData }) : [];
+  let detailSections = [];
+  if (hasStructuredData) {
+    try {
+      detailSections = buildWeeklyDetailSections(weeklyData, { dailyData });
+    } catch (err) {
+      partsFailed++;
+      logger.warn(`[WeeklyAnalysis] Páginas de detalhe ignoradas (${err?.name || 'Error'}): ${clampText(err?.message, 160)}`);
+    }
+  }
   const sections = [...detailSections, ...aiSections];
 
   const total = pages.length + sections.length;
   const startPage = pages.length; // congela a base antes do loop (pages cresce ao push)
   sections.forEach((s, i) => {
     const num = startPage + i + 1;
-    let embed = baseEmbed()
-      .setTitle(`${s.emoji} Página ${num}/${total} — ${s.title}`)
-      .addFields(...s.fields);
-    if (s.footerText) embed = embed.setFooter({ text: s.footerText });
-    pages.push(embed);
+    pages.push(
+      makeEmbed({
+        ...pageFrame,
+        title: `${s.emoji} Página ${num}/${total} — ${s.title}`,
+        fields: s.fields,
+        footer: s.footerText ? { text: s.footerText } : undefined,
+      })
+    );
   });
+
+  // Algo falhou e nada sobrou: publica a versão mínima (título e link) em vez do aviso de "sem dados".
+  if (pages.length === 0 && partsFailed > 0) {
+    pages.push(buildMinimalWeeklyEmbed(weeklyData));
+  }
 
   // Garante que sempre haja ao menos uma página navegável.
   if (pages.length === 0) {
@@ -294,6 +341,29 @@ export function buildWeeklyCombinedEmbeds(weeklyData, dailyData = null) {
   }
 
   return pages;
+}
+
+/**
+ * Versão mínima do semanal (título e link do post). É o último recurso quando a montagem das páginas
+ * completas falha, para o Weekly ainda ser publicado em vez de repetir o erro a cada ciclo (TG-18).
+ * Nunca lança.
+ */
+export function buildMinimalWeeklyEmbed(weeklyData) {
+  const w = weeklyData && typeof weeklyData === 'object' ? weeklyData : {};
+  let titulo = '';
+  try {
+    titulo = String(w.analysis?.titulo || translateTitle(w.title) || w.title || '');
+  } catch {
+    titulo = String(w.title ?? '');
+  }
+  return makeEmbed({
+    color: CONSTANTS.COLORS.WEEKLY_EVENT,
+    title: `🚨 GTA Online — ${clampText(titulo.trim() || 'Atualização Semanal', 200)}`,
+    url: w.url,
+    description: 'Não consegui montar o resumo completo desta semana. Abra o título para ver o post original.',
+    thumbnail: CONSTANTS.THUMBNAILS.GTA_LOGO,
+    timestamp: true,
+  });
 }
 
 /**

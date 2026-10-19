@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { setGlobalContext } from '../setGlobalContext.js';
 import { youtubeRepository } from '../../database/repositories/youtubeRepo.js';
 import { twitchRepository } from '../../database/repositories/twitchRepo.js';
+import { clampText } from '../embedLimits.js';
 
 export const pararSeguirCommand = {
   data: setGlobalContext(
@@ -30,6 +31,8 @@ export const pararSeguirCommand = {
   async execute(interaction) {
     const platform = interaction.options.getString('plataforma', true);
     const target = interaction.options.getString('alvo', true);
+    // Eco do que o usuário digitou: no máximo 100 caracteres (a opção aceita até 6000 e a mensagem, 2000).
+    const shownTarget = clampText(target, 100);
 
     if (!interaction.guildId) {
       return interaction.reply({
@@ -42,27 +45,28 @@ export const pararSeguirCommand = {
       const result = youtubeRepository.removeByGuildAndChannel(interaction.guildId, target);
       if (result.changes === 0) {
         return interaction.reply({
-          content: `⚠️ Este servidor não estava seguindo o canal YouTube **${target}**.`,
+          content: `⚠️ Este servidor não estava seguindo o canal YouTube **${shownTarget}**.`,
           ephemeral: true,
         });
       }
       return interaction.reply({
-        content: `✅ Parei de seguir o canal do YouTube **${target}** neste servidor.`,
+        content: `✅ Parei de seguir o canal do YouTube **${shownTarget}** neste servidor.`,
         ephemeral: true,
       });
     }
 
     if (platform === 'twitch') {
       const login = target.toLowerCase().replace(/^@/, '');
+      const shownLogin = clampText(login, 100);
       const result = twitchRepository.removeByGuildAndLogin(interaction.guildId, login);
       if (result.changes === 0) {
         return interaction.reply({
-          content: `⚠️ Este servidor não estava seguindo o streamer **${login}**.`,
+          content: `⚠️ Este servidor não estava seguindo o streamer **${shownLogin}**.`,
           ephemeral: true,
         });
       }
       return interaction.reply({
-        content: `✅ Parei de seguir o streamer **${login}** neste servidor.`,
+        content: `✅ Parei de seguir o streamer **${shownLogin}** neste servidor.`,
         ephemeral: true,
       });
     }

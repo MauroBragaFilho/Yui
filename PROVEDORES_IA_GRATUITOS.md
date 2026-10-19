@@ -2,6 +2,10 @@
 
 Este guia contém as opções de provedores de nuvem que oferecem endpoints compatíveis com o padrão OpenAI (`/v1/chat/completions`) com planos ou modelos **100% gratuitos**.
 
+> 💡 **Atalho recomendado:** o **Yui Gateway** já integra Groq, Gemini, Hugging Face, OpenRouter, Cloudflare, Together e Pollinations com failover e rodízio de chaves. Basta colocar as chaves de cada provedor no `.env` (`GROQ_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`...); ele é usado logo após o LM Studio. Veja [docs/content_pt/GATEWAY.md](docs/content_pt/GATEWAY.md) e [ENVIRONMENT.md](docs/content_pt/ENVIRONMENT.md). As configurações `AI_BASE_URL`/`AI_API_KEY` abaixo servem para apontar **um** provedor fixo.
+>
+> ⚠️ Os modelos Gemini 1.5 e 2.0 foram **aposentados**; use `gemini-flash-lite-latest` ou `gemini-flash-latest`.
+
 ---
 
 ## 1. Groq (Recomendado — Ultra Rápido)
@@ -34,12 +38,12 @@ Este guia contém as opções de provedores de nuvem que oferecem endpoints comp
 ## 3. Google AI Studio (Gemini com Endpoint OpenAI)
 - **Site:** [https://aistudio.google.com/](https://aistudio.google.com/)
 - **Custo:** Gratuito (com limite de requisições por minuto).
-- **Modelos Populares:** `gemini-1.5-flash`, `gemini-2.0-flash`.
+- **Modelos Populares:** `gemini-flash-lite-latest` (rápido), `gemini-flash-latest`.
 - **Configuração no `.env`:**
   ```env
   AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
   AI_API_KEY=AIzaSy_sua_chave_google_aqui
-  AI_MODEL=gemini-1.5-flash
+  AI_MODEL=gemini-flash-lite-latest
   ```
 
 ---

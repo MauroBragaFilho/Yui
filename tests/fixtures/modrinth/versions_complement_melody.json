@@ -1,0 +1,74 @@
+{
+ "request": "/v2/project/CVT4pFB2/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "complemento obrigatorio de: FancyMenu",
+ "reducedFrom": 4,
+ "body": [
+  {
+   "id": "lJlW5r8R",
+   "project_id": "CVT4pFB2",
+   "name": "[Forge] v1.0.3 MC 1.20.1-1.20.4",
+   "version_number": "1.0.3-1.20.1-1.20.4-forge",
+   "version_type": "release",
+   "date_published": "2024-02-15T10:46:09.435735Z",
+   "game_versions": [
+    "1.20.1",
+    "1.20.2",
+    "1.20.3",
+    "1.20.4"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/CVT4pFB2/versions/lJlW5r8R/melody_forge_1.0.3_MC_1.20.1-1.20.4.jar",
+     "filename": "melody_forge_1.0.3_MC_1.20.1-1.20.4.jar",
+     "primary": true,
+     "size": 37178
+    },
+    {
+     "url": "https://cdn.modrinth.com/data/CVT4pFB2/versions/lJlW5r8R/sources_melody_forge_1.0.3_MC_1.20.1-1.20.4.jar",
+     "filename": "sources_melody_forge_1.0.3_MC_1.20.1-1.20.4.jar",
+     "primary": false,
+     "size": 25370
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "t7thRplt",
+   "project_id": "CVT4pFB2",
+   "name": "[Forge] v1.0.2 MC 1.20.1-1.20.4",
+   "version_number": "1.0.2-1.20.1-1.20.4-forge",
+   "version_type": "release",
+   "date_published": "2024-01-24T11:21:10.628916Z",
+   "game_versions": [
+    "1.20.1",
+    "1.20.2",
+    "1.20.3",
+    "1.20.4"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/CVT4pFB2/versions/t7thRplt/melody_forge_1.0.2_MC_1.20.1-1.20.4.jar",
+     "filename": "melody_forge_1.0.2_MC_1.20.1-1.20.4.jar",
+     "primary": true,
+     "size": 37178
+    },
+    {
+     "url": "https://cdn.modrinth.com/data/CVT4pFB2/versions/t7thRplt/sources_melody_forge_1.0.2_MC_1.20.1-1.20.4.jar",
+     "filename": "sources_melody_forge_1.0.2_MC_1.20.1-1.20.4.jar",
+     "primary": false,
+     "size": 25371
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

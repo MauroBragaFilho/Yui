@@ -40,6 +40,11 @@ export async function initDatabase(name, schemaSql) {
     return instances.get(name).db;
   }
 
+  if (!staleTempsChecked) {
+    staleTempsChecked = true;
+    cleanStaleTempFiles(); // sobras de uma gravação interrompida por processo morto (TG-20)
+  }
+
   const sql = await getSqlJs();
   const dbPath = path.join(databaseDir, `${name}.db`);
 
@@ -64,15 +69,128 @@ export async function initDatabase(name, schemaSql) {
   return db;
 }
 
-export function saveDatabase(name) {
+// ── Gravação atômica (TG-20) ──────────────────────────────────────────────
+// O sql.js mantém o banco na memória e reescreve o arquivo INTEIRO a cada
+// escrita. Gravar direto em cima do .db deixava uma janela (cresce com o
+// tamanho do banco) em que um processo morto (reinício pelo supervisor, queda
+// de energia, disco cheio) deixava o arquivo truncado, e um .db truncado
+// derruba o bootstrap em laço. Agora o conteúdo vai para um arquivo temporário
+// NA MESMA PASTA (mesmo volume) e só então é renomeado sobre o .db: o rename
+// troca o arquivo de uma vez, então quem lê (ou quem sobe depois de uma morte)
+// vê o estado antigo completo ou o novo completo, nunca um pedaço.
+//   - O nome do temporário leva o PID (`core.db.1234.tmp`): dois processos na
+//     mesma pasta não pisam no temporário um do outro. `*.tmp` já está no .gitignore.
+//   - Não há fsync de propósito: ele protege de queda de energia, não de
+//     processo morto, e custaria dezenas de ms em CADA escrita.
+//   - Se o rename falhar de forma persistente (antivírus/indexador segurando o
+//     arquivo no Windows), grava direto como antes: melhor persistir sem
+//     atomicidade do que deixar o dado só na memória.
+const STALE_TMP_MAX_AGE_MS = 5 * 60 * 1000; // uma gravação leva milissegundos: temporário mais velho que isto é sobra de processo morto
+const TMP_FILE_RE = /\.db(?:\.\d+)?\.tmp$/;
+const RENAME_RETRY_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']); // trancos passageiros típicos do Windows
+const RENAME_RETRY_WAITS_MS = [5, 25];
+const FALLBACK_WARN_EVERY_MS = 10 * 60 * 1000;
+const lastFallbackWarn = new Map();
+let staleTempsChecked = false;
+
+function sleepSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    // sem SharedArrayBuffer/Atomics.wait: tenta de novo sem esperar
+  }
+}
+
+function removeQuietly(fsImpl, file) {
+  try {
+    fsImpl.unlinkSync(file);
+  } catch {
+    // já não existe, ou está em uso: a limpeza de temporários antigos resolve depois
+  }
+}
+
+/**
+ * Apaga sobras `*.db.<pid>.tmp` (ou `*.db.tmp`) mais velhas que `maxAgeMs`:
+ * ficam quando o processo morre entre a escrita do temporário e o rename. Só
+ * toca nesses temporários, nunca num .db, e o limite de idade evita apagar o
+ * temporário de outro processo que esteja gravando agora. Roda uma vez por
+ * processo, no primeiro initDatabase.
+ * @returns {string[]} nomes removidos
+ */
+export function cleanStaleTempFiles(dir = databaseDir, { fsImpl = fs, now = Date.now(), maxAgeMs = STALE_TMP_MAX_AGE_MS } = {}) {
+  const removed = [];
+  let names;
+  try {
+    names = fsImpl.readdirSync(dir);
+  } catch {
+    return removed;
+  }
+  for (const file of names) {
+    if (!TMP_FILE_RE.test(file)) continue;
+    const full = path.join(dir, file);
+    try {
+      const st = fsImpl.statSync(full);
+      if (!st.isFile() || now - st.mtimeMs < maxAgeMs) continue;
+      fsImpl.unlinkSync(full);
+      removed.push(file);
+    } catch {
+      // sumiu ou está em uso: fica para a próxima subida
+    }
+  }
+  if (removed.length) logger.info(`[Database] ${removed.length} arquivo(s) temporário(s) antigo(s) de gravação removido(s).`);
+  return removed;
+}
+
+/**
+ * Persiste o banco nomeado em disco, de forma atômica (veja o bloco acima).
+ * Nunca lança: falhas vão para o log e o retorno é `false`. Em qualquer falha
+ * ANTES do rename o .db anterior continua intacto.
+ *
+ * @param {string} name Nome lógico do banco
+ * @param {object} [options] Injeção para testes
+ * @param {object} [options.fsImpl] Substituto do módulo fs (writeFileSync, renameSync, unlinkSync)
+ * @param {Function} [options.sleep] Espera síncrona entre as novas tentativas de rename: (ms) => void
+ * @returns {boolean} true se o banco foi gravado
+ */
+export function saveDatabase(name, { fsImpl = fs, sleep = sleepSync } = {}) {
   const entry = instances.get(name);
-  if (!entry) return;
+  if (!entry) return false;
+  const tmp = `${entry.path}.${process.pid}.tmp`;
   try {
     const data = entry.db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(entry.path, buffer);
+    // Visão sobre o mesmo buffer (sem a cópia de Buffer.from(data)): com o temporário + rename, é isto que mantém o custo da gravação no nível de antes.
+    const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+    fsImpl.writeFileSync(tmp, buffer); // se falhar aqui (disco cheio...), o .db original nem foi tocado
+
+    let renameErr = null;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        fsImpl.renameSync(tmp, entry.path);
+        renameErr = null;
+        break;
+      } catch (err) {
+        renameErr = err;
+        if (RENAME_RETRY_CODES.has(err?.code) && attempt < RENAME_RETRY_WAITS_MS.length) {
+          sleep(RENAME_RETRY_WAITS_MS[attempt]);
+          continue;
+        }
+        break;
+      }
+    }
+    if (renameErr) {
+      const now = Date.now();
+      if (now - (lastFallbackWarn.get(name) ?? 0) >= FALLBACK_WARN_EVERY_MS) {
+        lastFallbackWarn.set(name, now);
+        logger.warn(`[Database] "${name}" — rename atômico falhou (${renameErr.code || renameErr.message}); gravando direto no arquivo.`);
+      }
+      fsImpl.writeFileSync(entry.path, buffer);
+      removeQuietly(fsImpl, tmp);
+    }
+    return true;
   } catch (err) {
+    removeQuietly(fsImpl, tmp);
     logger.error(`[Database] "${name}" — falha ao persistir banco em disco: ${err.message}`);
+    return false;
   }
 }
 

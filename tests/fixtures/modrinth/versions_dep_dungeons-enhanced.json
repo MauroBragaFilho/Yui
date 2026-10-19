@@ -1,0 +1,70 @@
+{
+ "request": "/v2/project/3IAJcJXa/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "required: Structure Gel API",
+ "reducedFrom": 6,
+ "body": [
+  {
+   "id": "9SSVYA1L",
+   "project_id": "3IAJcJXa",
+   "name": "Dungeons Enhanced - 1.20.1 - 5.4.3",
+   "version_number": "5.4.3",
+   "version_type": "release",
+   "date_published": "2025-10-05T11:29:00.081856Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/3IAJcJXa/versions/9SSVYA1L/dungeons_enhanced-1.20.1-5.4.3.jar",
+     "filename": "dungeons_enhanced-1.20.1-5.4.3.jar",
+     "primary": true,
+     "size": 1421681
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "T8TGycIQ",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  },
+  {
+   "id": "yg5IoymZ",
+   "project_id": "3IAJcJXa",
+   "name": "Dungeons Enhanced - 1.20.1 - 5.4.2",
+   "version_number": "5.4.2",
+   "version_type": "release",
+   "date_published": "2025-06-07T13:43:00.869943Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/3IAJcJXa/versions/yg5IoymZ/dungeons_enhanced-1.20.1-5.4.2.jar",
+     "filename": "dungeons_enhanced-1.20.1-5.4.2.jar",
+     "primary": true,
+     "size": 1422224
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "T8TGycIQ",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  }
+ ]
+}

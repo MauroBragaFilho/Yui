@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Platform, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError, type MemoryItem, type MemoryScope, type YuiClient } from '../api/client.ts';
-import { Badge, Button, Card } from '../components/ui.tsx';
+import { Badge, Button, Card, PageHeader } from '../components/ui.tsx';
+import { confirmAction } from '../components/confirm.ts';
 import { colors, radius, spacing } from '../theme.ts';
 
 type Props = { client: YuiClient };
@@ -14,19 +15,6 @@ const TYPE_LABEL: Record<string, string> = {
   summary: 'Resumo',
   note: 'Nota',
 };
-
-/** Confirmação que funciona na web (window.confirm) e no celular (Alert). */
-function confirmAction(title: string, message: string, onYes: () => void) {
-  if (Platform.OS === 'web') {
-    // eslint-disable-next-line no-alert
-    if (typeof window !== 'undefined' && window.confirm(`${title}\n\n${message}`)) onYes();
-    return;
-  }
-  Alert.alert(title, message, [
-    { text: 'Cancelar', style: 'cancel' },
-    { text: 'Apagar', style: 'destructive', onPress: onYes },
-  ]);
-}
 
 export function MemoryScreen({ client }: Props) {
   const [items, setItems] = useState<MemoryItem[]>([]);
@@ -93,10 +81,11 @@ export function MemoryScreen({ client }: Props) {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Memória</Text>
-        <Badge label={personal ? '🔒 Pessoal (permanente)' : '🕒 Temporária (30 dias)'} color={personal ? colors.success : colors.warning} />
-      </View>
+      <PageHeader
+        title="Memória"
+        subtitle="O que a Yui lembra sobre você"
+        right={<Badge label={personal ? 'Pessoal (permanente)' : 'Temporária (30 dias)'} color={personal ? colors.success : colors.warning} />}
+      />
 
       <FlatList
         testID="memory-list"
@@ -134,7 +123,7 @@ export function MemoryScreen({ client }: Props) {
         renderItem={({ item }) => (
           <Card style={styles.item}>
             <View style={{ flex: 1, gap: spacing.xs }}>
-              <Badge label={TYPE_LABEL[item.type] ?? item.type} color={colors.primary} />
+              <Badge label={TYPE_LABEL[item.type] ?? item.type} color={colors.accentText} />
               <Text selectable style={styles.content}>{item.content}</Text>
               <Text style={styles.meta}>
                 {new Date(item.updated_at).toLocaleDateString('pt-BR')}
@@ -151,32 +140,22 @@ export function MemoryScreen({ client }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
-  list: { padding: spacing.lg, gap: spacing.sm, width: '100%', maxWidth: 820, alignSelf: 'center' },
+  list: { padding: spacing.lg, gap: spacing.sm, width: '100%', maxWidth: 860, alignSelf: 'center' },
   label: { color: colors.muted, fontSize: 13 },
   input: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.inputBg,
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius.sm,
     color: colors.text,
     paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    fontSize: 15,
+    paddingVertical: 10,
+    fontSize: 14,
   },
   error: { color: colors.danger },
   empty: { color: colors.muted, textAlign: 'center', marginTop: spacing.xl },
   item: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  content: { color: colors.text, fontSize: 15, lineHeight: 21 },
+  content: { color: colors.text, fontSize: 14, lineHeight: 21 },
   meta: { color: colors.muted, fontSize: 12 },
   delBtn: { minHeight: 36, paddingHorizontal: spacing.md },
 });

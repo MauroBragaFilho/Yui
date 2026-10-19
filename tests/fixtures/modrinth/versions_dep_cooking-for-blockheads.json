@@ -1,0 +1,72 @@
+{
+ "request": "/v2/project/vJnhuDde/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "required: Balm",
+ "reducedFrom": 13,
+ "body": [
+  {
+   "id": "W87tG8sG",
+   "project_id": "vJnhuDde",
+   "name": "16.0.15+forge-1.20.1",
+   "version_number": "16.0.15+forge-1.20.1",
+   "version_type": "release",
+   "date_published": "2026-01-13T13:00:10.009233Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/vJnhuDde/versions/W87tG8sG/cookingforblockheads-forge-1.20.1-16.0.15.jar",
+     "filename": "cookingforblockheads-forge-1.20.1-16.0.15.jar",
+     "primary": true,
+     "size": 837809
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "MBAkmtvl",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  },
+  {
+   "id": "mYMjjpcD",
+   "project_id": "vJnhuDde",
+   "name": "16.0.14+forge-1.20.1",
+   "version_number": "16.0.14+forge-1.20.1",
+   "version_type": "release",
+   "date_published": "2025-09-08T11:10:25.500852Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/vJnhuDde/versions/mYMjjpcD/cookingforblockheads-forge-1.20.1-16.0.14.jar",
+     "filename": "cookingforblockheads-forge-1.20.1-16.0.14.jar",
+     "primary": true,
+     "size": 837805
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "MBAkmtvl",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  }
+ ]
+}

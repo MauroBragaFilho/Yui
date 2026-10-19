@@ -1,0 +1,7 @@
+{
+ "request": "/v2/project/Du77FavA/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "lista vazia: falso positivo da uniao do hit",
+ "reducedFrom": 0,
+ "body": []
+}

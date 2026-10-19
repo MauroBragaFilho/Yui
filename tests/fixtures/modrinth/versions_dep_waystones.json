@@ -1,0 +1,72 @@
+{
+ "request": "/v2/project/LOpKHB2A/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "required: Balm",
+ "reducedFrom": 25,
+ "body": [
+  {
+   "id": "Y0IgdaoP",
+   "project_id": "LOpKHB2A",
+   "name": "14.1.21+forge-1.20.1",
+   "version_number": "14.1.21+forge-1.20.1",
+   "version_type": "release",
+   "date_published": "2026-09-08T12:21:29.593014Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/LOpKHB2A/versions/Y0IgdaoP/waystones-forge-1.20.1-14.1.21.jar",
+     "filename": "waystones-forge-1.20.1-14.1.21.jar",
+     "primary": true,
+     "size": 536782
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "MBAkmtvl",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  },
+  {
+   "id": "sKoHLGbK",
+   "project_id": "LOpKHB2A",
+   "name": "14.1.20+forge-1.20.1",
+   "version_number": "14.1.20+forge-1.20.1",
+   "version_type": "release",
+   "date_published": "2026-02-26T17:34:53.368729Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/LOpKHB2A/versions/sKoHLGbK/waystones-forge-1.20.1-14.1.20.jar",
+     "filename": "waystones-forge-1.20.1-14.1.20.jar",
+     "primary": true,
+     "size": 533739
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "MBAkmtvl",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  }
+ ]
+}

@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.j
 import { setGlobalContext } from '../setGlobalContext.js';
 import { twitchRepository } from '../../database/repositories/twitchRepo.js';
 import { getTwitchUser } from '../../handlers/twitchApiHandler.js';
+import { clampText } from '../embedLimits.js';
 
 export const seguirTwitchCommand = {
   data: setGlobalContext(
@@ -51,7 +52,8 @@ export const seguirTwitchCommand = {
     }
     const login = input.toLowerCase().replace(/^@/, '');
 
-    if (!login) {
+    // Logins da Twitch têm no máximo 25 caracteres: texto maior nem existe, então não vale consultar a API.
+    if (!login || login.length > 25) {
       return interaction.editReply({
         content: '❌ Login da Twitch inválido.',
       });
@@ -62,13 +64,13 @@ export const seguirTwitchCommand = {
       twitchUser = await getTwitchUser(login);
     } catch (err) {
       return interaction.editReply({
-        content: `❌ Falha ao consultar a API da Twitch: ${err.message}`,
+        content: `❌ Falha ao consultar a API da Twitch: ${clampText(err?.message, 200)}`,
       });
     }
 
     if (!twitchUser) {
       return interaction.editReply({
-        content: `❌ Não encontrei o canal "${login}" na Twitch. Confira o login.`,
+        content: `❌ Não encontrei o canal "${clampText(login, 100)}" na Twitch. Confira o login.`,
       });
     }
 
@@ -82,14 +84,14 @@ export const seguirTwitchCommand = {
 
     if (result.changes === 0) {
       return interaction.editReply({
-        content: `⚠️ Este servidor **já segue** o streamer **${twitchUser.displayName}** neste canal (${discordChannel}).`,
+        content: `⚠️ Este servidor **já segue** o streamer **${clampText(twitchUser.displayName, 100)}** neste canal (${discordChannel}).`,
       });
     }
 
     return interaction.editReply({
       content:
         `✅ **Agora seguindo!**\n\n` +
-        `🎮 **Streamer:** ${twitchUser.displayName} (${twitchUser.login})\n` +
+        `🎮 **Streamer:** ${clampText(twitchUser.displayName, 100)} (${clampText(twitchUser.login, 40)})\n` +
         `📍 **Publicação:** ${discordChannel}\n` +
         `${mentionRole ? `👥 **Menção:** <@&${mentionRole.id}>` : ''}` +
         `🔴 Você será avisado quando ele(a) entrar ao vivo.`,

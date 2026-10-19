@@ -9,9 +9,19 @@
  */
 export function createMessageAdapter(message, { stringArgs = [], channelArg = null } = {}) {
   let workingMessage = null;
+  const author = message.author ?? null;
+  const channel = message.channel ?? null;
 
   return {
     guildId: message.guild?.id ?? null,
+    // QUEM pediu e ONDE, como numa interaction: o /yui (ask.js) decide a conversa sensível (o dono em DM ou em canal privado),
+    // a trava de "uma pesquisa por pessoa" e o limite de buscas por usuário por estes campos. `authorId` segue valendo para o
+    // limite de uma resposta por vez. `channel` serve ao plano B da entrega (mensagem nova no canal).
+    user: author,
+    authorId: author?.id ?? null,
+    guild: message.guild ?? null,
+    channelId: message.channelId ?? channel?.id ?? null,
+    channel,
     replied: false,
     deferred: false,
 

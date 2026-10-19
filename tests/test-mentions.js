@@ -1,7 +1,7 @@
 // Testes da resolução de menções (@nome -> <@ID>) sem Discord real.
 // Execução: npm run test:mentions
 import assert from 'assert';
-import { resolveMentions, neutralizeMassMentions, SAFE_ALLOWED_MENTIONS } from '../src/discord/mentions.js';
+import { resolveMentions, neutralizeMassMentions, SAFE_ALLOWED_MENTIONS, mentionFirstUserOnly } from '../src/discord/mentions.js';
 
 let passed = 0;
 const test = async (name, fn) => { await fn(); passed++; console.log(`  ✔ ${name}`); };
@@ -95,6 +95,16 @@ await test('allowedMentions só permite usuários (cargos e everyone bloqueados)
 await test('não marca ninguém quando o servidor tem usuário com o mesmo nome "everyone"', async () => {
   const g = makeGuild([member('7', 'everyone')]);
   assert.ok(!(await resolveMentions('oi @everyone', g)).includes('<@7>'));
+});
+
+await test('mentionFirstUserOnly: só o PRIMEIRO usuário marcado (o autor do pedido) pode ser notificado; @everyone, cargo e outros ids nunca', () => {
+  assert.deepEqual(mentionFirstUserOnly('🎵 <@123456789012345678> Tocando **@everyone** - <@&987654321098765432> <@999999999999999999>'), { parse: [], users: ['123456789012345678'] });
+  assert.deepEqual(mentionFirstUserOnly('<@!123456789012345678> oi'), { parse: [], users: ['123456789012345678'] }, 'forma antiga com apelido');
+  assert.deepEqual(mentionFirstUserOnly('sem marcação nenhuma @everyone @here'), { parse: [], users: [] });
+  assert.deepEqual(mentionFirstUserOnly('Tocando **x** - <@111111111111111111>'), { parse: [], users: ['111111111111111111'] }, 'a única marcação');
+  assert.deepEqual(mentionFirstUserOnly('<@12>'), { parse: [], users: [] }, 'id curto demais não é um snowflake');
+  for (const v of [null, undefined, 42, {}]) assert.deepEqual(mentionFirstUserOnly(v), { parse: [], users: [] });
+  assert.equal(mentionFirstUserOnly('<@123456789012345678>').parse.length, 0, 'nenhum parse automático: cargos e everyone não passam');
 });
 
 console.log(`\n${passed} testes OK`);

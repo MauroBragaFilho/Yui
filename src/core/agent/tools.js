@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
+import { safeEnv } from '../dev/terminal.js';
 import { registerToolPolicy, clearToolPolicies, ROLES, TOOL_ACCESS } from '../permissions.js';
 
 /**
@@ -50,7 +51,7 @@ export function validateArgs(tool, rawArgs) {
   const args = {};
   const src = rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs) ? rawArgs : {};
   for (const key of Object.keys(src)) {
-    if (!(key in tool.params)) throw new Error(`argumento desconhecido: ${key}`);
+    if (!(key in tool.params) && !tool.lenient) throw new Error(`argumento desconhecido: ${key}`);
   }
   for (const [key, spec] of Object.entries(tool.params)) {
     let v = src[key];
@@ -65,6 +66,7 @@ export function validateArgs(tool, rawArgs) {
       v = String(v).trim();
       if (v.length > (spec.max || 200)) throw new Error(`${key} muito longo`);
     }
+    if (spec.enum && !spec.enum.includes(v) && spec.enum.includes(v.toLowerCase())) v = v.toLowerCase();
     if (spec.enum && !spec.enum.includes(v)) throw new Error(`${key} deve ser um de: ${spec.enum.join(', ')}`);
     args[key] = v;
   }
@@ -130,6 +132,86 @@ function walk(root, needle, { maxDepth = 5, maxEntries = 8000, maxResults = 20 }
   return results;
 }
 
+// ───────────────────────── Informações do sistema ─────────────────────────
+
+const SYSTEM_SECTIONS = ['all', 'cpu', 'memory', 'disk', 'uptime'];
+
+function cpuTimes() {
+  let idle = 0;
+  let total = 0;
+  for (const c of os.cpus()) {
+    for (const v of Object.values(c.times)) total += v;
+    idle += c.times.idle;
+  }
+  return { idle, total };
+}
+
+/** Uso de CPU medido durante ~300 ms (os.loadavg não funciona no Windows). */
+async function cpuUsagePercent() {
+  const a = cpuTimes();
+  await new Promise((r) => setTimeout(r, 300));
+  const b = cpuTimes();
+  const total = b.total - a.total;
+  return total > 0 ? Math.round((1 - (b.idle - a.idle) / total) * 100) : 0;
+}
+
+function diskLines() {
+  const roots = new Set([path.parse(process.cwd()).root]);
+  for (const r of parseRoots(process.env.YUI_FILE_ROOTS)) roots.add(path.parse(r).root);
+  const gb = (b) => (b / 1024 ** 3).toFixed(0);
+  const lines = [];
+  for (const root of roots) {
+    try {
+      const s = fs.statfsSync(root);
+      const total = s.blocks * s.bsize;
+      const free = s.bavail * s.bsize;
+      lines.push(`Disco ${root}: ${gb(total - free)} GB usados de ${gb(total)} GB (${gb(free)} GB livres)`);
+    } catch { /* unidade indisponível */ }
+  }
+  return lines;
+}
+
+export async function systemInfo(section = 'all') {
+  const gb = (b) => (b / 1024 ** 3).toFixed(1);
+  const want = (s) => section === 'all' || section === s;
+  const lines = [];
+  if (section === 'all') lines.push(`SO: ${os.type()} ${os.release()} (${os.arch()}) — ${os.hostname()}`);
+  if (want('cpu')) lines.push(`CPU: ${os.cpus()[0]?.model?.trim() || 'desconhecida'} x${os.cpus().length}, uso agora: ${await cpuUsagePercent()}%`);
+  if (want('memory')) {
+    const used = os.totalmem() - os.freemem();
+    lines.push(`RAM: ${gb(used)} GB usados de ${gb(os.totalmem())} GB (${Math.round((used / os.totalmem()) * 100)}%)`);
+  }
+  if (want('disk')) lines.push(...diskLines());
+  if (want('uptime')) lines.push(`Ligado há: ${(os.uptime() / 3600).toFixed(1)} h`);
+  return lines.join('\n');
+}
+
+// ───────────────────────── Comandos cadastrados ─────────────────────────
+
+/** "git -C D:/x status -s" -> ["git","-C","D:/x","status","-s"] (aspas duplas agrupam; sem shell). */
+export function splitCommand(line) {
+  return (String(line).match(/"[^"]*"|\S+/g) || []).map((p) => (p.startsWith('"') && p.endsWith('"') && p.length >= 2 ? p.slice(1, -1) : p));
+}
+
+/** Roda executável + argumentos FIXOS do .env, sem shell, com tempo limite e saída curta. */
+function runAllowed(exe, args) {
+  return new Promise((resolve, reject) => {
+    if (!exe) return reject(new Error('comando vazio'));
+    const child = spawn(exe, args, { shell: false, windowsHide: true, env: safeEnv(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    const add = (b) => { if (out.length < 4000) out += b.toString(); };
+    child.stdout.on('data', add);
+    child.stderr.on('data', add);
+    const timer = setTimeout(() => { child.kill(); }, 25_000);
+    child.once('error', (e) => { clearTimeout(timer); reject(new Error(e.code === 'ENOENT' ? `executável não encontrado: ${exe}` : e.message)); });
+    child.once('close', (code, signal) => {
+      clearTimeout(timer);
+      const text = out.trim().slice(0, 3500) || '(sem saída)';
+      resolve(signal ? `Encerrado por tempo limite.\n${text}` : `Código de saída ${code}.\n${text}`);
+    });
+  });
+}
+
 // ───────────────────────── Ferramentas embutidas ─────────────────────────
 
 /** Registra as ferramentas do PC (apenas se YUI_TOOLS_PC_ENABLED=true). */
@@ -138,17 +220,41 @@ export function registerBuiltinTools() {
 
   registerTool({
     name: 'system.info',
-    description: 'Mostra informações do computador (SO, CPU, memória, uptime).',
+    description: 'Mostra o estado do computador: SO, CPU (modelo e uso agora), memória, disco e uptime. Use "section" para só uma parte.',
+    params: { section: { type: 'string', max: 20, enum: SYSTEM_SECTIONS } },
+    // Modelos costumam mandar argumentos próprios ("cpu", "memory"...): são ignorados, não viram erro.
+    lenient: true,
+    minRole: ROLES.OWNER,
+    access: TOOL_ACCESS.READ,
+    async run({ section = 'all' } = {}) {
+      return systemInfo(section);
+    },
+  });
+
+  registerTool({
+    name: 'commands.list',
+    description: 'Lista os comandos do computador que o dono cadastrou (YUI_COMMANDS).',
     minRole: ROLES.OWNER,
     access: TOOL_ACCESS.READ,
     async run() {
-      const gb = (b) => (b / 1024 ** 3).toFixed(1);
-      return [
-        `SO: ${os.type()} ${os.release()} (${os.arch()})`,
-        `CPU: ${os.cpus()[0]?.model || 'desconhecida'} x${os.cpus().length}`,
-        `RAM: ${gb(os.totalmem() - os.freemem())} GB usados de ${gb(os.totalmem())} GB`,
-        `Uptime: ${(os.uptime() / 3600).toFixed(1)} h`,
-      ].join('\n');
+      const cmds = parseAllowlist(process.env.YUI_COMMANDS);
+      return cmds.size ? [...cmds].map(([n, c]) => `${n}: ${c}`).join('\n') : 'Nenhum comando cadastrado (YUI_COMMANDS).';
+    },
+  });
+
+  registerTool({
+    name: 'commands.run',
+    description: 'Executa um comando do computador pelo NOME, entre os cadastrados pelo dono (YUI_COMMANDS). Não aceita argumentos livres.',
+    params: { name: { type: 'string', required: true, max: 50 } },
+    minRole: ROLES.OWNER,
+    access: TOOL_ACCESS.EXECUTE,
+    confirm: true,
+    async run({ name }) {
+      const cmds = parseAllowlist(process.env.YUI_COMMANDS);
+      const line = cmds.get(name.toLowerCase());
+      if (!line) throw new Error(`comando "${name}" não está cadastrado. Disponíveis: ${[...cmds.keys()].join(', ') || 'nenhum'}`);
+      const [exe, ...args] = splitCommand(line);
+      return runAllowed(exe, args);
     },
   });
 

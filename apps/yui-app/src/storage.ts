@@ -15,7 +15,12 @@ const KEY_HISTORY = 'yui.history.v1';
 
 export interface Settings {
   baseUrl: string;
+  /** Token fixo OU token de sessão (login por usuário e senha). */
   token: string;
+  /** 'session' = veio do login por senha (expira); 'token' = token fixo. */
+  via?: 'session' | 'token';
+  /** Validade da sessão (epoch em ms). Só para via='session'. */
+  expiresAt?: number;
 }
 
 export async function loadSettings(): Promise<Settings | null> {
@@ -24,7 +29,12 @@ export async function loadSettings(): Promise<Settings | null> {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (typeof data?.baseUrl === 'string' && typeof data?.token === 'string' && data.baseUrl && data.token) {
-      return { baseUrl: data.baseUrl, token: data.token };
+      return {
+        baseUrl: data.baseUrl,
+        token: data.token,
+        via: data.via === 'session' ? 'session' : 'token',
+        expiresAt: typeof data.expiresAt === 'number' ? data.expiresAt : undefined,
+      };
     }
   } catch {
     /* ignora */

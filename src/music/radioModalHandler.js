@@ -16,6 +16,7 @@ import { resolveInput } from './radioProviders.js';
 import { leaveRadioCall, radioAmbiguousSessions, scheduleAmbiguousAutoSelect } from './radioManager.js';
 import { setLoopMode, toggleShuffle, prevTrack, skipToTrack } from './radioDatabase.js';
 import { prefetchNextTrack } from './radioPrefetcher.js';
+import { clampText } from '../discord/embedLimits.js';
 
 function isUserInRadioChannel(interaction, session) {
     if (!session) return false;
@@ -222,7 +223,7 @@ async function handleRadioModal(interaction, client) {
     const resolved = await resolveInput(query, guildId);
 
     if (resolved.type === 'not_found') {
-        await interaction.editReply({ content: `❌ Não encontrei **"${query}"**.` });
+        await interaction.editReply({ content: `❌ Não encontrei **"${clampText(query, 100)}"**.` });
         setTimeout(() => { interaction.deleteReply().catch(() => {}); }, 5000);
         return true;
     }

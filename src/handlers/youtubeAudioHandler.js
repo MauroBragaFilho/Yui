@@ -1,35 +1,62 @@
-import { exec, spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import config from '../config.js';
+import { logger } from '../utils/logger.js';
 import { getYtdlpPath, getFfmpegPath } from '../utils/binaries.js';
+import {
+    MediaError,
+    MEDIA_MESSAGES,
+    normalizeMediaUrl,
+    buildYtdlpAudioFlags as buildAudioArgs,
+    buildYtdlpVideoFlags as buildVideoArgs,
+    readDownloadLimits,
+    readMaxConcurrentDownloads,
+    createRequestDir,
+    removeRequestDir,
+    sweepStaleRequestDirs,
+    safeFileStem,
+    runTool,
+    isMissingBinary,
+    resolveExistingPath,
+    resolveBinaryPath,
+} from '../utils/mediaUrls.js';
+import {
+    RADIO_SOURCES,
+    shouldFitForUpload,
+    audioUploadMaxMinutes,
+    prepareAudioForDelivery,
+    describePrepared,
+} from '../utils/audioFit.js';
+import { getUploadLimitBytes } from '../utils/uploadLimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// As pastas só são criadas sob demanda (uma subpasta única por pedido), nunca ao importar o módulo.
 const TEMP_AUDIO_DIR = path.join(__dirname, '../data/temp_audio');
 const TEMP_VIDEO_DIR = path.join(__dirname, '../data/temp_videos');
-if (!fs.existsSync(TEMP_AUDIO_DIR)) fs.mkdirSync(TEMP_AUDIO_DIR, { recursive: true });
-if (!fs.existsSync(TEMP_VIDEO_DIR)) fs.mkdirSync(TEMP_VIDEO_DIR, { recursive: true });
 
-const YOUTUBE_VIDEO_REGEX = /^(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|shorts\/)?([a-zA-Z0-9_-]{11,})(?:\S+)?$/;
-const YOUTUBE_MUSIC_REGEX = /^(?:https?:\/\/)?(?:www\.)?music\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11,})(?:\S+)?$/;
-const YOUTUBE_PLAYLIST_REGEX = /(?:youtube\.com|youtu\.be)\/playlist\?list=|youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11,}&list=([a-zA-Z0-9_-]+)|music\.youtube\.com\/playlist\?list=|music\.youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11,}&list=/;
-const YOUTUBE_SHORTS_REGEX = /^(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/shorts\/([a-zA-Z0-9_-]{11,})(?:\S+)?$/;
-const INSTAGRAM_REGEX = /^(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:reel|reels)\/([a-zA-Z0-9_-]+)/;
-const TIKTOK_REGEX = /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)?tiktok\.com\/.+/;
+// Legado: mantidas só para o export default. NÃO são usadas para montar comandos
+// (a validação real é feita por src/utils/mediaUrls.js).
+const YOUTUBE_SHORTS_REGEX = /^https?:\/\/(?:www\.|m\.)?youtube\.com\/shorts\/([A-Za-z0-9_-]{11})(?:[/?#][A-Za-z0-9_\-.~%&=+/?#]*)?$/;
+const INSTAGRAM_REGEX = /^https?:\/\/(?:www\.)?instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)\/?(?:[?#][A-Za-z0-9_\-.~%&=+/?#]*)?$/;
+const TIKTOK_REGEX = /^https?:\/\/(?:www\.|m\.|vm\.|vt\.)?tiktok\.com\/[A-Za-z0-9._~@/-]+\/?(?:\?[A-Za-z0-9_\-.~&=+/]*)?$/;
+
+// Origens que não sofrem o limite de duração (o Modo Rádio toca sets e faixas longas de propósito).
+// A mesma lista decide quem NÃO tem o MP3 recomprimido para caber no upload (audioFit.js).
+const LIMIT_EXEMPT_SOURCES = new Set(RADIO_SOURCES);
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const MAX_BUFFER = 1024 * 1024 * 10;
 
 const activeUserProcesses = new Set();
 let isCompressing = false;
 const compressionQueue = [];
 const pendingVideoFiles = new Map();
+const lastSweepAt = new Map();
 
-function getYtdlpCmd() {
-    return `"${getYtdlpPath()}"`;
-}
-
-function logMediaAction(type, platform, url, context, status, extra = '') {
+function describeContext(context) {
     let source = 'Desconhecido';
     let userStr = 'N/A';
     let localStr = 'DM';
@@ -48,30 +75,23 @@ function logMediaAction(type, platform, url, context, status, extra = '') {
             localStr = context.guildName;
         }
     }
+    return { source, userStr, localStr };
+}
+
+// A URL registrada é sempre a canônica (nunca o texto cru do usuário).
+function logMediaAction(type, platform, url, context, status, extra = '') {
+    const { source, userStr, localStr } = describeContext(context);
     const platformStr = platform ? ` [${platform.toUpperCase()}]` : '';
     const extraStr = extra ? ` | ${extra}` : '';
-    console.log(`[LOG] ${type} (${source})${platformStr} | Usuário: ${userStr} | Local: ${localStr} | URL: ${url} | Status: ${status}${extraStr}`);
+    const line = `[LOG] ${type} (${source})${platformStr} | Usuário: ${userStr} | Local: ${localStr} | URL: ${url || 'n/a'} | Status: ${status}${extraStr}`;
+    if (/^erro/i.test(status)) logger.warn(line);
+    else logger.info(line);
 }
 
 function logCompressionAction(context, status, extra = '') {
-    let userStr = 'N/A';
-    let localStr = 'DM';
-    if (context) {
-        if (context.user) {
-            userStr = `${context.user.tag} (${context.user.id})`;
-        } else if (context.userTag && context.userId) {
-            userStr = `${context.userTag} (${context.userId})`;
-        } else if (context.userId) {
-            userStr = `ID: ${context.userId}`;
-        }
-        if (context.guild) {
-            localStr = context.guild.name;
-        } else if (context.guildName) {
-            localStr = context.guildName;
-        }
-    }
+    const { userStr, localStr } = describeContext(context);
     const extraStr = extra ? ` | ${extra}` : '';
-    console.log(`[LOG] Compressão (Botão) | Usuário: ${userStr} | Local: ${localStr} | Status: ${status}${extraStr}`);
+    logger.info(`[LOG] Compressão (Botão) | Usuário: ${userStr} | Local: ${localStr} | Status: ${status}${extraStr}`);
 }
 
 function formatVideoSuccessMessage(videoData, showDetails = false) {
@@ -105,7 +125,8 @@ function formatVideoSuccessMessage(videoData, showDetails = false) {
 }
 
 function sanitizeFilenameForDiscord(filename) {
-    let sanitized = filename.replace(/[<>:"/\\|?*`!,]/g, '');
+    let sanitized = String(filename ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ');
+    sanitized = sanitized.replace(/[<>:"/\\|?*`!,]/g, '');
     sanitized = sanitized.replace(/\s+/g, ' ').trim();
     const MAX_FILENAME_LENGTH = 100;
     if (sanitized.length > MAX_FILENAME_LENGTH) {
@@ -115,47 +136,187 @@ function sanitizeFilenameForDiscord(filename) {
     return sanitized;
 }
 
+/** Plataforma do link ('youtube', 'youtube_music', 'youtube_shorts', 'instagram', 'tiktok') ou null. */
 function detectPlatform(url) {
-    if (YOUTUBE_SHORTS_REGEX.test(url)) return 'youtube_shorts';
-    if (YOUTUBE_MUSIC_REGEX.test(url)) return 'youtube_music';
-    if (YOUTUBE_VIDEO_REGEX.test(url)) return 'youtube';
-    if (INSTAGRAM_REGEX.test(url)) return 'instagram';
-    if (TIKTOK_REGEX.test(url)) return 'tiktok';
+    const info = normalizeMediaUrl(url);
+    return info ? info.platform : null;
+}
+
+// ---------------------------------------------------------------------------
+// Execução do yt-dlp (sem shell)
+// ---------------------------------------------------------------------------
+
+// `deps` existe para testes: { execFileImpl, killImpl, ytdlpPath, ffmpegPath, cookiesPath, extraFlags, limits, tempRoot }.
+function resolveRuntime(deps = {}) {
+    const cookies = deps.cookiesPath !== undefined ? deps.cookiesPath : config.ytdlpCookiesPath;
+    const ffmpeg = deps.ffmpegPath !== undefined ? deps.ffmpegPath : getFfmpegPath();
+    // O yt-dlp roda com cwd na subpasta do pedido: caminhos relativos do .env (cookies, ffmpeg, yt-dlp)
+    // precisam virar absolutos AQUI, a partir do diretório de trabalho da Yui.
+    return {
+        execFileImpl: deps.execFileImpl || execFile,
+        killImpl: deps.killImpl,
+        ytdlpPath: resolveBinaryPath(deps.ytdlpPath || getYtdlpPath()),
+        cookiesPath: resolveExistingPath(cookies),
+        ffmpegPath: resolveExistingPath(ffmpeg),
+        extraFlags: deps.extraFlags || config.ytdlpExtraFlags || [],
+        limits: { ...readDownloadLimits(), ...(deps.limits || {}) },
+    };
+}
+
+function effectiveLimits(limits, context) {
+    if (context && (context.skipLimits === true || LIMIT_EXEMPT_SOURCES.has(context.source))) {
+        return { ...limits, maxMinutes: 0 };
+    }
+    return limits;
+}
+
+// Limites de um download de ÁUDIO. Quando o MP3 vai ser enviado ao Discord (nunca no Modo Rádio), a duração também
+// respeita o que cabe no limite de upload a 96 kbps, o último degrau da recompressão (cerca de 13 minutos nos 10 MB):
+// o yt-dlp recusa o que não caberia, em vez de baixar tudo e falhar no envio. Com YUI_AUDIO_REENCODE=false não há
+// garantia de que caiba, então não há essa checagem prévia (vale a checagem de tamanho depois do download).
+function audioLimits(limits, context, env = process.env) {
+    const base = effectiveLimits(limits, context);
+    if (!shouldFitForUpload(context)) return base;
+    const cap = audioUploadMaxMinutes(getUploadLimitBytes(context?.guild, env), env);
+    if (cap <= 0) return base;
+    return { ...base, maxMinutes: base.maxMinutes > 0 ? Math.min(base.maxMinutes, cap) : cap };
+}
+
+function flagOptions(runtime, limits, info) {
+    return {
+        playlistOnly: info.playlistOnly,
+        maxMinutes: limits.maxMinutes,
+        maxFilesizeMB: limits.maxFilesizeMB,
+        cookiesPath: runtime.cookiesPath,
+        extraFlags: runtime.extraFlags,
+        ffmpegPath: runtime.ffmpegPath,
+    };
+}
+
+/** Argumentos do yt-dlp para áudio MP3 (ARRAY, sem aspas). `url` precisa ser a URL canônica. */
+function buildYtdlpAudioFlags(outputPath, url, options = {}) {
+    const runtime = resolveRuntime();
+    return buildAudioArgs(outputPath, url, { ...flagOptions(runtime, runtime.limits, { playlistOnly: false }), ...options });
+}
+
+/** Argumentos do yt-dlp para vídeo (ARRAY, sem aspas). `url` precisa ser a URL canônica. */
+function buildYtdlpVideoFlags(outputPath, url, options = {}) {
+    const runtime = resolveRuntime();
+    return buildVideoArgs(outputPath, url, { ...flagOptions(runtime, runtime.limits, { playlistOnly: false }), ...options });
+}
+
+function sweepIfDue(root) {
+    const now = Date.now();
+    if (now - (lastSweepAt.get(root) || 0) < SWEEP_INTERVAL_MS) return;
+    lastSweepAt.set(root, now);
+    try {
+        const removed = sweepStaleRequestDirs(root);
+        if (removed > 0) logger.info(`[MediaHandler] Faxina: ${removed} pasta(s) temporária(s) antiga(s) removida(s).`);
+    } catch (err) {
+        logger.warn(`[MediaHandler] Faxina de temporários falhou: ${err.message}`);
+    }
+}
+
+function lastLine(text) {
+    const lines = String(text || '').trim().split(/\r?\n/);
+    return (lines[lines.length - 1] || '').slice(0, 300);
+}
+
+const MB = 1024 * 1024;
+
+function fileTooLargeMessage(limits) {
+    return limits.maxFilesizeMB > 0
+        ? `Esse conteúdo passa do limite de ${limits.maxFilesizeMB} MB para download.`
+        : MEDIA_MESSAGES.FILE_TOO_LARGE;
+}
+
+function tooLongMessage(limits) {
+    return limits.maxMinutes > 0
+        ? `Esse conteúdo passa do limite de ${limits.maxMinutes} minutos (ou é uma transmissão ao vivo).`
+        : MEDIA_MESSAGES.MEDIA_TOO_LONG;
+}
+
+// Primeira linha de stdout que é um objeto JSON (o `--print-json` do yt-dlp imprime uma linha por item).
+function findJsonObject(stdout) {
+    for (const line of String(stdout || '').split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) continue;
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && typeof parsed === 'object') return parsed;
+        } catch { /* tenta a próxima linha */ }
+    }
     return null;
 }
 
-function buildYtdlpAudioFlags(outputPath, url) {
-    const flags = ['--no-playlist', '-x', '--audio-format', 'mp3'];
-    const cookiesPath = config.ytdlpCookiesPath;
-    if (cookiesPath && fs.existsSync(cookiesPath)) {
-        flags.push('--cookies', `"${cookiesPath}"`);
+// Tamanho (bytes) que o yt-dlp informou para o item escolhido; 0 = desconhecido.
+function knownSizeBytes(meta) {
+    const sizeOf = (entry) => {
+        const n = Number(entry && (entry.filesize ?? entry.filesize_approx));
+        return Number.isFinite(n) && n > 0 ? n : 0;
+    };
+    const direct = sizeOf(meta);
+    if (direct) return direct;
+    if (Array.isArray(meta.requested_formats)) {
+        return meta.requested_formats.reduce((sum, format) => sum + sizeOf(format), 0);
     }
-    flags.push(...config.ytdlpExtraFlags);
-    const ffmpegPath = getFfmpegPath();
-    if (fs.existsSync(ffmpegPath)) {
-        flags.push('--ffmpeg-location', `"${ffmpegPath}"`);
-    }
-    flags.push('-o', `"${outputPath}"`, '--print-json', `"${url}"`);
-    return flags.join(' ');
+    return 0;
 }
 
-function buildYtdlpVideoFlags(outputPath, url) {
-    const flags = ['--no-playlist', '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'];
-    const cookiesPath = config.ytdlpCookiesPath;
-    if (cookiesPath && fs.existsSync(cookiesPath)) {
-        flags.push('--cookies', `"${cookiesPath}"`);
+// O yt-dlp sai com código 0 e SEM baixar nada em dois casos silenciosos (com `--print-json` ele
+// roda em modo quieto, sem nenhuma mensagem), e a diferença está no JSON da saída:
+//  - o --match-filters rejeitou o conteúdo (duração acima do limite ou transmissão ao vivo): SEM JSON;
+//  - o arquivo passa do --max-filesize: o JSON do item é impresso (antes do download), mas nenhum arquivo aparece.
+function missingOutputError(run, limits) {
+    const meta = findJsonObject(run.stdout);
+    if (meta && limits.maxFilesizeMB > 0) {
+        const size = knownSizeBytes(meta);
+        if (size === 0 || size > limits.maxFilesizeMB * MB) {
+            return new MediaError('FILE_TOO_LARGE', fileTooLargeMessage(limits),
+                { detail: `JSON sem arquivo com limite de tamanho ativo (tamanho informado: ${size ? `${(size / MB).toFixed(1)} MB` : 'desconhecido'})` });
+        }
     }
-    flags.push(...config.ytdlpExtraFlags);
-    const ffmpegPath = getFfmpegPath();
-    if (fs.existsSync(ffmpegPath)) {
-        flags.push('--ffmpeg-location', `"${ffmpegPath}"`);
+    if (!meta && limits.maxMinutes > 0) {
+        return new MediaError('MEDIA_TOO_LONG', tooLongMessage(limits),
+            { detail: 'saída vazia com filtro de duração ativo' });
     }
-    flags.push('-o', `"${outputPath}"`, '--print-json', `"${url}"`);
-    return flags.join(' ');
+    return new MediaError('OUTPUT_NOT_FOUND', MEDIA_MESSAGES.OUTPUT_NOT_FOUND);
+}
+
+// Converte a saída/erro do yt-dlp num MediaError amigável (o detalhe técnico fica em `.detail`).
+function classifyYtdlpFailure(run, kind, limits) {
+    const text = `${run.stderr}\n${run.stdout}`;
+    const detail = lastLine(run.stderr) || (run.error && run.error.message) || '';
+    const make = (code, message) => new MediaError(code, message, { detail, cause: run.error || undefined });
+
+    if (isMissingBinary(run)) return make('YTDLP_NOT_INSTALLED', MEDIA_MESSAGES.YTDLP_NOT_INSTALLED);
+    if (run.timedOut) return make('DOWNLOAD_TIMEOUT', MEDIA_MESSAGES.DOWNLOAD_TIMEOUT);
+    if (/larger than max-filesize/i.test(text)) return make('FILE_TOO_LARGE', fileTooLargeMessage(limits));
+    if (/does not pass filter/i.test(text)) return make('MEDIA_TOO_LONG', tooLongMessage(limits));
+    if (/Private video|Video unavailable|This video is (?:private|unavailable|not available)|has been removed/i.test(text)) {
+        return make('VIDEO_PRIVATE', MEDIA_MESSAGES.VIDEO_PRIVATE);
+    }
+    if (/age-restricted|confirm your age/i.test(text)) return make('VIDEO_AGE_RESTRICTED', MEDIA_MESSAGES.VIDEO_AGE_RESTRICTED);
+    if (/not a bot/i.test(text)) return make('YOUTUBE_BOT_CHECK', MEDIA_MESSAGES.YOUTUBE_BOT_CHECK);
+    if (kind === 'audio' && /no appropriate format|Requested format is not available/i.test(text)) {
+        return make('FORMAT_UNAVAILABLE', MEDIA_MESSAGES.FORMAT_UNAVAILABLE);
+    }
+    return kind === 'video'
+        ? make('YTDLP_ERROR', MEDIA_MESSAGES.YTDLP_VIDEO_ERROR)
+        : make('YTDLP_ERROR', MEDIA_MESSAGES.YTDLP_ERROR);
+}
+
+// Ocupado = o usuário já tem um download em andamento OU o teto global de downloads simultâneos foi atingido
+// (YUI_DL_MAX_CONCURRENT, padrão 3; o dono nunca é barrado pelo teto global).
+function getBusyReason(userId, env = process.env) {
+    if (activeUserProcesses.has(userId)) return 'user';
+    const max = readMaxConcurrentDownloads(env);
+    if (max > 0 && activeUserProcesses.size >= max && !canBypass(userId)) return 'global';
+    return null;
 }
 
 function isUserBusy(userId) {
-    return activeUserProcesses.has(userId);
+    return getBusyReason(userId) !== null;
 }
 
 function lockUser(userId) {
@@ -177,197 +338,216 @@ function getMemoryUsagePercent() {
 }
 
 function parseMetadata(stdout, fallbackId) {
-    let videoMetadata = {};
-    try {
-        const jsonLineMatch = stdout.match(/^\{.*\}$/ms);
-        if (jsonLineMatch) {
-            videoMetadata = JSON.parse(jsonLineMatch[0]);
-        } else {
-            const titleMatch = stdout.match(/\[ExtractAudio\] Destination: .*? - (.+?)\./);
-            if (titleMatch && titleMatch[1]) {
-                videoMetadata.title = titleMatch[1].trim();
-            } else {
-                videoMetadata.title = `Media_${fallbackId}`;
-            }
-        }
-    } catch (parseError) {
-        videoMetadata.title = `Media_${fallbackId}`;
+    const text = String(stdout || '');
+    // O yt-dlp (--print-json) imprime o JSON do item em uma linha.
+    let videoMetadata = findJsonObject(text);
+    if (!videoMetadata) {
+        videoMetadata = {};
+        try {
+            const jsonLineMatch = text.match(/^\{.*\}$/ms);
+            if (jsonLineMatch) videoMetadata = JSON.parse(jsonLineMatch[0]);
+        } catch { /* cai no título genérico */ }
     }
-    if (!videoMetadata.title) videoMetadata.title = `Media_${fallbackId}`;
+    if (!videoMetadata.title || typeof videoMetadata.title !== 'string') {
+        const titleMatch = text.match(/\[ExtractAudio\] Destination: .*? - (.+?)\./);
+        videoMetadata.title = titleMatch && titleMatch[1] ? titleMatch[1].trim() : `Media_${fallbackId}`;
+    }
     return videoMetadata;
 }
 
-function extractVideoId(url, platform) {
-    let match;
-    switch (platform) {
-        case 'youtube_shorts':
-            match = url.match(YOUTUBE_SHORTS_REGEX);
-            return match ? match[1] : crypto.randomUUID().slice(0, 11);
-        case 'youtube_music':
-            match = url.match(YOUTUBE_MUSIC_REGEX);
-            return match ? match[1] : crypto.randomUUID().slice(0, 11);
-        case 'youtube':
-            match = url.match(YOUTUBE_VIDEO_REGEX);
-            return match ? match[1] : crypto.randomUUID().slice(0, 11);
-        case 'instagram':
-            match = url.match(INSTAGRAM_REGEX);
-            return match ? match[1] : crypto.randomUUID().slice(0, 8);
-        case 'tiktok':
-            return crypto.randomUUID().slice(0, 8);
-        default:
-            return crypto.randomUUID().slice(0, 8);
+// Arquivo gerado na subpasta do pedido: o maior com uma das extensões esperadas.
+function findProducedFile(dir, extensions) {
+    let best = null;
+    let bestSize = -1;
+    try {
+        for (const name of fs.readdirSync(dir)) {
+            if (!extensions.includes(path.extname(name).toLowerCase())) continue;
+            const full = path.join(dir, name);
+            const stat = fs.statSync(full);
+            if (stat.isFile() && stat.size > bestSize) {
+                best = full;
+                bestSize = stat.size;
+            }
+        }
+    } catch { /* pasta sumiu */ }
+    return best;
+}
+
+function renameInsideDir(produced, dir, stem, extension) {
+    const target = path.join(dir, `${stem}${extension}`);
+    if (target === produced) return produced;
+    try {
+        fs.renameSync(produced, target);
+        return target;
+    } catch {
+        return produced;
     }
 }
 
-async function downloadAudio(videoUrl, context = null) {
-    return new Promise((resolve, reject) => {
-        const platform = detectPlatform(videoUrl);
-        if (!platform) {
-            const err = new Error("URL_INVALID: A URL fornecida não é de uma plataforma suportada (YouTube, Instagram ou TikTok).");
-            logMediaAction('Download Áudio', platform, videoUrl, context, 'Erro', `Detalhe: ${err.message}`);
-            return reject(err);
-        }
-        if (YOUTUBE_PLAYLIST_REGEX.test(videoUrl)) {
-            const err = new Error("PLAYLIST_DETECTED: O download de playlists não é suportado no momento. Por favor, forneça uma URL de vídeo individual.");
-            logMediaAction('Download Áudio', platform, videoUrl, context, 'Erro', `Detalhe: ${err.message}`);
-            return reject(err);
-        }
-        let processedUrl = videoUrl;
-        if (platform === 'youtube_music') {
-            const match = videoUrl.match(YOUTUBE_MUSIC_REGEX);
-            if (match && match[1]) {
-                processedUrl = `https://www.youtube.com/watch?v=${match[1]}`;
-            }
-        }
-        const videoId = extractVideoId(videoUrl, platform);
-        const tempOutputFilename = `${videoId}.mp3`;
-        const tempOutputFilePath = path.join(TEMP_AUDIO_DIR, tempOutputFilename);
-        const command = `${getYtdlpCmd()} ${buildYtdlpAudioFlags(tempOutputFilePath, processedUrl)}`;
-        logMediaAction('Download Áudio', platform, videoUrl, context, 'Iniciado');
-        exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`[MediaHandler] FALHA NO YT-DLP (Áudio):\nSTDOUT: ${stdout}\nSTDERR: ${stderr}\nERROR: ${error.message}`);
-                let errObj = error;
-                if (stderr.includes("Private video") || stdout.includes("Private video")) {
-                    errObj = new Error("VIDEO_PRIVATE: Este vídeo é privado ou não está disponível.");
-                } else if (stderr.includes("age-restricted") || stdout.includes("age-restricted")) {
-                    errObj = new Error("VIDEO_AGE_RESTRICTED: Este vídeo é restrito por idade.");
-                } else if (stderr.includes("no appropriate format") || stdout.includes("no appropriate format")) {
-                    errObj = new Error("FORMAT_UNAVAILABLE: Não foi encontrado um formato de áudio adequado.");
-                } else if (error.code === 'ENOENT' || /not recognized|não é reconhecido|command not found/i.test(stderr)) {
-                    errObj = new Error('YTDLP_NOT_INSTALLED: O yt-dlp não está instalado ou não está disponível no PATH da máquina. Instale-o e reinicie o bot.');
-                } else {
-                    errObj = new Error(`YTDLP_ERROR: O yt-dlp falhou: ${stderr.trim().split('\n').pop() || error.message}`);
-                }
-                logMediaAction('Download Áudio', platform, videoUrl, context, 'Erro', `Detalhe: ${errObj.message}`);
-                return reject(errObj);
-            }
-            const videoMetadata = parseMetadata(stdout, videoId);
-            const sanitizedTitle = sanitizeFilenameForDiscord(videoMetadata.title);
-            const finalFilePath = path.join(TEMP_AUDIO_DIR, `${sanitizedTitle}.mp3`);
-            const renameAndResolve = (src, dest) => {
-                const sizeMB = (fs.statSync(src).size / (1024 * 1024)).toFixed(1);
-                logMediaAction('Download Áudio', platform, videoUrl, context, 'Sucesso', `Título: "${videoMetadata.title}" | Tamanho: ${sizeMB} MB`);
-                resolve({ filePath: dest, metadata: videoMetadata });
-            };
-            if (fs.existsSync(tempOutputFilePath)) {
-                fs.rename(tempOutputFilePath, finalFilePath, (renameErr) => {
-                    if (renameErr) {
-                        renameAndResolve(tempOutputFilePath, tempOutputFilePath);
-                    } else {
-                        renameAndResolve(finalFilePath, finalFilePath);
-                    }
-                });
-            } else {
-                const err = new Error("O áudio não foi encontrado na pasta temporária após o download. Tente novamente ou com outro vídeo.");
-                logMediaAction('Download Áudio', platform, videoUrl, context, 'Erro', `Detalhe: ${err.message}`);
-                reject(err);
-            }
+/**
+ * Baixa o áudio (MP3) de um link do YouTube, Instagram ou TikTok.
+ * Devolve { filePath, metadata, playlistIgnored, playlistOnly, cleanup }:
+ *  - playlistIgnored: o link tinha uma playlist (list=) junto do vídeo; baixou só o vídeo;
+ *  - playlistOnly: o link era uma playlist/perfil/coleção; baixou só o 1º item;
+ *  - cleanup(): apaga a subpasta temporária inteira do pedido (idempotente).
+ * Erros são `MediaError` (`error.code`, `error.userMessage`).
+ */
+async function downloadAudio(videoUrl, context = null, deps = {}) {
+    const info = normalizeMediaUrl(videoUrl);
+    if (!info) {
+        logMediaAction('Download Áudio', null, null, context, 'Erro', 'Código: URL_INVALID');
+        throw new MediaError('URL_INVALID', MEDIA_MESSAGES.URL_INVALID);
+    }
+
+    const runtime = resolveRuntime(deps);
+    const limits = audioLimits(runtime.limits, context, deps.env || process.env);
+    const tempRoot = deps.tempRoot || TEMP_AUDIO_DIR;
+    sweepIfDue(tempRoot);
+    const tempDir = createRequestDir(tempRoot);
+    const startedAt = Date.now();
+    const note = info.playlistOnly ? 'Playlist: só o 1º item' : (info.playlistIgnored ? 'Playlist ignorada: só o vídeo' : '');
+    logMediaAction('Download Áudio', info.platform, info.url, context, 'Iniciado', note);
+
+    try {
+        const args = buildAudioArgs(path.join(tempDir, 'media.%(ext)s'), info.url, flagOptions(runtime, limits, info));
+        const run = await runTool(runtime.ytdlpPath, args, {
+            timeoutMs: limits.timeoutMs,
+            maxBuffer: MAX_BUFFER,
+            cwd: tempDir,
+            execFileImpl: runtime.execFileImpl,
+            killImpl: runtime.killImpl,
         });
-    });
+        if (run.error) throw classifyYtdlpFailure(run, 'audio', limits);
+
+        const produced = findProducedFile(tempDir, ['.mp3']);
+        if (!produced) throw missingOutputError(run, limits);
+
+        const metadata = parseMetadata(run.stdout, info.id || crypto.randomUUID().slice(0, 8));
+        const filePath = renameInsideDir(produced, tempDir, safeFileStem(metadata.title, 'audio'), '.mp3');
+        // Entrega ao Discord: recomprime se passar do limite de upload e limpa as tags de origem (não vale para o Modo Rádio).
+        const prepared = await prepareAudioForDelivery(filePath, {
+            context,
+            env: deps.env,
+            durationSeconds: Number(metadata.duration),
+            ffmpegPath: runtime.ffmpegPath || resolveBinaryPath(deps.ffmpegPath || getFfmpegPath()),
+            execFileImpl: runtime.execFileImpl,
+            killImpl: runtime.killImpl,
+            ...(deps.audioFit || {}),
+        });
+        const preparedNote = describePrepared(prepared);
+        const sizeMB = (fs.statSync(filePath).size / (1024 * 1024)).toFixed(1);
+        logMediaAction('Download Áudio', info.platform, info.url, context, 'Sucesso',
+            `Título: "${metadata.title}" | Tamanho: ${sizeMB} MB | Tempo: ${((Date.now() - startedAt) / 1000).toFixed(1)}s${preparedNote ? ` | ${preparedNote}` : ''}`);
+        return {
+            filePath,
+            metadata,
+            playlistIgnored: info.playlistIgnored,
+            playlistOnly: info.playlistOnly,
+            cleanup: () => removeRequestDir(tempRoot, tempDir),
+        };
+    } catch (err) {
+        removeRequestDir(tempRoot, tempDir);
+        const mediaError = err instanceof MediaError
+            ? err
+            : new MediaError('YTDLP_ERROR', MEDIA_MESSAGES.YTDLP_ERROR, { cause: err, detail: err && err.message });
+        logMediaAction('Download Áudio', info.platform, info.url, context, 'Erro',
+            `Código: ${mediaError.code}${mediaError.detail ? ` | Detalhe: ${mediaError.detail}` : ''}`);
+        throw mediaError;
+    }
 }
 
-async function downloadVideo(videoUrl, context = null) {
-    return new Promise((resolve, reject) => {
-        const platform = detectPlatform(videoUrl);
-        if (!platform) {
-            const err = new Error("URL_INVALID: A URL fornecida não é de uma plataforma suportada.");
-            logMediaAction('Download Vídeo', platform, videoUrl, context, 'Erro', `Detalhe: ${err.message}`);
-            return reject(err);
-        }
-        if (platform === 'youtube' || platform === 'youtube_music') {
-            const err = new Error("YOUTUBE_FULL_VIDEO: Para vídeos do YouTube, apenas Shorts são suportados para download de vídeo. Use /baixar_musica para extrair o áudio.");
-            logMediaAction('Download Vídeo', platform, videoUrl, context, 'Erro', `Detalhe: ${err.message}`);
-            return reject(err);
-        }
-        if (YOUTUBE_PLAYLIST_REGEX.test(videoUrl)) {
-            const err = new Error("PLAYLIST_DETECTED: O download de playlists não é suportado.");
-            logMediaAction('Download Vídeo', platform, videoUrl, context, 'Erro', `Detalhe: ${err.message}`);
-            return reject(err);
-        }
-        let processedUrl = videoUrl;
-        const videoId = extractVideoId(videoUrl, platform);
-        const tempOutputFilename = `${videoId}.mp4`;
-        const tempOutputFilePath = path.join(TEMP_VIDEO_DIR, tempOutputFilename);
-        const command = `${getYtdlpCmd()} ${buildYtdlpVideoFlags(tempOutputFilePath, processedUrl)}`;
-        logMediaAction('Download Vídeo', platform, videoUrl, context, 'Iniciado');
-        exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`[MediaHandler] FALHA NO YT-DLP (Vídeo):\nSTDOUT: ${stdout}\nSTDERR: ${stderr}\nERROR: ${error.message}`);
-                let errObj = error;
-                if (stderr.includes("Private video") || stdout.includes("Private video")) {
-                    errObj = new Error("VIDEO_PRIVATE: Este vídeo é privado ou não está disponível.");
-                } else if (stderr.includes("age-restricted") || stdout.includes("age-restricted")) {
-                    errObj = new Error("VIDEO_AGE_RESTRICTED: Este vídeo é restrito por idade.");
-                } else {
-                    errObj = new Error(`lib do ytdlp desatualizada, peça o <@${config.ownerId}> para atualizar na host`);
-                }
-                logMediaAction('Download Vídeo', platform, videoUrl, context, 'Erro', `Detalhe: ${errObj.message}`);
-                return reject(errObj);
-            }
-            const videoMetadata = parseMetadata(stdout, videoId);
-            const sanitizedTitle = sanitizeFilenameForDiscord(videoMetadata.title);
-            const possiblePaths = [
-                tempOutputFilePath,
-                tempOutputFilePath.replace('.mp4', '.webm'),
-                tempOutputFilePath.replace('.mp4', '.mkv')
-            ];
-            let foundPath = possiblePaths.find(p => fs.existsSync(p));
-            if (foundPath) {
-                const finalFilePath = path.join(TEMP_VIDEO_DIR, `${sanitizedTitle}.mp4`);
-                if (foundPath !== finalFilePath) {
-                    try {
-                        fs.renameSync(foundPath, finalFilePath);
-                        foundPath = finalFilePath;
-                    } catch (e) {}
-                }
-                const fileSize = fs.statSync(foundPath).size;
-                const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
-                logMediaAction('Download Vídeo', platform, videoUrl, context, 'Sucesso', `Título: "${videoMetadata.title}" | Tamanho: ${sizeMB} MB`);
-                resolve({ filePath: foundPath, metadata: videoMetadata, fileSize });
-            } else {
-                const err = new Error("O vídeo não foi encontrado na pasta temporária após o download. Tente novamente.");
-                logMediaAction('Download Vídeo', platform, videoUrl, context, 'Erro', `Detalhe: ${err.message}`);
-                reject(err);
-            }
+/**
+ * Baixa um vídeo (mp4) de Shorts, Instagram Reels ou TikTok. Vídeos comuns do YouTube continuam
+ * bloqueados de propósito (YOUTUBE_FULL_VIDEO).
+ * Devolve { filePath, metadata, fileSize, playlistIgnored, playlistOnly, cleanup }.
+ */
+async function downloadVideo(videoUrl, context = null, deps = {}) {
+    const info = normalizeMediaUrl(videoUrl);
+    if (!info) {
+        logMediaAction('Download Vídeo', null, null, context, 'Erro', 'Código: URL_INVALID');
+        throw new MediaError('URL_INVALID', MEDIA_MESSAGES.URL_INVALID);
+    }
+    if (info.platform === 'youtube' || info.platform === 'youtube_music') {
+        logMediaAction('Download Vídeo', info.platform, info.url, context, 'Erro', 'Código: YOUTUBE_FULL_VIDEO');
+        throw new MediaError('YOUTUBE_FULL_VIDEO', MEDIA_MESSAGES.YOUTUBE_FULL_VIDEO);
+    }
+
+    const runtime = resolveRuntime(deps);
+    const limits = effectiveLimits(runtime.limits, context);
+    const tempRoot = deps.tempRoot || TEMP_VIDEO_DIR;
+    sweepIfDue(tempRoot);
+    const tempDir = createRequestDir(tempRoot);
+    const startedAt = Date.now();
+    logMediaAction('Download Vídeo', info.platform, info.url, context, 'Iniciado', info.playlistOnly ? 'Coleção/perfil: só o 1º item' : '');
+
+    try {
+        const args = buildVideoArgs(path.join(tempDir, 'media.%(ext)s'), info.url, flagOptions(runtime, limits, info));
+        const run = await runTool(runtime.ytdlpPath, args, {
+            timeoutMs: limits.timeoutMs,
+            maxBuffer: MAX_BUFFER,
+            cwd: tempDir,
+            execFileImpl: runtime.execFileImpl,
+            killImpl: runtime.killImpl,
         });
-    });
+        if (run.error) throw classifyYtdlpFailure(run, 'video', limits);
+
+        const produced = findProducedFile(tempDir, ['.mp4', '.webm', '.mkv', '.mov']);
+        if (!produced) throw missingOutputError(run, limits);
+
+        const metadata = parseMetadata(run.stdout, info.id || crypto.randomUUID().slice(0, 8));
+        const filePath = renameInsideDir(produced, tempDir, safeFileStem(metadata.title, 'video'), '.mp4');
+        const fileSize = fs.statSync(filePath).size;
+        const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
+        logMediaAction('Download Vídeo', info.platform, info.url, context, 'Sucesso',
+            `Título: "${metadata.title}" | Tamanho: ${sizeMB} MB | Tempo: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+        return {
+            filePath,
+            metadata,
+            fileSize,
+            playlistIgnored: info.playlistIgnored,
+            playlistOnly: info.playlistOnly,
+            cleanup: () => removeRequestDir(tempRoot, tempDir),
+        };
+    } catch (err) {
+        removeRequestDir(tempRoot, tempDir);
+        const mediaError = err instanceof MediaError
+            ? err
+            : new MediaError('YTDLP_ERROR', MEDIA_MESSAGES.YTDLP_VIDEO_ERROR, { cause: err, detail: err && err.message });
+        logMediaAction('Download Vídeo', info.platform, info.url, context, 'Erro',
+            `Código: ${mediaError.code}${mediaError.detail ? ` | Detalhe: ${mediaError.detail}` : ''}`);
+        throw mediaError;
+    }
+}
+
+/** Libera o resultado de um download: apaga a subpasta do pedido (ou, na falta dela, só o arquivo). */
+function cleanupDownload(result) {
+    if (!result) return;
+    try {
+        if (typeof result.cleanup === 'function') {
+            result.cleanup();
+        } else if (result.filePath && fs.existsSync(result.filePath)) {
+            fs.unlinkSync(result.filePath);
+        }
+    } catch (err) {
+        logger.warn(`[MediaHandler] Falha ao limpar temporários: ${err.message}`);
+    }
 }
 
 function storeVideoForCompression(filePath) {
     const fileId = crypto.randomUUID().slice(0, 12);
     pendingVideoFiles.set(fileId, { filePath, createdAt: Date.now() });
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
         const entry = pendingVideoFiles.get(fileId);
         if (entry) {
             pendingVideoFiles.delete(fileId);
             try {
                 if (fs.existsSync(entry.filePath)) fs.unlinkSync(entry.filePath);
             } catch (e) {}
-            console.log(`[MediaHandler] Arquivo expirado removido: ${fileId}`);
+            logger.info(`[MediaHandler] Arquivo expirado removido: ${fileId}`);
         }
     }, 6 * 60 * 60 * 1000);
+    if (typeof timer.unref === 'function') timer.unref();
 
     return fileId;
 }
@@ -409,8 +589,8 @@ async function compressVideo(inputPath, attachmentLimit) {
         ];
 
         const ffmpegBin = getFfmpegPath();
-        console.log(`[MediaHandler] Comprimindo: ${ffmpegBin} ${ffmpegArgs.join(' ')}`);
-        const ffmpegProcess = spawn(ffmpegBin, ffmpegArgs);
+        logger.info(`[MediaHandler] Comprimindo vídeo de ${(fileStat.size / (1024 * 1024)).toFixed(1)} MB (limite ${(attachmentLimit / (1024 * 1024)).toFixed(0)} MB)`);
+        const ffmpegProcess = spawn(ffmpegBin, ffmpegArgs, { windowsHide: true });
         let killed = false;
 
         const memoryMonitor = setInterval(() => {
@@ -419,7 +599,7 @@ async function compressVideo(inputPath, attachmentLimit) {
                 killed = true;
                 ffmpegProcess.kill('SIGKILL');
                 clearInterval(memoryMonitor);
-                console.error(`[MediaHandler] FFmpeg KILLED - RAM em ${usage.toFixed(1)}%`);
+                logger.error(`[MediaHandler] FFmpeg encerrado - RAM em ${usage.toFixed(1)}%`);
             }
         }, 1000);
 
@@ -488,8 +668,9 @@ function isCompressionActive() {
 }
 
 export {
-    downloadAudio, downloadVideo, sanitizeFilenameForDiscord, detectPlatform,
-    isUserBusy, lockUser, unlockUser, canBypass, storeVideoForCompression,
+    downloadAudio, downloadVideo, cleanupDownload, sanitizeFilenameForDiscord, detectPlatform,
+    buildYtdlpAudioFlags, buildYtdlpVideoFlags,
+    isUserBusy, getBusyReason, lockUser, unlockUser, canBypass, storeVideoForCompression,
     getPendingVideo, removePendingVideo, enqueueCompression,
     getCompressionQueuePosition, isCompressionActive, getMemoryUsagePercent,
     logCompressionAction, formatVideoSuccessMessage
@@ -498,9 +679,13 @@ export {
 export default {
     downloadAudio,
     downloadVideo,
+    cleanupDownload,
     sanitizeFilenameForDiscord,
     detectPlatform,
+    buildYtdlpAudioFlags,
+    buildYtdlpVideoFlags,
     isUserBusy,
+    getBusyReason,
     lockUser,
     unlockUser,
     canBypass,

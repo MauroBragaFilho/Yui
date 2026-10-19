@@ -1,11 +1,24 @@
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { clampText } from '../discord/embedLimits.js';
 
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const TWITCH_HELIX_BASE = 'https://api.twitch.tv/helix';
 
 let cachedToken = null;
 let cachedTokenExpiresAt = 0;
+
+/**
+ * Corpo de uma resposta de erro em uma linha e com no máximo 200 caracteres. O corpo cru entrava
+ * inteiro na mensagem do erro, que chega ao log e à resposta do comando (TG-33). Nunca lança.
+ */
+async function errorBody(response) {
+  try {
+    return clampText(String(await response.text()).replace(/\s+/g, ' ').trim(), 200);
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Obtém (e cacheia) o App Access Token da Twitch usando OAuth
@@ -39,8 +52,7 @@ async function getAppAccessToken() {
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Twitch token error ${response.status}: ${body}`);
+    throw new Error(`Twitch token error ${response.status}: ${await errorBody(response)}`);
   }
 
   const data = await response.json();
@@ -79,8 +91,7 @@ export async function getStreamStatus(logins) {
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Twitch streams error ${response.status}: ${body}`);
+    throw new Error(`Twitch streams error ${response.status}: ${await errorBody(response)}`);
   }
 
   const data = await response.json();
@@ -130,8 +141,7 @@ export async function getTwitchUser(login) {
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Twitch users error ${response.status}: ${body}`);
+    throw new Error(`Twitch users error ${response.status}: ${await errorBody(response)}`);
   }
 
   const data = await response.json();

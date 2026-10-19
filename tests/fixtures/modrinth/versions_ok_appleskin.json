@@ -1,0 +1,56 @@
+{
+ "request": "/v2/project/EsAfCjCV/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "sem dependencias obrigatorias",
+ "reducedFrom": 2,
+ "body": [
+  {
+   "id": "XdXDExVF",
+   "project_id": "EsAfCjCV",
+   "name": "appleskin-forge-mc1.20.1-2.5.1",
+   "version_number": "2.5.1+mc1.20.1",
+   "version_type": "release",
+   "date_published": "2023-09-27T05:07:37.394825Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": true,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/EsAfCjCV/versions/XdXDExVF/appleskin-forge-mc1.20.1-2.5.1.jar",
+     "filename": "appleskin-forge-mc1.20.1-2.5.1.jar",
+     "primary": true,
+     "size": 47428
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "lH9KEmGA",
+   "project_id": "EsAfCjCV",
+   "name": "appleskin-forge-mc1.20.1-2.5.0",
+   "version_number": "2.5.0+mc1.20.1",
+   "version_type": "release",
+   "date_published": "2023-06-23T05:33:40.562725Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/EsAfCjCV/versions/lH9KEmGA/appleskin-forge-mc1.20.1-2.5.0.jar",
+     "filename": "appleskin-forge-mc1.20.1-2.5.0.jar",
+     "primary": true,
+     "size": 47447
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

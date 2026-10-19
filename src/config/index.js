@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { currentGeminiModel, GEMINI_FAST, GEMINI_SMART } from '../utils/geminiModels.js';
 import path from 'path';
 
 dotenv.config();
@@ -74,6 +75,9 @@ export const config = {
   },
 };
 
+// Chaves lidas na hora (getters): o painel pode adicionar chaves sem reiniciar a Yui.
+const keyList = (...names) => [...new Set(names.flatMap((n) => String(process.env[n] || '').split(',')).map((key) => key.trim()).filter(Boolean))];
+
 // Compatibilidade com os módulos legados da Hikari, que usam configuração
 // achatada e importação default.
 export default {
@@ -93,26 +97,33 @@ export default {
   localLlmModel: process.env.LOCAL_LLM_MODEL || process.env.AI_MODEL || 'local-model',
   lmStudioApiKey: process.env.LM_STUDIO_API_KEY || process.env.AI_API_KEY || '',
   geminiUrl: process.env.GEMINI_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-  geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
-  geminiModelFallback: process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.5-flash',
-  geminiApiKeys: (process.env.GEMINI_API_KEYS || '').split(',').map((key) => key.trim()).filter(Boolean),
+  geminiModel: currentGeminiModel(process.env.GEMINI_MODEL, GEMINI_FAST),
+  geminiModelFallback: currentGeminiModel(process.env.GEMINI_MODEL_FALLBACK, GEMINI_SMART),
+  // Aceita GEMINI_API_KEYS (várias, para rotação) e GEMINI_API_KEY (uma ou várias), como na documentação.
+  get geminiApiKeys() { return keyList('GEMINI_API_KEYS', 'GEMINI_API_KEY'); },
   hfApiUrl: process.env.HF_API_URL || 'https://router.huggingface.co/v1/chat/completions',
   hfModel: process.env.HF_MODEL || 'Qwen/Qwen2.5-72B-Instruct',
-  hfToken: process.env.HF_TOKEN || '',
-  groqApiKeys: (process.env.GROQ_API_KEY || '').split(',').map((key) => key.trim()).filter(Boolean),
+  get hfToken() { return process.env.HF_TOKEN || ''; },
+  get groqApiKeys() { return keyList('GROQ_API_KEY'); },
   groqApiUrl: process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions',
   groqModel: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
   hordeUrl: process.env.HORDE_URL || 'https://stablehorde.net/api/v2/generate/text/async',
   hordeApiKey: process.env.HORDE_API_KEY || '0000000000',
   braveApiKey: process.env.BRAVE_API_KEY || '',
-  togetherApiKey: process.env.TOGETHER_API_KEY || '',
-  stabilityApiKeys: (process.env.STABILITY_API_KEYS || '').split(',').map((key) => key.trim()).filter(Boolean),
+  get togetherApiKey() { return process.env.TOGETHER_API_KEY || ''; },
+  // Aceita STABILITY_API_KEYS (várias) e STABILITY_API_KEY (uma ou várias).
+  get stabilityApiKeys() { return keyList('STABILITY_API_KEYS', 'STABILITY_API_KEY'); },
   hordeImageApiKey: process.env.HORDE_IMAGE_API_KEY || '',
-  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
-  cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN || '',
+  get cloudflareAccountId() { return process.env.CLOUDFLARE_ACCOUNT_ID || ''; },
+  get cloudflareApiToken() { return process.env.CLOUDFLARE_API_TOKEN || ''; },
   cloudflareModel: process.env.CLOUDFLARE_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast',
   ytdlpCookiesPath: process.env.YTDLP_COOKIES_PATH || '',
   ytdlpExtraFlags: ['--ignore-config', '--js-runtimes', 'node', '--remote-components', 'ejs:github'],
   isOwner: (id) => id && (id === process.env.OWNER_ID || (process.env.OWNER_IDS || '').split(',').map((v) => v.trim()).includes(id)),
+  // Usada pelo imageHandler: escolhe uma chave ao acaso (balanceamento de créditos entre várias chaves).
+  getStabilityKey: () => {
+    const keys = keyList('STABILITY_API_KEYS', 'STABILITY_API_KEY');
+    return keys.length ? keys[Math.floor(Math.random() * keys.length)] : null;
+  },
   isAutomodWhitelisted: (id) => id && (id === process.env.OWNER_ID || (process.env.OWNER_IDS || '').split(',').map((v) => v.trim()).includes(id)),
 };

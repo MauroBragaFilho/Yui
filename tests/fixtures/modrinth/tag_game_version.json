@@ -1,0 +1,121 @@
+{
+ "request": "/v2/tag/game_version",
+ "status": 200,
+ "note": "reduzido de 919 para as 19 releases mais recentes + antigas conhecidas (formato novo 26.x existe)",
+ "body": [
+  {
+   "version": "26.3",
+   "version_type": "release",
+   "date": "2026-09-15T11:23:02Z",
+   "major": false
+  },
+  {
+   "version": "26.2",
+   "version_type": "release",
+   "date": "2026-06-16T12:03:33Z",
+   "major": false
+  },
+  {
+   "version": "26.1.2",
+   "version_type": "release",
+   "date": "2026-04-09T10:12:23Z",
+   "major": false
+  },
+  {
+   "version": "26.1.1",
+   "version_type": "release",
+   "date": "2026-04-01T09:06:36Z",
+   "major": false
+  },
+  {
+   "version": "26.1",
+   "version_type": "release",
+   "date": "2026-03-24T12:11:04Z",
+   "major": false
+  },
+  {
+   "version": "1.21.11",
+   "version_type": "release",
+   "date": "2025-12-09T12:23:30Z",
+   "major": false
+  },
+  {
+   "version": "1.21.10",
+   "version_type": "release",
+   "date": "2025-10-07T09:17:23Z",
+   "major": false
+  },
+  {
+   "version": "1.21.9",
+   "version_type": "release",
+   "date": "2025-09-30T11:58:43Z",
+   "major": false
+  },
+  {
+   "version": "1.21.8",
+   "version_type": "release",
+   "date": "2025-07-17T12:04:02Z",
+   "major": false
+  },
+  {
+   "version": "1.21.7",
+   "version_type": "release",
+   "date": "2025-06-30T09:32:16Z",
+   "major": false
+  },
+  {
+   "version": "1.21.6",
+   "version_type": "release",
+   "date": "2025-06-17T11:10:28Z",
+   "major": false
+  },
+  {
+   "version": "1.21.5",
+   "version_type": "release",
+   "date": "2025-03-25T12:14:58Z",
+   "major": false
+  },
+  {
+   "version": "1.21.4",
+   "version_type": "release",
+   "date": "2024-12-03T10:12:57Z",
+   "major": false
+  },
+  {
+   "version": "1.21.3",
+   "version_type": "release",
+   "date": "2024-10-23T12:28:15Z",
+   "major": false
+  },
+  {
+   "version": "1.20.1",
+   "version_type": "release",
+   "date": "2023-06-12T13:25:51Z",
+   "major": true
+  },
+  {
+   "version": "1.19.2",
+   "version_type": "release",
+   "date": "2022-08-05T11:57:05Z",
+   "major": true
+  },
+  {
+   "version": "1.18.2",
+   "version_type": "release",
+   "date": "2022-02-28T10:42:45Z",
+   "major": true
+  },
+  {
+   "version": "1.16.5",
+   "version_type": "release",
+   "date": "2021-01-14T16:05:32Z",
+   "major": true
+  },
+  {
+   "version": "1.12.2",
+   "version_type": "release",
+   "date": "2017-09-18T08:39:46Z",
+   "major": true
+  }
+ ]
+}

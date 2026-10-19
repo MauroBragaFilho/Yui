@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.j
 import { setGlobalContext } from '../setGlobalContext.js';
 import { youtubeRepository } from '../../database/repositories/youtubeRepo.js';
 import { resolveChannel } from '../../handlers/youtubeApiHandler.js';
+import { clampText } from '../embedLimits.js';
 
 export const seguirYoutubeCommand = {
   data: setGlobalContext(
@@ -70,13 +71,13 @@ export const seguirYoutubeCommand = {
       resolved = await resolveChannel(input);
     } catch (err) {
       return interaction.editReply({
-        content: `❌ Falha ao consultar a API do YouTube: ${err.message}`,
+        content: `❌ Falha ao consultar a API do YouTube: ${clampText(err?.message, 200)}`,
       });
     }
 
     if (!resolved) {
       return interaction.editReply({
-        content: `❌ Não encontrei o canal "${input}". Confira o handle (@Canal), o ID (UC...) ou a URL.`,
+        content: `❌ Não encontrei o canal "${clampText(input, 100)}". Confira o handle (@Canal), o ID (UC...) ou a URL.`,
       });
     }
 
@@ -100,14 +101,14 @@ export const seguirYoutubeCommand = {
 
     if (result.changes === 0) {
       return interaction.editReply({
-        content: `⚠️ Este servidor **já segue** o canal **${resolved.title}** neste canal (${discordChannel}).`,
+        content: `⚠️ Este servidor **já segue** o canal **${clampText(resolved.title, 100)}** neste canal (${discordChannel}).`,
       });
     }
 
     return interaction.editReply({
       content:
         `✅ **Agora seguindo!**\n\n` +
-        `📺 **Canal:** ${resolved.title}\n` +
+        `📺 **Canal:** ${clampText(resolved.title, 100)}\n` +
         `📍 **Publicação:** ${discordChannel}\n` +
         `${mentionRole ? `👥 **Menção:** <@&${mentionRole.id}>\n` : ''}` +
         `🔔 **Notificações:** ${preferences}`,

@@ -1,5 +1,7 @@
 # ✅ RESUMO DA INTEGRAÇÃO - YUI BOT GTA ONLINE
 
+> 🕰️ **Documento histórico** da integração inicial dos motores do GTA Online. Nomes de comandos, hospedagem e fluxo do evento semanal mudaram. A documentação atual está em [docs/README.md](docs/README.md) e [GTA Online](docs/content_pt/GTA_ONLINE.md).
+
 ## 🎯 Tarefa Concluída
 
 Integração completa dos **dois motores de atualizações do GTA Online** no código da Yui Bot, mantendo 95-100% do código raiz aproveitável.

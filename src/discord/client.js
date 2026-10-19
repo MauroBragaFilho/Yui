@@ -2,7 +2,12 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { handlePrefixCommand } from './prefixRouter.js';
-import { setDiscordClient, setOnQueueUpdate } from '../handlers/llmHandler.js';
+import { setDiscordClient, setOnQueueUpdate, isToolDisabled, getAllMcpTools } from '../handlers/llmHandler.js';
+import { createTtsDeps } from '../handlers/voiceHandler.js';
+import { checkBan, forbiddenKeywords } from '../handlers/banHandler.js';
+import { hasActiveSession } from '../music/radioDatabase.js';
+import { initTts } from '../services/tts/index.js';
+import { isOpusAvailable } from '../utils/binaries.js';
 import { updateBotActivity } from '../utils/activity.js';
 
 export function createDiscordClient() {
@@ -31,6 +36,16 @@ export function createDiscordClient() {
     setDiscordClient(client);
     setOnQueueUpdate((queueLength) => updateBotActivity(client, queueLength));
     updateBotActivity(client, 0);
+
+    // Resposta falada (TTS). É AQUI, no 'ready' que o bootstrap realmente usa (src/events/ready.js não é carregado por
+    // ninguém). Nunca atrasa nem derruba o boot: initTts não rejeita e o try/catch cobre a montagem das dependências.
+    // Elas são montadas aqui (síncronas, falham fechado) porque o serviço não importa llmHandler/banHandler (evita ciclo).
+    try {
+      const deps = createTtsDeps(client, { isToolDisabled, getAllMcpTools, checkBan, forbiddenKeywords, hasActiveSession, isOpusAvailable });
+      initTts({ client, deps }).catch((err) => logger.warn(`[TTS] Falha ao iniciar (${err?.code || err?.name || 'erro'}).`));
+    } catch (err) {
+      logger.warn(`[TTS] Não foi possível preparar a voz falada (${err?.code || err?.name || 'erro'}).`);
+    }
   });
 
   // Slash commands são processados em src/events/interactionCreate.js

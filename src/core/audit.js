@@ -1,16 +1,20 @@
 import fs from 'fs';
 import path from 'path';
 
-const auditFile = path.resolve('logs', 'core-audit.jsonl');
+/** Caminho do arquivo de auditoria (YUI_AUDIT_FILE permite trocar; usado nos testes). */
+export function auditFilePath() {
+  return process.env.YUI_AUDIT_FILE || path.resolve('logs', 'core-audit.jsonl');
+}
 
 /**
  * Registro de auditoria append-only (uma linha JSON por evento) para ações
- * sensíveis: acesso à memória pessoal, decisões de ferramenta etc.
- * Nunca registra o conteúdo das memórias, só metadados.
+ * sensíveis: acesso à memória pessoal, decisões de ferramenta, login, ações do painel.
+ * Nunca registra o conteúdo das memórias nem senhas, só metadados.
  */
 export function audit(event, ctx, details = {}) {
   try {
-    fs.mkdirSync(path.dirname(auditFile), { recursive: true });
+    const file = auditFilePath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     const line = JSON.stringify({
       ts: new Date().toISOString(),
       event,
@@ -20,7 +24,7 @@ export function audit(event, ctx, details = {}) {
       channelKind: ctx?.channelKind ?? null,
       ...details,
     });
-    fs.appendFileSync(auditFile, line + '\n');
+    fs.appendFileSync(file, line + '\n');
   } catch {
     // auditoria nunca deve derrubar a requisição
   }

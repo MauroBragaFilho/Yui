@@ -45,7 +45,8 @@ async function transcribeWithGemini(audioBuffer, apiKey) {
     const model = process.env.GEMINI_MODEL_FALLBACK && !process.env.GEMINI_MODEL_FALLBACK.includes('2.5')
         ? process.env.GEMINI_MODEL_FALLBACK
         : 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    // A chave vai no cabeçalho x-goog-api-key, nunca na URL (URL aparece em log, mensagem de erro e proxy).
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     const payload = {
         contents: [
@@ -64,7 +65,7 @@ async function transcribeWithGemini(audioBuffer, apiKey) {
     };
 
     const response = await axios.post(url, payload, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         timeout: 12000
     });
 

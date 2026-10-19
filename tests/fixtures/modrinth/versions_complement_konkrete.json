@@ -1,0 +1,70 @@
+{
+ "request": "/v2/project/J81TRJWm/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "complemento obrigatorio de: FancyMenu",
+ "reducedFrom": 2,
+ "body": [
+  {
+   "id": "skYziQQL",
+   "project_id": "J81TRJWm",
+   "name": "[Forge] v1.8.0 MC 1.20-1.20.1",
+   "version_number": "1.8.0-1.20-1.20.1-forge",
+   "version_type": "release",
+   "date_published": "2024-01-13T03:30:28.707265Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/J81TRJWm/versions/skYziQQL/konkrete_forge_1.8.0_MC_1.20-1.20.1.jar",
+     "filename": "konkrete_forge_1.8.0_MC_1.20-1.20.1.jar",
+     "primary": true,
+     "size": 625185
+    },
+    {
+     "url": "https://cdn.modrinth.com/data/J81TRJWm/versions/skYziQQL/dev_konkrete_forge_1.8.0_MC_1.20-1.20.1.jar",
+     "filename": "dev_konkrete_forge_1.8.0_MC_1.20-1.20.1.jar",
+     "primary": false,
+     "size": 910948
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "9o3SSmd1",
+   "project_id": "J81TRJWm",
+   "name": "[Forge] v1.6.1-2 MC 1.20-1.20.1",
+   "version_number": "1.6.1-2-1.20-forge",
+   "version_type": "release",
+   "date_published": "2023-06-12T23:49:18.949011Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/J81TRJWm/versions/9o3SSmd1/konkrete_forge_1.6.1-2_MC_1.20.jar",
+     "filename": "konkrete_forge_1.6.1-2_MC_1.20.jar",
+     "primary": true,
+     "size": 624093
+    },
+    {
+     "url": "https://cdn.modrinth.com/data/J81TRJWm/versions/9o3SSmd1/dev_konkrete_forge_1.6.1-2_MC_1.20.jar",
+     "filename": "dev_konkrete_forge_1.6.1-2_MC_1.20.jar",
+     "primary": false,
+     "size": 910956
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

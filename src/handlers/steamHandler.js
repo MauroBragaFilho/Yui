@@ -1,11 +1,41 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { clampText } from '../discord/embedLimits.js';
+import { logger } from '../utils/logger.js';
 
-// Remove tags HTML de uma string e retorna texto limpo
-function stripHtml(html) {
+// Cada requisito vira uma linha de um campo de embed (1024 caracteres): 5 linhas de até 160 + rótulos cabem.
+const REQ_VALUE_MAX = 160;
+const clampReq = (value) => (typeof value === 'string' ? clampText(value, REQ_VALUE_MAX) : value);
+const clampStr = (value, max) => (typeof value === 'string' ? clampText(value, max) : value);
+
+// Rótulo de sistema operacional no começo de um item ("OS *: Windows 10", "SO: Windows 10").
+// A forma curta é sensível a maiúsculas: "Os" / "os" são artigos do português ("Os requisitos...").
+const OS_LABEL_SHORT = /^\s*(?:OS|SO|S\.O\.)\s*\*?\s*:/;
+const OS_LABEL_LONG = /^\s*(?:sistema operacional|operating system)\b/i;
+const isOsLine = (text) => OS_LABEL_SHORT.test(text) || OS_LABEL_LONG.test(text);
+
+// Extrai só a linha de sistema operacional de um bloco HTML de requisitos. Antes o campo `os` recebia o
+// bloco inteiro sem tags (duplicava processador, memória etc. e estourava o campo do embed).
+function extractOs(html) {
     if (!html || typeof html !== 'string') return null;
+
+    // 1º: itens de lista (<li>), o formato mais comum na Steam.
     const $ = cheerio.load('<div>' + html + '</div>');
-    return $.text().replace(/\s+/g, ' ').trim() || null;
+    let found = null;
+    $('li').each((i, el) => {
+        if (found) return;
+        const text = $(el).text().replace(/\s+/g, ' ').trim();
+        if (text && isOsLine(text)) found = text;
+    });
+    if (found) return clampReq(found);
+
+    // 2º: segmentos separados por <br>.
+    const plain = html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/?[^>]+>/g, ' ')
+        .replace(/\r/g, '');
+    const segment = plain.split('\n').map(s => s.replace(/\s+/g, ' ').trim()).find(s => s && isOsLine(s));
+    return segment ? clampReq(segment) : null;
 }
 
 // Extrai um campo específico (ex: "processor", "memory") de um bloco HTML de requisitos
@@ -69,11 +99,13 @@ function extractRequirement(html, key) {
 
 async function getSteamGameInfo(query) {
     try {
-        console.log(`[STEAM] Buscando jogo: ${query}`);
-        const searchRes = await axios.get(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=brazilian&cc=BR`, { timeout: 8000 });
+        // Só o tamanho no log (o nome vem do usuário) e a busca vai com no máximo 150 caracteres.
+        logger.info(`[STEAM] Buscando jogo (${String(query ?? '').length} caracteres)`);
+        const searchTerm = String(query ?? '').slice(0, 150);
+        const searchRes = await axios.get(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(searchTerm)}&l=brazilian&cc=BR`, { timeout: 8000 });
         
         if (!searchRes.data || !searchRes.data.items || searchRes.data.items.length === 0) {
-            return { error: `Não encontrei nenhum jogo com o nome "${query}" na Steam.` };
+            return { error: `Não encontrei nenhum jogo com o nome "${clampText(query, 100)}" na Steam.` };
         }
         
         const game = searchRes.data.items[0]; 
@@ -98,26 +130,21 @@ async function getSteamGameInfo(query) {
         const discount = data.price_overview ? data.price_overview.discount_percent : 0;
         
         // Requisitos de PC (já retornados pela Steam API, agora expostos)
+        const requirementsOf = (html) => ({
+            os: extractOs(html),
+            processor: clampReq(extractRequirement(html, 'processor')),
+            memory: clampReq(extractRequirement(html, 'memory')),
+            graphics: clampReq(extractRequirement(html, 'graphics')),
+            storage: clampReq(extractRequirement(html, 'storage'))
+        });
         const pcRequirements = data.pc_requirements ? {
-            minimum: {
-                os: data.pc_requirements.minimum ? stripHtml(data.pc_requirements.minimum) : null,
-                processor: extractRequirement(data.pc_requirements.minimum, 'processor'),
-                memory: extractRequirement(data.pc_requirements.minimum, 'memory'),
-                graphics: extractRequirement(data.pc_requirements.minimum, 'graphics'),
-                storage: extractRequirement(data.pc_requirements.minimum, 'storage')
-            },
-            recommended: data.pc_requirements.recommended ? {
-                os: stripHtml(data.pc_requirements.recommended),
-                processor: extractRequirement(data.pc_requirements.recommended, 'processor'),
-                memory: extractRequirement(data.pc_requirements.recommended, 'memory'),
-                graphics: extractRequirement(data.pc_requirements.recommended, 'graphics'),
-                storage: extractRequirement(data.pc_requirements.recommended, 'storage')
-            } : null
+            minimum: requirementsOf(data.pc_requirements.minimum),
+            recommended: data.pc_requirements.recommended ? requirementsOf(data.pc_requirements.recommended) : null
         } : null;
 
         return {
             success: true,
-            name: data.name,
+            name: clampStr(data.name, 200),
             appId: appId,
             price: price,
             originalPrice: originalPrice,
@@ -125,16 +152,16 @@ async function getSteamGameInfo(query) {
             description: desc,
             url: `https://store.steampowered.com/app/${appId}/`,
             headerImage: data.header_image,
-            developers: data.developers ? data.developers.join(', ') : 'Desconhecido',
-            publishers: data.publishers ? data.publishers.join(', ') : 'Desconhecido',
-            releaseDate: data.release_date && data.release_date.date ? data.release_date.date : 'Desconhecida',
+            developers: data.developers ? clampStr(data.developers.join(', '), 300) : 'Desconhecido',
+            publishers: data.publishers ? clampStr(data.publishers.join(', '), 300) : 'Desconhecido',
+            releaseDate: data.release_date && data.release_date.date ? clampStr(data.release_date.date, 60) : 'Desconhecida',
             metacritic: data.metacritic ? data.metacritic.score : null,
             pcRequirements: pcRequirements
         };
         
     } catch (error) {
-        console.error('[STEAM] Erro na API:', error.message);
-        return { error: `Deu um erro na conexão com a Steam: ${error.message}` };
+        logger.warn(`[STEAM] Erro na API: ${clampText(error?.message, 160)}`);
+        return { error: `Deu um erro na conexão com a Steam: ${clampText(error?.message, 200)}` };
     }
 }
 

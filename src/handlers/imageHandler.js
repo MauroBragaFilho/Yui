@@ -4,7 +4,20 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import config from '../config.js';
 import dotenv from 'dotenv';
+import { logger } from '../utils/logger.js';
 dotenv.config();
+// O prompt de imagem é texto do usuário: NUNCA vai para o log (só o tamanho). Os erros dos provedores trazem o corpo da resposta depois de
+// "HTTP nnn:" ou de "content-type inesperado", e esse corpo pode repetir o prompt. No log fica só o motivo, curto: a mensagem só entra se
+// for uma das NOSSAS (começa com o nome do provedor ou da chave) ou um erro de rede conhecido, e sempre cortada antes do corpo; qualquer
+// outra (erro de biblioteca, do Gradio, de JSON) entra só com o nome e o código do erro.
+const OWN_ERROR_RE = /^(?:HF_TOKEN|TOGETHER_API_KEY|STABILITY_API_KEY|URL da imagem|Stable Horde|Together AI|HuggingFace|Pollinations|Stability AI|Gradio download|fetch failed$|The operation was aborted due to timeout$|This operation was aborted$)/;
+function briefError(err) {
+    const name = String(err?.name || 'Error').slice(0, 40);
+    const msg = String(err?.message ?? err ?? '').slice(0, 2000);
+    if (!OWN_ERROR_RE.test(msg)) return `${name}${err?.code ? ` ${String(err.code).slice(0, 30)}` : ''}`;
+    const cut = /^[\s\S]*?(?:\bHTTP \d{3}\b|content-type inesperado)/.exec(msg);
+    return `${name}: ${(cut ? cut[0] : msg).slice(0, 100)}`;
+}
 const SAFETY_NEGATIVE_BASE = 'nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18, genitals, suggestive, semi-nude';
 function enforceSafetyNegative(negativePrompt = '') {
     if (!negativePrompt.trim()) return SAFETY_NEGATIVE_BASE;
@@ -22,14 +35,14 @@ async function saveImageLocally(imageUrl, seed) {
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         const localFilePath = path.join(tempDir, `image_${Date.now()}_${seed || 'na'}.png`);
         fs.writeFileSync(localFilePath, imageBuffer);
-        console.log(`[ImageHandler] Imagem salva em: ${localFilePath}`);
+        logger.info(`[ImageHandler] Imagem salva em: ${localFilePath}`);
     } catch (e) {
-        console.warn('[ImageHandler] Falha ao salvar imagem localmente:', e.message);
+        logger.warn(`[ImageHandler] Falha ao salvar imagem localmente (${briefError(e)}).`);
     }
 }
 async function tryGradioSDXL(prompt, negativePrompt, width, height) {
     const { Client } = await import('@gradio/client');
-    console.log('[Image 1/5] Tentando Gradio (SDXL-Flash)...');
+    logger.info('[Image 1/5] Tentando Gradio (SDXL-Flash)...');
     const client = await Client.connect('KingNish/SDXL-Flash');
     const result = await client.predict('/run', {
         prompt,
@@ -52,13 +65,13 @@ async function tryGradioSDXL(prompt, negativePrompt, width, height) {
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     const filePath = path.join(tempDir, `image_${Date.now()}_${actualSeed}.png`);
     fs.writeFileSync(filePath, buffer);
-    console.log(`[Image 1/5] Gradio imagem salva localmente: ${filePath}`);
+    logger.info(`[Image 1/5] Gradio imagem salva localmente: ${filePath}`);
     return { imageUrl: null, localFilePath: filePath, actualSeed, modelName: 'SDXL-Flash (Gradio)' };
 }
 async function tryHuggingFace(prompt, negativePrompt, width, height) {
     const hfToken = config.hfToken;
     if (!hfToken) throw new Error('HF_TOKEN não configurado');
-    console.log('[Image 2/5] Tentando HuggingFace (FLUX.1-schnell)...');
+    logger.info('[Image 2/5] Tentando HuggingFace (FLUX.1-schnell)...');
     const model  = 'black-forest-labs/FLUX.1-schnell';
     const apiUrl = `https://router.huggingface.co/hf-inference/models/${model}`;
     const response = await fetch(apiUrl, {
@@ -99,7 +112,7 @@ async function tryHuggingFace(prompt, negativePrompt, width, height) {
 }
 async function tryStableHorde(prompt, negativePrompt, width, height) {
     const apiKey = config.hordeImageApiKey;
-    console.log('[Image 3/5] Tentando Stable Horde...');
+    logger.info('[Image 3/5] Tentando Stable Horde...');
     const submitRes = await fetch('https://stablehorde.net/api/v2/generate/async', {
         method: 'POST',
         headers: {
@@ -132,7 +145,7 @@ async function tryStableHorde(prompt, negativePrompt, width, height) {
     }
     const { id } = await submitRes.json();
     if (!id) throw new Error('Stable Horde não retornou ID de job');
-    console.log(`[Image 3/5] Stable Horde job ID: ${id} — aguardando geração...`);
+    logger.info(`[Image 3/5] Stable Horde job ID: ${id} — aguardando geração...`);
     for (let attempt = 0; attempt < 60; attempt++) {
         await new Promise(r => setTimeout(r, 5000));
         const checkRes = await fetch(`https://stablehorde.net/api/v2/generate/check/${id}`);
@@ -163,14 +176,14 @@ async function tryStableHorde(prompt, negativePrompt, width, height) {
             throw new Error('Stable Horde não retornou imagem');
         }
         if (checkData.faulted) throw new Error('Stable Horde: job falhou (faulted)');
-        console.log(`[Image 3/5] Stable Horde: aguardando... (fila: ${checkData.queue_position || '?'})`);
+        logger.debug(`[Image 3/5] Stable Horde: aguardando... (fila: ${checkData.queue_position || '?'})`);
     }
     throw new Error('Stable Horde Timeout (120s)');
 }
 async function tryTogetherAI(prompt, negativePrompt, width, height) {
     const apiKey = config.togetherApiKey;
     if (!apiKey) throw new Error('TOGETHER_API_KEY não configurado');
-    console.log('[Image 4/5] Tentando Together AI (FLUX.1-schnell)...');
+    logger.info('[Image 4/5] Tentando Together AI (FLUX.1-schnell)...');
     const response = await fetch('https://api.together.ai/v1/images/generations', {
         method: 'POST',
         headers: {
@@ -207,7 +220,7 @@ async function tryTogetherAI(prompt, negativePrompt, width, height) {
 async function tryStabilityAI(prompt, negativePrompt, width, height) {
     const apiKey = config.getStabilityKey();
     if (!apiKey) throw new Error('STABILITY_API_KEY não configurado');
-    console.log('[Image 0/6] Tentando Stability AI (Ultra)...');
+    logger.info('[Image 0/6] Tentando Stability AI (Ultra)...');
     
     const formData = new FormData();
     formData.append('prompt', prompt);
@@ -239,7 +252,7 @@ async function tryStabilityAI(prompt, negativePrompt, width, height) {
     return { imageUrl: null, localFilePath: filePath, actualSeed: seed, modelName: 'Stable Image Ultra (Stability AI)' };
 }
 async function tryPollinations(prompt, negativePrompt, width, height) {
-    console.log('[Image 5/5] Tentando Pollinations AI (último fallback)...');
+    logger.info('[Image 5/5] Tentando Pollinations AI (último fallback)...');
     const encodedPrompt   = encodeURIComponent(prompt);
     const encodedNegative = encodeURIComponent(negativePrompt);
     const seed = Math.floor(Math.random() * 1e9);
@@ -261,7 +274,8 @@ async function tryPollinations(prompt, negativePrompt, width, height) {
 }
 async function generateImage(prompt, negativePrompt = '', width = 1024, height = 1024, options = {}) {
     const { provider = 'auto', bypassSafety = false } = options;
-    console.log(`[LOG] Geração de Imagem | Provedor: ${provider} | Prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);
+    // B9: só o tamanho do prompt (o texto é do usuário e não vai para o log).
+    logger.info(`[ImageHandler] Geração de imagem | Provedor: ${String(provider).slice(0, 30)} | Prompt: ${String(prompt ?? '').length} caracteres`);
     const finalNegative = bypassSafety ? negativePrompt : enforceSafetyNegative(negativePrompt);
     const allProviders = [
         { id: 'stability',    name: 'Stability AI',      fn: tryStabilityAI },
@@ -280,14 +294,14 @@ async function generateImage(prompt, negativePrompt = '', width = 1024, height =
         try {
             const result = await p.fn(prompt, finalNegative, width, height);
             if (result) {
-                console.log(`[ImageHandler] ✅ Sucesso via ${p.name}`);
+                logger.info(`[ImageHandler] ✅ Sucesso via ${p.name}`);
                 return result;
             }
         } catch (err) {
-            console.warn(`[ImageHandler] ❌ ${p.name} falhou: ${err.message}`);
+            logger.warn(`[ImageHandler] ❌ ${p.name} falhou (${briefError(err)})`);
         }
     }
-    console.error(`[ImageHandler] CRITICAL: Fallback failed para a lista de provedores tentados (${providersToTry.map(p => p.id).join(', ')}).`);
+    logger.error(`[ImageHandler] CRITICAL: Fallback failed para a lista de provedores tentados (${providersToTry.map(p => p.id).join(', ')}).`);
     return null;
 }
 export { generateImage };

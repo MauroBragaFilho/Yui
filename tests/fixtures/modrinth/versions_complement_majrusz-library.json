@@ -1,0 +1,56 @@
+{
+ "request": "/v2/project/PYQD8noM/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "complemento obrigatorio de: Majrusz's Accessories",
+ "reducedFrom": 25,
+ "body": [
+  {
+   "id": "BZzTRseC",
+   "project_id": "PYQD8noM",
+   "name": "Majrusz Library 7.0.8",
+   "version_number": "7.0.8",
+   "version_type": "release",
+   "date_published": "2024-04-29T20:47:27.555331Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/PYQD8noM/versions/BZzTRseC/majrusz-library-forge-1.20.1-7.0.8.jar",
+     "filename": "majrusz-library-forge-1.20.1-7.0.8.jar",
+     "primary": true,
+     "size": 437340
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "10qUmi1t",
+   "project_id": "PYQD8noM",
+   "name": "Majrusz Library 7.0.7",
+   "version_number": "7.0.7",
+   "version_type": "release",
+   "date_published": "2024-04-27T17:12:10.840558Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/PYQD8noM/versions/10qUmi1t/majrusz-library-forge-1.20.1-7.0.7.jar",
+     "filename": "majrusz-library-forge-1.20.1-7.0.7.jar",
+     "primary": true,
+     "size": 437317
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

@@ -3,6 +3,8 @@ import axios from 'axios';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { clampText } from '../discord/embedLimits.js';
+import { logger } from '../utils/logger.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SOURCES = [
@@ -63,7 +65,8 @@ async function searchGames(gameName, provider = 'any') {
         query = query.replace(regex, value);
     }
     
-    const searchWords = query.split(' ').filter(w => w.length > 0);
+    // No máximo 12 palavras: uma busca de milhares de palavras só gasta CPU (nenhum título casaria).
+    const searchWords = query.split(' ').filter(w => w.length > 0).slice(0, 12);
     if (searchWords.length === 0) return [];
 
     const activeSources = SOURCES.filter(s => {
@@ -105,7 +108,7 @@ async function searchGames(gameName, provider = 'any') {
             if (source.name === 'DODI') dodiMatches = found;
             if (source.name === 'Online Fix') onlineFixMatches = found;
         } catch (err) {
-            console.error(`Erro ao buscar em ${source.name}:`, err.message);
+            logger.warn(`[GameHandler] Erro ao buscar em ${source.name}: ${clampText(err?.message, 160)}`);
         }
     }));
 
@@ -150,7 +153,7 @@ function createPaginationComponents(page, totalPages, itemsInPage, startIndex) {
                 const safeTitle = game.title.length > 90 ? game.title.substring(0, 90) + '...' : game.title;
                 return new StringSelectMenuOptionBuilder()
                     .setLabel(`${startIndex + index + 1}. ${safeTitle}`)
-                    .setDescription(`${game.provider} - ${game.fileSize}`)
+                    .setDescription(clampText(`${game.provider} - ${game.fileSize}`, 100))
                     .setValue((startIndex + index).toString())
                     .setEmoji(game.emoji);
             })
@@ -178,16 +181,24 @@ function createPaginationComponents(page, totalPages, itemsInPage, startIndex) {
     return components;
 }
 
-async function executeGameCommand(interaction) {
+async function executeGameCommand(interaction, deps = {}) {
+    // `deps` só existe para os testes trocarem a busca e o torrent por dublês.
+    const search = deps.searchGames ?? searchGames;
+    const getTorrent = deps.getTorrentOrMagnet ?? getTorrentOrMagnet;
     const gameName = interaction.options.getString('nome');
+    // Eco do que o usuário digitou: no máximo 100 caracteres. A opção aceita até 6000, o texto da
+    // resposta passa de 2000 e o título do embed de 256 (os setters lançam e a resposta nunca saía).
+    const shownName = clampText(gameName, 100);
     const provider = interaction.options.getString('fonte') || 'any';
-    console.log(`[LOG] Slash: /buscar_jogo | Usuário: ${interaction.user.tag} (${interaction.user.id}) | Jogo: "${gameName}" | Fonte: "${provider}"`);
+    // Só metadados no log: o nome digitado é texto do usuário (e pode ter até 6000 caracteres).
+    logger.info(`[GameHandler] /buscar_jogo | usuário ${interaction.user.id} | fonte ${clampText(provider, 30)} | consulta de ${String(gameName ?? '').length} caracteres`);
     
     const interactionResponse = await interaction.deferReply({ ephemeral: false });
     try {
-        const finalResults = await searchGames(gameName, provider);
+        const finalResults = await search(gameName, provider);
         if (finalResults.length === 0) {
-            return interaction.editReply({ content: `❌ Nada encontrado para "**${gameName}**".` });
+            // O nome é eco do que o usuário digitou: nenhuma menção (@everyone, @here, cargo, usuário) pode sair daqui.
+            return interaction.editReply({ content: `❌ Nada encontrado para "**${shownName}**".`, allowedMentions: { parse: [] } });
         }
         
         const pageSize = 5;
@@ -209,7 +220,7 @@ async function executeGameCommand(interaction) {
             });
 
             const embed = new EmbedBuilder()
-                .setTitle(`🔍 Resultados para: "${gameName}" (Página ${page + 1}/${totalPages})`)
+                .setTitle(`🔍 Resultados para: "${shownName}" (Página ${page + 1}/${totalPages})`)
                 .setDescription(description)
                 .setColor('#8F55FD')
                 .setFooter({ text: 'Yui Torrent • by oBraga' });
@@ -225,31 +236,42 @@ async function executeGameCommand(interaction) {
         });
         
         collector.on('collect', async i => {
-            if (i.user.id !== interaction.user.id) {
-                return i.reply({ content: '❌ Faça sua própria busca com /buscar_jogo.', ephemeral: true });
-            }
-            
-            if (i.customId === 'game_prev') {
-                currentPage--;
-                await i.update(renderPage(currentPage));
-            } else if (i.customId === 'game_next') {
-                currentPage++;
-                await i.update(renderPage(currentPage));
-            } else if (i.customId === 'select_game') {
-                await i.update({ content: '🔄 **Processando...** Buscando arquivo...', components: [], embeds: [] });
-                const selectedIndex = parseInt(i.values[0]);
-                const selectedGame = finalResults[selectedIndex];
-                console.log(`[LOG] Seleção Game: ${selectedGame.title} | Usuário: ${i.user.tag} (${i.user.id})`);
-                const result = await getTorrentOrMagnet(selectedGame);
-                const attachment = new AttachmentBuilder(result.buffer, { name: result.fileName });
-                const successEmbed = new EmbedBuilder()
-                    .setTitle(`🚀 Download Pronto: ${selectedGame.title}`)
-                    .setDescription(result.message)
-                    .setColor(result.color)
-                    .addFields({ name: '🔗 Magnet Link (Backup)', value: `\`\`\`${selectedGame.magnet}\`\`\`` })
-                    .setFooter({ text: 'Yui Torrent Search • by oBraga' });
-                await i.editReply({ content: '', embeds: [successEmbed], files: [attachment] });
-                collector.stop();
+            // Este ouvinte é assíncrono: um erro aqui virava rejeição sem tratamento e deixava a
+            // mensagem presa em "Processando...". Agora o erro vai para o log e o usuário recebe um aviso.
+            try {
+                if (i.user.id !== interaction.user.id) {
+                    return await i.reply({ content: '❌ Faça sua própria busca com /buscar_jogo.', ephemeral: true });
+                }
+
+                if (i.customId === 'game_prev') {
+                    currentPage--;
+                    await i.update(renderPage(currentPage));
+                } else if (i.customId === 'game_next') {
+                    currentPage++;
+                    await i.update(renderPage(currentPage));
+                } else if (i.customId === 'select_game') {
+                    await i.update({ content: '🔄 **Processando...** Buscando arquivo...', components: [], embeds: [] });
+                    const selectedIndex = parseInt(i.values[0]);
+                    const selectedGame = finalResults[selectedIndex];
+                    logger.info(`[GameHandler] Seleção no resultado ${selectedIndex + 1} (${selectedGame.provider}) | usuário ${i.user.id}`);
+                    const result = await getTorrent(selectedGame);
+                    const attachment = new AttachmentBuilder(result.buffer, { name: result.fileName });
+                    // Título do jogo até 255 caracteres e magnet sem "xt" podem passar dos limites do embed (256 e 1024).
+                    const successEmbed = new EmbedBuilder()
+                        .setTitle(`🚀 Download Pronto: ${clampText(selectedGame.title, 235)}`)
+                        .setDescription(result.message)
+                        .setColor(result.color)
+                        .addFields({ name: '🔗 Magnet Link (Backup)', value: `\`\`\`${clampText(selectedGame.magnet, 900)}\`\`\`` })
+                        .setFooter({ text: 'Yui Torrent Search • by oBraga' });
+                    await i.editReply({ content: '', embeds: [successEmbed], files: [attachment] });
+                    collector.stop();
+                }
+            } catch (err) {
+                logger.warn(`[GameHandler] Falha ao tratar a interação (${err?.name || 'Error'}): ${clampText(err?.message, 160)}`);
+                if (i.customId === 'select_game') {
+                    await i.editReply({ content: '❌ Não consegui preparar esse download agora. Tente de novo com /buscar_jogo.', embeds: [], files: [], components: [] }).catch(() => {});
+                    collector.stop();
+                }
             }
         });
         
@@ -259,7 +281,7 @@ async function executeGameCommand(interaction) {
             }
         });
     } catch (error) {
-        console.error('Erro no gameHandler:', error);
+        logger.error(`[GameHandler] Erro ao processar a busca (${error?.name || 'Error'}): ${clampText(error?.message, 160)}`);
         await interaction.editReply('Ocorreu um erro interno ao processar a busca.');
     }
 }

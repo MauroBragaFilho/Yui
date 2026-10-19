@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { alertOwner } from '../core/alerts.js';
 import { newswireEngine } from '../engines/newswire/index.js';
 import { gtaoEngine } from '../engines/gtao/index.js';
 import { youtubeEngine } from '../engines/youtube/index.js';
@@ -56,6 +57,7 @@ export function startScheduler(client) {
       logger.info(`[Scheduler] Memória temporária: ${removed} lembrança(s) expirada(s) removida(s).`);
     } catch (err) {
       logger.error(`[Scheduler] Erro ao limpar memória expirada: ${err.message}`);
+      alertOwner('memory-purge', 'Falha ao limpar a memória temporária', err.message, { cooldownMinutes: 360 });
     }
   }, { timezone: 'UTC' });
 
@@ -121,6 +123,7 @@ export function startScheduler(client) {
       }
     } catch (err) {
       logger.error(`[Weekly] Falha no ciclo: ${err.message}`);
+      alertOwner('weekly', 'Falha ao buscar o evento semanal', err.message, { cooldownMinutes: 180 });
     } finally {
       weeklyRunning = false;
     }
@@ -160,6 +163,7 @@ export function startScheduler(client) {
         }
       } catch (err) {
         logger.error(`[Scheduler] Erro na tarefa do YouTube: ${err.message}`);
+        alertOwner('youtube', 'Falha nos avisos do YouTube', err.message, { cooldownMinutes: 120 });
       }
     });
     logger.info(`[Scheduler] Monitoramento do YouTube configurado para rodar a cada ${config.youtube.intervalMinutes} minutos.`);
@@ -182,6 +186,7 @@ export function startScheduler(client) {
         }
       } catch (err) {
         logger.error(`[Scheduler] Erro na tarefa da Twitch: ${err.message}`);
+        alertOwner('twitch', 'Falha nos avisos da Twitch', err.message, { cooldownMinutes: 120 });
       }
     });
     logger.info(`[Scheduler] Monitoramento da Twitch configurado para rodar a cada ${config.twitch.intervalMinutes} minutos.`);

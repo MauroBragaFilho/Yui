@@ -1,0 +1,58 @@
+{
+ "request": "/v2/project/T8TGycIQ/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "complemento obrigatorio de: Dungeons Enhanced, Dungeons Plus",
+ "reducedFrom": 8,
+ "body": [
+  {
+   "id": "xavY0MZc",
+   "project_id": "T8TGycIQ",
+   "name": "Structure Gel API v2.16.2",
+   "version_number": "2.16.2",
+   "version_type": "release",
+   "date_published": "2024-04-21T03:49:56.791842Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/T8TGycIQ/versions/xavY0MZc/structure_gel-1.20.1-2.16.2.jar",
+     "filename": "structure_gel-1.20.1-2.16.2.jar",
+     "primary": true,
+     "size": 966028
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "FQtCiGpd",
+   "project_id": "T8TGycIQ",
+   "name": "Structure Gel API v2.16.1",
+   "version_number": "2.16.1",
+   "version_type": "release",
+   "date_published": "2024-03-17T02:03:59.823661Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/T8TGycIQ/versions/FQtCiGpd/structure_gel-1.20.1-2.16.1.jar",
+     "filename": "structure_gel-1.20.1-2.16.1.jar",
+     "primary": true,
+     "size": 962119
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

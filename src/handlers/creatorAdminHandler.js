@@ -13,8 +13,11 @@ import {
     removeBan,
     getBans,
     setAutoBlock,
-    getAutoBlockMode
+    getAutoBlockMode,
+    clampBanReason,
+    BAN_REASON_MAX
 } from './banHandler.js';
+import { clampText } from '../discord/embedLimits.js';
 import { buildBanListPayload } from './banListHandler.js';
 import {
     updateShowModel,
@@ -31,6 +34,10 @@ import {
 import { handleConfigCommand } from './configPanelHandler.js';
 import { sendMcpToolsManager } from './mcpToolPanelHandler.js';
 import { handleMemoriasAdmin } from './memoryAdminHandler.js';
+
+// Eco de entrada do dono (IDs, tipos, nomes de ferramenta): cortado em 100, porque o valor de um campo de
+// embed não pode passar de 1024 e a opção/modal aceita muito mais que isso (TG-19/TG-33).
+const show = (value, max = 100) => clampText(value, max) || '—';
 
 async function handleCreatorAdminCommand(interaction, client) {
     if (!config.isOwner(interaction.user.id)) {
@@ -68,14 +75,15 @@ async function handleCreatorAdminCommand(interaction, client) {
     if (sub === 'banir') {
         const tipo = interaction.options.getString('tipo');
         const id = interaction.options.getString('id');
-        const motivo = interaction.options.getString('motivo') || 'Violação dos termos.';
+        // O motivo é gravado cortado (BAN_REASON_MAX) e o eco mostra exatamente o que foi gravado.
+        const motivo = clampBanReason(interaction.options.getString('motivo') || 'Violação dos termos.');
         addBan(tipo, id, motivo);
         const embed = new EmbedBuilder()
             .setColor(0xE11D48)
             .setTitle('🔒 Restrição Aplicada')
             .addFields(
-                { name: 'Tipo', value: tipo, inline: true },
-                { name: 'ID', value: `\`${id}\``, inline: true },
+                { name: 'Tipo', value: show(tipo), inline: true },
+                { name: 'ID', value: `\`${show(id)}\``, inline: true },
                 { name: 'Motivo', value: motivo }
             )
             .setTimestamp();
@@ -90,8 +98,8 @@ async function handleCreatorAdminCommand(interaction, client) {
             .setColor(0x10B981)
             .setTitle('🔓 Restrição Revogada')
             .addFields(
-                { name: 'Tipo', value: tipo, inline: true },
-                { name: 'ID', value: `\`${id}\``, inline: true }
+                { name: 'Tipo', value: show(tipo), inline: true },
+                { name: 'ID', value: `\`${show(id)}\``, inline: true }
             )
             .setTimestamp();
         return interaction.reply({ embeds: [embed], ephemeral: false });
@@ -110,8 +118,8 @@ async function handleCreatorAdminCommand(interaction, client) {
             .setColor(0x10B981)
             .setTitle('🛡️ AutoMod Configurado')
             .addFields(
-                { name: 'ID do Servidor', value: `\`${guildId}\``, inline: true },
-                { name: 'Modo', value: `\`${modo}\``, inline: true }
+                { name: 'ID do Servidor', value: `\`${show(guildId)}\``, inline: true },
+                { name: 'Modo', value: `\`${show(modo)}\``, inline: true }
             )
             .setTimestamp();
         return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -128,7 +136,7 @@ async function handleCreatorAdminCommand(interaction, client) {
             let tool = allTools.find(t => t.function.name === toolInput || t.meta.label === toolInput);
             if (!tool) tool = allTools.find(t => toolInput.includes(t.function.name) || toolInput.includes(t.meta.label));
             if (!tool) {
-                return interaction.reply({ content: `❌ Ferramenta \`${toolInput}\` não encontrada.`, ephemeral: true });
+                return interaction.reply({ content: `❌ Ferramenta \`${show(toolInput)}\` não encontrada.`, ephemeral: true });
             }
             const enabled = estado === 'on';
             setServerToolEnabled(targetGuildId, tool.function.name, enabled);
@@ -137,7 +145,7 @@ async function handleCreatorAdminCommand(interaction, client) {
                 .setTitle(`Ferramenta ${enabled ? 'Ativada' : 'Desativada'}`)
                 .addFields(
                     { name: 'Ferramenta', value: tool.meta.label, inline: true },
-                    { name: 'Servidor', value: `\`${targetGuildId}\``, inline: true }
+                    { name: 'Servidor', value: `\`${show(targetGuildId)}\``, inline: true }
                 );
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
@@ -147,7 +155,7 @@ async function handleCreatorAdminCommand(interaction, client) {
             const embed = new EmbedBuilder()
                 .setColor(0x10B981)
                 .setTitle('🔄 Ferramentas MCP Resetadas')
-                .setDescription(`Todas as ferramentas foram reativadas para o servidor \`${targetGuildId}\`.`);
+                .setDescription(`Todas as ferramentas foram reativadas para o servidor \`${show(targetGuildId)}\`.`);
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
 
@@ -157,7 +165,7 @@ async function handleCreatorAdminCommand(interaction, client) {
             const embed = new EmbedBuilder()
                 .setColor(0x7C3AED)
                 .setTitle('🔧 Ferramentas MCP — Status')
-                .setDescription(`Desabilitadas no servidor \`${targetGuildId}\`: ${disabled.length > 0 ? disabled.map(d => `\`${d}\``).join(', ') : 'Nenhuma'}`);
+                .setDescription(clampText(`Desabilitadas no servidor \`${show(targetGuildId)}\`: ${disabled.length > 0 ? disabled.map(d => `\`${d}\``).join(', ') : 'Nenhuma'}`, 4000));
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
     }
@@ -286,6 +294,7 @@ async function handleCreatorAdminInteraction(interaction, client) {
             .setLabel('Motivo (Apenas para Banir)')
             .setStyle(TextInputStyle.Paragraph)
             .setPlaceholder('Motivo da restrição')
+            .setMaxLength(BAN_REASON_MAX)
             .setRequired(false);
 
         modal.addComponents(
@@ -364,21 +373,21 @@ async function handleCreatorAdminInteraction(interaction, client) {
         const acao = (interaction.fields.getTextInputValue('acao') || '').toLowerCase();
         const tipo = (interaction.fields.getTextInputValue('tipo') || '').toLowerCase();
         const id = interaction.fields.getTextInputValue('id');
-        const motivo = interaction.fields.getTextInputValue('motivo') || 'Violação.';
+        const motivo = clampBanReason(interaction.fields.getTextInputValue('motivo') || 'Violação.');
 
         if (acao === 'banir') {
             addBan(tipo, id, motivo);
             const embed = new EmbedBuilder()
                 .setColor(0xE11D48)
                 .setTitle('🛑 Bloqueio Aplicado')
-                .setDescription(`O alvo \`${id}\` (${tipo}) foi banido globalmente.`);
+                .setDescription(`O alvo \`${show(id)}\` (${show(tipo)}) foi banido globalmente.`);
             return interaction.reply({ embeds: [embed], ephemeral: true });
         } else if (acao === 'desbanir') {
             removeBan(tipo, id);
             const embed = new EmbedBuilder()
                 .setColor(0x10B981)
                 .setTitle('🔓 Bloqueio Revogado')
-                .setDescription(`O alvo \`${id}\` (${tipo}) foi desbanido.`);
+                .setDescription(`O alvo \`${show(id)}\` (${show(tipo)}) foi desbanido.`);
             return interaction.reply({ embeds: [embed], ephemeral: true });
         } else {
             return interaction.reply({ content: '❌ Ação inválida. Digite BANIR ou DESBANIR.', ephemeral: true });
@@ -397,7 +406,7 @@ async function handleCreatorAdminInteraction(interaction, client) {
         const embed = new EmbedBuilder()
             .setColor(0x10B981)
             .setTitle('🛡️ AutoMod do Servidor Atualizado')
-            .setDescription(`Servidor: \`${guildId}\` | Novo modo: \`${modo}\``);
+            .setDescription(`Servidor: \`${show(guildId)}\` | Novo modo: \`${modo}\``);
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
@@ -411,7 +420,7 @@ async function handleCreatorAdminInteraction(interaction, client) {
             const embed = new EmbedBuilder()
                 .setColor(0x10B981)
                 .setTitle('🔄 Tools Resetadas')
-                .setDescription(`Todas as ferramentas foram reativadas para o servidor \`${guildId}\`.`);
+                .setDescription(`Todas as ferramentas foram reativadas para o servidor \`${show(guildId)}\`.`);
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
 
@@ -420,7 +429,7 @@ async function handleCreatorAdminInteraction(interaction, client) {
             const embed = new EmbedBuilder()
                 .setColor(0x7C3AED)
                 .setTitle('🔧 Ferramentas Desabilitadas')
-                .setDescription(`Servidor \`${guildId}\`: ${disabled.length > 0 ? disabled.map(d => `\`${d}\``).join(', ') : 'Nenhuma'}`);
+                .setDescription(clampText(`Servidor \`${show(guildId)}\`: ${disabled.length > 0 ? disabled.map(d => `\`${d}\``).join(', ') : 'Nenhuma'}`, 4000));
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
 
@@ -429,7 +438,7 @@ async function handleCreatorAdminInteraction(interaction, client) {
         const embed = new EmbedBuilder()
             .setColor(enabled ? 0x10B981 : 0xE11D48)
             .setTitle(`Ferramenta ${enabled ? 'Ativada' : 'Desativada'}`)
-            .setDescription(`Ferramenta \`${toolOrCmd}\` para o servidor \`${guildId}\`.`);
+            .setDescription(`Ferramenta \`${show(toolOrCmd)}\` para o servidor \`${show(guildId)}\`.`);
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 }

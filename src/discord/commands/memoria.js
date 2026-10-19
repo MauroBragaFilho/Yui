@@ -1,10 +1,44 @@
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { setGlobalContext } from '../setGlobalContext.js';
+import { makeEmbed, chunkLines, clampText } from '../embedLimits.js';
 import { checkBan } from '../../handlers/banHandler.js';
 import { contextFromDiscord, isMemoryEnabled } from '../../core/discordAdapter.js';
-import { memory } from '../../core/index.js';
+import { memory, audit } from '../../core/index.js';
+import { forgetUserContext } from '../../core/context/contextStore.js';
+import { logger } from '../../utils/logger.js';
 
 const COLOR = 0x8B5CF6;
+
+// A descrição do embed aceita 4096 caracteres e o conteúdo de cada lembrança vem de fora (pode ser longo). A lista é montada
+// linha a linha: uma lembrança nunca é cortada no meio (cortar deixava crase aberta e escondia o número que o /yui-memoria
+// esquecer usa) e o que não coube vira o aviso "(+N lembrança(s) não exibida(s))".
+const LIST_BUDGET = 3800;
+const LINE_MAX = 500;
+function fitLines(lines, budget = LIST_BUDGET) {
+  const oneLine = lines.map((l) => clampText(String(l).replace(/\s+/g, ' ').trim(), LINE_MAX));
+  const [first = ''] = chunkLines(oneLine, budget);
+  const shown = first ? first.split('\n').length : 0;
+  return { text: first, shown, hidden: lines.length - shown };
+}
+
+// O `apagar-tudo` NÃO toca no registro de uso do bot (src/data/historico.txt): o comando avisa isso, em vez de prometer o que não faz.
+const HISTORY_NOTE = '\n-# O registro de uso do bot (historico.txt) não é apagado por este comando.';
+
+// Direito de exclusão do contexto por horas (falas recentes guardadas por src/core/context/contextStore.js): apaga todos os fios
+// da pessoa (DM e canais). Nunca lança, para a exclusão da memória não depender dele. Devolve quantas falas saíram.
+async function wipeConversationContext(userId) {
+  try {
+    const removed = await forgetUserContext(userId);
+    if (removed.turns > 0) {
+      // Auditoria só com contagens, nunca o conteúdo.
+      audit('context.forgetAll', { userId, platform: 'discord' }, { scopes: removed.scopes, turns: removed.turns });
+    }
+    return removed.turns;
+  } catch (err) {
+    logger.warn(`[Memoria] não consegui apagar o contexto das conversas recentes: ${String(err?.message ?? err).slice(0, 120)}`);
+    return 0;
+  }
+}
 
 function scopeLabel(ctx) {
   return ctx.memoryScope === 'personal'
@@ -30,11 +64,18 @@ export const memoriaCommand = {
   async execute(interaction) {
     const reply = (payload) => interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
 
+    const sub = interaction.options.getSubcommand();
+    const userId = interaction.user.id;
+
+    // O contexto por horas é apagável mesmo com a memória desligada ou para quem está bloqueado.
+    const removedContext = sub === 'apagar-tudo' ? await wipeConversationContext(userId) : 0;
+    const contextOnlyReply = () => reply({ content: `🗑️ Apaguei ${removedContext} fala(s) do contexto das suas conversas recentes com a Yui.${HISTORY_NOTE}` });
+
     if (!isMemoryEnabled()) {
+      if (removedContext > 0) return contextOnlyReply();
       return reply({ content: '🧠 O sistema de memória da Yui está desativado no momento.' });
     }
 
-    const userId = interaction.user.id;
     const isBlocked = Boolean(checkBan(userId, interaction.guildId, interaction.channelId));
     const ctx = contextFromDiscord({
       userId,
@@ -42,19 +83,19 @@ export const memoriaCommand = {
       channelId: interaction.channelId,
       isBlocked,
     });
-    if (isBlocked) return reply({ content: '🛑 Memória indisponível para este usuário.' });
-
-    const sub = interaction.options.getSubcommand();
+    if (isBlocked) {
+      if (removedContext > 0) return contextOnlyReply();
+      return reply({ content: '🛑 Memória indisponível para este usuário.' });
+    }
 
     if (sub === 'ver') {
       const rows = memory.listMemories(ctx, { limit: 25 });
-      const embed = new EmbedBuilder().setColor(COLOR).setTitle('🧠 O que a Yui lembra sobre você')
-        .setFooter({ text: scopeLabel(ctx) });
-      embed.setDescription(
-        rows.length
-          ? rows.map((r) => `**#${r.id}** · \`${r.type}\` — ${r.content}`).join('\n').slice(0, 3900)
-          : 'Nada guardado ainda. Diga algo como “lembra que eu gosto de Sultan RS” ou use `/yui-memoria lembrar`.'
-      );
+      let description = 'Nada guardado ainda. Diga algo como “lembra que eu gosto de Sultan RS” ou use `/yui-memoria lembrar`.';
+      if (rows.length) {
+        const { text, hidden } = fitLines(rows.map((r) => `**#${r.id}** · \`${r.type}\` — ${r.content}`));
+        description = hidden > 0 ? `${text}\n(+${hidden} lembrança(s) não exibida(s))` : text;
+      }
+      const embed = makeEmbed({ color: COLOR, title: '🧠 O que a Yui lembra sobre você', description, footer: scopeLabel(ctx) });
       return reply({ embeds: [embed] });
     }
 
@@ -70,7 +111,8 @@ export const memoriaCommand = {
 
     if (sub === 'apagar-tudo') {
       const n = memory.forgetAll(ctx);
-      return reply({ content: `🗑️ Apaguei ${n} lembrança(s) da sua memória.` });
+      const extra = removedContext > 0 ? ` e ${removedContext} fala(s) do contexto das conversas recentes` : '';
+      return reply({ content: `🗑️ Apaguei ${n} lembrança(s) da sua memória${extra}.${HISTORY_NOTE}` });
     }
   },
 };

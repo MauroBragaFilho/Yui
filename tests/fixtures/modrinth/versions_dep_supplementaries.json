@@ -1,0 +1,72 @@
+{
+ "request": "/v2/project/fFEIiSDQ/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "required: Moonlight Lib (esta na lista do dono)",
+ "reducedFrom": 135,
+ "body": [
+  {
+   "id": "foXRPXFH",
+   "project_id": "fFEIiSDQ",
+   "name": "1.20-3.1.44-forge",
+   "version_number": "1.20-3.1.44-forge",
+   "version_type": "release",
+   "date_published": "2026-10-11T23:14:37.640319Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/fFEIiSDQ/versions/foXRPXFH/supplementaries-1.20-3.1.44-forge.jar",
+     "filename": "supplementaries-1.20-3.1.44-forge.jar",
+     "primary": true,
+     "size": 13686603
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "twkfQtEc",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  },
+  {
+   "id": "S0TIJ1hU",
+   "project_id": "fFEIiSDQ",
+   "name": "1.20-3.1.43-forge",
+   "version_number": "1.20-3.1.43-forge",
+   "version_type": "release",
+   "date_published": "2026-04-06T12:12:16.092272Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/fFEIiSDQ/versions/S0TIJ1hU/supplementaries-1.20-3.1.43-forge.jar",
+     "filename": "supplementaries-1.20-3.1.43-forge.jar",
+     "primary": true,
+     "size": 13667742
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "twkfQtEc",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  }
+ ]
+}

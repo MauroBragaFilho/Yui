@@ -10,6 +10,8 @@ import {
     updateProviderSetting,
     getProviderSettings,
 } from './llmHandler.js';
+import { logger } from '../utils/logger.js';
+import { clampOptions, clampText } from '../discord/embedLimits.js';
 
 const CONFIG_PAGES = [
     {
@@ -498,16 +500,13 @@ const CONFIG_PAGES = [
     },
 ];
 
+// Chave do painel -> variável do .env que o src/config/index.js REALMENTE lê na subida (e que, por isso, manda no valor ao reiniciar).
+// As chaves antigas (PREFIX, BOT_NAME, SAVE_HISTORY, DEFAULT_AUTOMOD, AUTOMOD_MODE, APPEAL_CHANNEL_ID, SEND_ENVIRONMENT_INFO,
+// KEEP_MUSIC_EMBED, SYSTEM_PROMPT) não são lidas por nada (docs/content_pt/ENVIRONMENT.md, seção 10): avisar delas era avisar à toa.
 const envConfigMap = {
-    prefix: 'PREFIX',
-    botName: 'BOT_NAME',
-    appealChannelId: 'APPEAL_CHANNEL_ID',
+    prefix: 'COMMAND_PREFIX',
+    botName: 'AI_BOT_NAME',
     requireTos: 'REQUIRE_TOS',
-    saveHistory: 'SAVE_HISTORY',
-    keepMusicEmbed: 'KEEP_MUSIC_EMBED',
-    defaultAutoMod: 'DEFAULT_AUTOMOD',
-    automodMode: 'AUTOMOD_MODE',
-    sendEnvironmentInfo: 'SEND_ENVIRONMENT_INFO',
     geminiModel: 'GEMINI_MODEL',
     geminiModelFallback: 'GEMINI_MODEL_FALLBACK',
     hfModel: 'HF_MODEL',
@@ -518,15 +517,19 @@ const envConfigMap = {
     groqModel: 'GROQ_MODEL',
     groqApiUrl: 'GROQ_API_URL',
     hordeUrl: 'HORDE_URL',
-    systemPrompt: 'SYSTEM_PROMPT',
+    systemPrompt: 'AI_SYSTEM_PROMPT',
 };
+
+// Reg 6: nada lê o src/config/config.json na subida da Yui. Alterar uma página "json" muda o valor na memória (vale na hora) e grava o
+// arquivo, mas ao reiniciar o valor volta ao do .env (que tem prioridade) ou ao padrão do código. O texto diz isso, sem prometer "salvo".
+const JSON_PERSISTENCE_NOTE = '💾 Aplicado agora e gravado em src/config/config.json, mas esse arquivo ainda não é lido ao iniciar: ao reiniciar a Yui o valor volta ao do .env (que tem prioridade) ou ao padrão.';
 
 function getActiveEnvWarning(page) {
     if (page.persistence !== 'json') return null;
     const envKey = envConfigMap[page.configKey];
     if (!envKey) return null;
     if (process.env[envKey] !== undefined && process.env[envKey] !== '') {
-        return `⚠️ A variável de ambiente \`${envKey}\` está ativa no .env. Alterar aqui no JSON **não terá efeito** enquanto o ENV existir (o ENV sobrescreve o JSON).`;
+        return `⚠️ A variável de ambiente \`${envKey}\` está ativa no .env. O valor alterado aqui vale **só até reiniciar** a Yui: ao reiniciar, o .env tem prioridade e o valor volta a ser o dele.`;
     }
     return null;
 }
@@ -596,9 +599,9 @@ function buildConfigEmbed(pageIndex) {
         .setDescription(`${page.description}`)
         .addFields(
             { name: '📋 Resumo', value: page.summary, inline: false },
-            { name: '📊 Valor Atual', value: formatValue(currentValue, page), inline: true },
+            { name: '📊 Valor Atual', value: clampText(formatValue(currentValue, page), 1000), inline: true },
             { name: '📂 Categoria', value: page.category, inline: true },
-            { name: '💽 Persistência', value: page.persistence === 'runtime' ? '⚡ Runtime (volta ao padrão no restart)' : '💾 JSON Permanente (salvo em disco)', inline: false }
+            { name: '💽 Persistência', value: page.persistence === 'runtime' ? '⚡ Runtime (volta ao padrão no restart)' : JSON_PERSISTENCE_NOTE, inline: false }
         )
         .setFooter({ text: `Página ${pageIndex}/${CONFIG_PAGES.length} • ${page.key} • Yui Config • by oBraga` })
         .setTimestamp();
@@ -708,8 +711,25 @@ function buildEditRow(pageIndex) {
     return null;
 }
 
-function buildGotoSelectMenu(currentPage) {
-    const pageSize = 25;
+// O menu "Ir Para" aceita 25 opções, mas há mais configurações do que isso (eram 41; só as 24 primeiras apareciam). Cada "janela"
+// traz a opção Home mais até 24 configurações, e dois botões (cfgpanel_gotowin_<n>) trocam de janela. Ao abrir, a janela mostrada
+// é a que contém a página atual.
+const GOTO_WINDOW_SIZE = 24;
+
+function gotoWindowCount() {
+    return Math.max(1, Math.ceil(CONFIG_PAGES.length / GOTO_WINDOW_SIZE));
+}
+
+function gotoWindowIndex(requested, currentPage) {
+    const last = gotoWindowCount() - 1;
+    const wanted = Number.isFinite(requested) ? requested : Math.floor((Math.max(1, currentPage) - 1) / GOTO_WINDOW_SIZE);
+    return Math.max(0, Math.min(last, wanted));
+}
+
+function buildGotoSelectMenu(currentPage, windowIndex) {
+    const win = gotoWindowIndex(windowIndex, currentPage);
+    const first = win * GOTO_WINDOW_SIZE;
+    const lastExclusive = Math.min(CONFIG_PAGES.length, first + GOTO_WINDOW_SIZE);
     const options = [];
 
     options.push({
@@ -719,11 +739,11 @@ function buildGotoSelectMenu(currentPage) {
         default: currentPage === 0
     });
 
-    for (let i = 0; i < CONFIG_PAGES.length && options.length < pageSize; i++) {
+    for (let i = first; i < lastExclusive; i++) {
         const page = CONFIG_PAGES[i];
         options.push({
-            label: `${page.icon} ${(i + 1)}. ${page.label}`.substring(0, 100),
-            description: page.summary.substring(0, 100),
+            label: `${page.icon} ${(i + 1)}. ${page.label}`,
+            description: page.summary,
             value: `cfgpage_${i + 1}`,
             default: currentPage === i + 1
         });
@@ -731,10 +751,31 @@ function buildGotoSelectMenu(currentPage) {
 
     const menu = new StringSelectMenuBuilder()
         .setCustomId('cfgpanel_goto_select')
-        .setPlaceholder('🔢 Selecione uma configuração para ir...')
-        .addOptions(options);
+        .setPlaceholder(gotoWindowCount() > 1
+            ? `🔢 Configurações ${first + 1} a ${lastExclusive} de ${CONFIG_PAGES.length}...`
+            : '🔢 Selecione uma configuração para ir...')
+        .addOptions(clampOptions(options));
 
     return new ActionRowBuilder().addComponents(menu);
+}
+
+/** Botões para trocar a janela do menu "Ir Para". Sem eles (uma janela só) devolve null. */
+function buildGotoPagingRow(currentPage, windowIndex) {
+    const total = gotoWindowCount();
+    if (total <= 1) return null;
+    const win = gotoWindowIndex(windowIndex, currentPage);
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`cfgpanel_gotowin_${Math.max(0, win - 1)}`)
+            .setLabel('⬅️ Configs anteriores')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(win <= 0),
+        new ButtonBuilder()
+            .setCustomId(`cfgpanel_gotowin_${Math.min(total - 1, win + 1)}`)
+            .setLabel('Mais configs ➡️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(win >= total - 1)
+    );
 }
 
 function buildFullPayload(pageIndex) {
@@ -750,19 +791,25 @@ function buildFullPayload(pageIndex) {
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-function updateConfigJson(key, value) {
-    const configJsonPath = path.join(__dirname, '../config/config.json');
+// Módulo ES não tem __dirname: sem esta linha, qualquer alteração de configuração com persistência 'json' lançava ReferenceError.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CONFIG_JSON_PATH = path.join(__dirname, '../config/config.json');
+const MODAL_VALUE_MAX = 4000; // limite do Discord para o texto de um campo de modal
+
+// `filePath` existe para os testes gravarem num arquivo temporário (o padrão é src/config/config.json).
+function updateConfigJson(key, value, filePath = CONFIG_JSON_PATH) {
     try {
-        const rawContent = fs.readFileSync(configJsonPath, 'utf8');
+        const rawContent = fs.readFileSync(filePath, 'utf8');
         const cleanContent = rawContent.replace(/\\"|"(?:\\"|[^"])*"|(\/{2}.*|\/\*[\s\S]*?\*\/)/g, (m, g) => g ? "" : m);
         const jsonConfig = JSON.parse(cleanContent);
         jsonConfig[key] = value;
-        fs.writeFileSync(configJsonPath, JSON.stringify(jsonConfig, null, 2));
+        fs.writeFileSync(filePath, JSON.stringify(jsonConfig, null, 2));
         config[key] = value;
         return true;
     } catch (error) {
-        console.error('[ConfigPanel] Erro ao salvar config.json:', error.message);
+        logger.error(`[ConfigPanel] Erro ao salvar config.json (${error?.name || 'Error'}): ${clampText(error?.message, 200)}`);
         return false;
     }
 }
@@ -800,15 +847,19 @@ async function handleConfigButton(interaction) {
         return await interaction.update(buildFullPayload(Math.min(CONFIG_PAGES.length, current + 1)));
     }
 
-    if (cid === 'cfgpanel_goto_open') {
+    if (cid === 'cfgpanel_goto_open' || cid.startsWith('cfgpanel_gotowin_')) {
         const currentFooter = interaction.message.embeds[0]?.footer?.text || '';
         const match = currentFooter.match(/Página (\d+)/);
         const currentPage = match ? parseInt(match[1]) : 0;
-        const selectRow = buildGotoSelectMenu(currentPage);
+        // Abrir mostra a janela da página atual; os botões cfgpanel_gotowin_<n> pedem outra janela.
+        const requested = cid.startsWith('cfgpanel_gotowin_') ? parseInt(cid.slice('cfgpanel_gotowin_'.length), 10) : NaN;
+        const win = gotoWindowIndex(requested, currentPage);
+        const selectRow = buildGotoSelectMenu(currentPage, win);
         const navRow = buildNavigationRow(currentPage);
+        const pagingRow = buildGotoPagingRow(currentPage, win);
         return await interaction.update({
             embeds: interaction.message.embeds,
-            components: [selectRow, navRow]
+            components: pagingRow ? [selectRow, navRow, pagingRow] : [selectRow, navRow]
         });
     }
 
@@ -846,17 +897,27 @@ async function handleConfigButton(interaction) {
 
         const style = (typeof current === 'string' && current.length > 100) ? TextInputStyle.Paragraph : TextInputStyle.Short;
 
+        // O campo do modal aceita no máximo 4000 caracteres. Um valor atual maior que isso não cabe (setValue lançava e o botão
+        // não respondia) e também não pode ser pré-preenchido cortado, porque salvar gravaria o texto truncado por cima do original.
+        // Nesse caso o campo abre vazio e o aviso fica no texto de exemplo.
+        const currentText = String(current ?? '');
+        const prefill = currentText.length <= MODAL_VALUE_MAX;
+
         const input = new TextInputBuilder()
             .setCustomId('cfg_value')
             .setLabel(page.summary.substring(0, 45))
-            .setPlaceholder(page.type === 'number' ? `${page.min} a ${page.max}` : 'Digite o novo valor...')
-            .setValue(String(current ?? ''))
+            .setPlaceholder(page.type === 'number'
+                ? `${page.min} a ${page.max}`
+                : (prefill ? 'Digite o novo valor...' : 'O valor atual é grande demais para exibir: digite o valor completo'))
             .setStyle(style)
             .setRequired(true);
+        if (prefill) input.setValue(currentText);
 
         if (page.type === 'number') {
             input.setMinLength(1);
             input.setMaxLength(20);
+        } else {
+            input.setMaxLength(MODAL_VALUE_MAX);
         }
 
         modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -921,7 +982,7 @@ async function handleConfigSelect(interaction) {
     return await interaction.update(buildFullPayload(pageIndex));
 }
 
-export { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect };
+export { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect, updateConfigJson, CONFIG_JSON_PATH };
 export default {
     handleConfigCommand,
     handleConfigButton,

@@ -1,0 +1,72 @@
+{
+ "request": "/v2/project/CETpiisl/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "required: Citadel",
+ "reducedFrom": 2,
+ "body": [
+  {
+   "id": "EbBp44Gs",
+   "project_id": "CETpiisl",
+   "name": "Rats 8.1.3",
+   "version_number": "8.1.3",
+   "version_type": "release",
+   "date_published": "2024-11-15T04:30:22.596230Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/CETpiisl/versions/EbBp44Gs/Rats-1.20.1-8.1.3.jar",
+     "filename": "Rats-1.20.1-8.1.3.jar",
+     "primary": true,
+     "size": 8437611
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "jJfV67b1",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  },
+  {
+   "id": "T5O7lDfS",
+   "project_id": "CETpiisl",
+   "name": "Rats 8.1.2",
+   "version_number": "8.1.2",
+   "version_type": "release",
+   "date_published": "2023-11-04T19:41:29.104635Z",
+   "game_versions": [
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/CETpiisl/versions/T5O7lDfS/Rats-1.20.1-8.1.2.jar",
+     "filename": "Rats-1.20.1-8.1.2.jar",
+     "primary": true,
+     "size": 8408175
+    }
+   ],
+   "dependencies": [
+    {
+     "version_id": null,
+     "project_id": "jJfV67b1",
+     "file_name": null,
+     "dependency_type": "required"
+    }
+   ]
+  }
+ ]
+}

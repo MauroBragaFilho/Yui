@@ -36,3 +36,33 @@ build/
 apps/**/node_modules/
 apps/**/dist/
 apps/**/.expo/
+apps/**/dist-*/
+!apps/yui-app/.env.example
+
+# Chaves/provedores de IA configurados pelo painel (nunca versionar)
+secrets/
+
+# Aba Codigo: conversas por projeto e indice de busca (conteudo dos seus projetos; nunca versionar)
+database/dev-history/
+database/dev-index/
+
+# Python: ambientes virtuais (o do deemix fica em .venv-deemix; recrie com requirements-deemix.txt)
+.venv*/
+.venv-deemix/
+
+# O *.txt acima ignora tudo; este arquivo precisa ser versionado (dependências do deemix)
+!requirements-deemix.txt
+!requirements-spotdl.txt
+!requirements-spotdl.lock.txt
+
+# Mídia temporária dos downloads e do rádio (uma subpasta por pedido; apagada depois do envio)
+src/data/temp_audio/
+src/data/temp_video*/
+src/data/temp_spotify/
+src/data/temp_images/
+src/music/data/temp_radio_audio/
+
+# Logs do app (cada máquina gera os seus; o core-audit.jsonl do app já tinha ido para o repositório)
+apps/**/logs/
+# Listas pessoais salvas pela Yui (um JSON por usuário)
+database/listas/

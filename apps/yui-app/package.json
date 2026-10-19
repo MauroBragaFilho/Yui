@@ -23,7 +23,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/app-logic.test.mjs",
-    "web:build": "expo export --platform web",
+    "web:build": "expo export --platform web --clear",
     "web:serve": "node scripts/serve-web.mjs"
   },
   "private": true

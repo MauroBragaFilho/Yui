@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getBans } from './banHandler.js';
+import { getBans, BAN_REASON_MAX } from './banHandler.js';
+import { clampText } from '../discord/embedLimits.js';
 
 async function buildBanListPayload(client, category, page = 0) {
     const currentBans = getBans();
@@ -64,48 +65,57 @@ async function buildBanListPayload(client, category, page = 0) {
         const pageEntries = entries.slice(start, start + pageSize);
         const options = [];
         for (const [id, info] of pageEntries) {
-            let mentionText = `ID: \`${id}\``;
-            let label = `Inspecionar ID: ${id}`;
+            // ID só para exibir: um registro com chave gigante não pode estourar o campo (o valor da opção segue sendo o ID inteiro).
+            const shownId = clampText(String(id), 40);
+            let mentionText = `ID: \`${shownId}\``;
+            let label = `Inspecionar ID: ${shownId}`;
             if (category === 'users') {
-                mentionText = `<@${id}> | ID: \`${id}\``;
+                mentionText = `<@${shownId}> | ID: \`${shownId}\``;
                 const userObj = client.users.cache.get(id) || await client.users.fetch(id).catch(() => null);
                 if (userObj) {
-                    label = `${userObj.globalName || userObj.username} (@${userObj.username}) | ID: ${id}`;
-                    mentionText = `<@${id}> | **${userObj.globalName || userObj.username}** (@${userObj.username}) | ID: \`${id}\``;
+                    label = `${userObj.globalName || userObj.username} (@${userObj.username}) | ID: ${shownId}`;
+                    mentionText = `<@${shownId}> | **${userObj.globalName || userObj.username}** (@${userObj.username}) | ID: \`${shownId}\``;
                 }
             } else if (category === 'guilds') {
                 const guildObj = client.guilds.cache.get(id) || await client.guilds.fetch(id).catch(() => null);
                 if (guildObj) {
-                    label = `${guildObj.name} | ID: ${id}`;
-                    mentionText = `**${guildObj.name}** | ID: \`${id}\``;
+                    label = `${guildObj.name} | ID: ${shownId}`;
+                    mentionText = `**${guildObj.name}** | ID: \`${shownId}\``;
                 }
             } else if (category === 'channels') {
-                mentionText = `<#${id}> | ID: \`${id}\``;
+                mentionText = `<#${shownId}> | ID: \`${shownId}\``;
                 const channelObj = client.channels.cache.get(id) || await client.channels.fetch(id).catch(() => null);
                 if (channelObj) {
-                    label = `#${channelObj.name} | ID: ${id}`;
-                    mentionText = `<#${id}> | **#${channelObj.name}** | ID: \`${id}\``;
+                    label = `#${channelObj.name} | ID: ${shownId}`;
+                    mentionText = `<#${shownId}> | **#${channelObj.name}** | ID: \`${shownId}\``;
                 }
             }
             const dateStr = info.timestamp ? new Date(info.timestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'N/A';
+            // Motivo cortado (TG-19): um motivo longo derrubava a página inteira da lista (campo acima de 1024).
+            const reasonText = clampText(info.reason || 'Sem motivo informado', BAN_REASON_MAX);
             embed.addFields({
                 name: `${icon} Registro`,
-                value: `**Alvo:** ${mentionText}\n**Motivo:** ${info.reason || 'Sem motivo informado'}\n**Data:** ${dateStr}`
+                value: clampText(`**Alvo:** ${mentionText}\n**Motivo:** ${reasonText}\n**Data:** ${dateStr}`, 1000)
             });
 
-            options.push({
-                label: label.substring(0, 95),
-                description: (info.reason || 'Sem motivo informado').substring(0, 95),
-                value: id
-            });
+            // O valor da opção é o próprio ID (a seleção o procura no banco): acima de 100 caracteres ele não cabe no menu.
+            if (String(id).length <= 100) {
+                options.push({
+                    label: clampText(label, 95),
+                    description: clampText(reasonText, 95),
+                    value: id
+                });
+            }
         }
 
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`banlist_select_${category}_${currentPage}`)
-            .setPlaceholder('🔍 Selecione um registro para ver detalhes')
-            .addOptions(options);
+        if (options.length > 0) {
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`banlist_select_${category}_${currentPage}`)
+                .setPlaceholder('🔍 Selecione um registro para ver detalhes')
+                .addOptions(options);
 
-        menuRow = new ActionRowBuilder().addComponents(selectMenu);
+            menuRow = new ActionRowBuilder().addComponents(selectMenu);
+        }
     }
 
     const row = new ActionRowBuilder().addComponents(
@@ -166,7 +176,7 @@ async function buildBanDetailPayload(client, category, targetId) {
          .setDescription(`Informações completas e de sistema para o ID \`${targetId}\`.`);
 
     embed.addFields(
-        { name: '📋 Registro Interno (Banco)', value: `**ID:** \`${targetId}\`\n**Motivo:** ${banDb.reason || 'Sem motivo informado'}\n**Data:** ${banDb.timestamp ? new Date(banDb.timestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'N/A'}` }
+        { name: '📋 Registro Interno (Banco)', value: `**ID:** \`${clampText(String(targetId), 100)}\`\n**Motivo:** ${clampText(banDb.reason || 'Sem motivo informado', BAN_REASON_MAX)}\n**Data:** ${banDb.timestamp ? new Date(banDb.timestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'N/A'}` }
     );
 
     let discordInfoStr = '';
@@ -212,7 +222,7 @@ async function buildBanDetailPayload(client, category, targetId) {
                     discordInfoStr += `**Servidor:** ${channelObj.guild.name} (ID: \`${channelObj.guild.id}\`)\n`;
                 }
                 if (channelObj.topic) {
-                    discordInfoStr += `**Tópico:** ${channelObj.topic}`;
+                    discordInfoStr += `**Tópico:** ${clampText(channelObj.topic, 300)}`;
                 }
             }
         }
@@ -220,7 +230,7 @@ async function buildBanDetailPayload(client, category, targetId) {
     }
 
     if (discordInfoStr) {
-        embed.addFields({ name: '🌐 Dados Obtidos via Discord API', value: discordInfoStr });
+        embed.addFields({ name: '🌐 Dados Obtidos via Discord API', value: clampText(discordInfoStr, 1000) });
     } else {
         embed.addFields({ name: '⚠️ Dados Discord API', value: 'Alvo não encontrado no cache ou sem acesso mútuo para consultar dados em tempo real.' });
     }

@@ -1,0 +1,266 @@
+[
+ {
+  "file": "search_exact_waystones.json",
+  "request": "/v2/search?query=Waystones&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "achado exato (1o hit); varios homonimos abaixo"
+ },
+ {
+  "file": "search_exact_cooking-for-blockheads.json",
+  "request": "/v2/search?query=Cooking%20for%20blockheads&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "achado exato com caixa diferente"
+ },
+ {
+  "file": "search_trap_chisel.json",
+  "request": "/v2/search?query=chisel&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "armadilha: 1o hit e um mod minusculo so-fabric; o conhecido (Chisel Reborn) e o 2o"
+ },
+ {
+  "file": "search_compact_apple-skin.json",
+  "request": "/v2/search?query=Apple%20Skin&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "nome com espaco x titulo colado (AppleSkin) - exige comparacao compacta"
+ },
+ {
+  "file": "search_compact_fancy-menu.json",
+  "request": "/v2/search?query=Fancy%20Menu&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "FancyMenu e o 2o hit; o 1o e um mod diferente"
+ },
+ {
+  "file": "search_typo_suplementaries_0.json",
+  "request": "/v2/search?query=Suplementaries&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "erro de digitacao: a busca NAO tolera, 0 hits"
+ },
+ {
+  "file": "search_typo_dungeons-enchaced_0.json",
+  "request": "/v2/search?query=Dungeons%20Enchaced&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "erro de digitacao: 0 hits"
+ },
+ {
+  "file": "search_notfound_the-sims-mod.json",
+  "request": "/v2/search?query=The%20Sims%20Mod&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "nao existe: 0 hits"
+ },
+ {
+  "file": "search_curseforge-only_alex-mobs.json",
+  "request": "/v2/search?query=Alex%20mobs&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "mod so de CurseForge: so ha hits sem relacao"
+ },
+ {
+  "file": "search_compat-only_cosmetic-armor-reworked.json",
+  "request": "/v2/search?query=Cosmetic%20Armor%20Reworked&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "so existem o fork e um addon de compat"
+ },
+ {
+  "file": "search_old-version-only_industrial-craft.json",
+  "request": "/v2/search?query=Industrial%20Craft&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "achado, mas so forge 1.12.2"
+ },
+ {
+  "file": "search_dependency_rats.json",
+  "request": "/v2/search?query=Rats&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "achado; versao exige Citadel"
+ },
+ {
+  "file": "search_union-false-positive_more-chests.json",
+  "request": "/v2/search?query=More%20Chests&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "o hit diz forge + 1.20.1 mas nao existe versao forge 1.20.1"
+ },
+ {
+  "file": "search_ladder_prefix4_supl.json",
+  "request": "/v2/search?query=supl&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=25&index=relevance",
+  "status": 200,
+  "note": "degrau prefixo4: 1 hit"
+ },
+ {
+  "file": "search_ladder_prefix3_sup.json",
+  "request": "/v2/search?query=sup&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=25&index=relevance",
+  "status": 200,
+  "note": "degrau prefixo3: 25 hits, Supplementaries entre eles"
+ },
+ {
+  "file": "search_ladder_token_dungeons.json",
+  "request": "/v2/search?query=dungeons&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=25&index=relevance",
+  "status": 200,
+  "note": "degrau token: 25 hits, Dungeons Enhanced entre eles"
+ },
+ {
+  "file": "search_ladder_token_acessories_0.json",
+  "request": "/v2/search?query=acessories&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=25&index=relevance",
+  "status": 200,
+  "note": "token com erro: 0 hits"
+ },
+ {
+  "file": "search_ladder_token_majrusz.json",
+  "request": "/v2/search?query=majrusz&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=25&index=relevance",
+  "status": 200,
+  "note": "token: 7 hits, Majrusz's Accessories entre eles"
+ },
+ {
+  "file": "search_ladder_clean_sims.json",
+  "request": "/v2/search?query=sims&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "degrau limpa: 1 hit sem relacao"
+ },
+ {
+  "file": "search_typo_majrusz_0.json",
+  "request": "/v2/search?query=Majrusz's%20Acessories&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+  "status": 200,
+  "note": "erro de digitacao + apostrofo: 0 hits"
+ },
+ {
+  "file": "versions_dep_chisel-reborn.json",
+  "request": "/v2/project/4KWv7wbN/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "required: Architectury API + Cryonic Config"
+ },
+ {
+  "file": "versions_dep_cooking-for-blockheads.json",
+  "request": "/v2/project/vJnhuDde/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "required: Balm"
+ },
+ {
+  "file": "versions_dep_waystones.json",
+  "request": "/v2/project/LOpKHB2A/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "required: Balm"
+ },
+ {
+  "file": "versions_dep_fancymenu.json",
+  "request": "/v2/project/Wq5SjeWM/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "required: Melody + Konkrete"
+ },
+ {
+  "file": "versions_dep_supplementaries.json",
+  "request": "/v2/project/fFEIiSDQ/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "required: Moonlight Lib (esta na lista do dono)"
+ },
+ {
+  "file": "versions_dep_dungeons-enhanced.json",
+  "request": "/v2/project/3IAJcJXa/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "required: Structure Gel API"
+ },
+ {
+  "file": "versions_dep_rats.json",
+  "request": "/v2/project/CETpiisl/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "required: Citadel"
+ },
+ {
+  "file": "versions_dep_majruszs-accessories.json",
+  "request": "/v2/project/6roN0iTa/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "required: Majrusz Library; optional"
+ },
+ {
+  "file": "versions_ok_appleskin.json",
+  "request": "/v2/project/EsAfCjCV/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "sem dependencias obrigatorias"
+ },
+ {
+  "file": "versions_empty_more-chests.json",
+  "request": "/v2/project/Du77FavA/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "lista vazia: falso positivo da uniao do hit"
+ },
+ {
+  "file": "versions_complement_cofh-core.json",
+  "request": "/v2/project/OWSRM4vD/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: Archer's Paradox"
+ },
+ {
+  "file": "versions_complement_curios.json",
+  "request": "/v2/project/vvuO3ImH/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: Meet Your Fight"
+ },
+ {
+  "file": "versions_complement_cryonicconfig.json",
+  "request": "/v2/project/oEhQIkOs/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: Chisel Reborn"
+ },
+ {
+  "file": "versions_complement_balm.json",
+  "request": "/v2/project/MBAkmtvl/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: Cooking for Blockheads, TrashSlot, Waystones"
+ },
+ {
+  "file": "versions_complement_melody.json",
+  "request": "/v2/project/CVT4pFB2/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: FancyMenu"
+ },
+ {
+  "file": "versions_complement_konkrete.json",
+  "request": "/v2/project/J81TRJWm/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: FancyMenu"
+ },
+ {
+  "file": "versions_complement_majrusz-library.json",
+  "request": "/v2/project/PYQD8noM/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: Majrusz's Accessories"
+ },
+ {
+  "file": "versions_complement_citadel.json",
+  "request": "/v2/project/jJfV67b1/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: Rats"
+ },
+ {
+  "file": "versions_complement_structure-gel-api.json",
+  "request": "/v2/project/T8TGycIQ/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: Dungeons Enhanced, Dungeons Plus"
+ },
+ {
+  "file": "versions_complement_architectury-api.json",
+  "request": "/v2/project/lhGA9TYQ/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+  "status": 200,
+  "note": "complemento obrigatorio de: Chisel Reborn, Item Filters"
+ },
+ {
+  "file": "projects_deps_batch.json",
+  "request": "/v2/projects?ids=%5B%22lhGA9TYQ%22%2C%22oEhQIkOs%22%2C%22OWSRM4vD%22%2C%22MBAkmtvl%22%2C%22T8TGycIQ%22%2C%22J81TRJWm%22%2C%22CVT4pFB2%22%2C%22vvuO3ImH%22%2C%22PYQD8noM%22%2C%22jJfV67b1%22%5D",
+  "status": 200,
+  "note": "10 projetos required fora da lista (so campos usados)"
+ },
+ {
+  "file": "tag_game_version.json",
+  "request": "/v2/tag/game_version",
+  "status": 200,
+  "note": "reduzido de 919 para as 19 releases mais recentes + antigas conhecidas (formato novo 26.x existe)"
+ },
+ {
+  "file": "tag_loader.json",
+  "request": "/v2/tag/loader",
+  "status": 200,
+  "note": "loaders de mod"
+ },
+ {
+  "file": "search_pair-filtered_chisel.json",
+  "request": "/v2/search?query=chisel&facets=%5B%5B%22project_type%3Amod%22%5D%2C%5B%22versions%3A1.20.1%22%5D%2C%5B%22categories%3Aforge%22%5D%5D&limit=5&index=relevance",
+  "status": 200,
+  "note": "busca com facets versions:1.20.1 + categories:forge: o 1o hit passa a ser Chisel Reborn"
+ }
+]

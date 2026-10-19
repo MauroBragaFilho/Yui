@@ -5,7 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const root = path.resolve(import.meta.dirname, '..', 'dist');
+const root = path.resolve(import.meta.dirname, '..', process.env.DIST_DIR || 'dist');
 const port = Number(process.env.PORT || 8081);
 const host = process.env.HOST || '127.0.0.1';
 
@@ -18,6 +18,8 @@ const TYPES = {
   '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml',
   '.ttf': 'font/ttf',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
   '.map': 'application/json',
 };
 

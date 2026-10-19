@@ -9,6 +9,8 @@ import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-ro-'));
 process.env.DATABASE_DIR = tmp;
+// Auditoria num arquivo temporário (antes de importar os módulos): sem isto os eventos falsos iam para logs/core-audit.jsonl REAL.
+process.env.YUI_AUDIT_FILE = path.join(tmp, 'audit.jsonl');
 process.env.YUI_OWNER_ID = '111';
 process.env.YUI_PRIVATE_CHANNEL_IDS = 'priv1';
 delete process.env.AI_BASE_URL;
@@ -125,11 +127,12 @@ tools.clearTools();
 tools.registerBuiltinTools();
 await test('declaram o acesso correto: system.info/files.search = read, projects.open = open, apps.open = execute', () => {
   const acc = Object.fromEntries(tools.listTools().map((t) => [t.name, t.access]));
-  assert.deepEqual(acc, { 'system.info': 'read', 'files.search': 'read', 'projects.open': 'open', 'apps.open': 'execute' });
+  assert.deepEqual(acc, { 'system.info': 'read', 'files.search': 'read', 'projects.open': 'open', 'apps.open': 'execute', 'commands.list': 'read', 'commands.run': 'execute' });
 });
-await test('no modo somente leitura, apps.open (executar programas) é bloqueado; as demais seguem', () => {
+await test('no modo somente leitura, apps.open e commands.run (executar programas) são bloqueados; as demais seguem', () => {
   assert.equal(checkToolAccess(ownerDm, 'apps.open').allowed, false);
-  for (const t of ['system.info', 'files.search', 'projects.open']) assert.equal(checkToolAccess(ownerDm, t).allowed, true, t);
+  assert.equal(checkToolAccess(ownerDm, 'commands.run').allowed, false);
+  for (const t of ['system.info', 'files.search', 'projects.open', 'commands.list']) assert.equal(checkToolAccess(ownerDm, t).allowed, true, t);
 });
 await test('files.search não altera nada: a pasta fica idêntica depois da busca', async () => {
   fs.writeFileSync(path.join(projDir, 'relatorio.txt'), 'conteudo');
@@ -153,7 +156,8 @@ await test('/v1/health informa readOnly=true e /v1/agent nega apagar de ponta a 
   const res = await (await fetch(`${b}/v1/agent`, { method: 'POST', headers: { Authorization: `Bearer ${OWNER}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'apaga o arquivo' }) })).json();
   assert.equal(res.type, 'denied', JSON.stringify(res));
   assert.equal(ran.length, before);
-  server.close();
+  server.closeAllConnections?.();
+  await new Promise((r) => server.close(r));
 });
 
 console.log('Vigia do código das ferramentas');
@@ -170,7 +174,7 @@ await test('tools.js não usa API que apague, grave, mova, ou execute comandos l
   for (const re of forbidden) assert.ok(!re.test(src), `tools.js usa uma API proibida: ${re}`);
   // as únicas chamadas de sistema de arquivos permitidas são de LEITURA
   const fsCalls = [...src.matchAll(/\bfs\.(\w+)/g)].map((m) => m[1]);
-  const allowed = new Set(['existsSync', 'readdirSync']);
+  const allowed = new Set(['existsSync', 'readdirSync', 'statfsSync']);
   for (const c of fsCalls) assert.ok(allowed.has(c), `fs.${c} não é uma operação de leitura permitida`);
   // iniciar algo só via spawn SEM shell
   assert.match(src, /spawn\(command, args, \{[^}]*shell: false/);
@@ -183,4 +187,4 @@ await test('o vigia detecta de fato: um código com unlink/rm/writeFile seria re
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
-process.exit(0);
+process.exitCode = 0;

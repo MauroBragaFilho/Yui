@@ -7,6 +7,8 @@ import path from 'path';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-agent-'));
 process.env.DATABASE_DIR = tmp;
+// Auditoria num arquivo temporário (antes de importar os módulos): sem isto os eventos falsos iam para logs/core-audit.jsonl REAL.
+process.env.YUI_AUDIT_FILE = path.join(tmp, 'audit.jsonl');
 process.env.YUI_OWNER_ID = '111';
 process.env.YUI_PRIVATE_CHANNEL_IDS = 'priv1';
 delete process.env.AI_BASE_URL;
@@ -179,7 +181,7 @@ process.env.YUI_PROJECTS = `inexistente=${path.join(tmp, 'nao-existe')}`;
 process.env.YUI_APPS = '';
 const names = tools.registerBuiltinTools();
 await test('registra apenas ferramentas OWNER do PC', () => {
-  assert.deepEqual(names.sort(), ['apps.open', 'files.search', 'projects.open', 'system.info']);
+  assert.deepEqual(names.sort(), ['apps.open', 'commands.list', 'commands.run', 'files.search', 'projects.open', 'system.info']);
   assert.equal(tools.listTools().every((t) => t.minRole === ROLES.OWNER), true);
 });
 await test('files.search acha por nome, ignora node_modules e bloqueia caminhos', async () => {

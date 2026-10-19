@@ -1,5 +1,7 @@
 # 🤖 GTA Online Updates — Documentação do Projeto
 
+> 📚 **Documentação atual:** [docs/README.md](../docs/README.md). Este arquivo é a descrição **original** dos motores do GTA Online; a Yui hoje roda no PC do dono (não mais em Oracle/VPS), o evento semanal vem do Reddit via Chrome e os comandos são `/gta-diario`, `/gta-semanal`, `/gta-noticias` e `/yui-configurar`. Veja [GTA Online](../docs/content_pt/GTA_ONLINE.md).
+
 Projeto unificado e otimizado de rastreamento de notícias e sistemas diários/semanais do **GTA Online** para Discord, projetado para rodar com alta eficiência e baixo consumo de recursos em um servidor **Oracle Cloud (Ubuntu 24.04 LTS, 2 vCPU, ~4 GB RAM)** ou ambiente local sem dependências de compilação C++.
 
 ---

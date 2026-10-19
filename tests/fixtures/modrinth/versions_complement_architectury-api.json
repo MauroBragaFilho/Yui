@@ -1,0 +1,58 @@
+{
+ "request": "/v2/project/lhGA9TYQ/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "complemento obrigatorio de: Chisel Reborn, Item Filters",
+ "reducedFrom": 6,
+ "body": [
+  {
+   "id": "1MKTLiiG",
+   "project_id": "lhGA9TYQ",
+   "name": "[Forge 1.20(.1)] v9.2.14",
+   "version_number": "9.2.14+forge",
+   "version_type": "release",
+   "date_published": "2024-02-26T13:19:00.816154Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/lhGA9TYQ/versions/1MKTLiiG/architectury-9.2.14-forge.jar",
+     "filename": "architectury-9.2.14-forge.jar",
+     "primary": true,
+     "size": 580602
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "tBWqtdBO",
+   "project_id": "lhGA9TYQ",
+   "name": "[Forge 1.20(.1)] v9.1.13",
+   "version_number": "9.1.13+forge",
+   "version_type": "release",
+   "date_published": "2024-02-06T09:18:05.160132Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/lhGA9TYQ/versions/tBWqtdBO/architectury-9.1.13-forge.jar",
+     "filename": "architectury-9.1.13-forge.jar",
+     "primary": true,
+     "size": 577285
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

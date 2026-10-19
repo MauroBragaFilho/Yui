@@ -22,11 +22,17 @@ import {
 import { resolveInput } from './radioProviders.js';
 import { buildQueueEmbed, buildAmbiguousEmbed } from './radioEmbed.js';
 import { prefetchNextTrack } from './radioPrefetcher.js';
+import { clampText } from '../discord/embedLimits.js';
+import { mentionFirstUserOnly } from '../discord/mentions.js';
 import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 async function sendTempMessage(textChannel, content, delayMs = 5000) {
     try {
-        const msg = await textChannel.send(content);
+        // content pode ser texto com eco de dados externos (título, artista): nunca passa dos 2000 caracteres da mensagem e só a primeira
+        // marcação (o autor do pedido) notifica: um "@everyone" no título de uma faixa não marca o servidor.
+        const msg = await textChannel.send(typeof content === 'string'
+            ? { content: clampText(content, 2000), allowedMentions: mentionFirstUserOnly(content) }
+            : content);
         setTimeout(() => {
             msg?.delete?.().catch(() => {});
         }, delayMs);
@@ -46,7 +52,7 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
         const resolved = await resolveInput(query, guildId);
 
         if (resolved.type === 'not_found') {
-            return `${userMention} Não encontrei **"${query}"** no Deezer nem no YouTube.`;
+            return `${userMention} Não encontrei **"${clampText(query, 100)}"** no Deezer nem no YouTube.`;
         }
 
         if (resolved.type === 'ambiguous') {
@@ -71,7 +77,8 @@ async function handleRadioMCPCall(toolName, toolArgs, userId, guildId, textChann
                 const row1 = new ActionRowBuilder().addComponents(selectMenu);
                 const row2 = new ActionRowBuilder().addComponents(cancelBtn);
                 const ephemeralMsg = await textChannel.send({
-                    content: `${userMention} Encontrei várias opções para "${query}". Qual delas você quer? (Seleção automática da 1ª opção em 10s)`,
+                    content: `${userMention} Encontrei várias opções para "${clampText(query, 100)}". Qual delas você quer? (Seleção automática da 1ª opção em 10s)`,
+                    allowedMentions: { parse: [], users: [String(userId)] }, // a busca vem do modelo: só quem pediu é notificado
                     embeds: [embed],
                     components: [row1, row2]
                 });

@@ -1,7 +1,20 @@
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { clampText } from '../discord/embedLimits.js';
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+
+/**
+ * Corpo de uma resposta de erro em uma linha e com no máximo 200 caracteres. O corpo cru entrava
+ * inteiro na mensagem do erro, que chega ao log e à resposta do comando (TG-33). Nunca lança.
+ */
+async function errorBody(response) {
+  try {
+    return clampText(String(await response.text()).replace(/\s+/g, ' ').trim(), 200);
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Busca os itens mais recentes de um canal do YouTube.
@@ -31,8 +44,7 @@ export async function getLatestChannelItems(uploadsPlaylistId, maxResults = 5) {
   const response = await fetch(url);
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`YouTube API playlistItems error ${response.status}: ${body}`);
+    throw new Error(`YouTube API playlistItems error ${response.status}: ${await errorBody(response)}`);
   }
 
   const data = await response.json();
@@ -64,8 +76,7 @@ export async function getVideoDetails(videoId) {
   const response = await fetch(url);
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`YouTube API videos error ${response.status}: ${body}`);
+    throw new Error(`YouTube API videos error ${response.status}: ${await errorBody(response)}`);
   }
 
   const data = await response.json();
@@ -121,8 +132,7 @@ export async function resolveChannel(input) {
   const response = await fetch(url);
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`YouTube API channels error ${response.status}: ${body}`);
+    throw new Error(`YouTube API channels error ${response.status}: ${await errorBody(response)}`);
   }
 
   const data = await response.json();
@@ -150,8 +160,7 @@ async function fetchChannelById(channelId, apiKey) {
   const response = await fetch(url);
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`YouTube API channels error ${response.status}: ${body}`);
+    throw new Error(`YouTube API channels error ${response.status}: ${await errorBody(response)}`);
   }
 
   const data = await response.json();

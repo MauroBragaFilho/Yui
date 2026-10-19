@@ -1,0 +1,214 @@
+{
+ "request": "/v2/search?query=Apple%20Skin&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+ "status": 200,
+ "note": "nome com espaco x titulo colado (AppleSkin) - exige comparacao compacta",
+ "reducedFrom": 5,
+ "body": {
+  "hits": [
+   {
+    "project_id": "Q5IXwQJO",
+    "slug": "apple-skins",
+    "title": "Apple Skins",
+    "description": "Challenge yourself in your Create mod factories with the Apple Skins mod, and automate things you never thought possible!",
+    "versions": [
+     "1.19.2",
+     "1.20.1",
+     "1.21.1"
+    ],
+    "categories": [
+     "cursed",
+     "equipment",
+     "food",
+     "forge",
+     "game-mechanics",
+     "neoforge",
+     "technology"
+    ],
+    "display_categories": [
+     "equipment",
+     "food",
+     "forge",
+     "neoforge",
+     "technology"
+    ],
+    "downloads": 4396,
+    "follows": 8,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "5u9xXXTK",
+    "license": "LicenseRef-All-Rights-Reserved",
+    "project_type": "mod",
+    "date_modified": "2026-05-08T04:27:21.327038+00:00",
+    "author": "SphagnumStudios"
+   },
+   {
+    "project_id": "EsAfCjCV",
+    "slug": "appleskin",
+    "title": "AppleSkin",
+    "description": "Food/hunger-related HUD improvements",
+    "versions": [
+     "1.10.2",
+     "1.11.2",
+     "1.12.2",
+     "1.13.2",
+     "1.14.4",
+     "1.15.2",
+     "1.16.4",
+     "1.16.5",
+     "1.17.1",
+     "1.18",
+     "1.18.1",
+     "1.18.2",
+     "1.19",
+     "1.19.1",
+     "1.19.2",
+     "1.19.3",
+     "1.19.4",
+     "1.20",
+     "1.20.1",
+     "1.20.2",
+     "1.20.3",
+     "1.20.4",
+     "24w14potato",
+     "1.20.5",
+     "1.20.6",
+     "1.21",
+     "1.21.1",
+     "1.21.2",
+     "1.21.3",
+     "1.21.4",
+     "1.21.5",
+     "1.21.6",
+     "1.21.7",
+     "1.21.8",
+     "1.21.9",
+     "1.21.10",
+     "1.21.11",
+     "26.1",
+     "26.1.1",
+     "26.1.2",
+     "26.2",
+     "26.3"
+    ],
+    "categories": [
+     "fabric",
+     "food",
+     "forge",
+     "neoforge",
+     "quilt",
+     "utility"
+    ],
+    "display_categories": [
+     "fabric",
+     "food",
+     "forge",
+     "neoforge",
+     "quilt",
+     "utility"
+    ],
+    "downloads": 96041974,
+    "follows": 18264,
+    "client_side": "optional",
+    "server_side": "optional",
+    "latest_version": "PHjDtQay",
+    "license": "Unlicense",
+    "project_type": "mod",
+    "date_modified": "2026-09-17T23:59:30.437129+00:00",
+    "author": "squeek502"
+   },
+   {
+    "project_id": "X8whoGUt",
+    "slug": "apple-skin-lunge-fix",
+    "title": "AppleSkin Lunge Fix",
+    "description": "Fixes AppleSkin’s saturation display not updating immediately after using a spear lunge.",
+    "versions": [
+     "1.21.11",
+     "26.1.2",
+     "26.2"
+    ],
+    "categories": [
+     "fabric",
+     "food",
+     "utility"
+    ],
+    "display_categories": [
+     "fabric",
+     "food",
+     "utility"
+    ],
+    "downloads": 16745,
+    "follows": 11,
+    "client_side": "required",
+    "server_side": "unsupported",
+    "latest_version": "1YKIGsLs",
+    "license": "MIT",
+    "project_type": "mod",
+    "date_modified": "2026-07-29T16:51:30.760078+00:00",
+    "author": "SirCool145"
+   },
+   {
+    "project_id": "jx585On0",
+    "slug": "appleskinhue",
+    "title": "AppleSkinHue",
+    "description": "The AppleSkinHue Is a extension to the mod AppleSkin that lets you change the color of the Saturation bar as you like",
+    "versions": [
+     "1.21.11"
+    ],
+    "categories": [
+     "equipment",
+     "fabric",
+     "food",
+     "game-mechanics",
+     "utility"
+    ],
+    "display_categories": [
+     "fabric",
+     "food",
+     "game-mechanics",
+     "utility"
+    ],
+    "downloads": 129,
+    "follows": 0,
+    "client_side": "required",
+    "server_side": "unsupported",
+    "latest_version": "7jHBt5jK",
+    "license": "LicenseRef-All-Rights-Reserved",
+    "project_type": "mod",
+    "date_modified": "2026-09-06T05:26:55.592772+00:00",
+    "author": "aj4713"
+   },
+   {
+    "project_id": "ox0F11nN",
+    "slug": "industrucdium",
+    "title": "Industrucdium",
+    "description": "*A Mod that adds new materials and tools.  Works with apple skin.\n\n\n\n\n*make sure to set your key binds for day/night cycle and exp give. aut",
+    "versions": [
+     "1.20.1"
+    ],
+    "categories": [
+     "adventure",
+     "equipment",
+     "forge",
+     "worldgen"
+    ],
+    "display_categories": [
+     "adventure",
+     "equipment",
+     "forge"
+    ],
+    "downloads": 379,
+    "follows": 2,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "OIBRnOT0",
+    "license": "CC0-1.0",
+    "project_type": "mod",
+    "date_modified": "2024-07-15T00:44:30.665474+00:00",
+    "author": "YoYoMaster"
+   }
+  ],
+  "offset": 0,
+  "limit": 10,
+  "total_hits": 5
+ }
+}

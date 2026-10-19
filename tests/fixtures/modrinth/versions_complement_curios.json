@@ -1,0 +1,84 @@
+{
+ "request": "/v2/project/vvuO3ImH/version?loaders=%5B%22forge%22%5D&game_versions=%5B%221.20.1%22%5D&include_changelog=false",
+ "status": 200,
+ "note": "complemento obrigatorio de: Meet Your Fight",
+ "reducedFrom": 36,
+ "body": [
+  {
+   "id": "IPQlZkz1",
+   "project_id": "vvuO3ImH",
+   "name": "curios-forge-5.14.1+1.20.1",
+   "version_number": "5.14.1+1.20.1",
+   "version_type": "release",
+   "date_published": "2025-04-13T13:09:28.168539Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/vvuO3ImH/versions/IPQlZkz1/curios-forge-5.14.1%2B1.20.1.jar",
+     "filename": "curios-forge-5.14.1+1.20.1.jar",
+     "primary": true,
+     "size": 398066
+    },
+    {
+     "url": "https://cdn.modrinth.com/data/vvuO3ImH/versions/IPQlZkz1/curios-forge-5.14.1%2B1.20.1-api.jar",
+     "filename": "curios-forge-5.14.1+1.20.1-api.jar",
+     "primary": false,
+     "size": 107842
+    },
+    {
+     "url": "https://cdn.modrinth.com/data/vvuO3ImH/versions/IPQlZkz1/curios-forge-5.14.1%2B1.20.1-sources.jar",
+     "filename": "curios-forge-5.14.1+1.20.1-sources.jar",
+     "primary": false,
+     "size": 181829
+    }
+   ],
+   "dependencies": []
+  },
+  {
+   "id": "r8awEXjr",
+   "project_id": "vvuO3ImH",
+   "name": "curios-forge-5.14.0+1.20.1",
+   "version_number": "5.14.0+1.20.1",
+   "version_type": "release",
+   "date_published": "2025-04-10T04:50:59.379593Z",
+   "game_versions": [
+    "1.20",
+    "1.20.1"
+   ],
+   "loaders": [
+    "forge",
+    "neoforge"
+   ],
+   "featured": false,
+   "files": [
+    {
+     "url": "https://cdn.modrinth.com/data/vvuO3ImH/versions/r8awEXjr/curios-forge-5.14.0%2B1.20.1.jar",
+     "filename": "curios-forge-5.14.0+1.20.1.jar",
+     "primary": true,
+     "size": 397472
+    },
+    {
+     "url": "https://cdn.modrinth.com/data/vvuO3ImH/versions/r8awEXjr/curios-forge-5.14.0%2B1.20.1-api.jar",
+     "filename": "curios-forge-5.14.0+1.20.1-api.jar",
+     "primary": false,
+     "size": 107842
+    },
+    {
+     "url": "https://cdn.modrinth.com/data/vvuO3ImH/versions/r8awEXjr/curios-forge-5.14.0%2B1.20.1-sources.jar",
+     "filename": "curios-forge-5.14.0+1.20.1-sources.jar",
+     "primary": false,
+     "size": 181543
+    }
+   ],
+   "dependencies": []
+  }
+ ]
+}

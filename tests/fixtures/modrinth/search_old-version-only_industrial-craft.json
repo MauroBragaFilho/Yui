@@ -1,0 +1,182 @@
+{
+ "request": "/v2/search?query=Industrial%20Craft&facets=%5B%5B%22project_type%3Amod%22%5D%5D&limit=10&index=relevance",
+ "status": 200,
+ "note": "achado, mas so forge 1.12.2",
+ "reducedFrom": 8,
+ "body": {
+  "hits": [
+   {
+    "project_id": "wTncj5gs",
+    "slug": "industrial-craft",
+    "title": "Industrial Craft",
+    "description": "IC2 - A comprehensive tech mod reaching back to the earliest days of Minecraft modding.",
+    "versions": [
+     "1.12.2"
+    ],
+    "categories": [
+     "decoration",
+     "economy",
+     "equipment",
+     "food",
+     "forge",
+     "storage",
+     "technology",
+     "transportation",
+     "utility"
+    ],
+    "display_categories": [
+     "equipment",
+     "forge",
+     "technology"
+    ],
+    "downloads": 194354,
+    "follows": 140,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "k2tOj88k",
+    "license": "LicenseRef-All-Rights-Reserved",
+    "project_type": "mod",
+    "date_modified": "2023-02-03T18:48:35.937639+00:00",
+    "author": "Player7457"
+   },
+   {
+    "project_id": "x99uA7Bu",
+    "slug": "iav",
+    "title": "[Immersive Vehicles] IAV Parts pack",
+    "description": "The Industrial Association of Vehicle Manufacturers is a collaborative parts pack for Immersive vehicles, adding a wide array of parts, and ",
+    "versions": [
+     "1.12.2",
+     "1.16.5",
+     "1.18.2",
+     "1.19.2",
+     "1.20.1"
+    ],
+    "categories": [
+     "forge"
+    ],
+    "display_categories": [
+     "forge"
+    ],
+    "downloads": 82105,
+    "follows": 3,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "hOz7lgDz",
+    "license": "CC-BY-4.0",
+    "project_type": "mod",
+    "date_modified": "2025-10-09T22:18:08.578268+00:00",
+    "author": "Franz_Junker"
+   },
+   {
+    "project_id": "uWvWTs7C",
+    "slug": "industrialupgrade",
+    "title": "[IU] Industrial Upgrade",
+    "description": "Industrial Upgrade is the spiritual successor to Industrial Craft",
+    "versions": [
+     "1.12.2",
+     "1.19.2",
+     "1.20.1",
+     "1.21",
+     "1.21.1"
+    ],
+    "categories": [
+     "equipment",
+     "food",
+     "forge",
+     "game-mechanics",
+     "neoforge",
+     "storage",
+     "technology",
+     "worldgen"
+    ],
+    "display_categories": [
+     "equipment",
+     "forge",
+     "game-mechanics",
+     "neoforge",
+     "technology"
+    ],
+    "downloads": 56872,
+    "follows": 139,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "HykawKs8",
+    "license": "GPL-3.0-only",
+    "project_type": "mod",
+    "date_modified": "2026-07-12T14:40:44.239514+00:00",
+    "author": "Denfop"
+   },
+   {
+    "project_id": "4exet6R3",
+    "slug": "create-designed-decor",
+    "title": "Create: Designed Decor",
+    "description": "**Designed Decor** is a lightweight Create mod add-on focused on decorative industrial-style blocks and items like cardboard sheets, safety ",
+    "versions": [
+     "1.20.1",
+     "1.21.1",
+     "1.21.2",
+     "1.21.3",
+     "1.21.4",
+     "1.21.5",
+     "1.21.6",
+     "1.21.7",
+     "1.21.8",
+     "1.21.9",
+     "1.21.10",
+     "1.21.11"
+    ],
+    "categories": [
+     "decoration",
+     "equipment",
+     "forge",
+     "neoforge",
+     "technology"
+    ],
+    "display_categories": [
+     "decoration",
+     "forge",
+     "neoforge",
+     "technology"
+    ],
+    "downloads": 27022,
+    "follows": 28,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "1RtDMTDz",
+    "license": "LicenseRef-CMF-Community-License",
+    "project_type": "mod",
+    "date_modified": "2026-02-03T00:30:15.863101+00:00",
+    "author": "CreateModFan12"
+   },
+   {
+    "project_id": "riNiodLj",
+    "slug": "create-paper",
+    "title": "Create Paper",
+    "description": "Craft papermaking your industrial way",
+    "versions": [
+     "1.20.1"
+    ],
+    "categories": [
+     "forge",
+     "neoforge"
+    ],
+    "display_categories": [
+     "forge",
+     "neoforge"
+    ],
+    "downloads": 1026,
+    "follows": 4,
+    "client_side": "required",
+    "server_side": "required",
+    "latest_version": "utMwTsca",
+    "license": "MIT",
+    "project_type": "mod",
+    "date_modified": "2026-03-24T14:32:09.602577+00:00",
+    "author": "Chemiofitor"
+   }
+  ],
+  "offset": 0,
+  "limit": 10,
+  "total_hits": 8
+ }
+}

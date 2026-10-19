@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ApiError, type Health, type Me, type YuiClient } from '../api/client.ts';
-import { Badge, Button, Card } from '../components/ui.tsx';
+import { Badge, Button, Card, PageHeader } from '../components/ui.tsx';
 import { colors, spacing } from '../theme.ts';
+import { getTheme, setTheme, type ThemeMode } from '../web.ts';
 
 type Props = { client: YuiClient; me: Me; onLogout: () => void };
 
@@ -36,12 +37,14 @@ export function StatusScreen({ client, me, onLogout }: Props) {
     refresh();
   }, [refresh]);
 
+  const [theme, setThemeState] = useState<ThemeMode>(getTheme);
   const online = Boolean(health?.ok);
   const active = health?.backends.find((b) => b.active);
 
   return (
+    <View style={styles.root}>
+    <PageHeader title="Status" subtitle="Servidor, permissões e segurança" />
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Status</Text>
 
       <Card style={styles.card}>
         <View style={styles.row}>
@@ -57,9 +60,9 @@ export function StatusScreen({ client, me, onLogout }: Props) {
         <Text style={styles.label}>Você</Text>
         <Text style={styles.value}>ID {me.userId}</Text>
         <View style={styles.row}>
-          <Badge label={ROLE_LABEL[me.role] ?? me.role} color={colors.primary} />
+          <Badge label={ROLE_LABEL[me.role] ?? me.role} color={colors.accentText} />
           <Badge
-            label={me.memoryScope === 'personal' ? '🔒 Memória pessoal' : '🕒 Memória temporária'}
+            label={me.memoryScope === 'personal' ? 'Memória pessoal' : 'Memória temporária'}
             color={me.memoryScope === 'personal' ? colors.success : colors.warning}
           />
         </View>
@@ -82,9 +85,9 @@ export function StatusScreen({ client, me, onLogout }: Props) {
       <Card style={styles.card}>
         <Text style={styles.label}>Segurança no computador</Text>
         {health?.readOnly === false ? (
-          <Badge label="⚠️ Modo somente leitura desligado" color={colors.warning} />
+          <Badge label="Modo somente leitura desligado" color={colors.warning} />
         ) : (
-          <Badge label="🔒 Somente leitura" color={colors.success} />
+          <Badge label="Somente leitura" color={colors.success} />
         )}
         <Text style={styles.hint}>
           {health?.readOnly === false
@@ -93,19 +96,42 @@ export function StatusScreen({ client, me, onLogout }: Props) {
         </Text>
       </Card>
 
-      <Button testID="btn-logout" label="Sair deste dispositivo" variant="danger" onPress={onLogout} />
+      {Platform.OS === 'web' ? (
+        <Card style={styles.card}>
+          <Text style={styles.label}>Aparência</Text>
+          <View style={styles.row}>
+            <Button
+              testID="btn-theme-dark"
+              label="Escuro"
+              variant={theme === 'dark' ? 'primary' : 'ghost'}
+              onPress={() => { setTheme('dark'); setThemeState('dark'); }}
+              style={styles.themeBtn}
+            />
+            <Button
+              testID="btn-theme-light"
+              label="Claro"
+              variant={theme === 'light' ? 'primary' : 'ghost'}
+              onPress={() => { setTheme('light'); setThemeState('light'); }}
+              style={styles.themeBtn}
+            />
+          </View>
+        </Card>
+      ) : null}
+
+      <Button testID="btn-logout" label="Sair deste dispositivo" variant="danger" icon="logout" onPress={onLogout} />
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md, width: '100%', maxWidth: 820, alignSelf: 'center' },
-  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  content: { padding: spacing.lg, gap: spacing.md, width: '100%', maxWidth: 860, alignSelf: 'center' },
+  themeBtn: { flex: 1, minHeight: 40 },
   card: { gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' },
   label: { color: colors.muted, fontSize: 13 },
-  value: { color: colors.text, fontSize: 15 },
+  value: { color: colors.text, fontSize: 14 },
   hint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   error: { color: colors.danger },
 });
