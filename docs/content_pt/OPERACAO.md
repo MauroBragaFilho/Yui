@@ -31,6 +31,32 @@ A Yui roda **no PC do dono**, não em servidor. Duas tarefas do **Agendador de T
 
 Cada tarefa roda dentro de um **supervisor**: um laço que religa o processo **15 segundos depois de qualquer saída**, seja erro, queda ou fechamento do console. Assim a Yui volta sozinha, e não depende de reiniciar o Windows para se recuperar.
 
+### 🐕 Supervisor, Watchdog e Auto-Start no Windows (R08)
+
+O script unificado `scripts/yui-supervisor.ps1` reúne watchdog ativo via `/v1/health`, auto-recuperação do Tailscale Serve e rotação de logs:
+
+- **Monitoramento contínuo:** consulta `http://127.0.0.1:3939/v1/health` periodicamente (padrão a cada 15 segundos). Se falhar consecutivamente além do limite, reinicia a Yui de forma controlada.
+- **Proteção contra encerramento indevido:** o script NUNCA faz varredura de processos por PID solto. Ele guarda e encerra **exclusivamente o processo que ele mesmo iniciou** via arquivo de controle (`logs/yui-supervisor.pid`).
+- **Garantia de Tailscale:** verifica se a publicação segura do Tailscale Serve está ativa na porta 3939 e a recria sem expor portas à internet (apenas Tailnet, sem funnel).
+- **Rotação de logs:** arquiva automaticamente logs em `logs/` que excedam 10MB.
+- **Modo Dry-Run:** execute a qualquer momento com `-DryRun` para simular sem afetar nenhum processo:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts/yui-supervisor.ps1 -DryRun
+  ```
+
+#### Instalação da Tarefa Agendada no Windows:
+Para registrar ou remover a tarefa agendada oficial `YuiSupervisor`:
+```powershell
+# Simular instalação:
+powershell -ExecutionPolicy Bypass -File scripts/instalar-supervisor-windows.ps1 -DryRun
+
+# Instalar de fato:
+powershell -ExecutionPolicy Bypass -File scripts/instalar-supervisor-windows.ps1
+
+# Desinstalar se necessário:
+powershell -ExecutionPolicy Bypass -File scripts/instalar-supervisor-windows.ps1 -Uninstall
+```
+
 Consequências práticas:
 
 - A Yui **só responde com o PC ligado, com internet e com o seu usuário logado** (a tarefa inicia no logon). Se o PC dormir ou desligar, ela fica offline para todos os servidores.
@@ -117,7 +143,18 @@ Menu para uso manual (fica fora do Git: `*.bat` está no `.gitignore`):
 |---------|----------|
 | `logs/app-AAAA-MM-DD.log` | Log da aplicação (inicialização, agendador, API, Gateway) |
 | `logs/error-AAAA-MM-DD.log` | Só os erros |
-| `logs/core-audit.jsonl` | **Auditoria** do Core: logins, chaves por DM, ações do painel, ferramentas, leituras de memória pessoal (só metadados, nunca conteúdo nem senhas) |
+| `logs/core-audit.jsonl` | **Auditoria** do Core com hash encadeado (R04): cada evento possui `seq`, `prev_hash` e `hash` (SHA-256). Registra decisões, aprovador, comando exato/caminhos e metadados, sem jamais conter senhas, tokens ou dados de memória |
+
+### 🔗 Auditoria com Hash Encadeado (R04)
+
+- **Integridade verificável:** qualquer linha alterada, removida ou reordenada quebra a cadeia e é detectada por `verifyAudit()`.
+- **Registro completo de aprovações:** aprovações no módulo Código registram o comando exato, caminhos, cwd e o aprovador (`approverId` e `approverRole`).
+- **Resiliência:** falhas de escrita disparam alerta de erro ao dono (`alerts.js`). Linhas legadas continuam sendo lidas normalmente.
+- **Rotação:** configurável via `YUI_AUDIT_MAX_BYTES` (padrão 10MB) e `YUI_AUDIT_MAX_ROTATE` (padrão 5 arquivos).
+- **Verificação de integridade via comando:**
+  ```powershell
+  npm run test:audit
+  ```
 
 O que procurar quando investigar:
 
@@ -148,7 +185,33 @@ O painel mostra a auditoria em **Admin → Auditoria** e os logs da aplicação 
 | `.venv-deemix/` | Ambiente Python do `deemix` (Deezer) | Ignorado pelo Git; recrie com `requirements-deemix.txt` (veja [Primeiros passos](GET_STARTED.md)) |
 | `.venv-spotdl/` | Ambiente Python do `spotdl` (Spotify) | Ignorado pelo Git; recrie com `requirements-spotdl.txt` e o lock `requirements-spotdl.lock.txt` (veja [Primeiros passos](GET_STARTED.md#-spotify-opcional-ambiente-python-do-spotdl)) |
 
-**Backup recomendado** (copie para um disco externo ou nuvem pessoal, com a Yui parada ou não):
+### 🔒 Backup e Restauração Cifrada da Memória (R05)
+
+A memória da Yui (`memory-personal.db`, `memory-discord.db`, `memory-context*.db`) possui rotina de backup rotativo, cifrado com **XChaCha20-Poly1305** (AEAD) e verificação de integridade via hash SHA-256:
+
+- **Chave de cifragem:** nunca fica no repositório. Configure via variável de ambiente `YUI_BACKUP_KEY` (string hex de 64 caracteres ou passphrase) ou `YUI_BACKUP_KEY_FILE` apontando para um arquivo fora do repositório.
+- **Destino do backup:** configurável via `YUI_BACKUP_DIR` (padrão: `../yui-backups` fora do repositório).
+- **Rotação:** retenção configurável via `YUI_BACKUP_MAX_KEEP` (padrão: últimos 7 backups).
+- **Alerta de falha:** se o backup falhar, um alerta automático de erro é disparado ao dono (`alerts.js`).
+
+#### Comandos de Backup e Restauração:
+
+1. **Fazer backup agora:**
+   ```powershell
+   node scripts/backup-memory.mjs --dir "D:\Backups\Yui-Memory" --keep 7
+   ```
+
+2. **Restaurar um backup existente:**
+   ```powershell
+   node scripts/restore-memory.mjs --from "D:\Backups\Yui-Memory\backup-2026-11-05T04-33-26-042Z" --to "database"
+   ```
+
+3. **Rodar teste automatizado do ciclo completo de backup/restauração:**
+   ```powershell
+   npm run test:backup
+   ```
+
+**Backup manual recomendado** (copie para um disco externo ou nuvem pessoal, com a Yui parada ou não):
 
 ```powershell
 $dest = "D:\Backups\Yui-$(Get-Date -Format yyyyMMdd)"

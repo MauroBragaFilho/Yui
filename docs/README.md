@@ -52,6 +52,7 @@ A Yui começou como um bot de Discord sobre o **GTA Online** e hoje é uma **pla
 | Configurar a IA e os provedores | [Yui Gateway](content_pt/GATEWAY.md) · [Provedores gratuitos](../PROVEDORES_IA_GRATUITOS.md) |
 | Deixar a Yui ler e editar meus projetos (aba Código) | [Código](content_pt/CODIGO.md) |
 | Comandos do PC, skills e provedores de busca na web | [Comandos e skills](content_pt/COMANDOS_E_SKILLS.md) |
+| Ver quais funções já funcionam por conversa (e quais ainda só por comando) | [Conversa e comandos](content_pt/CONVERSA_E_COMANDOS.md) |
 | Instalar ou gerar o app | [App da Yui](../apps/yui-app/README.md) |
 | Criar ferramentas (MCP) e mexer na "alma" | [Desenvolvimento avançado](content_pt/ADVANCED.md) |
 | Rodar os testes | [Testes](../README_TESTES.md) |

@@ -92,6 +92,7 @@ import {
 } from './youtubeAudioHandler.js';
 import { searchGames, getTorrentOrMagnet, createPaginationComponents, normalizeString } from './gameHandler.js';
 import { generateImage } from './imageHandler.js';
+import { detectImageRequest, pickCreativePrompt, sanitizeEnhancedPrompt, takeImageQuota, imagePreRouteEnabled } from './imageIntent.js';
 import { getSteamGameInfo } from './steamHandler.js';
 import { convertCurrency } from './currencyHandler.js';
 import { getGameInfoWithSteamFallback, compareSpecs, formatVerdict } from './gameInfoHandler.js';
@@ -2538,9 +2539,30 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 return;
             }
         }
+        // Porta I (imagem por conversa): "yui gera uma imagem de um gato" => o CÓDIGO chama generate_image, sem depender de o modelo lembrar da ferramenta.
+        // Mesmo despachante da ferramenta (filtro de conteúdo impróprio, limite por hora, ferramenta desligada no servidor, voz). YUI_IMAGE_PRE_ROUTE=false desliga.
+        const imageReq = (imagePreRouteEnabled() && !isToolDisabled(options.guildId || guildId, 'generate_image') && !preResearch.explicit)
+            ? detectImageRequest(ownQuestion, { voice: isVoice, direct: directToYui, radioMode: options.radioMode === true, disableTools: options.disableTools === true, thirdPartyPrompt: options.thirdPartyPrompt === true, hasAttachment: typeof options.attachmentBlock === 'string' && options.attachmentBlock.length > 0 })
+            : { explicit: false, reason: 'desligada' };
         if (preResearch.explicit) {
             // Porta A: o código decide pesquisar, sem a primeira chamada ao modelo. O JSON passa pelo despachante normal (voz, ferramenta desligada e privado valem).
             rawResponse = JSON.stringify({ thought: 'pesquisa explícita', tool: 'search_web', args: { query: preResearch.query } });
+        } else if (imageReq.explicit) {
+            let imageSubject = imageReq.vague ? pickCreativePrompt() : imageReq.subject;
+            if (!imageReq.vague) {
+                // Traduz/melhora o assunto para inglês (os modelos de imagem entendem melhor). Falhou, demorou ou recusou: usa o texto da própria pessoa.
+                // O filtro de conteúdo impróprio olha o texto ORIGINAL (abaixo, no despachante), então a tradução não "lava" o pedido.
+                try {
+                    const enhanced = await Promise.race([
+                        generateResponse(`Rewrite this image idea as ONE detailed English prompt for an AI image generator (max 40 words, comma separated, no quotes, no explanations). Idea: ${imageReq.subject}`, channelId, { allowSearch: false, disableTools: true, noHistory: true, guildId: options.guildId || guildId, sensitive: sensitiveChat, isInternalComment: true }),
+                        new Promise(resolve => setTimeout(() => resolve(''), 12_000))
+                    ]);
+                    const cleanPrompt = sanitizeEnhancedPrompt(enhanced);
+                    if (cleanPrompt && !isSystemReply(cleanPrompt)) imageSubject = `${cleanPrompt} | ${imageReq.subject}`.slice(0, 480);
+                } catch (_) { /* segue com o texto original */ }
+            }
+            logger.info(`[Imagem] Porta I: pedido de imagem por conversa (${imageReq.vague ? 'assunto criativo' : 'com assunto'}, ${imageSubject.length} caracteres)`);
+            rawResponse = JSON.stringify({ thought: 'pedido de imagem por conversa', tool: 'generate_image', args: { prompt: imageSubject, negative_prompt: '' } });
         } else do {
             rawResponse = await generateResponse(prompt, channelId, {
                 ...options,
@@ -3622,8 +3644,12 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
                         const scoldPrompt = `O usuário te pediu para gerar uma imagem com conteúdo NSFW/impróprio: "${clampText(imagePrompt, 100, { ellipsis: '' })}". Dê uma bronca curta e natural nele, na sua personalidade Yui, sem gerar a imagem. Seja direta, sem rodeios, pode ser um pouco irônica.`;
                         const scoldResponse = await generateResponse(scoldPrompt, channelId, { allowSearch: false, disableTools: true, guildId, sensitive: sensitiveChat });
                         processedResponse = scoldResponse;
+                    } else if (!takeImageQuota(userId, { isOwner: isOwnerId(userId) }).ok) {
+                        // Limite por pessoa por hora (YUI_IMAGE_PER_HOUR, padrão 6; o dono não tem limite): protege a cota dos provedores de imagem.
+                        logger.info('[GenerateImage] Limite por hora atingido para este usuário.');
+                        processedResponse = 'Calma, já gerei várias imagens para você nesta hora. Tenta de novo daqui a pouco! 🎨';
                     } else {
-                        const SAFETY_NEGATIVE = 'nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18, genitals, suggestive, semi-nude';
+                        const SAFETY_NEGATIVE ='nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18, genitals, suggestive, semi-nude';
                         if (!imageNegative.trim()) {
                             imageNegative = SAFETY_NEGATIVE;
                         } else {

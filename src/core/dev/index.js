@@ -158,11 +158,21 @@ export function createDev({
           resolve(false);
         }
       }, APPROVAL_TIMEOUT_MS);
-      run.pending.set(id, (approved) => {
+      run.pending.set(id, (approved, approverCtx = null) => {
         clearTimeout(timer);
         run.pending.delete(id);
         pushEvent(run, { type: 'approval_done', id, approved: Boolean(approved) });
-        audit('dev.approval', ctx, { project: project.id, action: request.action, approved: Boolean(approved) });
+        const finalCtx = approverCtx || ctx;
+        audit('dev.approval', finalCtx, {
+          project: project.id,
+          action: request.action,
+          command: request.params?.command ?? null,
+          path: request.params?.path ?? null,
+          cwd: workspace.fs?.root ?? null,
+          approved: Boolean(approved),
+          approverId: finalCtx?.userId ?? null,
+          approverRole: finalCtx?.role ?? null,
+        });
         resolve(Boolean(approved));
       });
       pushEvent(run, { type: 'approval', id, action: request.action, summary: request.summary, preview: request.preview });
@@ -171,7 +181,14 @@ export function createDev({
     const emit = (event) => {
       pushEvent(run, event);
       if (event.type === 'tool' && event.status && !['waiting', 'running'].includes(event.status)) {
-        audit('dev.tool', ctx, { project: project.id, action: event.action, status: event.status });
+        audit('dev.tool', ctx, {
+          project: project.id,
+          action: event.action,
+          status: event.status,
+          command: event.params?.command ?? null,
+          path: event.params?.path ?? null,
+          cwd: workspace.fs?.root ?? null,
+        });
       }
     };
 
@@ -232,8 +249,7 @@ export function createDev({
     const run = getRun(runId);
     const resolve = run.pending.get(String(approvalId));
     if (!resolve) throw new DevError(404, 'Esse pedido de aprovação não existe mais.');
-    resolve(Boolean(approve));
-    void ctx;
+    resolve(Boolean(approve), ctx);
     return { ok: true };
   }
 

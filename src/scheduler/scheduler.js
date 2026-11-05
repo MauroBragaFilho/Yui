@@ -11,6 +11,14 @@ import { getCurrentWeekKey } from '../utils/weekKey.js';
 import { weeklyService } from '../engines/gtao/systems/weekly/service.js';
 import { memory } from '../core/index.js';
 
+/** Converte "a cada N minutos" em cron válido (o passo de minutos só vai até 59). */
+export function minutesToCron(minutes) {
+  const n = Math.max(1, Math.floor(minutes));
+  if (n < 60) return `*/${n} * * * *`;
+  const hours = Math.min(24, Math.round(n / 60));
+  return hours >= 24 ? '0 0 * * *' : `0 */${hours} * * *`;
+}
+
 export function startScheduler(client) {
   logger.info('[Scheduler] Inicializando agendador central de tarefas em UTC...');
 
@@ -33,7 +41,7 @@ export function startScheduler(client) {
     }, 2 * 60 * 1000);
 
     // 2. Verificação periódica do Rockstar Newswire (Default: a cada 30 minutos)
-    const newswireCronExpr = `*/${config.newswire.intervalMinutes} * * * *`;
+    const newswireCronExpr = minutesToCron(config.newswire.intervalMinutes);
     cron.schedule(newswireCronExpr, async () => {
       try {
         logger.info('[Scheduler] Disparando checagem agendada do Newswire...');
@@ -135,7 +143,7 @@ export function startScheduler(client) {
       runWeeklyCheck().catch(() => null);
     }, 3 * 60 * 1000);
 
-    const weeklyCronExpr = `*/${config.weekly.intervalMinutes} * * * *`;
+    const weeklyCronExpr = minutesToCron(config.weekly.intervalMinutes);
     cron.schedule(weeklyCronExpr, runWeeklyCheck);
     logger.info(
       `[Scheduler] Weekly Reddit configurado para rodar a cada ${config.weekly.intervalMinutes} minutos.`

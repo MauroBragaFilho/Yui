@@ -77,7 +77,11 @@
     "test:lists": "node tests/test-lists.js",
     "test:modlist": "node tests/test-mod-list.js",
     "test:tts": "node tests/test-tts-text.js && node tests/test-tts-audio.js && node tests/test-tts-engine.js && node tests/test-tts-output.js && node tests/test-tts-pipeline.js && node tests/test-tts-integration.js && node tests/test-tts-ia.js",
-    "test:dev": "node --test \"tests/dev/**/*.test.js\""
+    "test:dev": "node --test \"tests/dev/**/*.test.js\"",
+    "test:backup": "node tests/test-memory-backup.js",
+    "test:audit": "node tests/test-audit-chained.js",
+    "test:imageintent": "node tests/test-image-intent.js",
+    "test:cleanbootstrap": "node tests/test-clean-bootstrap.js"
   },
   "keywords": [
     "discord",

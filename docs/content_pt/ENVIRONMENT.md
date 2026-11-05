@@ -368,6 +368,12 @@ Como entrar e as rotas: [Yui API](YUI_API.md).
 | `YUI_EDITOR_COMMAND` | Executável do editor usado ao abrir projetos |
 | `YUI_MCP_ALLOW` | Ferramentas MCP liberadas ao Agent (`servidor.ferramenta,...`) |
 | `YUI_MCP_READ_ONLY` | Dentre as liberadas, as que só leem (as demais ficam bloqueadas em somente leitura) |
+| `YUI_BACKUP_KEY` / `YUI_BACKUP_KEY_FILE` | Chave de 32 bytes (hex de 64 caracteres ou base64) do **backup cifrado da memória**, direta ou por arquivo. **Guarde fora do repositório** e faça uma cópia offline: sem ela o backup não abre | (obrigatória para fazer backup) |
+| `YUI_BACKUP_DIR` | Destino dos backups (fora do repositório). Padrão: uma pasta `yui-backups` ao lado do projeto | `../yui-backups` |
+| `YUI_BACKUP_MAX_KEEP` | Quantos backups manter (rotação) | `7` |
+| `YUI_AUDIT_MAX_BYTES` / `YUI_AUDIT_MAX_ROTATE` | Tamanho máximo do `core-audit.jsonl` antes de girar e quantos arquivos girados guardar | `10485760` (10 MB) e `5` |
+| `YUI_IMAGE_PRE_ROUTE` | `false` desliga a **Porta I** (imagem por conversa: "yui gera uma imagem de um gato" vira `generate_image` pelo código). Padrão `true`. A ferramenta chamada pelo modelo continua valendo | `true` |
+| `YUI_IMAGE_PER_HOUR` | Imagens por pessoa por hora, na conversa e na ferramenta (o dono não tem limite; `0` desliga o limite) | `6` |
 
 ---
 

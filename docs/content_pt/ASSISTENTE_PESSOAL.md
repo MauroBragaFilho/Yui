@@ -33,6 +33,7 @@ Este documento descreve a arquitetura que transformou a Yui de bot de Discord em
 6. Texto vindo de web, arquivos, mensagens de terceiros ou resultados de ferramentas é **dado**, nunca instrução.
 7. O modelo de IA é **intercambiável** (nuvem hoje, local no futuro).
 8. Evolução incremental: **a Yui pública nunca parou de funcionar** durante a construção do Core.
+9. **Toda função da Yui também se aciona pela conversa, não só por comando.** O comando de barra (`/`) e o prefixo (`+yui`) são atalhos; a pessoa tem de poder dizer "yui, gera uma imagem", "yui, baixa essa música", "yui, mostra o status" e a Yui executar. Regras: (a) **o CÓDIGO decide a rota** (pré-rota por padrão estrito, como a Porta I da imagem e as portas de pesquisa, listas e mods), nunca só a vontade do modelo de lembrar da ferramenta; (b) a conversa passa pelas **mesmas verificações** do comando (papel, permissão do Discord, filtros de conteúdo, limites, ferramenta desligada no servidor) e pela política de autonomia; (c) função sensível ou irreversível (banir, configurar servidor, seguir/parar canais, gravar no PC) pede **confirmação** pelo chat e só vale para quem tem a permissão, nunca por texto de terceiros, anexo, web ou voz; (d) toda função nova nasce com a rota de conversa **e** o teste dela; (e) o estado de cada função está em [Conversa e comandos](CONVERSA_E_COMANDOS.md).
 
 ---
 
