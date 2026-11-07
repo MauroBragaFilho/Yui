@@ -31,8 +31,8 @@ Legenda: ✅ por conversa · 🔶 parcial · ❌ só por comando · 🔒 exige c
 | Listas pessoais | ✅ | Porta L ("anota na lista X: ...") |
 | Lista de mods | ✅ | Porta M (Modrinth) |
 | Lembrar algo (`/yui-memoria lembrar`) | 🔶 | captura "lembra que...", "meu nome é...", "eu gosto de..." |
-| Ver/esquecer/apagar a própria memória (`/yui-memoria`) | ❌ | falta rota ("o que você sabe de mim?", "esquece isso", "apaga tudo") 🔒 apagar-tudo |
-| Resumo do chat (`/chat_resumo`) | ❌ | falta rota ("yui resume as últimas 50 mensagens") |
+| Ver/esquecer/apagar a própria memória (`/yui-memoria`) | ✅ | **Porta N**: "o que você sabe de mim?", "esquece a lembrança #3", "esquece que eu gosto de X", "apaga tudo que sabe de mim" 🔒 (pede "sim, apagar tudo" em até 2 min). Em canal público só mostra a contagem; o conteúdo aparece na DM. Teste: `npm run test:chatintents` |
+| Resumo do chat (`/chat_resumo`) | ✅ | **Porta R**: "yui resume as últimas 50 mensagens", "faz um resumo da conversa" (5 a 100, padrão 20; 1 por minuto por pessoa, dono sem limite) |
 | Reset/novidades do GTA Online (`/gta-diario`, `/gta-semanal`, `/gta-newswire`, `status`) | ❌ | só responde de memória do contexto de GTA; falta chamar o publicador sob demanda |
 | Seguir/parar/listar canais do YouTube e da Twitch | ❌ | 🔒 exige `ManageGuild` e confirmação |
 | Modo rádio / baixar a música atual (`/modo-radio`, `/baixar_musica_atual`) | ❌ | |
