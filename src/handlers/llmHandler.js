@@ -827,7 +827,7 @@ function isToolCallText(fullMatch, name) {
 // Tira os blocos <think>...</think> (e um <think> sem fechamento, até o fim do texto) numa passagem só. O par de expressões antigo varria o texto inteiro a
 // partir de CADA "<think>": uma saída degenerada de 100 mil caracteres com "<think>" repetido custava mais de 1 s e parava o laço de eventos (resíduo F1).
 // Mesmo resultado de antes: um bloco vai da PRIMEIRA abertura pendente até o primeiro "</think>" depois dela; "</think>" sem abertura fica como está.
-function removeThinkBlocks(text) {
+function removeThinkBlocks(text, { onStrippedBlock } = {}) {
     const tag = /<(\/?)think>/gi;
     let out = '';
     let last = 0;
@@ -838,12 +838,42 @@ function removeThinkBlocks(text) {
             if (openAt === -1) openAt = m.index;
         } else if (openAt !== -1) {
             out += text.slice(last, openAt);
+            if (typeof onStrippedBlock === 'function') {
+                onStrippedBlock(text.slice(openAt + m[0].length, m.index));
+            }
             last = m.index + m[0].length;
             openAt = -1;
         }
     }
-    if (openAt !== -1) { out += text.slice(last, openAt); last = text.length; }
+    if (openAt !== -1) {
+        out += text.slice(last, openAt);
+        if (typeof onStrippedBlock === 'function') {
+            onStrippedBlock(text.slice(openAt + 7));
+        }
+        last = text.length;
+    }
     return out + text.slice(last);
+}
+function extractThinkingFallback(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    const innerBlocks = [];
+    removeThinkBlocks(raw, { onStrippedBlock: (b) => innerBlocks.push(b) });
+    for (const block of innerBlocks) {
+        const trimmed = block.trim();
+        if (!trimmed) continue;
+        const respMatch = trimmed.match(/[\(\[\*]*\s*(?:response|reply|resposta|fala|yui|output|text|speech)\s*[\*\)\]]*\s*:\s*([\s\S]+)$/i);
+        if (respMatch) {
+            const cleanResp = respMatch[1].replace(/^[\(\[\*]*\s*(?:fala|resposta|yui|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
+            if (cleanResp) return cleanResp;
+        }
+    }
+    for (let i = innerBlocks.length - 1; i >= 0; i--) {
+        const trimmed = innerBlocks[i].trim();
+        if (trimmed.length > 5 && !/^(?:pensando|thinking|thought)\b/i.test(trimmed)) {
+            return trimmed;
+        }
+    }
+    return innerBlocks.join(' ').trim();
 }
 // A heurística "Thought: ... Response: ..." (expressões sem âncora) só vale para respostas curtas: numa saída degenerada de dezenas de milhares de caracteres
 // ("thought: (((((...") ela custava vários segundos. Um texto maior que isto segue sem essa limpeza.
@@ -1578,7 +1608,14 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
                                 const writtenSearch = options.disableTools ? null : writtenToolCallToJson(content);
                                 let isSearchCall = false;
                                 try { isSearchCall = Boolean(writtenSearch) && canonicalToolName(JSON.parse(writtenSearch).tool) === 'search_web'; } catch (_) { isSearchCall = false; }
-                                if (!isSearchCall) throw new Error('Gemini retornou tool_code como texto (formato inválido)');
+                                if (!isSearchCall) {
+                                    const cleanedText = stripThinking(content).trim();
+                                    if (cleanedText && !/^(?:tool_code|default_api\.|print\()/i.test(cleanedText)) {
+                                        content = cleanedText;
+                                    } else {
+                                        throw new Error('Gemini retornou tool_code como texto (formato inválido)');
+                                    }
+                                }
                             }
                         }
                         return {
@@ -1719,6 +1756,7 @@ async function tryGateway(prompt, systemPrompt, options = {}) {
 }
 async function tryHuggingFace(prompt, systemPrompt, options = {}) {
     console.log(`[IA] Tentando HuggingFace Public (Router)...`);
+
     const headers = { 'Content-Type': 'application/json' };
     if (config.hfToken && config.hfToken.length > 5) {
         headers['Authorization'] = `Bearer ${config.hfToken}`;
@@ -1746,6 +1784,11 @@ async function tryHuggingFace(prompt, systemPrompt, options = {}) {
             };
         }
     } catch (error) {
+        const status = error.response ? error.response.status : null;
+        if (status === 402 || status === 429) {
+            geminiCooldowns['hf_router'] = Date.now() + (status === 402 ? 30 * 60 * 1000 : 2 * 60 * 1000);
+            logger.warn(`[HuggingFace] Router retornou ${status} (créditos/cota). Cooldown ativado.`);
+        }
         const msg = error.response?.data?.error?.message || error.message;
         throw providerError(`HF Router Error: ${msg}`, error);
     }
@@ -2107,7 +2150,14 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
             // JSON da ferramenta vem ANTES do stripThinking: ele apagava a chamada (ou deixava só a cerca ```), o provedor era dado como falho e a cadeia seguia até
             // "Limites de Processamento". Com as ferramentas ligadas o JSON vai ao despachante da fila, que executa. A entrada é limitada (TOOLCALL_SCAN_MAX).
             const writtenCall = options.disableTools ? null : writtenToolCallToJson(result.text);
-            const strippedText = writtenCall || stripThinking(result.text);
+            let strippedText = writtenCall || stripThinking(result.text);
+            if (!strippedText && result.text) {
+                const recovered = extractThinkingFallback(result.text);
+                if (recovered) {
+                    logger.warn('[Parser] Resposta resgatada do bloco de raciocínio (thinking)');
+                    strippedText = recovered;
+                }
+            }
             result.text = strippedText;
             if (!result.text) throw new Error('Resposta vazia após remoção de thinking block');
             let finalOutput = result.text.trim();
