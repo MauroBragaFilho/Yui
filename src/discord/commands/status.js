@@ -111,7 +111,7 @@ export const statusCommand = {
           inline: true,
         }
       )
-      .setFooter({ text: 'Otimizado para Oracle Cloud Ubuntu 24.04' })
+      .setFooter({ text: 'Otimizado para baixo consumo de recursos' })
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

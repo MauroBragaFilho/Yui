@@ -126,7 +126,7 @@ No Windows, o `Yui.bat` oferece um menu. Para a Yui **subir sozinha com o Window
 
 - **Propagação:** comandos globais podem levar até 1 hora para aparecer. Defina `DISCORD_GUILD_ID` para testar na hora em um servidor.
 - **Permissões de escrita:** sem escrita em `src/data` e `database`, configurações e bancos falham.
-- **Bloqueios do YouTube:** em servidores de nuvem (AWS, Oracle), o yt-dlp pode precisar de cookies (`YTDLP_COOKIES_PATH`).
+- **Bloqueios do YouTube:** em servidores de nuvem (como a AWS), o yt-dlp pode precisar de cookies (`YTDLP_COOKIES_PATH`).
 - **Voz parada:** se `/entrar-call` ou o Modo Rádio responderem que faltam componentes de áudio, rode `npm install` (instala o Opus) e reinicie. O log da inicialização mostra `[MediaTools] Opus: OK` quando está certo.
 - **A Yui entra na call mas não fala:** a resposta falada vem **desligada** em cada servidor. Ligue **🔊 Resposta por Voz (TTS)** (e **🎙️ Assistente de Voz (Call)**, que o `/entrar-call` exige) em `/yui-ferramentas`, reinicie a Yui se acabou de atualizar o código e chame por voz começando a frase com "Yui". Veja o [guia de TTS](TTS.md).
 - **Teste antes de ligar:** `npm run test:media`, `npm run test:deezer`, `npm run test:spotdl` e os demais `test:*` rodam sem rede e sem tocar nos seus dados (lista em [README_TESTES.md](../../README_TESTES.md)).

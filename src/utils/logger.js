@@ -22,7 +22,7 @@ export const logger = winston.createLogger({
     customFormat
   ),
   transports: [
-    // Console (Stdout/Stderr para systemd na Oracle)
+    // Console (Stdout/Stderr para o systemd)
     new winston.transports.Console({
       format: combine(
         colorize(),

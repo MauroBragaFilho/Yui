@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script de provisionamento e deploy para Oracle Cloud (Ubuntu 24.04 LTS)
+# Script de provisionamento e deploy para um servidor Ubuntu 24.04 LTS
 
 set -e
 
