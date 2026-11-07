@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { handlePrefixCommand } from './prefixRouter.js';
@@ -12,6 +12,9 @@ import { updateBotActivity } from '../utils/activity.js';
 
 export function createDiscordClient() {
   const client = new Client({
+    // Sem Partials.Channel o discord.js v14 descarta as mensagens privadas (DM) antes do handler. Quem pode falar no privado é
+    // decidido em events/messageCreate.js (só o dono).
+    partials: [Partials.Channel],
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,

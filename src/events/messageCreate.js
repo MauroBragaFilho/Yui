@@ -10,6 +10,7 @@ import { fenceUntrustedWeb } from '../handlers/llmSafety.js';
 import { safeFetchText } from '../search/safeFetch.js';
 import { clipHeadTail } from '../utils/promptBudget.js';
 import { logger } from '../utils/logger.js';
+import { isOwnerId } from '../core/permissions.js';
 
 // ---------------------------------------------------------------------------------------------
 // Bloco CONTEXTO: teto de caracteres
@@ -327,11 +328,18 @@ export function attachmentOnlyReply(result) {
     return `Recebi o anexo, mas só leio arquivos .txt, .md e .log (até ${maxKb} KB). Cole o texto aqui na conversa ou mande em um desses formatos.`;
 }
 
+/** Mensagem privada (DM) de quem NÃO é o dono: a Yui não responde nada (nem aviso) no privado a mais ninguém. */
+export function isForeignDirectMessage(message, isOwner = isOwnerId) {
+    return !message?.guildId && !isOwner(message?.author?.id);
+}
+
 export default {
     name: 'messageCreate',
     once: false,
     async execute(message, client) {
         if (message.author.bot) return;
+        if (isForeignDirectMessage(message)) return;
+        const isDirectMessage = !message.guildId; // só chega aqui se for o dono: no privado ele não precisa citar "Yui"
         // Comando por prefixo ("+yui diario", "+yui perguntar ..."): quem trata é o prefixRouter (client.js). Sem este retorno a mesma
         // mensagem virava também uma conversa (o nome "Yui" casa com "+yui"): custo dobrado e até ferramenta acionada pela menção.
         if (startsWithCommandPrefix(message.content, config.discord?.prefix ?? config.prefix)) return;
@@ -389,7 +397,7 @@ export default {
         const botName = config.botName || 'Yui';
         const nameRegex = new RegExp(`\\b${botName}\\b`, 'i');
         const hasYuiName = nameRegex.test(message.content);
-        if (isMention || hasYuiName) {
+        if (isMention || hasYuiName || isDirectMessage) {
             if (message.guildId && message.channelId) {
                 const { setServerLastChannel } = await import('../handlers/llmHandler.js');
                 setServerLastChannel(message.guildId, message.channelId);
