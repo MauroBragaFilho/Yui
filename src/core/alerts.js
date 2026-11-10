@@ -90,6 +90,26 @@ export function formatCrashDetail(reason, { maxLines = 4, root = PROJECT_ROOT } 
   const origin = firstProjectFrame(reason instanceof Error ? reason.stack : text, { root });
   return origin ? `Origem na Yui: ${origin}\n${head}` : head;
 }
+/**
+ * Falhas de rede conhecidas que nascem dentro do pacote `ws` numa conexão que a biblioteca do
+ * Discord já descartou (veja src/discord/gatewayGuard.js). Não são defeito da Yui: ela reconecta
+ * sozinha. Só contam se a pilha passa pelo pacote `ws` e por nenhuma linha de `src/` da Yui.
+ * Nesses casos o erro vai para o log como aviso e não vira DM de "Erro grave".
+ */
+const HARMLESS_WS_MESSAGES = [
+  /^Opening handshake has timed out$/,
+  /^WebSocket was closed before the connection was established$/,
+];
+
+export function isHarmlessNetworkCrash(reason, { root = PROJECT_ROOT } = {}) {
+  if (!(reason instanceof Error)) return false;
+  const message = String(reason.message ?? '').trim();
+  if (!HARMLESS_WS_MESSAGES.some((re) => re.test(message))) return false;
+  const stack = String(reason.stack ?? '');
+  if (!/[\\/]node_modules[\\/]ws[\\/]/i.test(stack)) return false;
+  return firstProjectFrame(stack, { root }) === null;
+}
+
 const ICON = { info: 'ℹ️', warn: '⚠️', error: '🚨' };
 
 export function createAlerter({ notify = null, ownerId = null, env = process.env, now = () => Date.now(), maxPerHour = 10 } = {}) {

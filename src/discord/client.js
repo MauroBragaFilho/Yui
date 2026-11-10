@@ -9,8 +9,12 @@ import { hasActiveSession } from '../music/radioDatabase.js';
 import { initTts } from '../services/tts/index.js';
 import { isOpusAvailable } from '../utils/binaries.js';
 import { updateBotActivity } from '../utils/activity.js';
+import { installGatewayGuard } from './gatewayGuard.js';
 
 export function createDiscordClient() {
+  // Evita a exceção "Opening handshake has timed out" quando a rede cai durante uma reconexão (veja gatewayGuard.js).
+  installGatewayGuard();
+
   const client = new Client({
     // Sem Partials.Channel o discord.js v14 descarta as mensagens privadas (DM) antes do handler. Quem pode falar no privado é
     // decidido em events/messageCreate.js (só o dono).

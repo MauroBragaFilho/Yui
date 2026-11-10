@@ -14,7 +14,7 @@ import { initMemory } from './core/index.js';
 import { startApi } from './core/api/server.js';
 import { startGatewayServer } from './gateway/index.js';
 import { applyAiSettings } from './core/aiSettings.js';
-import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail } from './core/alerts.js';
+import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail, isHarmlessNetworkCrash } from './core/alerts.js';
 import { ownerUserId } from './core/api/auth.js';
 
 async function registerHikariEvents(client) {
@@ -177,8 +177,14 @@ async function bootstrap() {
 // Tratamento global de erros para evitar queda do processo
 // A chave do aviso é a causa-raiz (igual para exceção e rejeição: uma causa, uma DM) e o corpo inclui
 // o primeiro frame da pilha que está em src/ (veja core/alerts.js). Os handlers nunca lançam.
+// Falha de rede numa conexão do Discord já descartada (isHarmlessNetworkCrash) vira só aviso no log, sem DM.
+function logHarmlessNetworkCrash(reason) {
+  logger.warn(`[Discord] Falha de rede numa conexão já descartada (${reason.message}). Sem efeito: a Yui reconecta sozinha.`);
+}
+
 process.on('unhandledRejection', (reason) => {
   try {
+    if (isHarmlessNetworkCrash(reason)) return logHarmlessNetworkCrash(reason);
     logger.error(`Unhandled Rejection: ${describeReason(reason)}`);
     alertOwner(crashAlertKey(reason), 'Erro inesperado (promessa rejeitada)', formatCrashDetail(reason, { maxLines: 3 }), { level: 'error' });
   } catch (err) {
@@ -188,6 +194,7 @@ process.on('unhandledRejection', (reason) => {
 
 process.on('uncaughtException', (error) => {
   try {
+    if (isHarmlessNetworkCrash(error)) return logHarmlessNetworkCrash(error);
     logger.error(`Uncaught Exception: ${describeReason(error)}`);
     alertOwner(crashAlertKey(error), 'Erro grave na Yui', formatCrashDetail(error, { maxLines: 4 }), { level: 'error' });
   } catch (err) {

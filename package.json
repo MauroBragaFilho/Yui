@@ -84,7 +84,8 @@
     "test:library": "node tests/test-library-intent.js",
     "test:chatintents": "node tests/test-chat-intents.js",
     "test:dmowner": "node --test-force-exit tests/test-dm-owner.js",
-    "test:cleanbootstrap": "node tests/test-clean-bootstrap.js"
+    "test:cleanbootstrap": "node tests/test-clean-bootstrap.js",
+    "test:discordreconnect": "node tests/test-discord-reconnect.js"
   },
   "keywords": [
     "discord",
