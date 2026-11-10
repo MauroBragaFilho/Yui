@@ -16,6 +16,7 @@ import { preRouteDecision, recoveryPlan, inspectFinalGuard, finalGuard, finalGua
 import { isOwnerId } from '../core/permissions.js';
 // Lista de mods (Minecraft): o CÓDIGO procura cada nome no Modrinth e monta a lista com os links (Porta M, antes da Porta A).
 import { routeModList } from './modListResolver.js';
+import { routeLibrary } from './libraryIntent.js';
 import { routeLists } from './listAssistant.js';
 import { logger } from '../utils/logger.js';
 import { getMediaUserMessage, formatDeezerDelivery, codeSafe, isUploadTooLargeError, MEDIA_MESSAGES } from '../utils/mediaUrls.js';
@@ -2585,6 +2586,24 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 logger.info(formatDeliveryLog({
                     chars: modRouted.text.length, parts: modDelivery.parts, sentParts: modDelivery.sentParts, mode: modDelivery.mode, ok: modDelivery.ok,
                     channelKind: guildId ? 'servidor' : 'DM', durationMs: Date.now() - startTime, deliveryMs: modDelivery.durationMs
+                }));
+                return;
+            }
+        }
+        // Porta B (biblioteca): "yui procura Matrix na biblioteca", "o que eu tenho de filmes?" => o CÓDIGO consulta o servidor de arquivos (BDS Server), SOMENTE LEITURA.
+        // Só o dono, só em DM/canal privado, só pedido direto em texto. Falso positivo, desligado (sem YUI_BDS_URL) ou erro: segue para o modelo. YUI_BDS_PRE_ROUTE=false desliga.
+        if (directToYui && !isVoice && options.radioMode !== true && options.thirdPartyPrompt !== true && ownQuestion) {
+            const libRouted = await routeLibrary({
+                text: ownQuestion, isOwner: isOwnerId(userId), privateChat: privateChat === true,
+                direct: directToYui, voice: isVoice, radioMode: options.radioMode === true, disableTools: options.disableTools === true,
+                thirdPartyPrompt: options.thirdPartyPrompt === true, hasAttachment: typeof options.attachmentBlock === 'string' && options.attachmentBlock.length > 0
+            }, {});
+            if (libRouted.handled) {
+                await unifiedReply(libRouted.text);
+                const libDelivery = unifiedReply.lastDelivery || { ok: false, mode: 'failed', parts: 1, sentParts: 0, durationMs: 0 };
+                logger.info(formatDeliveryLog({
+                    chars: libRouted.text.length, parts: libDelivery.parts, sentParts: libDelivery.sentParts, mode: libDelivery.mode, ok: libDelivery.ok,
+                    channelKind: guildId ? 'servidor' : 'DM', durationMs: Date.now() - startTime, deliveryMs: libDelivery.durationMs
                 }));
                 return;
             }

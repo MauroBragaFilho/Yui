@@ -4,6 +4,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { safeEnv } from '../dev/terminal.js';
 import { registerToolPolicy, clearToolPolicies, ROLES, TOOL_ACCESS } from '../permissions.js';
+import { readBdsConfig, runLibraryAction, FOLDER_ALIASES } from '../../services/bdsLibrary.js';
 
 /**
  * Registro de ferramentas do Agent.
@@ -212,11 +213,56 @@ function runAllowed(exe, args) {
   });
 }
 
+// ───────────────────────── Biblioteca (BDS Server), somente leitura ─────────────────────────
+
+/** Ferramentas da biblioteca de arquivos: só existem se YUI_BDS_URL estiver no .env. Todas OWNER + leitura (GET na API do BDS Server). */
+export function registerBdsTools() {
+  const cfg = readBdsConfig();
+  if (!cfg.enabled) return [];
+  const folders = [...new Set(Object.keys(FOLDER_ALIASES))];
+  const base = { minRole: ROLES.OWNER, access: TOOL_ACCESS.READ };
+  registerTool({
+    ...base,
+    name: 'bds.buscar',
+    description: 'Procura arquivos e pastas pelo nome na biblioteca (servidor de arquivos: filmes, séries, importações do BDS). Somente leitura.',
+    params: { query: { type: 'string', required: true, max: 80 } },
+    async run({ query }) {
+      if (/[\/]/.test(query) || query.includes('..')) throw new Error('a busca é só por nome, sem caminhos');
+      return runLibraryAction('search', { query });
+    },
+  });
+  registerTool({
+    ...base,
+    name: 'bds.listar',
+    description: `Lista o conteúdo de uma pasta da biblioteca. Pastas: ${folders.join(', ')}. Somente leitura.`,
+    params: { pasta: { type: 'string', required: true, max: 20, enum: folders } },
+    async run({ pasta }) { return runLibraryAction('list', { folder: pasta }); },
+  });
+  registerTool({
+    ...base,
+    name: 'bds.recentes',
+    description: 'Mostra os últimos arquivos que chegaram na biblioteca. Somente leitura.',
+    params: {},
+    lenient: true,
+    async run() { return runLibraryAction('recent'); },
+  });
+  registerTool({
+    ...base,
+    name: 'bds.status',
+    description: 'Mostra se o servidor de arquivos está no ar e quanto espaço ainda tem. Somente leitura.',
+    params: {},
+    lenient: true,
+    async run() { return runLibraryAction('status'); },
+  });
+  return ['bds.buscar', 'bds.listar', 'bds.recentes', 'bds.status'];
+}
+
 // ───────────────────────── Ferramentas embutidas ─────────────────────────
 
 /** Registra as ferramentas do PC (apenas se YUI_TOOLS_PC_ENABLED=true). */
 export function registerBuiltinTools() {
-  if (String(process.env.YUI_TOOLS_PC_ENABLED || 'false').toLowerCase() !== 'true') return [];
+  registerBdsTools();
+  if (String(process.env.YUI_TOOLS_PC_ENABLED || 'false').toLowerCase() !== 'true') return listTools().map((t) => t.name);
 
   registerTool({
     name: 'system.info',

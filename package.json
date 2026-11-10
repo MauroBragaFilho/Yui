@@ -81,6 +81,7 @@
     "test:backup": "node tests/test-memory-backup.js",
     "test:audit": "node tests/test-audit-chained.js",
     "test:imageintent": "node tests/test-image-intent.js",
+    "test:library": "node tests/test-library-intent.js",
     "test:chatintents": "node tests/test-chat-intents.js",
     "test:dmowner": "node --test-force-exit tests/test-dm-owner.js",
     "test:cleanbootstrap": "node tests/test-clean-bootstrap.js"
