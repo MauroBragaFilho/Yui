@@ -2,7 +2,7 @@
 
 Este documento descreve a arquitetura que transformou a Yui de bot de Discord em **assistente pessoal**, mantendo o Discord como interface oficial: decisões, princípios, permissões, memória, Agent, personalidade e modelo de ameaças. É a referência de arquitetura do **Yui Core**.
 
-> **Resumo:** uma única Yui, com um único Core (`src/core`). Discord, API e apps são só interfaces. A **autorização é decidida pelo backend**, nunca pelo modelo de IA. Tudo que é pessoal fica no PC do dono.
+> **Resumo:** uma única Yui, com um único Core (`src/core`). Discord, API e apps são só interfaces. A **autorização é decidida pelo backend**, nunca pelo modelo de IA. Tudo que é pessoal fica no computador do dono que roda a Yui (desde 03/11/2026, um notebook dedicado que serve de servidor).
 
 ---
 
@@ -41,12 +41,12 @@ Este documento descreve a arquitetura que transformou a Yui de bot de Discord em
 
 | Tema | Decisão |
 |------|---------|
-| Número de Cores | **Um único**, rodando no **PC do dono** (a VPS foi desligada do bot) |
+| Número de Cores | **Um único**, rodando num **notebook dedicado do dono** desde 03/11/2026 (antes, no PC do dono; a VPS foi desligada do bot) |
 | Memória sensível no Discord | Só em **DM** e **canais privados** configurados; em canal público o dono usa a memória de usuário comum |
 | IA | **Nuvem permitida** por enquanto (hardware ainda limitado para IA local); local é plano futuro |
 | Ferramentas do PC | Com proteções: allowlist, confirmação, auditoria e **somente leitura** |
 | Entrada nos apps | Usuário e senha **ou** chave de uso único enviada por DM; sessões temporárias |
-| Hospedagem | PC com Windows; Tailscale para acesso externo |
+| Hospedagem | Notebook dedicado com Windows 10 (servidor); Tailscale para acesso externo |
 
 ---
 
@@ -92,14 +92,17 @@ src/core/
 ├── index.js            ponto único de entrada do Core
 ├── permissions.js      papéis, tipo de canal, escopo de memória, política e acesso das ferramentas
 ├── persona.js          personalidade por contexto (pessoal / assistente / Discord público)
-├── audit.js            auditoria append-only (logs/core-audit.jsonl)
+├── audit.js            auditoria append-only com hash encadeado (logs/core-audit.jsonl; verifyAudit confere a cadeia)
+├── alerts.js           avisos automáticos ao dono por DM
+├── aiSettings.js       chaves e provedores de IA do painel (secrets/ai-providers.json)
+├── skills.js           skills: receitas em texto do dono (skills/)
 ├── discordAdapter.js   ponte Discord → Core (contexto, bloco de memória, captura)
-├── memory/             schemas.js e store.js (remember, recall, forget, purge, administração)
+├── memory/             schemas.js, store.js (remember, recall, forget, purge, administração) e backup.js (backup cifrado)
 ├── context/            contextStore.js: contexto das conversas por horas (opcional, desligado por padrão)
 ├── ai/manager.js       AI Manager: backends plugáveis (legacy-chain, openai-compatible, gateway)
 ├── agent/              agent.js (laço de decisão) e tools.js (registro, allowlists, ponte MCP)
 ├── dev/                Código (o que era do Jarvis): projetos, arquivos, comandos, laço do agente, execuções com aprovação
-└── api/                server.js (rotas), auth.js (login, sessões, chave por DM), admin.js (painel)
+└── api/                server.js (rotas), auth.js (login, sessões, chave por DM), admin.js (painel), integrations.js, panelLogs.js e radioAdmin.js
 src/gateway/            Yui Gateway (servidor de IA): providers, router, server
 apps/yui-app/           App Android e web
 ```
@@ -124,6 +127,8 @@ apps/yui-app/           App Android e web
 | demais | pública | pública | pública |
 
 Canais privados são listados em `YUI_PRIVATE_CHANNEL_IDS`. Quem decide é o dono, não a IA.
+
+**Mensagem privada só do dono:** no Discord a Yui responde DM **só ao dono** (no privado ele nem precisa citar o nome dela). A mensagem privada de qualquer outra pessoa é ignorada em silêncio, sem aviso (`src/events/messageCreate.js`, teste `npm run test:dmowner`); os comandos de barra continuam funcionando no privado.
 
 ---
 
@@ -187,10 +192,11 @@ A Yui **não pode apagar, gravar nem mover arquivos, nem executar programas**, e
 | `apps.open` | execute | 🚫 bloqueada (inicia programas) |
 | `commands.list` | read | ✅ lista os comandos cadastrados (`YUI_COMMANDS`) |
 | `commands.run` | execute | 🚫 bloqueada; roda um comando cadastrado **pelo nome**, sem shell, com confirmação |
+| `bds.buscar`, `bds.listar`, `bds.recentes`, `bds.status` | read | ✅ consultam a biblioteca de arquivos do **BDS Server** (só `GET`; busca por nome, pasta de uma lista fixa, últimos arquivos, espaço livre). Só com `YUI_BDS_URL` |
 
 **Skills** (`skills/`): receitas em texto do dono que a Yui segue quando o pedido combina; só dono em DM/canal privado, sem ferramentas. Veja [Comandos e skills](COMANDOS_E_SKILLS.md).
 
-As ferramentas do PC só existem com `YUI_TOOLS_PC_ENABLED=true`. Não há shell livre. Configuração em [YUI_API.md](YUI_API.md#-agent-e-ferramentas-do-pc).
+As ferramentas do PC só existem com `YUI_TOOLS_PC_ENABLED=true`; as da biblioteca (`bds.*`) só com `YUI_BDS_URL`, independentemente da primeira. Não há shell livre. Configuração em [YUI_API.md](YUI_API.md#-agent-e-ferramentas-do-pc). No Discord, a mesma biblioteca responde por conversa pela **Porta B** (só o dono, conteúdo só em DM ou canal privado, `YUI_BDS_PRE_ROUTE=false` desliga).
 
 ### MCP
 
@@ -227,7 +233,7 @@ O **AI Manager** (`src/core/ai/manager.js`) expõe `chat()` e delega a um backen
 
 - **Yui Gateway:** servidor de IA próprio com failover, rodízio de chaves e descanso progressivo. Veja [GATEWAY.md](GATEWAY.md).
 - **Privacidade da nuvem:** como a nuvem é permitida, o contexto pessoal pode ir ao provedor; por isso só os N resultados relevantes são enviados, **conversas sensíveis nunca vão a provedores anônimos**, e `AI_PRIVATE_LOCAL_ONLY=true` faz o Manager **recusar** contexto pessoal em backend que não seja local. `AI_BASE_LOCAL=true` só deve ser marcado se o modelo realmente roda na sua máquina: **um gateway local que encaminha para a nuvem não é local**.
-- **OmniRoute** (de terceiros) continua possível como `openai-compatible`; usa ~540 MB de RAM, serve para a Yui pública e não para contexto pessoal.
+- **OmniRoute** (de terceiros) continua possível como `openai-compatible`; usa ~540 MB de RAM, serve para a Yui pública e não para contexto pessoal. O caminho mais simples é cadastrá-lo como provedor próprio do Gateway pelo painel: o modelo pronto (`src/core/aiSettings.js`) aponta para `http://127.0.0.1:20128/v1`, vem logo após o LM Studio e marcado como **sem conversas pessoais**.
 - **Pesquisa na web e dado não confiável:** o resultado da busca e o texto das páginas entram no prompt como **dado**, cercados por uma marca de "dados externos não confiáveis" que a página não consegue forjar, e naquela chamada a IA fica **sem ferramentas** (uma página não consegue disparar download, imagem ou busca). Conversa **sensível** (DM de qualquer pessoa, canal privado do dono ou app) **não pesquisa por padrão** (`YUI_PRIVATE_SEARCH=off`: a Yui responde "Não pesquiso na web numa conversa privada.") e nunca usa provedor anônimo. Com `owner` (só o dono) ou `all` (qualquer pessoa) ela pesquisa, mas só em pedido **explícito**, com a consulta feita **só do texto literal da mensagem** (nunca histórico, memória ou contexto pessoal), sem dado pessoal nem palavra proibida, com a síntese marcada como sensível e sem o texto da consulta no log; o histórico e o contexto por horas guardam só uma linha neutra, nunca o resultado. Cada pessoa tem 5 pesquisas por hora (`YUI_SEARCH_USER_PER_HOUR`, o dono também conta), o servidor inteiro tem 20 por hora (`YUI_SEARCH_GLOBAL_PER_HOUR`) e Brave e Tavily têm teto mensal de 900 (contador em `secrets/search-budget.json`). Provedor bloqueado ou sem cota descansa (1, 2, 4... até 30 min; cota esgotada, 1 h) e a cadeia segue para o próximo. A chave "texto-modelo" (menos de 10 caracteres, como `opcional`) é ignorada e o painel de integrações mostra isso. Detalhes em [Comandos e skills](COMANDOS_E_SKILLS.md#-4-busca-na-web).
 - **Agente de pesquisa (a Yui nunca mais "só promete pesquisar"):** o laço consulta, buscadores, leitura de até 2 páginas e síntese é do **código** (`src/handlers/researchAgent.js` e `searchIntent.js`), não do modelo. Todo pedido termina em resposta com fontes, resumo com links (sem IA) ou mensagem com o motivo, dentro de um prazo de 60 s. É o mesmo agente em todas as entradas: menção, nome da Yui ou resposta a ela, DM, `/yui`, `+yui perguntar` e o **app/API** (`/v1/chat` e `/v1/agent`, pelo AI Manager em `src/core/ai/manager.js`; no app e na DM de qualquer pessoa a pesquisa vale o `YUI_PRIVATE_SEARCH`, porque ambos são conversa privada para a pesquisa). Quatro "portas" ligam o agente: **A** (pré-rota, desligada por padrão: pedido explícito e estrito pesquisa sem a primeira chamada ao modelo), **B** (o modelo chama `search_web`), **C** (a resposta só promete pesquisar: vira pesquisa, cotação, recusa honesta ou pergunta do assunto) e **D** (guarda final: promessa que sobrou nunca é entregue nem guardada no histórico). Por voz a Yui recusa com honestidade, e a conversa espontânea nunca pesquisa. O texto da web é dado: a síntese roda sem ferramentas, busca, histórico nem memória, os links da resposta são colocados pelo código e menções e domínios soltos são neutralizados. Variáveis `YUI_RESEARCH_*` e `YUI_PRIVATE_SEARCH` em [Variáveis de ambiente](ENVIRONMENT.md#-agente-de-pesquisa).
 
@@ -253,7 +259,7 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 
 - **Entrada nos apps:** usuário e senha (hash scrypt) **ou** chave de uso único (5 min) enviada por **DM no Discord**; resulta em uma **sessão temporária**. O app não pede endereço do servidor: ele é configuração do build.
 - **Proteções do login:** comparação em tempo constante, erro genérico, atraso nas falhas, bloqueio após 5 erros em 15 min, pedidos de chave limitados a 3 por 10 min.
-- **Painel de administração** (aba **Admin**, só o dono): visão geral, **integrações** (o que está ligado ou falta configurar), servidores (AutoMod, **canais** e **seguidos** de YouTube/Twitch, editáveis), **rádio**, banimentos (não permite banir o dono), memória (só metadados), **IA** (chaves, provedores próprios como o OmniRoute, ordem na fila, teste), auditoria, **logs** (segredos mascarados), ferramentas, **mensagem no meu Discord** e reinício. A Yui também **avisa o dono por DM** quando algo dá errado (veja [Operação](OPERACAO.md)).
+- **Painel de administração** (aba **Admin**, só o dono): visão geral, **integrações** (o que está ligado ou falta configurar), servidores (AutoMod, **canais** e **seguidos** de YouTube/Twitch, editáveis), **rádio**, banimentos (não permite banir o dono), memória (só metadados), **IA** (chaves, provedores próprios como o OmniRoute, ordem na fila, teste), auditoria, **logs** (segredos mascarados), ferramentas, **mensagem no meu Discord** e reinício. A Yui também **avisa o dono por DM** quando algo dá errado (veja [Operação](OPERACAO.md)); a falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada (`src/discord/gatewayGuard.js` e `isHarmlessNetworkCrash` em `src/core/alerts.js`) não vira mais DM de "Erro grave": fica só no log, porque a Yui reconecta sozinha.
 - **O que o painel nunca controla:** o modo somente leitura, a senha e os tokens de acesso. Só mudam no `.env`. As **chaves de IA** podem ser adicionadas pelo painel (só entram, nunca voltam; `YUI_PANEL_AI_EDIT=false` trava).
 
 ---
@@ -277,7 +283,7 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 | `/chat_resumo` tratando mensagens de terceiros como ordem | O log do canal entra como registro de terceiros (dado), sem ferramentas, sem memória e sem gravar no `historico.txt` |
 | Execução ou alteração arbitrária no PC | Somente leitura imposto no backend; allowlists; sem shell livre; vigia de código nos testes; auditoria |
 | Código: instrução escondida em arquivo, página ou saída de comando | Tudo isso entra marcado como dado; comandos perigosos negados sempre; gravar e rodar comando exigem aprovação a cada vez; a política é do backend, não do modelo |
-| Código: aprovar de longe (celular, sessão roubada) | Aprovação e cadastro de projetos só valem se o pedido vier **do próprio PC** (pedido por proxy/Tailscale conta como remoto e fica somente leitura) |
+| Código: aprovar de longe (celular, sessão roubada) | Aprovação e cadastro de projetos só valem se o pedido vier **do próprio computador onde a Yui roda** (pedido por proxy/Tailscale conta como remoto e fica somente leitura) |
 | Código: ler segredos ou sair do projeto | `.env`, chaves e certificados nunca lidos; `path.relative` + `realpath`; projeto não pode ser a raiz do disco, a pasta pessoal nem `.ssh`/`.aws`; conteúdo vai só para IA marcada `sensitive` |
 | Força bruta no login | Hash scrypt, bloqueio global, atraso, erro genérico, sessões que expiram |
 | Encher a DM do dono com chaves | Máximo de 3 pedidos por 10 min; a chave nunca volta na API |
@@ -286,7 +292,7 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 | Dados pessoais no GitHub | `database/memory-*.db` e auditoria no `.gitignore`; revisar `git status` antes do push |
 | Dados de terceiros retidos | 30 dias, exclusão pelo próprio usuário, aviso no TOS. O contexto por horas é desligado por padrão, só do dono, com prazo por idade da fala e apagável por `/yui-memoria apagar-tudo`; o `historico.txt` ainda não tem política de retenção (veja as pendências) |
 | Provedor de IA vê contexto pessoal | Só o relevante; nunca a anônimos; `AI_PRIVATE_LOCAL_ONLY` quando houver IA local |
-| PC desligado | Core único: a Yui fica offline (decisão aceita) |
+| Servidor (notebook) desligado ou sem rede | Core único: a Yui fica offline (decisão aceita) |
 
 ---
 
@@ -303,10 +309,10 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 | 7 | Agent, ferramentas e ponte MCP | ✅ (transporte MCP pendente) |
 | 8 | App Android e web | ✅ `apps/yui-app` (chat com confirmação, memória, status, painel) |
 | 9 | Tailscale e acesso remoto | ✅ API publicada em HTTPS só na tailnet |
-| + | Somente leitura, persona, login e chave por DM, painel, Gateway de IA, Core único no PC | ✅ |
+| + | Somente leitura, persona, login e chave por DM, painel, Gateway de IA, Core único no computador do dono (hoje, o notebook servidor) | ✅ |
 | 10 | Código (Jarvis dentro da Yui) + Yui Desktop | ✅ aba Código, `/v1/dev/*`, janela Electron. Testado com IA simulada e na tela; o uso com modelo real depende do seu LM Studio/Gateway |
 
-**Em produção no PC:** bot do Discord, memória, API (`:3939`), app web (`:8081`) e Gateway (`:20130`), com reinício automático. Veja [Operação](OPERACAO.md).
+**Em produção no notebook servidor** (Windows 10, desde 03/11/2026): bot do Discord, memória, API (`127.0.0.1:3939`), app web (`127.0.0.1:8081`) e Gateway (`127.0.0.1:20130`), com reinício automático. No mesmo notebook roda o **OmniRoute** (gateway de IA externo, `127.0.0.1:20128`), que entra na Yui como provedor próprio pelo painel (**Admin → IA**, modelo pronto "OmniRoute"). Veja [Operação](OPERACAO.md).
 
 **Testes:** mais de 2.900 verificações automáticas, todas offline: as do Core (Core 21, API 12, Agent 21, somente leitura 15, painel 58, Gateway 42, persona 17, menções 17, configuração 5, avisos 24, pesquisa 56, Código 61, Weekly e app 23), as das correções de outubro de 2026 (downloads 150, Deezer 67, spotdl 105, leitura segura de páginas 24, segurança da IA 53, respostas longas 89, contexto por horas 63, voz 68, motor do YouTube 18, fala TTS 974 e integração das pendências 35 de 36, com uma asserção velha sobre o prazo do deemix), as dos limites de textos grandes (embeds 63, limite de anexo 20, entradas 44, leitura de páginas 42, respostas longas 50, anexos de texto 66, painéis 64, publicações 57, banco 14, HTTP 413 21, ajuste de áudio 37, fila e IA 69 e interações 56) e as do agente de pesquisa (detectores 55, agente 70, fila 77, entradas fora da fila 72, textos de ferramentas 44 e sobras da rodada final 40). Lista e comandos em [README_TESTES.md](../../README_TESTES.md).
 
@@ -317,14 +323,14 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 1. **Streaming** (SSE) na API e no app: hoje a resposta aparece inteira ao final.
 2. **Transporte MCP** (stdio/HTTP) e o primeiro servidor (Whisper).
 3. **App em aparelho físico**, APK assinado, notificações e voz. A casca de desktop já existe (**Yui Desktop**, Electron, mostra o mesmo app); faltam aprovações nativas do Windows nela.
-4. **Backup cifrado** de `memory-personal.db`.
+4. ✅ **Backup cifrado da memória: feito.** `node scripts/backup-memory.mjs` cifra (XChaCha20-Poly1305) `memory-personal.db`, `memory-discord.db` e os dois bancos do contexto por horas (os que existirem) numa pasta fora do repositório (`YUI_BACKUP_DIR`, padrão `../yui-backups`), mantendo os últimos 7 (`YUI_BACKUP_MAX_KEEP`); a chave vem de `YUI_BACKUP_KEY` ou `YUI_BACKUP_KEY_FILE`. Restaurar: `node scripts/restore-memory.mjs --from <pasta-do-backup> --to <pasta-de-destino>`. Veja [Operação](OPERACAO.md#-6-dados-e-backups).
 5. **TOS:** incluir texto sobre a retenção de 30 dias e como apagar a memória e, antes de ligar o contexto por horas para todos (`YUI_CONTEXT_SCOPE=all`), sobre as falas guardadas por algumas horas. O texto legal (`tosHandler.js`) é decisão do dono e não foi alterado.
 6. **Papéis TRUSTED/GUEST:** existem, mas só ganham função quando houver ferramentas que os justifiquem.
 7. **Embeddings** para a busca de memória (quando houver IA local).
 8. **VPS da AWS:** encerrar a instância e apagar o `.env` dela ([Operação](OPERACAO.md#-8-a-vps-da-aws)).
 9. **Dados no repositório:** `database/*.db` (exceto os de memória) são versionados; avaliar tirá-los do Git. O mesmo vale para `apps/yui-app/logs/` (incluindo o `core-audit.jsonl` do app), que já foi para o GitHub: o `.gitignore` agora ignora a pasta, mas quem já está rastreado só sai com `git rm --cached` (decisão e comando do dono).
 10. **Ferramentas de escrita:** se um dia forem necessárias (ex.: organizar arquivos), o caminho é uma ferramenta `write` com lista de pastas, confirmação obrigatória e `YUI_READ_ONLY=false` como decisão explícita.
-11. ✅ **Fala (TTS) na call: feito.** O módulo `src/services/tts/` (voz do Windows) está ligado ao `voiceHandler`, ao `llmHandler` e à inicialização (`src/discord/client.js`) e tem 974 verificações offline. Para usar: reinicie a Yui e ligue **🔊 Resposta por Voz (TTS)** no servidor (vem desligado); passo a passo no [guia de TTS](TTS.md). O teste numa call real continua na pendência 16. Piper e Edge (nuvem) ficaram para depois. Veja também [Variáveis de ambiente](ENVIRONMENT.md#-fala-da-yui-na-call-tts-local).
+11. ✅ **Fala (TTS) na call: feito.** O módulo `src/services/tts/` (voz do Windows) está ligado ao `voiceHandler`, ao `llmHandler` e à inicialização (`src/discord/client.js`) e tem 974 verificações offline. Para usar: reinicie a Yui e ligue **🔊 Resposta por Voz (TTS)** no servidor (vem desligado); passo a passo no [guia de TTS](TTS.md). O teste numa call real continua na pendência 16. O Piper ficou para depois; a voz da nuvem (Edge e Azure) já existe e vem desligada (`YUI_TTS_CLOUD=false`). Veja também [Variáveis de ambiente](ENVIRONMENT.md#-fala-da-yui-na-call-tts-local).
 12. **Contexto por horas:** falta o teste real (ligar `YUI_CONTEXT_ENABLED=true`, reiniciar, conversar na DM, conferir `database/memory-context-personal.db` e testar `/yui-memoria apagar-tudo`) e ligar a limpeza ao sair de um servidor (`forgetGuildContext`) e ao banir um usuário: as funções existem, mas nenhum evento as chama ainda. O histórico em RAM por usuário da API (`core/api/server.js`) é outro mecanismo e fica fora do contexto por horas.
 13. **`historico.txt`:** o registro de uso do bot continua gravando o restante das conversas e não tem política de retenção; nenhum comando o apaga. A decisão do prazo é do dono.
 14. **Recados de membros para o dono:** decisão de privacidade pendente; não implementado.

@@ -1,6 +1,6 @@
 # 🔊 Yui falando na call (TTS): guia de configuração
 
-Como fazer a Yui **responder falando** numa chamada de voz do Discord. Tudo roda no seu PC, sem rede e sem custo: ela usa a voz **Microsoft Maria (pt-BR)** que já vem no Windows. Não há nada para baixar.
+Como fazer a Yui **responder falando** numa chamada de voz do Discord. Por padrão tudo roda no computador onde a Yui roda (desde 03/11/2026, o notebook servidor), sem rede e sem custo: ela usa a voz **Microsoft Maria (pt-BR)** que já vem no Windows. Não há nada para baixar. Opcionalmente dá para usar uma voz neural da nuvem (`YUI_TTS_CLOUD=true`: Edge, ou Azure com chave), com a voz do Windows de reserva.
 
 > **Estado:** a fala já está ligada ao bot (`voiceHandler`, `llmHandler` e inicialização) e passou em todos os testes automáticos, que são offline e usam dublês. **Ainda não foi testada numa call de verdade.** Faça o primeiro teste num servidor seu, com o [checklist da Operação](OPERACAO.md#-11-checklist-da-fala-tts).
 >
@@ -40,14 +40,14 @@ Se algo não funcionar, vá direto ao [passo 9](#-9-problemas-comuns).
 
 ## 🎙️ 2. Conferir a voz do Windows
 
-No PowerShell:
+No PowerShell do computador onde a Yui roda:
 
 ```powershell
 Add-Type -AssemblyName System.Speech
 (New-Object System.Speech.Synthesis.SpeechSynthesizer).GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name + '  |  ' + $_.VoiceInfo.Culture.Name }
 ```
 
-Você deve ver uma linha como `Microsoft Maria Desktop  |  pt-BR`. Neste PC ela já existe (a `Microsoft Zira Desktop` é inglês e não serve).
+Você deve ver uma linha como `Microsoft Maria Desktop  |  pt-BR` (a `Microsoft Zira Desktop` é inglês e não serve).
 
 **Se não aparecer nenhuma voz `pt-BR`:** Configurações do Windows → Hora e idioma → Idioma e região → *Português (Brasil)* → Opções de idioma → instale o recurso de **texto para fala** (não o de reconhecimento de fala). Reinicie a Yui depois.
 
@@ -57,7 +57,7 @@ Para escolher outra voz instalada, ou mudar a velocidade, use `YUI_TTS_SAPI_VOIC
 
 ---
 
-**Testar as vozes sem usar a Yui:** dê duplo clique em `Testar Voz.bat` (ou rode `npm run tts:testar`) e abra http://127.0.0.1:4747. Escolha a voz, mova o tom e a velocidade, digite uma frase e ouça na hora; a página mostra as 3 linhas do `.env` para colar. Funciona só no seu PC (o texto digitado sai para a Microsoft, como na voz da nuvem).
+**Testar as vozes sem usar a Yui:** dê duplo clique em `Testar Voz.bat` (ou rode `npm run tts:testar`) e abra http://127.0.0.1:4747. Escolha a voz, mova o tom e a velocidade, digite uma frase e ouça na hora; a página mostra as 3 linhas do `.env` para colar. A página só abre no próprio computador onde o script roda (endereço `127.0.0.1`) e testa só as vozes da nuvem (Edge e Azure), então o texto digitado sai para a Microsoft.
 
 ## 🔌 3. Ligar no servidor
 
@@ -75,7 +75,7 @@ O TTS é um **interruptor por servidor, desligado por padrão**: todos na call o
 
 - **Conferir:** `/yui-ferramentas` com `acao` = **📜 Listar Status das Tools** mostra o que está em 🟢 Ativas e em 🔴 Desativadas.
 - **Desligar:** o mesmo caminho com **❌ Desativar**. A fala em curso é **cortada na hora** (de qualquer lugar onde se desligue: `/yui-ferramentas`, o painel do servidor ou o do dono) e nada mais é falado.
-- **Voltar ao padrão:** **🔄 Restaurar Padrão do Servidor** desliga as duas chaves, junto com o resto das ferramentas.
+- **Voltar ao padrão:** **🔄 Restaurar Padrão do Servidor** devolve todas as ferramentas do servidor ao padrão de fábrica: as duas chaves (e a do reconhecimento de voz do rádio) voltam a ficar desligadas, e as demais ferramentas, ligadas.
 
 As duas chaves são **independentes**: o *Assistente de Voz (Call)* deixa a Yui entrar na call (`/entrar-call`) e atender "Yui, sai da call"; o *TTS* só decide se ela **responde falando**. Ligar o TTS não faz a Yui entrar sozinha.
 
@@ -138,7 +138,8 @@ Quando ela deixa de falar, **o texto continua no chat**: só a fala é cortada.
 | Variável | Para que serve | Padrão |
 |----------|----------------|--------|
 | `YUI_TTS_ENABLED` | Chave mestra. `false` = nunca fala e nem sobe o processo da voz. Um valor que ela não reconhece (por exemplo `falso`) também desliga | `true` |
-| `YUI_TTS_PROVIDERS` | Provedores de voz, em ordem. Hoje só existe `sapi`; `piper` e `edge` ainda não existem e são ignorados com um aviso no log | `sapi` |
+| `YUI_TTS_PROVIDERS` | Provedores de voz, em ordem. Existem `sapi` (voz do Windows), `edge` e `azure` (nuvem); `piper` ainda não existe e é ignorado com um aviso no log | `sapi` (com `YUI_TTS_CLOUD=true`: `edge,sapi`, ou `azure,edge,sapi` se houver `AZURE_SPEECH_KEY`) |
+| `YUI_TTS_CLOUD` | `true` liga a voz neural da nuvem (o texto falado sai para a Microsoft; só resposta não sensível). Veja o [passo 9b](#-9b-azure-speech-oficial-como-criar-a-chave) e o [passo 10](#-10-uma-voz-melhor-no-futuro) | `false` |
 | `YUI_TTS_SAPI_VOICE` | Nome (ou parte do nome) de outra voz instalada | primeira voz pt-BR |
 | `YUI_TTS_SAPI_RATE` | Velocidade da fala, de `-10` (lenta) a `10` (rápida) | `0` |
 | `YUI_TTS_MAX_CHARS` | Quanto ela fala por resposta, em caracteres (60 a 600) | `220` |
@@ -162,13 +163,13 @@ O estilo da resposta falada (curta, sem Markdown, sem emoji) vem de `persona/yui
 
 ## 🔒 8. Privacidade
 
-- A **voz sintetizada nunca sai do seu PC**: o Windows gera o áudio localmente. Nenhum áudio e nenhuma transcrição são gravados em disco: a transcrição de voz não vai ao `historico.txt` e o log guarda só tamanhos e IDs, nunca o que foi dito.
-- **Atenção, a parte que não é local:** para entender o que as pessoas dizem, o áudio de **todos** na call é enviado a serviços de transcrição na nuvem (Groq, Wit.ai, Gemini, Hugging Face e OpenAI, conforme as chaves que estiverem no `.env`) **antes** de a Yui saber se falaram com ela. Só ficaria no PC se você usasse apenas um transcritor local (`LOCAL_STT_URL`). Isso já era assim na escuta por voz e é dito na mensagem de entrada da call. Avise quem frequenta a call.
+- Com a voz do Windows (o padrão), a **voz sintetizada nunca sai do computador onde a Yui roda**: o Windows gera o áudio localmente. Nenhum áudio e nenhuma transcrição são gravados em disco: a transcrição de voz não vai ao `historico.txt` e o log guarda só tamanhos e IDs, nunca o que foi dito.
+- **Atenção, a parte que não é local:** para entender o que as pessoas dizem, o áudio de **todos** na call é enviado a serviços de transcrição na nuvem (Groq, Wit.ai, Gemini, Hugging Face e OpenAI, conforme as chaves que estiverem no `.env`) **antes** de a Yui saber se falaram com ela. Só ficaria no computador da Yui (ou na sua rede) se você usasse apenas um transcritor local (`LOCAL_STT_URL`). Isso já era assim na escuta por voz e é dito na mensagem de entrada da call. Avise quem frequenta a call.
 - O que a pessoa diz vira texto e segue o mesmo caminho de uma mensagem do chat: vai ao provedor de IA em uso (que pode ser de nuvem) e a resposta fica **escrita no canal de texto**, visível a quem tem acesso a ele. Como a voz é conversa pública, se o provedor local falhar a cadeia pode cair nos provedores **gratuitos e anônimos** (Pollinations, AI Horde, Hugging Face), e o texto do pedido sai para eles; conversa privada nunca usa esses.
 - No modo voz (🔊 ligado) a voz é sempre tratada como **conversa pública**: sem memória pessoal, sem histórico do chat de texto, sem contexto privado e sem gravar nada na memória nem no `historico.txt`. Vale para **todo** pedido por voz do servidor, até o em que o nome da Yui vem depois das 3 primeiras palavras. Com o 🔊 desligado a conversa por voz segue as regras de sempre do chat (o pedido e a resposta podem ir ao `historico.txt`, se ele estiver ligado).
 - **A moderação continua valendo por voz.** Se a frase de alguém, ou a resposta, tiver uma palavra proibida, o aviso de segurança vai ao webhook de avisos do dono (se houver um configurado), com o trecho. No modo voz o AutoMod **por gatilho** (`trigger` ou `both`) **não bane sozinho** por uma frase transcrita: a transcrição erra, e um ban global por uma palavra mal ouvida seria injusto. O dono recebe só o aviso no webhook, com os botões de banir ou ignorar (decisão provisória; veja [Moderação](MODERATION.md#-2-hierarquia-do-automod-automated-blocking)). Com o 🔊 desligado vale a regra de sempre, e a frase transcrita pode banir.
 - `YUI_VOICE_TOOLS=true` permite que **qualquer pessoa na call**, só falando, peça download, imagem etc. (a pesquisa na web por voz é recusada mesmo assim) A transcrição pode errar ou ser manipulada por quem estiver falando. Mantenha `false`, a menos que confie em todos na call. Com o 🔊 ligado e `false`, nenhum pedido por voz executa ferramenta, nem o em que o nome da Yui vem **depois** das 3 primeiras palavras. Com o 🔊 desligado a voz tem as ferramentas de sempre.
-- **Voz da nuvem (`YUI_TTS_CLOUD=true`):** o texto que a Yui fala sai do seu PC para a Microsoft. Só vale para respostas NÃO sensíveis (na call tudo é conversa pública), e se a nuvem falhar ou passar do teto diário, a voz do Windows assume. Com `false`, nada sai do PC.
+- **Voz da nuvem (`YUI_TTS_CLOUD=true`):** o texto que a Yui fala sai do computador dela para a Microsoft. Só vale para respostas NÃO sensíveis (na call tudo é conversa pública), e se a nuvem falhar ou passar do teto (diário no Edge, mensal no Azure), a voz do Windows assume. Com `false`, nada sai do computador.
 
 ---
 
@@ -197,7 +198,7 @@ Depois de reiniciar, o log deve ter `[TTS] Provedor "sapi": disponível` e `[TTS
 | Ela não fala e o log diz `motivo=no-speak-permission` | Sem permissão de **Falar** no canal, silenciada pelo servidor ou em palco sem permissão | Dê a permissão *Falar* à Yui no canal de voz |
 | Ela não fala com o rádio ligado | De propósito: a música nunca é coberta | Encerre o Modo Rádio (botão **👋 Sair** do painel do rádio) e use `/entrar-call` de novo |
 | Ela se corta sozinha | Eco: o microfone de alguém capta o som dela | Use fone, ou `YUI_TTS_BARGE_IN=false` |
-| Fala atropelada ou demorada | PC ocupado (jogo aberto) | Espere; ou `YUI_TTS_SAPI_RATE=1` |
+| Fala atropelada ou demorada | Computador da Yui ocupado (jogo ou programa pesado aberto) | Espere; ou `YUI_TTS_SAPI_RATE=1` |
 | Não responde nada, nem em texto | Pedido ignorado pelos limites do modo voz (1 a cada 6 s; 1 por pessoa na fila) | Espere um pouco e repita |
 | Ela diz "Demorei demais para responder e perdi o fio" | O pedido ficou mais de 30 s esperando a vez na fila da IA | Peça de novo |
 | Responde em texto, mas não fala | A palavra de ativação não estava nas 3 primeiras palavras, ou a transcrição errou o nome | Repita mais devagar: **"Yui, ..."** |
@@ -237,18 +238,18 @@ O Azure tem mais vozes pt-BR e **estilos** (alegre, amigável...). A faixa gratu
 5. Abra `Testar Voz.bat`, escolha o motor **Azure** e a página lista as vozes reais do seu recurso (com os estilos de cada uma). Ajuste, ouça e copie as linhas `YUI_TTS_AZURE_*` para o `.env`.
 6. Reinicie a Yui. Com `YUI_TTS_CLOUD=true` e a chave, a ordem passa a ser Azure, Edge e voz do Windows (cada um assume se o anterior falhar).
 
-> O Azure é oficial e estável (o Edge usa um acesso não oficial). O texto falado também sai do PC. Há um teto mensal (`YUI_TTS_AZURE_MAX_CHARS_PER_MONTH`, 450 mil) para não passar da faixa gratuita.
+> O Azure é oficial e estável (o Edge usa um acesso não oficial). O texto falado também sai do computador da Yui. Há um teto mensal (`YUI_TTS_AZURE_MAX_CHARS_PER_MONTH`, 450 mil) para não passar da faixa gratuita.
 
 ## 🚀 10. Uma voz melhor, no futuro
 
 > ✅ **Já feito:** a voz neural da nuvem (Francisca/Thalita) está disponível com `YUI_TTS_CLOUD=true`; veja as variáveis `YUI_TTS_EDGE_*` em [Variáveis de ambiente](ENVIRONMENT.md#-fala-da-yui-na-call-tts-local). Ela usa um acesso não oficial da Microsoft, que pode mudar sem aviso (por isso a voz do Windows fica de reserva). O Piper continua como ideia futura.
 
-A voz Maria é clara, mas **robótica**. Há duas melhorias previstas que **ainda não foram feitas** (e que exigem a sua aprovação, porque baixam arquivos grandes):
+A voz Maria é clara, mas **robótica**. Das melhorias previstas, uma já foi feita e outra **ainda não** (e exige a sua aprovação, porque baixa arquivos grandes):
 
-- **Piper** (voz neural local): ~100 a 250 MB de download. As vozes pt-BR dele são provavelmente **masculinas**, então precisa ouvir amostras antes de decidir. Rodaria como um processo local sem porta de rede.
-- **Edge TTS** (nuvem, voz feminina natural): usa uma API não oficial da Microsoft; o texto falado sairia do PC. Ficaria desligado por padrão.
+- **Piper** (voz neural local, ainda não feito): ~100 a 250 MB de download. As vozes pt-BR dele são provavelmente **masculinas**, então precisa ouvir amostras antes de decidir. Rodaria como um processo local sem porta de rede.
+- **Edge TTS** (nuvem, voz feminina natural, **já feito**): usa uma API não oficial da Microsoft; o texto falado sai do computador da Yui. Fica desligado por padrão (`YUI_TTS_CLOUD=false`). O **Azure Speech** (oficial) entrou junto; veja o [passo 9b](#-9b-azure-speech-oficial-como-criar-a-chave).
 
-Hoje `piper` e `edge` em `YUI_TTS_PROVIDERS` são ignorados (com um aviso no log). Quando quiser testar uma delas, é só pedir.
+Hoje só `piper` em `YUI_TTS_PROVIDERS` é ignorado (com um aviso no log); `sapi`, `edge` e `azure` funcionam. Quando quiser testar o Piper, é só pedir.
 
 ---
 
@@ -260,7 +261,7 @@ npm run test:tts
 
 Roda as 7 suítes do TTS em sequência (cerca de 1 minuto): texto, áudio, motor, saída, ponta a ponta, integração com o bot (voz, inicialização e rádio) e o lado da IA (ferramentas bloqueadas por voz, persona e fila). Dá 974 verificações. Não usam rede nem o Discord; só a de áudio abre a voz do Windows por alguns segundos, sem tocar som.
 
-Cada uma também roda sozinha: `npm run test:tts-text`, `test:tts-audio`, `test:tts-engine`, `test:tts-output`, `test:tts-pipeline`, `test:tts-integration` e `test:tts-ia`. A tabela do que cada uma cobre está em [README_TESTES.md](../../README_TESTES.md).
+Cada uma também roda sozinha: `npm run test:tts-text`, `test:tts-audio`, `test:tts-engine`, `test:tts-output`, `test:tts-pipeline`, `test:tts-integration` e `test:tts-ia`. A tabela do que cada uma cobre está em [README_TESTES.md](../../README_TESTES.md). As vozes da nuvem têm testes próprios, também sem rede e fora do `test:tts`: `npm run test:tts-edge` e `npm run test:tts-azure`.
 
 **Ponta a ponta (opcional, fora do `test:tts`):**
 

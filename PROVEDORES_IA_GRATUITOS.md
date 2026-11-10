@@ -2,9 +2,11 @@
 
 Este guia contém as opções de provedores de nuvem que oferecem endpoints compatíveis com o padrão OpenAI (`/v1/chat/completions`) com planos ou modelos **100% gratuitos**.
 
-> 💡 **Atalho recomendado:** o **Yui Gateway** já integra Groq, Gemini, Hugging Face, OpenRouter, Cloudflare, Together e Pollinations com failover e rodízio de chaves. Basta colocar as chaves de cada provedor no `.env` (`GROQ_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`...); ele é usado logo após o LM Studio. Veja [docs/content_pt/GATEWAY.md](docs/content_pt/GATEWAY.md) e [ENVIRONMENT.md](docs/content_pt/ENVIRONMENT.md). As configurações `AI_BASE_URL`/`AI_API_KEY` abaixo servem para apontar **um** provedor fixo.
+> 💡 **Atalho recomendado:** o **Yui Gateway** já integra Groq, Gemini, Hugging Face, OpenRouter, Cloudflare, Together e Pollinations com failover e rodízio de chaves. Basta colocar as chaves de cada provedor no `.env` (`GROQ_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`...); ele é usado logo após o LM Studio. No Gateway, o OpenRouter usa `OPENROUTER_API_KEY` (modelos em `OPENROUTER_MODELS`) e o Together, `TOGETHER_API_KEY` (modelo em `TOGETHER_MODEL`). Veja [docs/content_pt/GATEWAY.md](docs/content_pt/GATEWAY.md) e [ENVIRONMENT.md](docs/content_pt/ENVIRONMENT.md). As configurações `AI_BASE_URL`/`AI_API_KEY` abaixo servem para apontar **um** provedor fixo.
 >
-> ⚠️ Os modelos Gemini 1.5 e 2.0 foram **aposentados**; use `gemini-flash-lite-latest` ou `gemini-flash-latest`.
+> 🔀 **OmniRoute:** no notebook servidor da Yui roda também o OmniRoute, um gateway de IA externo em `http://127.0.0.1:20128/v1`. Para usá-lo, cadastre-o pelo app em **Admin → IA** com o modelo pronto "OmniRoute" (ele entra logo após o LM Studio e não recebe conversas pessoais).
+>
+> ⚠️ Os modelos Gemini 1.5 e 2.0 foram **aposentados** (e o `gemini-2.5-flash`/`gemini-2.5-flash-lite` não atendem contas novas); use `gemini-flash-lite-latest` ou `gemini-flash-latest`. Em `GEMINI_MODEL`/`GEMINI_MODEL_FALLBACK` a Yui troca sozinha esses nomes antigos pelo apelido atual (`src/utils/geminiModels.js`); em `AI_MODEL` não há troca.
 
 ---
 

@@ -15,7 +15,9 @@ Está registrado como princípio 9 em [Assistente pessoal](ASSISTENTE_PESSOAL.md
 
 ## Estado atual (leitura do código em 2026-11-05; nada aqui foi verificado em um Discord real)
 
-Legenda: ✅ por conversa · 🔶 parcial · ❌ só por comando · 🔒 exige confirmação/política quando for feito
+Revisado de novo contra o código em 2026-11-10 (Porta B, Portas N e R ainda soltas, nomes dos comandos). Lembrete: "pela conversa" vale em servidor (menção, nome da Yui ou resposta a ela) e na DM **do dono**; a DM de qualquer outra pessoa é ignorada em silêncio (essas pessoas usam os comandos).
+
+Legenda: ✅ por conversa · 🔶 parcial · ⚠️ módulo pronto e testado, ainda não ligado ao fluxo da conversa · ❌ só por comando · 🔒 exige confirmação/política quando for feito
 
 | Função (comando) | Pela conversa | Observação |
 |---|---|---|
@@ -28,22 +30,25 @@ Legenda: ✅ por conversa · 🔶 parcial · ❌ só por comando · 🔒 exige c
 | Converter moeda (`/converter_moeda`) | ✅ | `convert_currency` |
 | Menu de ajuda (`/ajuda`) | ✅ | `show_bot_menu` |
 | Entrar/sair da call (`/entrar-call`, `/sair-call`) | ✅ | `join_voice_call`, `leave_voice_call` |
+| Baixar a música do seu status (`/baixar_musica_atual`) | ✅ | ferramenta `get_current_music` ("yui, baixa a música do meu status"); por conversa vale só a música de quem pediu |
+| Info de jogo e "meu PC roda?" (sem comando de barra) | ✅ | ferramentas `check_game_info` (RAWG + HowLongToBeat) e `check_pc_compatibility` |
 | Listas pessoais | ✅ | Porta L ("anota na lista X: ...") |
 | Lista de mods | ✅ | Porta M (Modrinth) |
+| Biblioteca de arquivos (BDS Server; sem comando de barra) | ✅ | **Porta B** (só dono, **só leitura**; em canal público ela avisa e não mostra nada, o conteúdo só sai em DM/canal privado): "yui procura Matrix na biblioteca", "o que eu tenho de filmes?", "o que chegou de novo na biblioteca?", "quanto espaço tem no servidor de arquivos?". Exige `YUI_BDS_URL`; só dispara citando a biblioteca/servidor de arquivos ou uma pasta sua ("meus filmes", "o que eu tenho de séries"). Ferramentas `bds.buscar/listar/recentes/status`. Teste: `npm run test:library` |
 | Lembrar algo (`/yui-memoria lembrar`) | 🔶 | captura "lembra que...", "meu nome é...", "eu gosto de..." |
-| Ver/esquecer/apagar a própria memória (`/yui-memoria`) | ✅ | **Porta N**: "o que você sabe de mim?", "esquece a lembrança #3", "esquece que eu gosto de X", "apaga tudo que sabe de mim" 🔒 (pede "sim, apagar tudo" em até 2 min). Em canal público só mostra a contagem; o conteúdo aparece na DM. Teste: `npm run test:chatintents` |
-| Resumo do chat (`/chat_resumo`) | ✅ | **Porta R**: "yui resume as últimas 50 mensagens", "faz um resumo da conversa" (5 a 100, padrão 20; 1 por minuto por pessoa, dono sem limite) |
-| Reset/novidades do GTA Online (`/gta-diario`, `/gta-semanal`, `/gta-newswire`, `status`) | ❌ | só responde de memória do contexto de GTA; falta chamar o publicador sob demanda |
-| Seguir/parar/listar canais do YouTube e da Twitch | ❌ | 🔒 exige `ManageGuild` e confirmação |
-| Modo rádio / baixar a música atual (`/modo-radio`, `/baixar_musica_atual`) | ❌ | |
-| Banir/desbanir, AutoMod (`/banir`, `/desbanir`, `/automod`) | 🔶 | existe `ia_automod`; banir/desbanir por pedido ❌ 🔒 |
-| Configurar servidor, ferramentas, IA, criador (`/yui-servidor`, `/yui-ferramentas`, `/yui-config_ia`, `/yui-criador`, `/setup`) | ❌ | 🔒 só dono/administrador, com confirmação |
+| Ver/esquecer/apagar a própria memória (`/yui-memoria`) | ⚠️ | **Porta N** (`src/handlers/chatIntents.js`, ainda não chamada pelo `llmHandler`; por enquanto use `/yui-memoria`): "o que você sabe de mim?", "esquece a lembrança #3", "esquece que eu gosto de X", "apaga tudo que sabe de mim" 🔒 (pede "sim, apagar tudo" em até 2 min). Em canal público só mostra a contagem; o conteúdo aparece na DM. Teste: `npm run test:chatintents` |
+| Resumo do chat (`/chat_resumo`) | ⚠️ | **Porta R** (mesmo módulo, ainda não ligado; por enquanto use `/chat_resumo`): "yui resume as últimas 50 mensagens", "faz um resumo da conversa" (5 a 100, padrão 20; 1 por minuto por pessoa, dono sem limite) |
+| Reset/novidades do GTA Online (`/gta-diario`, `/gta-semanal`, `/gta-noticias`) e estado da Yui (`/yui-status`) | ❌ | só responde de memória do contexto de GTA; falta chamar o publicador sob demanda. A detecção do GTA por conversa (`detectGtaIntent`, "Porta G" no `chatIntents.js`) existe e tem teste, mas também não está ligada |
+| Seguir/parar/listar canais do YouTube e da Twitch (`/yui-seguir-youtube`, `/yui-seguir-twitch`, `/yui-parar-seguir`, `/yui-listar-seguindo`) | ❌ | 🔒 os comandos exigem *Administrador* (permissão padrão no Discord); por conversa, exigiria confirmação |
+| Modo rádio (`/modo-radio`) | ❌ | dentro do rádio já há controle por voz e botões; a detecção de pedidos de rádio pelo chat (`detectRadioIntent` no `chatIntents.js`) existe e tem teste, mas não está ligada |
+| Banir/desbanir, AutoMod (`/yui-criador banir`, `desbanir`, `bans_lista`, `automod`) | 🔶 | existe `ia_automod` (a IA bane sozinha em AutoMod `mcp`/`both`); banir/desbanir por pedido ❌ 🔒 |
+| Configurar servidor, ferramentas, IA, criador (`/yui-servidor`, `/yui-ferramentas`, `/yui-config_ia`, `/yui-criador`, `/yui-configurar`) | ❌ | 🔒 só dono/administrador, com confirmação |
 | Origem de imagem/anime (`/anime_origem`) | ❌ por desenho | a Yui não vê imagens enviadas |
 | Aceitar os Termos (`/aceitar_tos`) | ❌ por desenho | exceção da regra 6 |
 
 ## Ordem sugerida para fechar o que falta
 
-1. **Somente leitura e baixo risco:** memória (ver/esquecer), resumo do chat, GTA sob demanda, modo rádio.
+1. **Somente leitura e baixo risco:** ligar ao fluxo da conversa o que já está pronto em `chatIntents.js` (memória: ver/esquecer/apagar; resumo do chat; detecção de GTA e de rádio) e completar GTA sob demanda e modo rádio.
 2. **Com permissão:** seguir/parar/listar canais, banir/desbanir. Depende do motor de política da Fase 1 do roadmap (`ROADMAP_EVOLUCAO.md`) para confirmar e auditar.
 3. **Administração:** configuração do servidor, ferramentas, IA. Só dono, sempre com confirmação e auditoria.
 

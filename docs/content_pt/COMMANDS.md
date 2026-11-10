@@ -15,9 +15,11 @@ Este documento detalha todos os comandos slash (/) disponíveis na Yui, suas fun
 7. [🏪 Consulta na Loja](#-consulta-na-loja)
 8. [📺 YouTube e Twitch](#-youtube-e-twitch)
 9. [⚙️ Configuração & Administração](#-configuração--administração)
-10. [💡 Dicas de Especialista](#-dicas-de-especialista)
+10. [🎙️ Voz & Calls](#-voz--calls)
+11. [⌨️ Comandos por prefixo](#-comandos-por-prefixo)
+12. [💡 Dicas de Especialista](#-dicas-de-especialista)
 
-> 📌 Os slash commands são registrados automaticamente na inicialização. Comandos globais podem levar até 1 hora para aparecer (use `DISCORD_GUILD_ID` para testar na hora). `/ajuda` lista os comandos dentro do Discord.
+> 📌 Os slash commands são registrados automaticamente na inicialização. Comandos globais podem levar até 1 hora para aparecer (use `DISCORD_GUILD_ID` para testar na hora). `/ajuda` lista os comandos dentro do Discord. Todos são registrados também para a DM com a Yui e para a instalação no seu usuário (os de configuração de servidor só fazem sentido dentro de um servidor). Muitas funções também saem **por conversa**, sem comando: veja [Conversa e comandos](CONVERSA_E_COMANDOS.md).
 
 ---
 
@@ -27,37 +29,42 @@ Este documento detalha todos os comandos slash (/) disponíveis na Yui, suas fun
 
 O comando principal para interagir com o cérebro da Yui.
 
-- **Prompt:** Sua pergunta ou pedido.
-- **Visibilidade:** Escolha entre `Público` (todos veem) ou `Privado` (apenas você vê).
+- **Mensagem (`mensagem`):** Sua pergunta ou pedido.
+- **Visibilidade:** Escolha entre `Público` (todos veem, o padrão) ou `Privado` (apenas você vê).
+- **No privado:** o `/yui` funciona na DM com a Yui para qualquer pessoa. Já a conversa por **mensagem** no privado é só com o dono: DM de outras pessoas é ignorada em silêncio.
 - **Advanced:** Se você mencionar outras pessoas no prompt, a Yui pode tentar entender o contexto da conversa.
 - **Tamanho:** a pergunta pode ter até 4000 caracteres (`YUI_ASK_MAX_CHARS`; o mesmo vale para `+yui perguntar`) e cada pessoa tem uma resposta por vez. Para um texto maior, mande uma **mensagem normal mencionando a Yui** com um anexo `.txt`, `.md` ou `.log`: ela lê o arquivo (até 100 KB e 12000 caracteres), tratando o conteúdo como dado, nunca como ordem. Comandos de barra não leem anexo.
 - **Respostas longas:** o Discord aceita 2000 caracteres por mensagem, então uma resposta maior é dividida em várias mensagens (a Yui escreve a lista ou o texto completo, sem prometer "parte 2"). Passando de 4 mensagens (`YUI_REPLY_MAX_PARTS`) ou de 20000 caracteres, ela manda uma introdução e o texto inteiro em anexo `.md` (`YUI_REPLY_ATTACH_EXT=txt` volta ao `.txt`). Quem é citado no arquivo e não aparece na introdução vai na linha "Citados no arquivo", porque menção dentro de anexo não notifica.
-- **Pesquisa na web:** só quando a pergunta pede dado atual ou factual específico, nunca em conversa privada, e limitada por pessoa (5 por hora, `YUI_SEARCH_USER_PER_HOUR`). Veja [Comandos e skills](COMANDOS_E_SKILLS.md#-4-busca-na-web).
-- **Lista de mods (Minecraft):** com 5 ou mais linhas de nomes de mods e um pedido de link ou download, a Yui procura cada nome no Modrinth, confere o loader e a versão do Minecraft em comum e devolve a lista com os links e as dependências obrigatórias (**Important Complements**). Vale também no `+yui perguntar`, na menção e na DM. Escreva `Forge 1.20.1` ou `fabric 1.21` para fixar a combinação. Veja [Lista de mods](ENVIRONMENT.md#-lista-de-mods-minecraft).
+- **Pesquisa na web:** só quando a pergunta pede dado atual ou factual específico, não em conversa privada (a não ser que `YUI_PRIVATE_SEARCH` libere), e limitada por pessoa (5 por hora, `YUI_SEARCH_USER_PER_HOUR`). Veja [Comandos e skills](COMANDOS_E_SKILLS.md#-4-busca-na-web).
+- **Lista de mods (Minecraft):** com 5 ou mais linhas de nomes de mods e um pedido de link ou download, a Yui procura cada nome no Modrinth, confere o loader e a versão do Minecraft em comum e devolve a lista com os links e as dependências obrigatórias (**Important Complements**). Vale também no `+yui perguntar`, na menção e na DM do dono. Escreva `Forge 1.20.1` ou `fabric 1.21` para fixar a combinação. Veja [Lista de mods](ENVIRONMENT.md#-lista-de-mods-minecraft).
 
 ### `/chat_resumo`
 
 Faz a leitura das últimas mensagens e gera um resumo inteligente.
 
-- **Quantidade:** O número de mensagens a analisar (Min: 10, Max: 100).
+- **Quantidade:** O número de mensagens a analisar (Min: 10, Max: 100; padrão 20).
 - **Advanced:** Útil para entender discussões longas que você perdeu. O que os outros escreveram no canal entra como **registro de terceiros** (dado, nunca ordem), sem usar a memória de ninguém e sem gravar esse log no `historico.txt`. O log enviado à IA tem até 20000 caracteres (cada mensagem, até 600): as mensagens mais novas têm prioridade e, se algo for cortado, o resumo abre avisando quantas entraram.
 
 ### `/chat_humor` (Admin)
 
+> ⚠️ Não existe mais como comando próprio: virou opções do [`/yui-servidor`](#yui-servidor-server-admin) (e o botão **🎭 Personalidade & Humor** do painel dele).
+
 Altera a "alma" da Yui em um canal específico.
 
-- **Instrucao:** Novas regras de comportamento (ex: "Fale como um pirata"), até 1500 caracteres.
-- **Mood:** Estado emocional (ex: "Brava", "Feliz"), até 100 caracteres.
-- **Reset:** Volta às configurações padrão.
+- **`instrucao`:** Novas regras de comportamento (ex: "Fale como um pirata"), até 1500 caracteres.
+- **`mood`:** Estado emocional (ex: "Brava", "Feliz"), até 100 caracteres.
+- **`reset_humor`:** Volta às configurações padrão.
 - **Advanced:** Essas mudanças persistem apenas no canal onde foram aplicadas.
 
 ### `/chat_espontaneo` (Dono)
 
+> ⚠️ Não existe mais como comando próprio: virou opções do [`/yui-servidor`](#yui-servidor-server-admin) (e o botão **💬 Mensagens Espontâneas** do painel dele).
+
 Configura a Yui para se intrometer nas conversas sem ser chamada.
 
-- **Estado:** Ativar ou Desativar.
-- **Frequência:** Escolha entre `Baixa`, `Média` ou `Alta`.
-- **Porcentagem (🔒 Dono):** Chance exata (0-100%) para cada mensagem recebida no canal.
+- **`espontaneo_estado`:** Ativar ou Desativar.
+- **`espontaneo_frequencia`:** Escolha entre `Baixa`, `Média` ou `Alta`.
+- **`espontaneo_porcentagem` (🔒 Dono):** Chance exata (0-100%) para cada mensagem recebida no canal. Só o dono pode usar; para os outros a Yui recusa.
 
 ---
 
@@ -94,9 +101,10 @@ Gera imagens usando diversos modelos de difusão.
 
 - **Prompt:** Descrição detalhada do que você quer.
 - **Negative Prompt:** O que você NÃO quer na imagem.
-- **Width/Height:** Dimensões da imagem (512px a 1280px).
-- **Provider:** Escolha o gerador (Stability, HuggingFace, Pollinations, etc).
-- **Advanced:** O modo `Auto` tentará os provedores em sequência até um funcionar.
+- **Width/Height:** Dimensões da imagem (512px a 1280px; padrão 1024).
+- **Provider:** Escolha o gerador: `Auto` (padrão), `Gradio`, `HuggingFace`, `Stable Horde`, `Together AI` ou `Pollinations AI`.
+- **Advanced:** O modo `Auto` tenta os provedores em sequência até um funcionar: Stability AI (só com `STABILITY_API_KEY`; não aparece na lista de escolha), Gradio, HuggingFace, Stable Horde, Together AI e Pollinations.
+- **Pela conversa:** "yui, gera uma imagem de um gato" também gera a imagem, sem comando (Porta I; pedido vago ganha um assunto criativo). Por conversa vale o limite de `YUI_IMAGE_PER_HOUR` (6 por pessoa por hora; o dono não tem limite). Veja [Conversa e comandos](CONVERSA_E_COMANDOS.md).
 
 ---
 
@@ -126,7 +134,7 @@ Não é um comando de barra: com a Yui na call (`/entrar-call`), é só falar.
 - **Sair:** *"Yui, sai da call"* (precisa do **🎙️ Assistente de Voz (Call)** ligado).
 - **O que ela não faz por voz:** baixar música, buscar na web, gerar imagem e as demais ferramentas; ela responde *"Isso eu faço só pelo chat."* Também não repete frases que mandarem (*"Essa eu passo."*). Não fala durante o Modo Rádio.
 - **Limites:** 1 pedido a cada 6 s por pessoa e fila curta por servidor; pedidos além disso são ignorados.
-- **Privacidade e ajuste:** o áudio da call é enviado a serviços de transcrição na nuvem; a voz da Yui é gerada no seu PC. Detalhes, limites e solução de problemas no [guia de TTS](TTS.md).
+- **Privacidade e ajuste:** o áudio da call é enviado a serviços de transcrição na nuvem; a voz da Yui é gerada no computador onde ela roda (voz do Windows), a não ser que a voz da nuvem esteja ligada (`YUI_TTS_CLOUD=true`). Detalhes, limites e solução de problemas no [guia de TTS](TTS.md).
 
 ---
 
@@ -140,7 +148,7 @@ Central de downloads de música em MP3 — aceita link ou busca.
 - **Busca (opcional):** Nome da música e/ou artista (busca no catálogo do Deezer).
 - **Advanced:** Detecta automaticamente a origem da URL. Para YouTube/Instagram/TikTok usa `yt-dlp` + `ffmpeg`; para Spotify usa o `spotdl` (do ambiente `.venv-spotdl`, de `SPOTDL_PATH` ou do `PATH`), e o `yt-dlp` só entra como reserva se o `spotdl` não estiver instalado (ele costuma falhar no Spotify, por causa de DRM); para nome/artista usa a API REST do Deezer com o motor `deemix` em MP3 HQ (com menu de seleção interativo em caso de ambiguidade). Detecta o limite de upload do servidor (10 MB no padrão, 50 MB no Boost nível 2 e 100 MB no nível 3) e recomprime o MP3 a 192, 128 e 96 kbps, nessa ordem, até caber; se nem assim couber, avisa que passou do limite. Arquivos temporários são removidos após o envio.
 - **Links com playlist:** se o link traz um vídeo e uma playlist (`...watch?v=ID&list=...`), a Yui baixa **só o vídeo** e avisa numa linha discreta. Se o link é só de playlist (ou perfil/coleção do TikTok), baixa **só o primeiro item** e também avisa. Nunca baixa a playlist inteira.
-- **Spotify:** só links de **faixa** (`open.spotify.com/track/...`). Álbum, playlist, artista e podcast são recusados com uma mensagem clara. O áudio é procurado em outro catálogo, então a faixa pode vir numa versão diferente da do Spotify. O limite de duração (`YUI_DL_MAX_MINUTES`) não vale para o Spotify, e o relógio do PC precisa estar certo para o `spotdl` conseguir o acesso.
+- **Spotify:** só links de **faixa** (`open.spotify.com/track/...`). Álbum, playlist, artista e podcast são recusados com uma mensagem clara. O áudio é procurado em outro catálogo, então a faixa pode vir numa versão diferente da do Spotify. O limite de duração (`YUI_DL_MAX_MINUTES`) não vale para o Spotify, e o relógio do computador onde a Yui roda precisa estar certo para o `spotdl` conseguir o acesso.
 - **Deezer:** só faixa. Se o `deemix` falhar (ARL vencido, conta sem acesso, tempo esgotado), a Yui baixa de outra fonte e **avisa só que a qualidade desta faixa pode ser menor que a original**.
 - **Sem indicar a origem:** o arquivo chega sem campo "Fonte" nem aviso com o nome do serviço (Deezer, YouTube, Spotify), e as tags de URL e de comentário do MP3 são tiradas. A origem fica só nos logs.
 - **Limites** (configuráveis no `.env`): duração máxima de 20 minutos (`YUI_DL_MAX_MINUTES`), arquivo de até 200 MB (`YUI_DL_MAX_FILESIZE_MB`) e 5 minutos por download (`YUI_DL_TIMEOUT_SECONDS`). Transmissões ao vivo são recusadas. O Modo Rádio e o Spotify não têm o limite de duração. Há ainda um teto de 3 downloads ao mesmo tempo no total (`YUI_DL_MAX_CONCURRENT`): acima disso a Yui pede para tentar de novo em instantes.
@@ -154,6 +162,19 @@ Baixa vídeos e envia em formato MP4 no chat do Discord.
 - **Descricao (Boolean):** Se verdadeiro, exibe o autor e a descrição do vídeo original na mensagem. Padrão: `false`.
 - **Advanced:** Detecta o limite de upload do servidor (10 MB no padrão, 50 MB no Boost nível 2 e 100 MB no nível 3) para aplicar compressão de vídeo em FFMPEG se ultrapassar os limites do Discord. Oferece fila de compressão assíncrona.
 - **Playlist e limites:** valem as mesmas regras do `/baixar_musica`: link com playlist baixa só o vídeo, playlist/perfil/coleção baixa só o primeiro item, e os limites de duração, tamanho e tempo do `.env` (`YUI_DL_*`) se aplicam.
+
+### `/baixar_musica_atual`
+
+Baixa em MP3 a música que você (ou outra pessoa) está ouvindo agora, lida do **status do Discord** (atividade "Ouvindo").
+
+- **Usuario (opcional):** menção ou ID; o autocompletar lista os membros do servidor. Sem ele, vale a sua própria música.
+- **Advanced:** reconhece Spotify, YouTube Music (via PreMID) e outros apps que mostram "Ouvindo" no status. A prévia "Música Identificada" mostra a plataforma; o cartão que fica junto do arquivo é neutro. O download segue as regras do `/baixar_musica` (um download por pessoa, teto global, sem indicar a origem).
+- **Requisito:** a pessoa precisa exibir a atividade no status (**Configurações → Privacidade e Segurança → Atividade de Status**); senão a Yui explica como ativar.
+- **Pela conversa:** "yui, baixa a música do meu status" faz o mesmo (ferramenta `get_current_music`).
+
+### `/modo-radio`
+
+Liga o **Modo Rádio**: a Yui entra no seu canal de voz e abre o painel de música (fila, botões e controle por voz). Você precisa estar num canal de voz. Detalhes em [Rádio](RADIO.md).
 
 ### `/anime_origem`
 
@@ -181,7 +202,8 @@ Converte moedas fiduciárias e criptomoedas em tempo real.
 Procura torrents/magnets de jogos de forma abrangente.
 
 - **Nome:** Título do jogo.
-- **Advanced:** Pesquisa refinada nas bases de dados da FitGirl e DODI Repacks. Agora inclui um paginador com botões para alternar as páginas de 5 em 5 itens diretamente no Discord.
+- **Fonte (opcional):** `Qualquer uma` (padrão), `Online Fix`, `DODI Repacks` ou `FitGirl Repacks`.
+- **Advanced:** Pesquisa refinada nas bases de dados da FitGirl, DODI Repacks e Online Fix. Agora inclui um paginador com botões para alternar as páginas de 5 em 5 itens diretamente no Discord. O item escolhido chega como arquivo `.torrent` ou, se o `.torrent` não for achado, como link magnético num `.txt`.
 
 ---
 
@@ -198,7 +220,7 @@ Consulta informações oficiais, preço e status na loja da Steam.
 
 ## 📺 YouTube e Twitch
 
-Avisos automáticos por servidor (checagem a cada 5 min no YouTube e 2 min na Twitch).
+Avisos automáticos por servidor (checagem a cada 5 min no YouTube e 2 min na Twitch). Os quatro comandos vêm liberados no Discord só para quem tem **Administrador** (permissão padrão do comando, que o servidor pode mudar em Integrações).
 
 - **`/yui-seguir-youtube canal: canal_discord: cargo:`** Avisa novos vídeos, Shorts e lives (`notificar_videos`, `notificar_shorts`, `notificar_lives`).
 - **`/yui-seguir-twitch streamer: canal_discord: cargo:`** Avisa quando o streamer entra ao vivo.
@@ -226,17 +248,19 @@ Painel gráfico unificado e público no chat para administração do servidor.
 - **Canal de Updates:** Define o canal oficial para receber comunicados de atualizações.
 - **Respostas a Mentions:** Configura se a IA deve responder quando o servidor for mencionado em `@everyone` ou `@here`.
 - **Ferramentas MCP:** Abre o Gerenciador Gráfico de Ferramentas MCP com lista de ativas/desativadas, descrições detalhadas e botões de ativar/desativar.
+- **Atalhos por opção:** sem nenhuma opção o comando abre o painel; com opções ele aplica direto (resposta só para você): `instrucao`, `mood` e `reset_humor` (o antigo `/chat_humor`), `espontaneo_estado`, `espontaneo_frequencia` e `espontaneo_porcentagem` (o antigo `/chat_espontaneo`; a porcentagem é só do dono), `canal_updates` e `mencoes_ativo`.
+- **Quem pode:** *Gerenciar Servidor* ou *Gerenciar Canais* (o comando vem visível no Discord para quem tem *Gerenciar Servidor*), além do dono.
 
 ### `/yui-criador` (Dono / Criador)
 
 Central de Controle Master para gerenciamento global da rede Yui (oculta e restrita ao criador).
 
 - **Subcomando `painel` / `dashboard`:** Abre o Dashboard Master por botões.
-- **Modelos:** Configura o modelo LLM ativo e exibição de modelo/pensamento.
-- **Banir / Desbanir / Lista de Bans:** Gerencia a lista negra global de usuários, servidores e canais banidos (o motivo vale até 300 caracteres).
-- **AutoMod:** Alterna o modo de moderação automática (Off / Monitor / Strict).
-- **Ferramentas MCP:** Gerencia a ativação de ferramentas MCP por servidor.
-- **Bot Config:** Abre as configurações de Runtime da IA.
+- **Subcomando `modelo`:** Liga ou desliga o nome do modelo nas respostas (`mostrar_nome`) e durante o "Processando..." (`mostrar_pensamento`), e define as tentativas em caso de erro (`retentativas`, 0 a 10).
+- **Banir / Desbanir / Lista de Bans (`banir`, `desbanir`, `bans_lista`):** Gerencia a lista negra global de usuários, servidores e canais banidos (o motivo vale até 300 caracteres).
+- **AutoMod (`automod servidor_id: modo:`):** Define o modo de moderação automática do servidor: `off`, `trigger` (gatilhos), `mcp` (IA) ou `both` (ambos). Veja [Moderação](MODERATION.md).
+- **Ferramentas MCP (`ferramenta`):** Gerencia a ativação de ferramentas MCP por servidor (`toggle`, `list`, `reset`; `servidor_id` opcional).
+- **Bot Config (`bot_config`):** Abre as configurações de Runtime da IA.
 - **Subcomando `memorias`:** Administra a memória dos usuários **sem ver o conteúdo**: lista quem tem memória e a quantidade de lembranças, e apaga uma lembrança ou tudo de um usuário. Também disponível no app, em **Admin → Memória**.
 
 > Para controlar a Yui por um painel gráfico (servidores, banimentos, memória, auditoria, provedores de IA), use o **app da Yui**: [Assistente pessoal](ASSISTENTE_PESSOAL.md).
@@ -246,16 +270,37 @@ Central de Controle Master para gerenciamento global da rede Yui (oculta e restr
 Comando independente para administradores de servidor gerenciarem as ferramentas da IA.
 
 - **Ação `list`:** Exibe um embed público com as ferramentas MCP ativas e desativadas no servidor.
-- **Ação `toggle`:** Alterna a disponibilidade de uma ferramenta específica (`join_voice_call`, `search_game`, `generate_image`, etc.). Duas delas vêm **desligadas** e controlam a voz: **🎙️ Assistente de Voz (Call)** (deixa a Yui entrar e sair da call) e **🔊 Resposta por Voz (TTS)** (ela responde falando; a IA nunca enxerga este interruptor). Veja [TTS](TTS.md).
-- **Ação `reset`:** Restaura as ferramentas do servidor para os padrões de fábrica.
+- **Ação `toggle`:** Alterna a disponibilidade de uma ferramenta específica (`join_voice_call`, `search_game`, `generate_image`, etc.). Três delas vêm **desligadas** e controlam a voz: **🎙️ Assistente de Voz (Call)** (deixa a Yui entrar e sair da call), **🔊 Resposta por Voz (TTS)** (ela responde falando; a IA nunca enxerga este interruptor; veja [TTS](TTS.md)) e **🎙️ Reconhecimento de Voz do Rádio (STT)** (`radio_voice_stt`, os comandos por voz do [Modo Rádio](RADIO.md)).
+- **Ação `reset`:** Restaura as ferramentas do servidor para os padrões de fábrica (as três de voz voltam a ficar desligadas e as demais, ligadas).
+- **Quem pode:** *Gerenciar Servidor* ou *Gerenciar Canais*, além do dono.
 
 ### `/aceitar_tos` (Server Admin)
 
-Exibe e registra o aceite dos Termos de Serviço da Yui para liberar e autorizar as funções do bot no servidor.
+Exibe e registra o aceite dos Termos de Serviço da Yui para liberar e autorizar as funções do bot no servidor. Quem pode: *Administrador*, *Gerenciar Servidor* ou *Gerenciar Canais*. Se os termos já foram aceitos, a Yui só avisa. Veja [Moderação](MODERATION.md#-1-o-fluxo-de-termos-de-serviço-tos).
 
 ### `/yui-config_ia` (Dono)
 
-Ajusta parâmetros técnicos de baixo nível dos modelos de IA (`Timeout`, `Temperatura`, `Max Tokens`).
+Ajusta parâmetros técnicos de baixo nível dos modelos de IA (`Timeout`, `Temperatura`, `Max Tokens`) por provedor (`Local (LM Studio)`, `Gemini`, `Pollinations`, `HuggingFace`, `Kobold Horde`).
+
+### `/ajuda`
+
+Abre o menu de ajuda interativo, com a lista de comandos e exemplos. Funciona até para quem está banido. Pela conversa, a IA pode abrir o mesmo menu quando alguém pede ajuda (ferramenta `show_bot_menu`).
+
+---
+
+## ⌨️ Comandos por prefixo
+
+Alguns comandos também funcionam como mensagem de texto começando pelo prefixo (`COMMAND_PREFIX`, padrão `+yui`). Eles chamam o mesmo código do comando de barra e respeitam os banimentos. `+yui ajuda` lista os disponíveis.
+
+| Prefixo | Equivale a |
+|---------|------------|
+| `+yui diario` (ou `daily`) | `/gta-diario` |
+| `+yui semanal` (ou `weekly`) | `/gta-semanal` |
+| `+yui noticias [quantidade]` (ou `news`) | `/gta-noticias` |
+| `+yui status` | `/yui-status` |
+| `+yui configurar <noticias\|diario\|semanal> #canal` (ou `config`) | `/yui-configurar` (exige *Administrador*) |
+| `+yui perguntar <texto>` (ou `ask`) | `/yui` (mantém as quebras de linha do texto colado) |
+| `+yui musica <link ou nome>` (ou `baixar-musica`) | `/baixar_musica` |
 
 ---
 

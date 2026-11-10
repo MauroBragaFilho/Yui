@@ -1,6 +1,6 @@
 # 📱 Yui App
 
-Cliente da **Yui** para **Android** e **web/desktop**, feito com **Expo (React Native + React Native Web)**: um único código para os dois. É só uma interface; toda a inteligência, memória e permissões ficam no **Yui Core** (no seu PC), acessado pela [Yui API](../../docs/content_pt/YUI_API.md).
+Cliente da **Yui** para **Android** e **web/desktop**, feito com **Expo (React Native + React Native Web)**: um único código para os dois. É só uma interface; toda a inteligência, memória e permissões ficam no **Yui Core** (no computador que roda a Yui; desde 03/11/2026, um notebook servidor), acessado pela [Yui API](../../docs/content_pt/YUI_API.md).
 
 ## O que o app faz
 
@@ -9,7 +9,7 @@ Cliente da **Yui** para **Android** e **web/desktop**, feito com **Expo (React N
 | 💬 **Chat** | Conversa com a Yui pelo Agent. Mostra quando uma ferramenta foi executada e pede **confirmação** (botões Confirmar/Cancelar) para ações sensíveis. O histórico fica salvo no aparelho. |
 | ⌨️ **Código** | *Só para o dono, e só com `YUI_DEV_ENABLED=true` no servidor.* A Yui lê e responde sobre os seus projetos (árvore de arquivos, arquivo "em foco", modos Yui/Desenvolvedora/Revisora...) e, se você liberar (`YUI_READ_ONLY=false`), edita arquivos e roda comandos **pedindo a sua aprovação a cada vez, no computador** (pelo celular ela só lê). Guia: [Código](../../docs/content_pt/CODIGO.md). |
 | 🧠 **Memória** | Lista, adiciona e apaga o que a Yui lembra de você. Mostra se é a memória **pessoal (permanente)** ou **temporária (30 dias)**. |
-| 🛠️ **Admin** | *Só para o dono.* Visão geral da Yui, integrações (o que está ligado ou falta configurar), sessões do rádio (pausar, retomar, parar, tirar da call), logs (com segredos mascarados), servidores (canais, YouTube/Twitch) e AutoMod, banimentos, memória dos usuários (só metadados), auditoria, ferramentas e reinício. |
+| 🛠️ **Admin** | *Só para o dono.* Visão geral da Yui, integrações (o que está ligado ou falta configurar), sessões do rádio (pausar, retomar, parar, tirar da call), logs (com segredos mascarados), servidores (canais, YouTube/Twitch) e AutoMod, banimentos, memória dos usuários (só metadados), **IA** (chaves, provedores e teste), auditoria, ferramentas, mensagem no seu Discord e reinício. |
 | ⚙️ **Status** | Estado do servidor, seu papel, tipo de memória e backend de IA em uso. Botão para sair do dispositivo. |
 
 ## Visual
@@ -22,7 +22,7 @@ O **papel** (dono, membro…) e o **tipo de memória** são decididos pelo servi
 
 - Node 20+ (testado no Node 24) e npm.
 - Para o celular: app **Expo Go** no Android (desenvolvimento) ou um APK gerado (ver abaixo).
-- O **Yui Core com a API ligada** no PC e o **Tailscale** conectado no celular. Veja [YUI_API.md](../../docs/content_pt/YUI_API.md).
+- O **Yui Core com a API ligada** no servidor da Yui (hoje, o notebook servidor, em `127.0.0.1:3939`) e o **Tailscale** conectado no celular. Veja [YUI_API.md](../../docs/content_pt/YUI_API.md).
 
 ## Rodando
 
@@ -38,6 +38,8 @@ npm run web:build      # gera dist/
 npm run web:serve      # http://localhost:8081
 ```
 
+O `web:serve` escuta só em `127.0.0.1:8081` (mude com as variáveis `HOST` e `PORT`). No notebook servidor ele roda nesse endereço, ao lado da API.
+
 **Android (Expo Go):**
 
 ```bash
@@ -47,13 +49,13 @@ npm run android        # abra o QR code no Expo Go (celular e PC na mesma rede o
 O app **não pede endereço do servidor**: ele vem da configuração do build.
 
 - **Android:** defina `EXPO_PUBLIC_YUI_SERVER_URL` ao gerar/rodar o app, por exemplo `EXPO_PUBLIC_YUI_SERVER_URL=https://seu-pc.tailnet.ts.net:3939 npm run android`. Sem ela, o app avisa que o servidor não foi configurado. Há um modelo em `.env.example`.
-- **Web:** usa o próprio PC que serviu a página, na porta `3939` (mude com `EXPO_PUBLIC_YUI_API_PORT` ao gerar o build, ou aponte outro servidor com `EXPO_PUBLIC_YUI_SERVER_URL`).
+- **Web:** usa o mesmo computador que serviu a página, na porta `3939` (mude com `EXPO_PUBLIC_YUI_API_PORT` ao gerar o build, ou aponte outro servidor com `EXPO_PUBLIC_YUI_SERVER_URL`).
 
 Na aba **Admin → IA** dá para colar chaves, ligar/desligar provedores, testar, ajustar a ordem na fila e cadastrar provedores próprios (como o OmniRoute). Em **Admin → Geral** há o botão **Enviar para o meu Discord**, que manda uma DM de teste.
 
 Na tela de entrada há duas formas, conforme o que o servidor oferece:
 
-- **Usuário e senha** (definidos no `.env` do PC; veja o `YUI_API.md`).
+- **Usuário e senha** (definidos no `.env` do servidor da Yui; veja o `YUI_API.md`).
 - **Chave pelo Discord:** toque em *Enviar chave para o meu Discord*; a Yui manda uma chave de uso único (válida por 5 minutos) por **mensagem privada** para você, e você digita no app. Não é preciso copiar token nenhum.
 
 Depois de entrar, o app guarda só uma **sessão temporária** (nunca a senha nem a chave). Se a sessão expirar ou for revogada, ele volta para a tela de entrada com um aviso.
@@ -64,7 +66,7 @@ Na raiz do projeto, `npm run dev:api -- --fake` sobe a API com **IA simulada**, 
 
 ## Tokens fixos (opcional, para scripts)
 
-No `.env` do PC, cada aparelho tem o próprio token (assim você revoga um sem afetar os outros):
+No `.env` do servidor da Yui, cada aparelho tem o próprio token (assim você revoga um sem afetar os outros):
 
 ```env
 YUI_API_ENABLED=true

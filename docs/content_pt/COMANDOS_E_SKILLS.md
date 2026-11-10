@@ -1,6 +1,8 @@
 # 🧩 Comandos, skills e busca na web
 
-Três coisas que a Yui faz no chat do app e no Discord (DM e canais privados do dono): **ver o estado do computador**, **rodar comandos que você cadastrou** e **seguir skills (receitas) que você escreveu**. Mais a configuração da **busca na web**.
+Três coisas que a Yui faz no chat do app (o Agent, rota `/v1/agent`, só para o dono): **ver o estado do computador onde ela roda**, **rodar comandos que você cadastrou** e **seguir skills (receitas) que você escreveu**. Mais a **biblioteca de arquivos** (BDS Server) e a configuração da **busca na web**.
+
+> No Discord a Yui **não** usa estas ferramentas do Agent (o código só chama o Agent pela API do app). No Discord, a biblioteca funciona pela conversa (Porta B; veja a [seção 5](#-5-biblioteca-de-arquivos-bds-server)) e a busca na web pelo agente de pesquisa.
 
 ---
 
@@ -52,7 +54,7 @@ Se faltar informação, pergunte uma coisa só.
 
 - A pasta é `skills/` na raiz da Yui (mude com `YUI_SKILLS_DIR`). Nome: letras minúsculas, números e hífen. Arquivo de até 20 KB. É **relida a cada uso**: editar vale na hora, sem reiniciar.
 - A Yui vê só **nome + descrição** e, se o pedido combina, segue a skill numa segunda resposta.
-- **Só o dono**, em **DM ou canal privado**. Membros e canais públicos não veem skills.
+- **Só o dono**, em **DM ou canal privado** (o chat do app conta como conversa privada). Membros e canais públicos não veem skills.
 - **Uma skill é só texto**: não ganha ferramentas, não executa nada e roda numa conversa sem ferramentas. O que a Yui pode fazer continua decidido pelo backend.
 - Skills são instruções **suas**: não coloque ali texto de terceiros.
 
@@ -82,8 +84,26 @@ YUI_SEARCH_PROVIDERS=tavily,brave,duckduckgo,bing
 - **Descanso dos provedores:** bloqueio leve (HTTP 202, página de desafio/anti-robô, DuckDuckGo sem resultados nem marcação de busca) descansa 1, 2, 4... até 30 minutos; cota esgotada (402, 432, 433, 429 de cota) descansa 1 hora; 401/403 descansam 30 minutos; timeout, erro de rede e 5xx descansam de 30 s até 5 minutos. `Retry-After` do provedor é respeitado. Uma página de busca legítima sem resultados não faz o provedor descansar.
 - **Limites:** `YUI_SEARCH_USER_PER_HOUR` (padrão 5 pesquisas por pessoa por hora), `YUI_SEARCH_MONTHLY_CAP_TAVILY` e `YUI_SEARCH_MONTHLY_CAP_BRAVE` (padrão 900 por mês cada, contador em `secrets/search-budget.json`, que o Git ignora) e `YUI_SEARCH_DEADLINE_MS` (padrão 12 s para a pesquisa inteira). `YUI_SEARCH_CACHE_TTL_MIN` guarda resultados repetidos por N minutos (padrão `0`, desligado; nunca guarda os da Brave, que os termos proíbem).
 - **Privacidade:** conversa privada ou sensível (o dono em DM ou canal privado, a DM de qualquer pessoa e o app) **não pesquisa por padrão** (a consulta sairia para terceiros); só o `YUI_PRIVATE_SEARCH` (`off`, `owner` ou `all`) libera, com proteções próprias: veja "Agente de pesquisa" em [Variáveis de ambiente](ENVIRONMENT.md). O log registra só o provedor, o status, o tempo e a quantidade de resultados, nunca o texto da pergunta.
-- Depois da busca, a Yui lê o conteúdo das 3 melhores páginas, só por `http`/`https` e nunca de endereços internos, com limite de tamanho. O resultado entra na conversa como dado **não confiável**, cercado por uma marca, e a IA fica sem ferramentas naquela chamada; nunca vira ordem.
+- Depois da busca, a Yui lê o conteúdo das melhores páginas (o agente de pesquisa lê até 2, `YUI_RESEARCH_PAGES`, de 0 a 3; a busca automática antiga do `/yui` lê até 3), só por `http`/`https` e nunca de endereços internos, com limite de tamanho. O resultado entra na conversa como dado **não confiável**, cercado por uma marca, e a IA fica sem ferramentas naquela chamada; nunca vira ordem.
 - **Admin → Integrações** mostra quais estão configurados (e quais foram ignorados por chave curta). Cotas gratuitas mudam: confira no site de cada serviço.
+
+---
+
+## 📚 5. Biblioteca de arquivos (BDS Server)
+
+O BDS Server é o servidor de arquivos do dono (filmes, séries, downloads, projetos, backups). Com `YUI_BDS_URL` no `.env`, a Yui consulta esse servidor em **somente leitura**: só faz `GET` na API dele e nunca grava, move nem apaga nada.
+
+| Ferramenta | O que faz |
+|------------|-----------|
+| `bds.buscar` | Procura arquivos e pastas pelo nome (até 80 caracteres, sem caminhos) |
+| `bds.listar` | Lista uma pasta da lista fixa: `filmes`, `series`, `downloads`, `projetos`, `backups`, `biblioteca` |
+| `bds.recentes` | Mostra o que chegou por último |
+| `bds.status` | Diz se o servidor está no ar e quanto espaço sobra |
+
+- **Só o dono** e só em conversa privada. As ferramentas valem no Agent do app mesmo sem `YUI_TOOLS_PC_ENABLED`.
+- **No Discord**, pela conversa (Porta B): "yui procura Matrix na biblioteca", "o que eu tenho de filmes?", "o que chegou de novo na biblioteca?", "quanto espaço tem no servidor de arquivos?". Em canal público a Yui avisa que só mostra no privado e não mostra nada.
+- O endereço vem só do `.env` (nunca do texto da conversa); a pasta sai de uma lista fixa de apelidos; nomes de arquivo voltam como dado, dentro de código. `YUI_BDS_KEY` (se o login do BDS Server estiver ligado), `YUI_BDS_TIMEOUT_MS` (padrão 8000) e `YUI_BDS_PRE_ROUTE=false` (desliga só a Porta B) estão em [Variáveis de ambiente](ENVIRONMENT.md).
+- Teste offline: `npm run test:library`.
 
 ---
 

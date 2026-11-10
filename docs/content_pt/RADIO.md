@@ -17,11 +17,13 @@ O **Modo Rádio** da Yui é um ecossistema completo de reprodução musical e vo
 
 ## 🎵 1. Reprodução e Streaming Progressivo (YouTube & PCM)
 
-O Modo Rádio elimina a necessidade de realizar o download completo de arquivos do YouTube antes de iniciar a reprodução.
+**Como ligar:** entre num canal de voz e use `/modo-radio`. A Yui entra na call e abre o painel do rádio no canal de texto; pedir de novo no mesmo canal de voz só reenvia o painel (e religa a escuta por voz, se ela tinha sido desligada por falhas). Ainda não há como ligar o rádio pela conversa (veja [Conversa e comandos](CONVERSA_E_COMANDOS.md)).
+
+O Modo Rádio elimina a necessidade de realizar o download completo de arquivos do YouTube antes de iniciar a reprodução (as faixas do Deezer e do Spotify são baixadas para um arquivo temporário e tocadas dele).
 
 - **Streaming em Tempo Real (`youtubeBufferStream.js`)**: Redireciona a saída do `yt-dlp` diretamente para o `ffmpeg`, produzindo um fluxo contínuo de áudio em PCM s16le (48.000 Hz, estéreo 16-bit).
-- **Buffer Inicial Mínimo**: Aguarda apenas **4 segundos de áudio** (768.000 bytes) para iniciar o som no Discord em cerca de ~4 segundos após a solicitação.
-- **Controle de Fluxo (Backpressure)**: Pausa temporariamente a leitura do processo quando o buffer em memória atinge **20 segundos** (3.840.000 bytes) e retoma a leitura ao cair para **10 segundos**, otimizando a RAM da VPS.
+- **Buffer Inicial Mínimo**: Aguarda apenas **1 segundo de áudio** (192.000 bytes) para iniciar o som no Discord; se o stream não ficar pronto em 30 segundos, a faixa falha.
+- **Controle de Fluxo (Backpressure)**: Pausa temporariamente a leitura do processo quando o buffer em memória atinge **20 segundos** (3.840.000 bytes) e retoma a leitura ao cair para **10 segundos**, poupando a RAM do computador onde a Yui roda.
 - **Tratamento de Underflow**: Em flutuações de rede, envia pequenos frames de silêncio (20ms) mantendo a sincronia de tempo do `@discordjs/voice` sem derrubar o player.
 
 ---
@@ -40,7 +42,7 @@ A resolução de mídia (`radioProviders.js`) suporta múltiplos formatos com ex
 - **Deezer**:
   - Músicas (`deezer.com/.../track/ID`), Playlists (`deezer.com/.../playlist/ID`) e Álbuns (`deezer.com/.../album/ID`).
 - **Busca por Nome (Texto Livre)**:
-  - Buscas sem link utilizam a API do Deezer com cálculo de confiança fonética. Se o score for `>= 80%`, adiciona a faixa; se for ambíguo, apresenta um menu de escolha no Discord.
+  - Buscas sem link utilizam a API do Deezer com cálculo de confiança fonética. Se o score for `>= 80%`, adiciona a faixa; se for ambíguo, apresenta um menu de escolha no Discord (sem escolha em 10 segundos, a 1ª opção entra sozinha).
 - **Segurança e limites dos links**:
   - Só links de **YouTube, Deezer e Spotify** são aceitos; o link é validado (sem aspas, caracteres de controle nem `usuário:senha`) e os programas externos (`yt-dlp`, `deemix`) rodam sem shell, com tempo limite.
   - O download pelo Deezer da rádio tem teto de 60 s por faixa (ou o valor de `YUI_DEEZER_TIMEOUT_S`, se menor). Pedidos simultâneos da mesma faixa (pré-carga e player) compartilham um único processo.
@@ -51,6 +53,7 @@ A resolução de mídia (`radioProviders.js`) suporta múltiplos formatos com ex
 
 ## 🎙️ 3. Controle por Voz e Reconhecimento (Whisper STT)
 
+- **Requisito**: a ferramenta **🎙️ Reconhecimento de Voz do Rádio (STT)** (`radio_voice_stt`) precisa estar ligada em `/yui-ferramentas`; ela vem **desligada** e, assim, a rádio abre com a voz em `Off`. Ligada, a rádio abre no último modo salvo do servidor (padrão `Direct`).
 - **Comandos de Voz em Tempo Real**: Ouvinte integrado que captura fala de usuários não mutados no canal e decodifica o áudio PCM WAV para o Whisper API.
 - **Seletor de 3 Modos de Voz**:
   1. `🔇 Voz: Off`: Escuta por voz completamente desativada.
@@ -59,10 +62,10 @@ A resolução de mídia (`radioProviders.js`) suporta múltiplos formatos com ex
 - **Algoritmo do Modo Direct (Keyword & Intent Engine)**:
   - **Execução Instantânea**: Responde em menos de 50ms após o STT.
   - **Captura em Frases Curtas e Longas**: Identifica intenções no meio da sentença (ex: *"Yui, pare a música então cara"*).
-  - **Intenções Suportadas**: `Pausar`, `Retomar`, `Parar`, `Próxima`, `Anterior`, `Embaralhar`, `Repetir`, `Ver Fila`, `Info da Música`, `Remover Faixa` e `Busca/Adição de Músicas` (ex: *"Yui, tocar Welcome to the Jungle"* ou *"Yui, Welcome to the Jungle"*).
+  - **Intenções Suportadas**: `Pausar`, `Retomar`, `Parar`, `Sair da call`, `Próxima`, `Anterior`, `Embaralhar`, `Repetir`, `Ver Fila`, `Info da Música`, `Remover Faixa` e `Busca/Adição de Músicas` (ex: *"Yui, tocar Welcome to the Jungle"* ou *"Yui, Welcome to the Jungle"*).
   - **Notificação Temporária**: Envia no chat uma notificação mencionando o usuário (`<@userId> ⚡ **[Direct]** ...`) com exclusão automática em 4 segundos.
 - **Autoproteção de Rate Limit (429/492)**: Ao atingir o limite da API do Whisper, a escuta de voz é desativada temporariamente por **1 minuto**, com notificação automática no chat e reativação agendada.
-- **Monitoramento de Canal Vazio**: Encerra a sessão e desloga a chamada se não houver usuários humanos no canal por mais de 10 segundos.
+- **Monitoramento de Canal Vazio**: Confere o canal a cada 10 segundos e encerra a sessão (saindo da chamada) quando não há mais nenhum usuário humano.
 
 ---
 

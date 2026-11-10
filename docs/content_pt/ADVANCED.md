@@ -38,7 +38,9 @@ O ecossistema MCP da Yui foi robustamente aprimorado com comportamentos nativos 
 - **Embed de Lista:** A ferramenta pode retornar uma lista interativa de jogos encontrados, permitindo que a IA apresente uma seleção para o usuário escolher em vez de enviar diretamente o Torrent.
 
 ### 3. Geração de Imagens (`image_gen`)
+- **Nome real:** no `src/data/mcp_tools.json` a ferramenta se chama `generate_image`.
 - **Transparência de Limitações:** A IA agora é instruída a recusar pedidos de edição de imagens e deixar claro que não possui visão computacional nativa em tempo real ao usar a ferramenta.
+- **Também por conversa (Porta I):** "yui gera uma imagem de um gato" aciona a mesma ferramenta pelo **código** (`src/handlers/imageIntent.js`), sem depender de o modelo lembrar dela, com as mesmas regras (filtro de conteúdo, ferramenta desligada no servidor) e um limite de imagens por pessoa por hora (`YUI_IMAGE_PER_HOUR`, padrão 6; o dono não tem limite). `YUI_IMAGE_PRE_ROUTE=false` desliga só a pré-rota.
 
 ### 4. Downloader de Mídia (`download_video`, `download_audio` & `search_and_download_music`)
 - **Direcionamento Inteligente:** A IA identifica a intenção do usuário sobre baixar vídeo ou áudio. Caso o pedido seja ambíguo, a IA faz perguntas de esclarecimento ao usuário no chat em vez de disparar a ferramenta às cegas. O MCP não inicia processos de compressão; essa decisão fica a cargo do Discord e do usuário via botões.
@@ -79,7 +81,7 @@ No arquivo `src/handlers/llmHandler.js`, adicione a lógica de execução dentro
 ## 🏗️ 4. Personalizando a Alma (System Prompt)
 
 A personalidade da Yui não é apenas texto; é um conjunto de diretrizes de segurança e comportamento.
-- **Local:** `src/config/index.js` -> campo `systemPrompt`.
+- **Local:** a personalidade pública fica em `persona/yui-publica.md` (troque o arquivo com `YUI_PERSONA_PUBLIC_FILE`; ele é relido quando muda). Um prompt de sistema extra pode vir do prompt próprio do servidor ou, sem ele, de `AI_SYSTEM_PROMPT` (campo `ai.systemPrompt` de `src/config/index.js`), e entra antes da personalidade.
 - **Dica:** Se você alterar as regras de formatação (como permitir emojis), lembre-se de que isso pode aumentar o consumo de tokens e mudar o "tom" das conversas.
 
 ---

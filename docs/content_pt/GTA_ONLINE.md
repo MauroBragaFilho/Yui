@@ -34,11 +34,11 @@ Cada servidor escolhe os canais de destino com `/yui-configurar` (`noticias`, `d
 O reset do GTA Online acontece às **06:00 UTC**. A Yui calcula os sistemas do dia com as mesmas regras do jogo e publica um embed no canal `diario`:
 
 - **Van de Armas** (Gun Van), incluindo as armas com desconto.
-- **Traficantes** (Street Dealers).
-- **Colecionáveis** do dia.
+- **Traficantes** (Street Dealers; no embed aparecem como "Comerciantes", com o produto em destaque de cada um).
+- **Colecionáveis** do dia (Naufrágio Diário e Baús do Tesouro).
 - **Desafios Contra o Relógio** (RC Bandito e Junk Energy Bike).
 
-O resultado fica em `database/gta-diario.db` e pode ser consultado a qualquer hora com `/gta-diario`.
+O resultado fica em `database/gta-diario.db` e pode ser consultado a qualquer hora com `/gta-diario` (se o dia ainda não está no banco, a Yui calcula na hora).
 
 ---
 
@@ -80,7 +80,7 @@ O parser (`weekly/parser.js`) extrai período, bônus (2x/3x...), veículos (pó
 
 ## 🧾 4. O embed semanal
 
-O embed foi pensado para **ler em segundos**: a página 1 é um resumo e os detalhes ficam nas páginas seguintes (botões ◀ ▶, ativos por 24 h).
+O embed foi pensado para **ler em segundos**: a página 1 é um resumo e os detalhes ficam nas páginas seguintes (botões ◀ ▶, ativos por 24 h na publicação automática; no `/gta-semanal`, só quem pediu navega, por 5 minutos).
 
 | Página | Conteúdo |
 |--------|----------|
@@ -136,8 +136,10 @@ Teste rápido no Discord: `/yui mensagem: qual a classe do Truffade Adder?` e `/
 |---------|-----------|
 | `/gta-diario` | Resumo do reset diário atual |
 | `/gta-semanal fonte:reddit\|newswire` | Evento da semana (Reddit por padrão), com a análise da Yui |
-| `/gta-noticias quantidade:N` | Últimas notícias do Newswire |
-| `/yui-configurar` | Define os canais `noticias`, `diario` e `semanal` do servidor |
+| `/gta-noticias quantidade:N` | Últimas notícias do Newswire (1 a 5; padrão 2) |
+| `/yui-configurar` | Define os canais `noticias`, `diario` e `semanal` do servidor (exige *Administrador*) |
+
+Os mesmos comandos existem por prefixo: `+yui diario`, `+yui semanal`, `+yui noticias [N]` e `+yui configurar <noticias|diario|semanal> #canal` (veja [Comandos por prefixo](COMMANDS.md#-comandos-por-prefixo)). Pela conversa ("o que tem no GTA hoje?"), a Yui ainda só responde com o que sabe: a detecção desses pedidos já existe e tem teste (`detectGtaIntent` em `src/handlers/chatIntents.js`), mas não está ligada ao fluxo da conversa (veja [Conversa e comandos](CONVERSA_E_COMANDOS.md)).
 
 Agendador (`src/scheduler/scheduler.js`, tudo em **UTC**):
 
@@ -145,8 +147,9 @@ Agendador (`src/scheduler/scheduler.js`, tudo em **UTC**):
 |--------|---------|
 | Limpeza da memória temporária expirada | Diária, 05:30 |
 | Reset diário do GTA Online | Diária, 06:00 |
-| Checagem do evento semanal (Reddit) | A cada `GTA_WEEKLY_INTERVAL_MINUTES` |
-| Newswire (se `NEWSWIRE_ENABLED`) | A cada `NEWSWIRE_INTERVAL_MINUTES` |
+| Checagem do evento semanal (Reddit) | A cada `GTA_WEEKLY_INTERVAL_MINUTES` (a primeira, 3 minutos depois de ligar) |
+| Newswire (se `NEWSWIRE_ENABLED`) | A cada `NEWSWIRE_INTERVAL_MINUTES` (a primeira, 2 minutos depois de ligar) |
+| Evento semanal pelo Newswire (se `NEWSWIRE_ENABLED`) | Quartas e quintas, de hora em hora, das 09:00 às 20:00 |
 | YouTube / Twitch | A cada `YOUTUBE_INTERVAL_MINUTES` (5) / `TWITCH_INTERVAL_MINUTES` (2) |
 
 Bancos: `database/gta-diario.db`, `database/gta-semanal.db`, `database/newswire.db`.

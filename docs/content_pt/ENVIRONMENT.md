@@ -28,11 +28,11 @@ Referência de todas as variáveis que a Yui lê. O arquivo `.env` fica na raiz 
 | `DISCORD_GUILD_ID` | Se definido, registra os slash commands só nesse servidor (aparecem na hora, bom para testes) | global |
 | `OWNER_ID` | ID do Discord do dono (o primeiro é o "dono primário") | — |
 | `OWNER_IDS` | Lista de donos adicionais, separados por vírgula | — |
-| `REQUIRE_TOS` | `true` exige que cada servidor aceite os termos antes de usar a Yui | `false` |
+| `REQUIRE_TOS` | Exige que cada servidor aceite os termos antes de usar a Yui; só `false` desliga | `true` |
 | `COMMAND_PREFIX` | Prefixo de comandos de texto | `+yui` |
 | `DATABASE_DIR` | Pasta dos bancos SQLite | `database` |
 | `LOG_LEVEL` | `debug`, `info`, `warn` ou `error` | `info` |
-| `NODE_ENV` | Aparece no `/yui-status` | — |
+| `NODE_ENV` | Aparece no `/yui-status` | `development` |
 
 > 💡 O dono pode ter mais de um ID; garanta que o **primeiro** em `OWNER_ID` seja o seu.
 
@@ -40,7 +40,7 @@ Referência de todas as variáveis que a Yui lê. O arquivo `.env` fica na raiz 
 
 ## 🤖 2. IA: cadeia de provedores
 
-A Yui tenta os provedores em ordem: **LM Studio/local → Yui Gateway → Gemini → Groq → Hugging Face → Cloudflare**, passando ao próximo em caso de erro ou limite. Um provedor sem chave é pulado.
+A Yui tenta os provedores em ordem: **LM Studio/local → Yui Gateway → Hugging Face → Groq → Gemini → Cloudflare → Pollinations → Horde** (`src/handlers/llmHandler.js`), passando ao próximo em caso de erro ou limite. Um provedor sem chave é pulado, e uma conversa sensível (ou um pedido com anexo de texto) nunca vai aos anônimos (Pollinations, Horde e o Hugging Face sem token).
 
 | Variável | Descrição |
 |----------|-----------|
@@ -51,16 +51,16 @@ A Yui tenta os provedores em ordem: **LM Studio/local → Yui Gateway → Gemini
 | `GEMINI_MODEL` | Modelo principal (use `gemini-flash-lite-latest` ou `gemini-flash-latest`) |
 | `GEMINI_MODEL_FALLBACK` | Modelo reserva |
 | `GEMINI_URL` | URL compatível com OpenAI do Gemini |
-| `GROQ_API_KEY`, `GROQ_API_URL`, `GROQ_MODEL` | Groq ([console](https://console.groq.com/keys)) |
+| `GROQ_API_KEY`, `GROQ_API_URL`, `GROQ_MODEL` | Groq ([console](https://console.groq.com/keys)). Várias chaves separadas por vírgula (rodízio). Modelo padrão `openai/gpt-oss-120b`. O Gateway também soma `GROQ_API_KEYS`; a cadeia antiga lê só `GROQ_API_KEY` |
 | `HF_TOKEN`, `HF_API_URL`, `HF_MODEL` | Hugging Face ([tokens](https://huggingface.co/settings/tokens)) |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_MODEL` | Workers AI (precisa dos dois primeiros) |
-| `TOGETHER_API_KEY` | Together AI |
+| `TOGETHER_API_KEY`, `TOGETHER_MODEL` | Together AI: geração de imagem e, só no Gateway, texto (`TOGETHER_MODEL`, padrão `meta-llama/Llama-3.3-70B-Instruct-Turbo-Free`) |
 | `AI_BOT_NAME` | Nome que a IA usa para si |
 | `AI_SYSTEM_PROMPT` | Prompt de sistema padrão |
 | `AI_KNOWLEDGE_DIR` | Pasta com a base de conhecimento (`.docs`/`knowledge`) |
-| `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, `AI_MAX_TOKENS` | Provedor compatível com OpenAI configurável do Core |
+| `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, `AI_MAX_TOKENS` | Provedor compatível com OpenAI configurável do Core (backend `openai-compatible`; `AI_MAX_TOKENS` padrão `1500`). Sem `LOCAL_LLM_URL`, `LOCAL_LLM_MODEL` e `LM_STUDIO_API_KEY`, os três primeiros também valem para o LM Studio |
 | `AI_BACKEND` | Backend do AI Manager: `legacy-chain` (padrão), `openai-compatible` ou `gateway` |
-| `AI_BASE_LOCAL` | Endpoint local alternativo para conversas privadas |
+| `AI_BASE_LOCAL` | `true` marca o backend `openai-compatible` (`AI_BASE_URL`) como **local** (o modelo roda nesta máquina). Um gateway local que repassa para a nuvem, como o OmniRoute, **não** é local. Padrão `false` |
 | `AI_PRIVATE_LOCAL_ONLY` | `true` obriga conversas privadas a usar só o modelo local. **Vale só no app/API** (AI Manager, com memória pessoal em jogo). No Discord (o dono em DM ou em canal privado) a conversa segue a cadeia normal de provedores, só sem os anônimos (Pollinations e Horde): essa variável não fecha a nuvem lá |
 | `YUI_REPLY_MAX_PARTS` | Máximo de mensagens por resposta longa (1 a 10; fora disso vale o padrão). Acima disso, a resposta vai em uma introdução mais o texto completo em anexo `.md`. Padrão `4` |
 | `YUI_REPLY_ATTACH_EXT` | Extensão do anexo com a resposta completa: `md` (padrão; o Discord mostra a prévia já formatada, com título, negrito e código) ou `txt` (texto cru) |
@@ -147,7 +147,7 @@ Valem também as variáveis da tabela de pesquisa acima, em especial `YUI_SEARCH
 
 **Por onde a Yui pesquisa.** Todas as entradas usam o mesmo agente e os mesmos limites: menção, nome da Yui ou resposta a ela no servidor, DM, `/yui`, `+yui perguntar` e o app/API (`/v1/chat` e `/v1/agent`). **Por voz ela não pesquisa** (a voz fica sem ferramentas, `YUI_VOICE_TOOLS=false`, o padrão): se a IA tentar chamar a pesquisa, a resposta é "Isso eu faço só pelo chat."; se só prometer pesquisar, vira "Por voz eu não pesquiso na web. Pede no chat de texto.". Mesmo com `YUI_VOICE_TOOLS=true` a pesquisa por voz é recusada com essa mesma frase (a fala de outras pessoas na call nunca vira consulta a buscador). O Modo Rádio, o `/chat_resumo` e a conversa espontânea (a Yui falando no canal sem ter sido chamada: a ferramenta nem é oferecida ao modelo, e nada gasta a cota de quem só falou) também nunca pesquisam.
 
-**Conversa privada, o que é.** Para a **pesquisa**, "privada" é o dono em DM, o dono em canal listado em `YUI_PRIVATE_CHANNEL_IDS`, o **app/API** (sempre privado) e a **DM de qualquer pessoa** ("DM e app para todos, com as proteções"). Só a pesquisa trata a DM de um membro comum como privada: o resto (memória pública, cadeia de provedores, histórico) segue como numa conversa de servidor. Com `YUI_PRIVATE_SEARCH=off` ou `owner`, a DM de um membro não pesquisa; com `all`, pesquisa com as proteções abaixo.
+**Conversa privada, o que é.** Para a **pesquisa**, "privada" é o dono em DM, o dono em canal listado em `YUI_PRIVATE_CHANNEL_IDS`, o **app/API** (sempre privado) e a **DM de qualquer pessoa** ("DM e app para todos, com as proteções"). Só a pesquisa trata a DM de um membro comum como privada: o resto (memória pública, cadeia de provedores, histórico) segue como numa conversa de servidor. Com `YUI_PRIVATE_SEARCH=off` ou `owner`, a DM de um membro não pesquisa; com `all`, pesquisa com as proteções abaixo. Desde novembro de 2026 a Yui só responde **mensagem privada do dono**: a mensagem na DM de qualquer outra pessoa é ignorada em silêncio (`src/events/messageCreate.js`), então, para um membro, "DM" aqui é o `/yui` usado no privado com a Yui (os comandos de barra continuam valendo lá).
 
 #### 🔒 Privacidade da pesquisa em conversa privada
 
@@ -186,14 +186,14 @@ Limites: uma lista por pessoa por vez e no máximo duas ao mesmo tempo (a tercei
 
 ### 🔊 Fala da Yui na call (TTS local)
 
-Voz do Windows (SAPI): roda no seu PC, sem rede e sem custo; precisa de uma voz pt-BR instalada. O módulo fica em `src/services/tts/` e lê as variáveis abaixo na inicialização, por isso **reinicie a Yui depois de editar o `.env`** (números fora do intervalo são ajustados ao limite; valor inválido volta ao padrão). A Yui fala uma resposta curta e manda o resto no chat; ela só fala resposta a um pedido feito **por voz**, nunca em conversa privada ou sensível e nunca enquanto o Modo Rádio estiver ligado.
+Voz do Windows (SAPI): roda na própria máquina da Yui (hoje, o notebook servidor), sem rede e sem custo; precisa de uma voz pt-BR instalada. O módulo fica em `src/services/tts/` e lê as variáveis abaixo na inicialização, por isso **reinicie a Yui depois de editar o `.env`** (números fora do intervalo são ajustados ao limite; valor inválido volta ao padrão). A Yui fala uma resposta curta e manda o resto no chat; ela só fala resposta a um pedido feito **por voz**, nunca em conversa privada ou sensível e nunca enquanto o Modo Rádio estiver ligado.
 
 > ✅ **Estado:** ligado ao bot (iniciado em `src/discord/client.js`, junto com o login). Vale a partir do próximo reinício **e** só nos servidores onde um administrador ligou **🔊 Resposta por Voz (TTS)** (desligado por padrão) e **🎙️ Assistente de Voz (Call)**, em `/yui-ferramentas`. Passo a passo e problemas comuns em [TTS](TTS.md). Testado só offline: o primeiro teste numa call real ainda está pendente ([checklist](OPERACAO.md#-11-checklist-da-fala-tts)).
 
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
 | `YUI_TTS_ENABLED` | `false` desliga a fala por completo (nenhum processo de voz sobe). Um valor escrito que ela não reconhece, como `falso`, também desliga | `true` |
-| `YUI_TTS_PROVIDERS` | Provedores de voz, em ordem. Hoje só existe `sapi`; `piper` e `edge` ainda não existem e são ignorados com um aviso no log | `sapi` |
+| `YUI_TTS_PROVIDERS` | Provedores de voz, em ordem. Existem `sapi` (Windows), `edge` e `azure` (nuvem); `piper` ainda não existe e, como qualquer nome desconhecido, é ignorado com um aviso no log | `sapi` |
 | `YUI_TTS_CLOUD` | `true` liga a voz neural da NUVEM (Microsoft Edge, bem mais natural e sem gastar CPU/GPU): o TEXTO falado sai do PC, só em respostas não sensíveis; se a nuvem falhar ou o teto diário acabar, a voz do Windows assume. `false` mantém tudo local | `false` |
 | `YUI_TTS_PROVIDERS` com nuvem | Sem definir, a ordem é `edge,sapi` quando `YUI_TTS_CLOUD=true` e só `sapi` quando `false` | automático |
 | `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` | Chave e região do recurso **Azure Speech** (oficial, mais vozes pt-BR e estilos; faixa gratuita de 500 mil caracteres/mês). Com `YUI_TTS_CLOUD=true` e a chave, a ordem vira `azure,edge,sapi`. A chave fica SÓ no `.env` (veja o passo a passo em [TTS](TTS.md)) | — |
@@ -321,7 +321,7 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
-| `YUI_MEMORY_ENABLED` | Liga a memória por usuário | `true` |
+| `YUI_MEMORY_ENABLED` | Liga a memória por usuário (só `true` liga) | `false` |
 | `MEMORY_RETENTION_DAYS` | Dias sem interação até a memória pública expirar (a pessoal do dono é permanente) | `30` |
 | `YUI_CONTEXT_ENABLED` | Liga o **contexto das conversas por horas** (a Yui lembra as últimas falas de cada pessoa em cada canal). Desligado, vale o buffer antigo (por canal, só em RAM) | `false` |
 | `YUI_CONTEXT_SCOPE` | `owner` = só o dono; `all` = todos (faça só depois de avisar nos Termos de Uso) | `owner` |
@@ -345,7 +345,7 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 | `YUI_PANEL_PASSWORD_HASH` | Hash scrypt da senha, gerado por `npm run panel:password` | — |
 | `YUI_PANEL_PASSWORD` | Senha em texto (menos segura; mínimo 10 caracteres). O hash tem prioridade | — |
 | `YUI_PANEL_USER_ID` | Dono a quem o login se aplica (se vazio, o dono) | — |
-| `YUI_ALERTS` | `false` desliga os avisos automáticos por DM quando algo dá errado | `true` |
+| `YUI_ALERTS` | `false` desliga os avisos automáticos por DM quando algo dá errado (no máximo 10 por hora). A falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada não vira DM de "Erro grave": vai só para o log, porque a Yui reconecta sozinha | `true` |
 | `YUI_ALERTS_COOLDOWN_MINUTES` | Intervalo mínimo para repetir o mesmo aviso | `30` |
 | `YUI_PANEL_AI_EDIT` | `false` trava a edição de chaves e provedores de IA pelo painel | `true` |
 | `YUI_AI_SETTINGS_FILE` | Onde o painel guarda as chaves/provedores que você adicionou | `secrets/ai-providers.json` |
@@ -359,7 +359,7 @@ Como entrar e as rotas: [Yui API](YUI_API.md).
 
 | Variável | Descrição |
 |----------|-----------|
-| `YUI_TOOLS_PC_ENABLED` | `true` registra as ferramentas do PC (`system.info`, `projects.open`, `apps.open`, `files.search`) |
+| `YUI_TOOLS_PC_ENABLED` | `true` registra as ferramentas do PC (`system.info`, `projects.open`, `apps.open`, `files.search`, `commands.list` e `commands.run`) |
 | `YUI_PROJECTS` | Projetos que podem ser abertos: `NOME=CAMINHO`, separados por `\|` |
 | `YUI_APPS` | Programas que podem ser abertos (bloqueado em somente leitura) |
 | `YUI_COMMANDS` | Comandos que a Yui pode rodar pelo **nome**: `NOME=executável args`, separados por `\|`; sem shell, com confirmação, bloqueado em somente leitura. [Comandos e skills](COMANDOS_E_SKILLS.md) |
@@ -368,11 +368,15 @@ Como entrar e as rotas: [Yui API](YUI_API.md).
 | `YUI_EDITOR_COMMAND` | Executável do editor usado ao abrir projetos |
 | `YUI_MCP_ALLOW` | Ferramentas MCP liberadas ao Agent (`servidor.ferramenta,...`) |
 | `YUI_MCP_READ_ONLY` | Dentre as liberadas, as que só leem (as demais ficam bloqueadas em somente leitura) |
-| `YUI_BACKUP_KEY` / `YUI_BACKUP_KEY_FILE` | Chave de 32 bytes (hex de 64 caracteres ou base64) do **backup cifrado da memória**, direta ou por arquivo. **Guarde fora do repositório** e faça uma cópia offline: sem ela o backup não abre | (obrigatória para fazer backup) |
+| `YUI_BACKUP_KEY` / `YUI_BACKUP_KEY_FILE` | Chave de 32 bytes (hex de 64 caracteres ou base64; outro texto vira chave pelo SHA-256 dele) do **backup cifrado da memória** (`node scripts/backup-memory.mjs`), direta ou por arquivo. **Guarde fora do repositório** e faça uma cópia offline: sem ela o backup não abre | (obrigatória para fazer backup) |
 | `YUI_BACKUP_DIR` | Destino dos backups (fora do repositório). Padrão: uma pasta `yui-backups` ao lado do projeto | `../yui-backups` |
 | `YUI_BACKUP_MAX_KEEP` | Quantos backups manter (rotação) | `7` |
 | `YUI_AUDIT_MAX_BYTES` / `YUI_AUDIT_MAX_ROTATE` | Tamanho máximo do `core-audit.jsonl` antes de girar e quantos arquivos girados guardar | `10485760` (10 MB) e `5` |
 | `YUI_IMAGE_PRE_ROUTE` | `false` desliga a **Porta I** (imagem por conversa: "yui gera uma imagem de um gato" vira `generate_image` pelo código). Padrão `true`. A ferramenta chamada pelo modelo continua valendo | `true` |
+| `YUI_BDS_URL` | Endereço do **BDS Server** (biblioteca de arquivos) visto por esta máquina; vazio = Yui não usa a biblioteca. Liga as ferramentas `bds.buscar/listar/recentes/status` e a **Porta B** (só dono, só leitura). As ferramentas valem no Agent do app (`/v1/agent`, dono em conversa privada) mesmo sem `YUI_TOOLS_PC_ENABLED`; a Porta B vale no Discord e só mostra o conteúdo em DM ou canal privado | _(vazio)_ |
+| `YUI_BDS_KEY` | Chave de API do BDS Server (`Authorization: Bearer`), só se o login dele estiver ligado. Nunca vai para log nem erro | _(vazio)_ |
+| `YUI_BDS_PRE_ROUTE` | `false` desliga a **Porta B** (biblioteca por conversa); as ferramentas continuam | `true` |
+| `YUI_BDS_TIMEOUT_MS` | Tempo máximo de cada consulta ao BDS Server, em ms (1000 a 60000) | `8000` |
 | `YUI_IMAGE_PER_HOUR` | Imagens por pessoa por hora, na conversa e na ferramenta (o dono não tem limite; `0` desliga o limite) | `6` |
 
 ---
@@ -381,16 +385,18 @@ Como entrar e as rotas: [Yui API](YUI_API.md).
 
 | Variável | Descrição |
 |----------|-----------|
-| `YUI_GATEWAY_ENABLED` | Liga o servidor HTTP do Gateway (`127.0.0.1:20130`) |
-| `YUI_GATEWAY_KEYS` | Chaves de acesso do servidor (16+ caracteres, separadas por vírgula) |
+| `YUI_GATEWAY_ENABLED` | `true` liga o servidor HTTP do Gateway (`127.0.0.1:20130`). Padrão `false` |
+| `YUI_GATEWAY_KEYS` | Chaves de acesso do servidor (16+ caracteres, separadas por vírgula). Sem nenhuma, o servidor HTTP não sobe |
 | `YUI_GATEWAY_HOST` / `YUI_GATEWAY_PORT` | Endereço e porta do servidor (padrão `127.0.0.1` / `20130`) |
 | `YUI_GATEWAY_IN_CHAIN` | Padrão `true`: mantém o Gateway na cadeia interna de IA da Yui (logo após o LM Studio); `false` desliga |
 | `YUI_GATEWAY_DISABLE` | Provedores a desligar |
 | `YUI_GATEWAY_PRIORITY` | Ordem dos provedores |
 | `YUI_GATEWAY_COMBOS` | Combos de modelos |
 | `YUI_GATEWAY_CUSTOM` | Provedores personalizados compatíveis com OpenAI |
+| `OPENROUTER_API_KEY` | Chave do OpenRouter (só no Gateway) |
+| `OPENROUTER_MODELS` | Modelos do OpenRouter, separados por vírgula. Padrão `meta-llama/llama-3.3-70b-instruct:free` |
 
-As chaves dos provedores do Gateway reaproveitam as acima (Groq, Gemini, Hugging Face, OpenRouter, Cloudflare, Together). Formatos e exemplos em [Gateway](GATEWAY.md).
+As demais chaves dos provedores do Gateway reaproveitam as da seção 2 (Groq, Gemini, Hugging Face, Cloudflare, Together). Os provedores próprios cadastrados pelo painel (**Admin → IA**) ficam em `secrets/ai-providers.json` (`YUI_AI_SETTINGS_FILE`); o modelo pronto **OmniRoute** aponta para `http://127.0.0.1:20128/v1`, a porta em que o OmniRoute roda no notebook servidor da Yui. Formatos e exemplos em [Gateway](GATEWAY.md).
 
 ---
 
@@ -415,9 +421,9 @@ A IA usada é a da própria Yui (LM Studio e, depois, o [Gateway](GATEWAY.md)), 
 
 Se o seu `.env` tiver estas linhas, **nada no código as lê mais**; pode removê-las:
 
-`PREFIX`, `BOT_NAME`, `SAVE_HISTORY`, `DEFAULT_AUTOMOD`, `AUTOMOD_MODE`, `LOG_WEBHOOK_URL`, `APPEAL_CHANNEL_ID`.
+`PREFIX`, `BOT_NAME`, `SAVE_HISTORY`, `DEFAULT_AUTOMOD`, `AUTOMOD_MODE`, `LOG_WEBHOOK_URL`, `APPEAL_CHANNEL_ID`, `AVISOS_URL`, `AUTOMOD_WHITELIST`, `SEND_ENVIRONMENT_INFO`, `KEEP_MUSIC_EMBED`, `SYSTEM_PROMPT`, `YTDLP_EXTRA_FLAGS`.
 
-(O prefixo agora é `COMMAND_PREFIX`; o nome é `AI_BOT_NAME`; o AutoMod é configurado por servidor com os comandos de moderação.)
+(O prefixo agora é `COMMAND_PREFIX`; o nome é `AI_BOT_NAME`; o prompt de sistema é `AI_SYSTEM_PROMPT`; o AutoMod é configurado por servidor com os comandos de moderação; as flags extras do yt-dlp são fixas em `src/config/index.js`. O `src/config/config.json` também não é lido ao iniciar.)
 
 ---
 

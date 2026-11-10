@@ -46,7 +46,7 @@ e use o app **no próprio computador** (veja [a seção 3](#-3-o-que-protege-voc
 
 ## 💬 2. Como usar
 
-1. Abra o app (`http://localhost:8081`, ou a **Yui Desktop**, que é a janela dele) e entre como dono.
+1. Abra o app (`http://localhost:8081` no computador onde a Yui roda, hoje o notebook servidor, ou a **Yui Desktop**, que é a janela dele) e entre como dono.
 2. Vá em **Código**. À esquerda: **Projetos**, **Adicionar projeto** (só no computador) e a **árvore de arquivos**. Clique num arquivo para vê-lo e deixá-lo **em foco**: a Yui recebe esse arquivo como contexto da próxima pergunta.
 3. Escolha o **modo** (Yui, Desenvolvedora, Revisora...) e escreva: "o que faz a função `soma`?", "revise `src/api.js`", "crie um teste para isso".
 4. Enquanto trabalha, a tela mostra o que ela faz: `✔ Lendo src/soma.js`, `… Gravando notas.txt`. Quando precisar gravar ou rodar algo, aparece um **cartão de aprovação** com exatamente o que será feito:
@@ -66,7 +66,7 @@ No celular (pelo Tailscale) a aba funciona para **ler e conversar**; os botões 
 |----------|---------------|
 | **Só o dono** | Todas as rotas `/v1/dev/*` exigem o papel OWNER no backend; membros recebem `403` |
 | **Somente leitura por padrão** | Com `YUI_READ_ONLY=true` as ferramentas de gravar e de rodar comandos são negadas, e a tela avisa |
-| **Aprovação no computador** | Aprovar uma ação e cadastrar/remover projetos só vale se o pedido vier **do próprio PC**. Pedido que passa por proxy (Tailscale Serve, cabeçalhos `X-Forwarded-*`/`Tailscale-User-*`) conta como remoto: lê e conversa, **não aprova nada** |
+| **Aprovação no computador** | Aprovar uma ação e cadastrar/remover projetos só vale se o pedido vier **do próprio computador onde a Yui roda** (hoje, o notebook servidor): conexão local (loopback) sem cabeçalhos de proxy. Pedido que passa por proxy (Tailscale Serve, cabeçalhos `X-Forwarded-*`/`Tailscale-User-*`) conta como remoto: lê e conversa, **não aprova nada** |
 | **Projetos da lista** | A Yui só abre pastas de `YUI_PROJECTS` ou cadastradas pelo dono. O cadastro recusa a raiz do disco, a sua pasta pessoal, pastas do Windows e `.ssh`, `.aws`, `.gnupg`, `.kube` |
 | **Não sai do projeto** | Os caminhos são resolvidos com `path.relative` + `realpath`: `..`, pasta irmã com nome parecido e links simbólicos não escapam |
 | **Arquivos sensíveis** | `.env`, `*.pem`, `*.key`, `id_rsa`, `credentials`, `secrets*`, `.npmrc`... **nunca** são lidos nem gravados, e nem aparecem na árvore |
@@ -74,7 +74,7 @@ No celular (pelo Tailscale) a aba funciona para **ler e conversar**; os botões 
 | **Edição segura** | Edição por blocos `SEARCH/REPLACE`: o trecho precisa existir **uma única vez**, tudo ou nada. Antes de gravar, o arquivo vai para `.yui/backups/` no projeto, e a gravação é atômica |
 | **Texto é dado, não ordem** | O que vem de arquivos, da web e de comandos entra na conversa marcado como dado; a Yui não obedece instruções que apareçam ali |
 | **IA** | Usa o LM Studio e, se faltar, o [Gateway](GATEWAY.md), sempre marcado como **sensível**: nunca vai a provedor anônimo (sem chave) |
-| **Limites** | Uma execução por vez; mensagem de até 8.000 caracteres; 30 pedidos/min na rota que inicia a execução; aprovação expira em 5 min; execuções somem da memória 30 min depois de acabar |
+| **Limites** | Uma execução por vez; mensagem de até 8.000 caracteres; 30 pedidos/min na rota que inicia a execução (contados junto com `/v1/chat` e `/v1/agent`); aprovação expira em 5 min; execuções somem da memória 30 min depois de acabar |
 | **Auditoria** | `logs/core-audit.jsonl` guarda início da execução, ferramenta usada e decisão de aprovação, **sem** o conteúdo dos arquivos nem das suas mensagens |
 
 ---

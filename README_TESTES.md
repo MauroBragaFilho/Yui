@@ -15,6 +15,8 @@ npm run test:panel        # login por senha, chave por DM, sessões, painel admi
 npm run test:search       # busca na web (cadeia de provedores, otimizador da consulta, teto global), system.info, comandos e skills
 npm run test:dev          # Código (as funções do Jarvis): projetos, arquivos, comandos, aprovação, rotas /v1/dev
 npm run test:alerts       # avisos automáticos por DM
+npm run test:discordreconnect # reconexão do Discord: rede caindo no meio do handshake não vira "Erro grave" (sem rede, servidor local)
+npm run test:dmowner      # privado (DM): só o dono conversa com a Yui
 npm run test:gateway      # Yui Gateway: failover, cooldown, streaming, servidor HTTP
 npm run test:config       # rodízio de chaves e modelos Gemini
 npm run test:gtao         # sistemas diários e semanais do GTA Online
@@ -70,6 +72,12 @@ npm run test:researchfixes # correções da revisão do agente de pesquisa, part
 npm run test:researchfixesqueue # correções da revisão do agente de pesquisa na fila real: chatter, voz, DM de qualquer pessoa, JSON cru, chamada escrita como texto, fila sem consumidor paralelo
 npm run test:modlist      # lista de mods: detector (40 mensagens), parser, correspondência de nomes, par loader+versão, complementos, links, texto hostil, limites, prazo, 429, API fora do ar, privado e trava (Modrinth falso com respostas reais, sem rede)
 npm run test:lists        # listas pessoais por conversa natural: JSON por usuário em database/listas, interpretação de pedidos em português, privacidade entre pessoas, limites
+npm run test:backup       # backup cifrado e rotativo da memória, restauração e alerta de falha (diretório temporário)
+npm run test:audit        # auditoria com hash encadeado: adulteração, remoção e reordenação detectadas
+npm run test:library      # biblioteca por conversa (Porta B) e cliente do BDS Server, só leitura
+npm run test:imageintent  # imagem por conversa (Porta I): detecção, filtros e limite por hora
+npm run test:chatintents  # memória (Porta N) e resumo do chat (Porta R) por conversa
+npm run test:cleanbootstrap # a Yui cria os bancos ausentes a partir de um diretório limpo
 npm run test:docssync     # coerência entre package.json, .env_example, docs e código (variáveis, padrões, links, textos desatualizados)
 npm run tts:amostra       # gera WAVs de amostra da voz para você ouvir (não é teste; use -- --fake para só testar o script)
 
@@ -91,8 +99,9 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:readonly` | 15 | Bloqueio de apagar/gravar/executar por padrão |
 | `test:backup` | 6 | Backup cifrado e rotativo da memória, restauração por hash e alerta de falha (diretório temporário) |
 | `test:audit` | 8 | Auditoria com hash encadeado: adulteração, remoção e reordenação são detectadas |
+| `test:library` | 10 | Biblioteca por conversa (Porta B) e cliente do BDS Server: detecção, só dono/privado, só leitura (GET), formatação e falhas |
 | `test:imageintent` | 9 | Imagem por conversa (Porta I): detecção, pedido vago, filtros de segurança e limite por hora |
-| `test:chatintents` | 9 | Memória (Porta N) e resumo do chat (Porta R) por conversa: detecção estrita, confirmação de "apagar tudo", privacidade em canal público, limite de resumo |
+| `test:chatintents` | 11 | Memória (Porta N) e resumo do chat (Porta R) por conversa: detecção estrita, confirmação de "apagar tudo", privacidade em canal público, limite de resumo |
 | `test:cleanbootstrap` | 1 | A Yui cria os bancos ausentes a partir de um diretório limpo |
 | `test:mentions` | 17 | Conversão de `@nome` em menção real, sem `@everyone`; mensagens do rádio só notificam quem pediu |
 | `test:persona` | 17 | Personalidade pessoal × pública, regras de resposta longa |
@@ -100,6 +109,8 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:search` | 56 | Cadeia Brave/Tavily/SearXNG/DuckDuckGo/Bing, cota esgotada, bloqueio leve e descanso, limite por pessoa, conversa sensível sem busca, gate de palavras, `system.info` tolerante, `commands.run` sem shell e com confirmação, skills (só dono, sem ferramentas), otimizador da consulta (sem ferramentas nem histórico, dado pessoal e palavras proibidas barrados antes do buscador), contexto da web reaproveitado entre provedores, teto global por hora e motivo distinto para cada tipo de falha |
 | `test:dev` | 61 | Código: workspace sem escapar da pasta, `SEARCH/REPLACE`, política de comandos, laço do agente, projetos, histórico, execução com aprovação (somente leitura, negar, expirar, cancelar, remoto), rotas `/v1/dev/*` e `403` para membros |
 | `test:alerts` | 24 | Avisos ao dono: intervalo, teto por hora, máscara de segredos, desligar, chave pela causa-raiz, origem no código da Yui |
+| `test:discordreconnect` | 9 | Reconexão do Discord: reproduz com a `@discordjs/ws` real a conexão órfã que virava "Opening handshake has timed out", confere a proteção (`src/discord/gatewayGuard.js`) e o filtro que tira essa falha de rede da DM de "Erro grave" |
+| `test:dmowner` | 4 | Privado: só o dono conversa com a Yui no DM; outras pessoas são ignoradas em silêncio |
 | `test:gateway` | 42 | Rodízio de chaves, descanso, erros 401/402/404/429, streaming, privacidade |
 | `test:config` | 5 | Chaves Gemini/Stability e modelos aposentados |
 | `test:media` | 150 | Tabela de links (YouTube, Instagram, TikTok, Spotify), links recusados, 18 tentativas de injeção de comando, fuzz de caracteres perigosos, argumentos do yt-dlp, limites, pasta por pedido, handlers e `/baixar_musica` com `execFile` falso, teto de downloads simultâneos, limite de anexo, origem do MP3 fora dos textos entregues e nomes de reserva neutros (`musica.mp3`) |

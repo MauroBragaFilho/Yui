@@ -1,6 +1,6 @@
 # MATRIZ_DE_PERMISSOES — Autonomia configurável da Yui (proposta)
 
-Proposta de design. Nada foi implementado. Preserva o que já existe: papéis (`permissions.js`), modo somente leitura (`YUI_READ_ONLY`), aprovação local do módulo Código, allowlists de ferramentas e deny por padrão.
+Proposta de design. Nada foi implementado (conferido no código em 2026-11-10: a política de hoje continua sendo `allow/ask/deny` em `src/core/dev/policy.js` e os papéis/`checkToolAccess` em `src/core/permissions.js`; a especificação da Fase 1 está em `docs/ESPECIFICACAO_MOTOR_POLITICAS_FASE1.md`). Preserva o que já existe: papéis (`permissions.js`), modo somente leitura (`YUI_READ_ONLY`), aprovação local do módulo Código, allowlists de ferramentas e deny por padrão.
 
 ## 1. Os quatro estados
 
@@ -36,11 +36,13 @@ Regras invioláveis:
 
 ## 3. Matriz ação × papel × estado (padrões propostos)
 
-Origem: **PC** = pedido local no computador; **Remoto** = app via Tailscale; **Discord** = DM/canal privado do dono. Demais papéis (TRUSTED, MEMBER, GUEST) só têm acesso a Discord público e memória temporária; BLOQUEADO para tudo que for ferramenta do PC (decisão atual, preservada).
+Origem: **PC** = pedido local no computador onde a Yui roda (desde 03/11/2026, o notebook servidor); **Remoto** = app via Tailscale; **Discord** = DM/canal privado do dono. Demais papéis (TRUSTED, MEMBER, GUEST) só têm acesso a Discord público e memória temporária (no privado a Yui só conversa com o dono; a DM de outras pessoas é ignorada, e elas só usam os comandos de barra); BLOQUEADO para tudo que for ferramenta do PC (decisão atual, preservada).
+
+Hoje as ferramentas do Agent (`system.info`, `commands.*`, `projects.open`, `apps.open`, `files.search`, `bds.*`) só são chamadas pela API do app (`/v1/agent`); no Discord elas não existem, então a coluna "Dono – Discord privado" é só proposta. A exceção é a biblioteca, que no Discord funciona pela conversa (Porta B, só leitura, só o dono).
 
 | Classe de ação | Exemplos (existentes ou previstos) | Dono – PC | Dono – Remoto | Dono – Discord privado | Outros papéis |
 |---|---|---|---|---|---|
-| Leitura de informação | `system.info`, `commands.list`, listar/ler arquivos de projeto da allowlist, `search_code` | AUTOMATICO | AUTOMATICO | AUTOMATICO | BLOQUEADO |
+| Leitura de informação | `system.info`, `commands.list`, listar/ler arquivos de projeto da allowlist, `search_code`, biblioteca do BDS Server (`bds.buscar`, `bds.listar`, `bds.recentes`, `bds.status`) | AUTOMATICO | AUTOMATICO | AUTOMATICO | BLOQUEADO |
 | Busca por nome em pastas autorizadas | `files.search` | AUTOMATICO | AUTOMATICO | AUTOMATICO | BLOQUEADO |
 | Memória pessoal: ler/gravar | `remember`, `recall` | AUTOMATICO | AUTOMATICO | AUTOMATICO | memória temporária própria (30 dias) |
 | Memória: apagar tudo / exportar | `forgetAll`, backup | AUTORIZADO | AUTORIZADO | AUTORIZADO | só a própria memória, AUTORIZADO pelo próprio usuário |

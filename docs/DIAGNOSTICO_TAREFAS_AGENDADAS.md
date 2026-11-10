@@ -1,5 +1,7 @@
 # Diagnóstico e Plano de Recuperação: Tarefas Agendadas da Yui
 
+> ⚠️ **Documento histórico (superado em 10/11/2026).** Ele descreve o PC de desenvolvimento antes da mudança. Desde 03/11/2026 a produção roda no notebook servidor com as tarefas `YuiBot`, `YuiWebApp` e `YuiAtualizar`, e o `YuiSupervisor` não está instalado lá (instalá-lo ao lado da `YuiBot` subiria duas Yuis). O horário da limpeza de memória no código é `30 5 * * *` (UTC). Estado atual em [Operação](content_pt/OPERACAO.md#-1-como-a-yui-roda).
+
 Este relatório investiga a situação das tarefas agendadas no sistema operacional (Windows Task Scheduler) e as tarefas periódicas internas da Yui (`src/scheduler/scheduler.js`), em atendimento à tarefa do Braga AI Hub.
 
 ---

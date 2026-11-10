@@ -17,7 +17,7 @@ Como preparar o ambiente e iniciar a Yui pela primeira vez. Para o dia a dia (re
 
 ## 🖥️ 1. Requisitos
 
-- **SO:** Windows 10/11 (uso atual do dono) ou Linux.
+- **SO:** Windows 10/11 (a produção é um notebook com Windows 10; o desenvolvimento, um PC com Windows) ou Linux.
 - **Node.js 22 ou superior** (a Yui é testada no **24**) e npm.
 - **Chrome ou Edge instalado**: usado para ler o evento semanal do Reddit e o Newswire.
 - **yt-dlp** e **ffmpeg** para música e mídia. A Yui localiza ou baixa os binários sozinha (`YTDLP_PATH`/`FFMPEG_PATH` só são necessários para usar versões próprias) e mantém o yt-dlp atualizado.
@@ -75,6 +75,30 @@ O `requirements-spotdl.lock.txt` fixa as versões testadas. A Yui acha o `spotdl
 
 Duas armadilhas conhecidas: nenhuma pasta do caminho de `src/data/temp_spotify` (incluindo as pastas acima dela, como a pasta do projeto) pode começar com `.` nem terminar com `.`, `*` ou `$`, senão o pedido falha cedo; e o relógio do PC precisa estar certo, senão o Spotify recusa o acesso. Mais detalhes, limites e como atualizar em [Variáveis de ambiente](ENVIRONMENT.md#-spotify-ambiente-python-do-spotdl).
 
+### 💻 Instalação no notebook servidor (sem internet)
+
+Foi assim que a produção atual foi montada (veja [Operação](OPERACAO.md#-1-como-a-yui-roda)). O `scripts/instalar-tudo-offline.ps1` instala a Yui e tudo o que ela precisa a partir de um pendrive, **sem internet**. Rode-o pelo `INSTALAR-TUDO.bat`, que pede permissão de Administrador (esse `.bat` fica na pasta `scripts/` local e não vai para o Git, por causa da regra `*.bat`; sem ele, abra o PowerShell como Administrador e rode o `.ps1`). Pode rodar de novo: o que já está instalado é pulado.
+
+No pendrive, ao lado do script, precisam estar:
+
+| Pasta ou arquivo | Conteúdo |
+|------------------|----------|
+| `Yui\` | Cópia do projeto, com `node_modules` (e o `.env`, se quiser levá-lo pronto; sem ele, o instalador avisa para configurar depois). Sem `node_modules` completo, a verificação final avisa para rodar `npm install` quando houver internet) |
+| `instaladores\` | `vc_redist.x64.exe`, `node-v24.14.0-x64.msi`, `python-3.12.10-amd64.exe`, `googlechromestandaloneenterprise64.msi`, `temurin-25-jre-x64.msi` e, opcional, `OpenSSH-Win64.msi` |
+| `ferramentas\` | `ffmpeg` e `yt-dlp` |
+| `wheels-deemix\`, `wheels-spotdl\` | Pacotes Python para criar os ambientes sem internet |
+| `minecraft\` | Arquivos do servidor de Minecraft (Paper) |
+| `instalar-ssh.ps1` | Chamado pelo instalador no passo do SSH |
+
+O que ele faz, em ordem: instala Visual C++, Node.js 24, Python 3.12 e Chrome; copia `ffmpeg` e `yt-dlp` para `C:\Tools\bin` (no PATH da máquina); copia a Yui para `C:\Yui` (`-Destino`), guardando antes uma cópia `.env.bak-...` se já houver um `.env`; cria `.venv-deemix` e `.venv-spotdl` e ajusta o `PYTHON_PATH` do `.env` (e avisa se `YUI_PROJECTS`, `YUI_FILE_ROOTS` ou `YUI_EDITOR_COMMAND` ainda apontam para o PC antigo); configura o SSH (`-PublicKey "ssh-ed25519 ..."` já instala a sua chave); registra as tarefas `YuiBot` e `YuiWebApp` como conta SYSTEM, na inicialização do sistema, 45 s e 50 s depois do boot (a `YuiWebApp` só se existir `apps\yui-app\dist`); instala o Java e o servidor de Minecraft em `C:\Minecraft` (porta 25565 liberada só para a rede local; `-MinecraftAutoIniciar` cria a tarefa `MinecraftServer`); e confere `node`, `npm`, `ffmpeg`, `yt-dlp`, `spotdl` e se o `discord.js` carrega.
+
+Nada é iniciado na hora: **reinicie o notebook uma vez** e as tarefas sobem sozinhas. A tarefa `YuiAtualizar` (atualização diária pelo GitHub) **não** é criada pelo instalador; veja [Operação](OPERACAO.md#-7-atualizar-o-código).
+
+Dois scripts de apoio, ambos para rodar como Administrador:
+
+- **`scripts/instalar-ssh.ps1`**: instala o OpenSSH Server no Windows 10, inclusive em português (pelo `OpenSSH-Win64.msi`, se estiver ao lado, ou pelo Windows Update), deixa o serviço automático, libera a porta 22 **só para a rede local**, põe o PowerShell como shell padrão, grava a chave de `-PublicKey` em `administrators_authorized_keys` e, com `-DesativarSenha` (só junto com `-PublicKey`), passa a aceitar só chave. Também desliga a suspensão, a hibernação e a ação de fechar a tampa com o notebook na tomada. No fim mostra o `ssh usuario@IP` e sugere reservar o IP no roteador.
+- **`scripts/otimizar-windows.ps1`**: **por padrão só simula** e mostra o que faria; altera de verdade apenas com `-Aplicar`, criando antes um ponto de restauração (log em `C:\Tools\otimizar-windows.log`). Desliga Copilot, Cortana e pesquisa na web, widgets, sugestões e anúncios, telemetria (no mínimo), apps em segundo plano, OneDrive, hibernação e inicialização rápida, além de serviços e apps dispensáveis; limita a varredura do Defender a 20% da CPU (a proteção continua ligada). Mantém o Windows Update (só impede o reinício automático com alguém logado), o Firewall, o UAC e o SSH.
+
 ---
 
 ## 🔑 3. Configuração mínima
@@ -109,9 +133,9 @@ npm run dev                 # modo desenvolvimento, reinicia ao editar o código
 npm run deploy:commands     # registra os slash commands manualmente (a Yui também faz isso ao iniciar)
 ```
 
-No Windows, o `Yui.bat` oferece um menu. Para a Yui **subir sozinha com o Windows** e se religar após falhas, use as tarefas agendadas descritas em [Operação](OPERACAO.md); não use o PM2 no PC.
+No Windows, o `Yui.bat` oferece um menu. Para a Yui **subir sozinha com o Windows** e se religar após falhas, use as tarefas agendadas descritas em [Operação](OPERACAO.md#-1-como-a-yui-roda) (na produção, `YuiBot` e `YuiWebApp` como conta SYSTEM, na inicialização do sistema); não use o PM2 no Windows.
 
-> ⚠️ Rode **uma única instância** por token do Discord; duas fariam a Yui responder em dobro.
+> ⚠️ Rode **uma única instância** por token do Discord; duas fariam a Yui responder em dobro. A produção já roda no notebook servidor: no PC de desenvolvimento, `npm start`, `npm run dev` e a opção `1` do `Yui.bat` com o mesmo token criariam uma segunda Yui (o `Yui.bat` não enxerga a do notebook). Para testar no PC, use um bot de testes com outro token ou desative antes a `YuiBot` do notebook ([Operação](OPERACAO.md#-3-iniciar-parar-e-reiniciar)).
 
 ---
 

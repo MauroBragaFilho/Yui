@@ -22,12 +22,12 @@ Entram **somente os que têm chave válida no `.env`** (chaves com menos de 10 c
 
 | Provedor | Variáveis | Modelos padrão |
 |----------|-----------|----------------|
-| **Groq** | `GROQ_API_KEY` (várias: `a,b`) | `openai/gpt-oss-120b`, `openai/gpt-oss-20b` |
-| **Google Gemini** | `GEMINI_API_KEY` ou `GEMINI_API_KEYS` | `gemini-flash-lite-latest`, `gemini-flash-latest` |
+| **Groq** | `GROQ_API_KEY` e/ou `GROQ_API_KEYS` (várias: `a,b`) | `GROQ_MODEL` (padrão `openai/gpt-oss-120b`) e `openai/gpt-oss-20b` |
+| **Google Gemini** | `GEMINI_API_KEY` ou `GEMINI_API_KEYS` | `GEMINI_MODEL` e `GEMINI_MODEL_FALLBACK` (padrão `gemini-flash-lite-latest` e `gemini-flash-latest`) |
 | **Hugging Face** | `HF_TOKEN` | `HF_MODEL` (padrão `Qwen/Qwen2.5-72B-Instruct`) |
 | **OpenRouter** | `OPENROUTER_API_KEY`, `OPENROUTER_MODELS` | `meta-llama/llama-3.3-70b-instruct:free` |
-| **Cloudflare** | `CLOUDFLARE_API_TOKEN` **e** `CLOUDFLARE_ACCOUNT_ID` | `@cf/meta/llama-3.1-8b-instruct-fast` |
-| **Together** | `TOGETHER_API_KEY` | `meta-llama/Llama-3.3-70B-Instruct-Turbo-Free` |
+| **Cloudflare** | `CLOUDFLARE_API_TOKEN` **e** `CLOUDFLARE_ACCOUNT_ID` | `CLOUDFLARE_MODEL` (padrão `@cf/meta/llama-3.1-8b-instruct-fast`) |
+| **Together** | `TOGETHER_API_KEY` | `TOGETHER_MODEL` (padrão `meta-llama/Llama-3.3-70B-Instruct-Turbo-Free`) |
 | **Pollinations** | nenhuma (grátis, **anônimo**) | `openai` |
 
 > ⚠️ **Gemini:** o Google aposentou o `gemini-2.5-flash` e o `gemini-2.5-flash-lite` para contas novas (erro 404). Se o `.env` ainda tiver esses nomes, a Yui usa o apelido atual (`…-latest`) e avisa no log. Corrija `GEMINI_MODEL` e `GEMINI_MODEL_FALLBACK` no `.env`.
@@ -88,7 +88,7 @@ YUI_GATEWAY_HOST=127.0.0.1
 YUI_GATEWAY_PORT=20130
 ```
 
-Sem `YUI_GATEWAY_KEYS` o servidor **não sobe** (nunca fica aberto). Gere uma chave com `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+Sem `YUI_GATEWAY_KEYS` (ou sem nenhum provedor configurado) o servidor **não sobe** (nunca fica aberto). Em produção (desde 03/11/2026) ele roda no **notebook servidor** da Yui, em `127.0.0.1:20130`. Gere uma chave com `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 
 | Rota | Função |
 |------|--------|
@@ -113,7 +113,7 @@ Segurança: escuta só em `127.0.0.1`; chave obrigatória em tudo (comparação 
 
 Na aba **Admin → IA** do app você vê cada provedor e modelo (disponível ou descansando, acertos, falhas e o último erro) e pode **zerar os descansos** depois de resolver um problema de chave ou crédito. Rotas: `GET /v1/admin/gateway` e `POST /v1/admin/gateway/reset` (só o dono).
 
-A mesma aba também **configura** os provedores: colar chaves, ligar/desligar, testar e cadastrar provedores próprios, como o **OmniRoute** (modelo pronto: `http://127.0.0.1:20128/v1`, modelo `free-stack`). As chaves ficam em `secrets/ai-providers.json` e valem na hora. Para o OmniRoute (ou qualquer roteador próprio) há duas opções importantes: **"Colocar logo após o LM Studio"** (vai para o começo da fila do Gateway) e **"Sem conversas pessoais"** (ligado por padrão no modelo do OmniRoute, porque ele repassa para serviços de terceiros e suas conversas privadas só devem ir a provedores com conta sua). Dica: se o combo `free-stack` estiver instável, use `auto/best-fast` e `auto/best-chat`, que costumam responder em segundos. Detalhes e proteções em [Yui API](YUI_API.md#provedores-de-ia-chaves-e-provedores-próprios).
+A mesma aba também **configura** os provedores: colar chaves, ligar/desligar, testar e cadastrar provedores próprios, como o **OmniRoute** (modelo pronto: `http://127.0.0.1:20128/v1`, modelo `free-stack`; no notebook servidor da Yui o OmniRoute roda justamente nessa porta, como um gateway de IA externo, separado do Yui Gateway). As chaves ficam em `secrets/ai-providers.json` e valem na hora. Para o OmniRoute (ou qualquer roteador próprio) há duas opções importantes: **"Colocar logo após o LM Studio"** (vai para o começo da fila do Gateway) e **"Sem conversas pessoais"** (ligado por padrão no modelo do OmniRoute, porque ele repassa para serviços de terceiros e suas conversas privadas só devem ir a provedores com conta sua). Dica: se o combo `free-stack` estiver instável, use `auto/best-fast` e `auto/best-chat`, que costumam responder em segundos. Detalhes e proteções em [Yui API](YUI_API.md#provedores-de-ia-chaves-e-provedores-próprios).
 
 ## 🧪 Testes
 

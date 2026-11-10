@@ -2,6 +2,8 @@
 
 Como a configuração da Yui é montada em `src/config/index.js`, como funcionam o rodízio de chaves e os donos. Para a lista de todas as variáveis, veja [ENVIRONMENT.md](ENVIRONMENT.md).
 
+> ℹ️ A configuração vem do `.env` e dos padrões do código. O `src/config/config.json` **não é lido ao iniciar**: o painel de configuração do Discord grava nele e o valor vale na hora, mas, ao reiniciar a Yui, volta o do `.env` (que tem prioridade) ou o padrão.
+
 ---
 
 ## 📂 Sumário
@@ -20,6 +22,7 @@ Para contornar limites de taxa (Google, Stability), as chaves aceitam **várias 
 
 - **Gemini:** `GEMINI_API_KEYS=key1,key2` ou `GEMINI_API_KEY=key1,key2` (os dois nomes são lidos e somados, sem duplicar). Tenta em ordem; em `429`/cota passa à próxima chave.
   - Os modelos configurados (`GEMINI_MODEL`, `GEMINI_MODEL_FALLBACK`) são validados: modelos **aposentados** (`gemini-1.5-*`, `gemini-2.0-*`...) são trocados por `gemini-flash-lite-latest` / `gemini-flash-latest` (veja `src/utils/geminiModels.js`).
+- **Groq:** `GROQ_API_KEY=key1,key2`. Tenta em ordem, pulando a chave que está em descanso. O Gateway também soma `GROQ_API_KEYS`; a cadeia antiga do `llmHandler.js` lê só `GROQ_API_KEY`.
 - **Stability AI:** `STABILITY_API_KEYS=key1,key2` ou `STABILITY_API_KEY=...`. A chave é **sorteada** a cada requisição (`config.getStabilityKey()`) para distribuir o consumo de créditos.
 - **RAWG.io:** `RAWG_API_KEY=sua_chave` ([rawg.io/apidocs](https://rawg.io/apidocs)) alimenta `check_game_info`. Sem ela, a Yui busca nota/sinopse via Steam e tempo de jogo via HowLongToBeat, de forma reduzida.
 - **Yui Gateway:** faz seu próprio rodízio de chaves entre provedores, com descanso progressivo em falhas. Veja [Gateway](GATEWAY.md).
@@ -49,10 +52,11 @@ Campos principais de `src/config/index.js`:
 | :--- | :--- | :--- |
 | `discordToken` / `clientId` | `DISCORD_TOKEN` / `DISCORD_CLIENT_ID` | Conexão com o Discord |
 | `ownerIds` | `OWNER_ID`, `OWNER_IDS` | Donos do bot |
-| `requireTos` | `REQUIRE_TOS` | Exige aceite dos termos ao entrar em novos servidores |
+| `requireTos` | `REQUIRE_TOS` | Exige aceite dos termos ao entrar em novos servidores (ligado por padrão; só `false` desliga) |
 | `prefix` | `COMMAND_PREFIX` | Prefixo de comandos de texto (padrão `+yui`) |
 | `geminiApiKeys` / `geminiModel` | `GEMINI_API_KEYS`, `GEMINI_API_KEY`, `GEMINI_MODEL` | Gemini com rodízio e modelos validados |
-| `localLlmUrl` | `LOCAL_LLM_URL` | LM Studio / Ollama |
+| `groqApiKeys` / `groqModel` | `GROQ_API_KEY`, `GROQ_MODEL` | Groq com rodízio (modelo padrão `openai/gpt-oss-120b`) |
+| `localLlmUrl` | `LOCAL_LLM_URL` (ou `AI_BASE_URL`) | LM Studio / Ollama |
 | `ai.systemPrompt` / `ai.botName` | `AI_SYSTEM_PROMPT`, `AI_BOT_NAME` | Comportamento e nome da IA |
 | `gtaWeekly` | `GTA_WEEKLY_ENABLED`, `GTA_WEEKLY_INTERVAL_MINUTES` | Evento semanal |
 | `newswire` | `NEWSWIRE_ENABLED`, `NEWSWIRE_INTERVAL_MINUTES` | Notícias (desligado por padrão) |

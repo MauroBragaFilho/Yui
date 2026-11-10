@@ -20,7 +20,7 @@ Interface HTTP do **Yui Core** para o app (Android e web) e para integrações. 
 
 - **Desligada por padrão** (`YUI_API_ENABLED=false`).
 - Escuta em **`127.0.0.1`**. O acesso de outros aparelhos é **só pelo Tailscale**; nunca abra a porta na internet nem no *security group* da AWS.
-- Toda rota, exceto `/v1/health`, `/v1/auth/*` e a pré-verificação CORS, exige `Authorization: Bearer <token ou sessão>`.
+- Toda rota, exceto `/v1/health`, `/v1/auth/status`, `/v1/auth/login`, `/v1/auth/discord/*` e a pré-verificação CORS, exige `Authorization: Bearer <token ou sessão>` (o `/v1/auth/logout` também exige).
 - O token/sessão só identifica **quem é o usuário**. O **papel** (OWNER, MEMBER...) e o **escopo de memória** são decididos pelo backend a partir do `userId`; o cliente não escolhe nenhum dos dois.
 - Tokens fixos têm **16+ caracteres**, são guardados como hash SHA-256 e comparados em tempo constante.
 - **CORS** só para origens listadas em `YUI_API_CORS_ORIGINS` (nunca `*`); não substitui a autenticação.
@@ -51,7 +51,8 @@ YUI_API_TOKENS=SEU_TOKEN_LONGO=ID_DISCORD_DO_DONO
 YUI_PANEL_SESSION_HOURS=12
 ```
 
-- A API sobe se houver **ao menos uma forma de entrar**: `YUI_API_TOKENS`, o login por senha (`YUI_PANEL_USER` + senha) ou a chave por DM (que depende de a Yui estar conectada ao Discord).
+- A API só sobe com `YUI_API_TOKENS` **ou** o login por senha (`YUI_PANEL_USER` + senha) configurado; sem nenhum dos dois ela não inicia e o motivo vai para o log. A chave por DM sozinha não basta: ela só funciona com a API já no ar e a Yui conectada ao Discord.
+- Em produção (desde 03/11/2026) a API roda no **notebook servidor** da Yui, em `127.0.0.1:3939`.
 - **Um token por dispositivo** (`tokenCelular=ID,tokenNotebook=ID`): cada aparelho pode ser revogado sozinho removendo o par e reiniciando a Yui.
 - Gerar um token: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 - Para testar sem o bot e sem tocar nos seus dados: `npm run dev:api -- --fake` (IA simulada, banco temporário). Com `--panel` liga também o login por senha e um painel **simulado**.
@@ -242,8 +243,9 @@ YUI_READ_ONLY=true                     # padrão: sem apagar/gravar/mover e sem 
 | `apps.open` | Abre programa da allowlist | OWNER, DM/canal privado, **exige confirmação**; **bloqueada no somente leitura** (executa programas) |
 | `files.search` | Busca por **nome** nas pastas autorizadas | Somente leitura; sem caminhos no pedido; ignora `node_modules` e `.git` |
 | `commands.list` / `commands.run` | Lista / roda um comando de `YUI_COMMANDS` pelo **nome** | `run`: OWNER, DM/canal privado, **confirmação**, sem shell, **bloqueada no somente leitura**. Detalhes: [Comandos e skills](COMANDOS_E_SKILLS.md) |
+| `bds.buscar` / `bds.listar` / `bds.recentes` / `bds.status` | Biblioteca de arquivos do **BDS Server** (filmes, séries, importações): busca por nome, lista uma pasta de uma lista fixa, últimos arquivos e espaço livre | OWNER, DM/canal privado, somente leitura (só `GET` na API do BDS Server). Existem só com `YUI_BDS_URL`, **mesmo sem** `YUI_TOOLS_PC_ENABLED` |
 
-Não existe ferramenta de shell livre.
+Não existe ferramenta de shell livre. As ferramentas são registradas quando a API sobe; as do PC exigem `YUI_TOOLS_PC_ENABLED=true` e as da biblioteca, `YUI_BDS_URL` (variáveis em [Variáveis de ambiente](ENVIRONMENT.md#-7-yui-core-agent-e-ferramentas-do-pc)).
 
 ---
 
@@ -259,7 +261,7 @@ tailscale serve --https=3939 off      # desfaz
 ```
 
 - **Não use `tailscale funnel`**: ele abre para a internet.
-- No celular: instale o app **Tailscale**, entre na mesma conta e mantenha-o conectado; o PC precisa estar ligado.
+- No celular: instale o app **Tailscale**, entre na mesma conta e mantenha-o conectado; o computador onde a Yui roda (hoje, o notebook servidor) precisa estar ligado.
 - Para o app Android, gere o build com `EXPO_PUBLIC_YUI_SERVER_URL=https://<seu-pc>.<sua-tailnet>.ts.net:3939`.
 - Use as **ACLs** do Tailscale para limitar quais dispositivos alcançam a porta.
 - Se você já usa o `tailscale serve` para outro serviço (por exemplo, na porta 443), a API na `3939` convive sem alterá-lo.
