@@ -34,6 +34,14 @@ export interface AdminOverview {
   bans: { users: number; guilds: number; channels: number };
   memoryUsers: number | null;
   flags: { readOnly: boolean; memoryEnabled: boolean; pcToolsEnabled: boolean };
+  /** Nome do dono para a saudação (YUI_OWNER_NAME no servidor), ou null. */
+  ownerName?: string | null;
+  /** Saúde da máquina (RAM e disco livres). Ausente em servidores antigos; cada campo pode vir null. */
+  host?: { platform: string; ramTotalMB: number | null; ramFreeMB: number | null; diskTotalGB: number | null; diskFreeGB: number | null };
+  /** Últimos eventos do registro de auditoria (só quando, o quê e por onde; nunca o conteúdo). */
+  activity?: { ts: string | null; event: string; role: string | null; platform: string | null }[];
+  /** Retenção da memória: a do dono é permanente; as demais expiram em `othersDays` dias. */
+  retention?: { ownerPermanent: boolean; othersDays: number | null };
 }
 export type AutomodMode = 'off' | 'trigger' | 'mcp' | 'both';
 export interface AdminGuild { id: string; name: string; members: number | null; automod: AutomodMode; tosAccepted: boolean }

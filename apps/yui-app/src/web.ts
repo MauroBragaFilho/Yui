@@ -17,19 +17,19 @@ const CSS = `
 
 :root, [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #000000; --card: #1c1c1c; --card-2: #262626; --line: #333333;
-  --text: #ffffff; --muted: #a1a1a1;
-  --btn-bg: #ffffff; --btn-fg: #000000; --input-bg: #262626;
-  --accent: #ff0000; --accent-text: #ff7373; --accent-light: rgba(255,0,0,0.18);
-  --danger: #ff5252; --danger-bg: rgba(255,82,82,0.14); --danger-solid: #c62828;
-  --success: #4caf50; --warning: #f59e0b;
+  --bg: #0b0912; --card: #130f1d; --card-2: #1b1529; --line: #2b2240;
+  --text: #f4f0fa; --muted: #9c93b3;
+  --btn-bg: #8a3fe6; --btn-fg: #ffffff; --input-bg: #1b1529;
+  --accent: #8a3fe6; --accent-text: #c77dff; --accent-light: rgba(138,63,230,0.24);
+  --danger: #ff5a5f; --danger-bg: rgba(255,90,95,0.14); --danger-solid: #b42318;
+  --success: #3fb27f; --warning: #f59e0b;
 }
 [data-theme="light"] {
   color-scheme: light;
-  --bg: #f4f4f4; --card: #ffffff; --card-2: #f0f0f0; --line: #e0e0e0;
-  --text: #000000; --muted: #666666;
-  --btn-bg: #000000; --btn-fg: #ffffff; --input-bg: #ffffff;
-  --accent: #ff0000; --accent-text: #b80000; --accent-light: rgba(255,0,0,0.12);
+  --bg: #f6f3fb; --card: #ffffff; --card-2: #efeaf8; --line: #ded6ee;
+  --text: #15101f; --muted: #655d7a;
+  --btn-bg: #6a28c0; --btn-fg: #ffffff; --input-bg: #ffffff;
+  --accent: #7b34d6; --accent-text: #6a28c0; --accent-light: rgba(123,52,214,0.10);
   --danger: #c20000; --danger-bg: rgba(194,0,0,0.08); --danger-solid: #c62828;
   --success: #2a6f2e; --warning: #9a5b00;
 }
@@ -59,7 +59,7 @@ export function setTheme(mode: ThemeMode): void {
   if (Platform.OS !== 'web') return;
   document.documentElement.setAttribute('data-theme', mode);
   const meta = document.querySelector('meta[name="theme-color"]');
-  meta?.setAttribute('content', mode === 'light' ? '#f4f4f4' : '#000000');
+  meta?.setAttribute('content', mode === 'light' ? '#f6f3fb' : '#0b0912');
   try {
     localStorage.setItem(KEY, mode);
   } catch {

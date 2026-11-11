@@ -12,30 +12,30 @@ const web = Platform.OS === 'web';
 const v = (name: string, dark: string) => (web ? `var(--${name})` : dark);
 
 export const colors = {
-  bg: v('bg', '#000000'),
-  surface: v('card', '#1c1c1c'),
-  surfaceAlt: v('card-2', '#262626'),
-  border: v('line', '#333333'),
-  text: v('text', '#ffffff'),
-  muted: v('muted', '#a1a1a1'),
+  bg: v('bg', '#0b0912'),
+  surface: v('card', '#130f1d'),
+  surfaceAlt: v('card-2', '#1b1529'),
+  border: v('line', '#2b2240'),
+  text: v('text', '#f4f0fa'),
+  muted: v('muted', '#9c93b3'),
   /** Destaque (vermelho). `accentText` é a versão legível sobre as superfícies. */
-  accent: v('accent', '#ff0000'),
-  accentText: v('accent-text', '#ff7373'),
-  accentLight: v('accent-light', 'rgba(255,0,0,0.18)'),
-  /** Botão primário em pílula: branco com texto preto (preto com texto branco no claro). */
-  btnBg: v('btn-bg', '#ffffff'),
-  btnFg: v('btn-fg', '#000000'),
-  inputBg: v('input-bg', '#262626'),
-  danger: v('danger', '#ff5252'),
-  dangerBg: v('danger-bg', 'rgba(255,82,82,0.14)'),
-  dangerSolid: v('danger-solid', '#c62828'),
-  success: v('success', '#4caf50'),
+  accent: v('accent', '#8a3fe6'),
+  accentText: v('accent-text', '#c77dff'),
+  accentLight: v('accent-light', 'rgba(138,63,230,0.24)'),
+  /** Botão primário em pílula, no roxo da Yui com texto branco. */
+  btnBg: v('btn-bg', '#8a3fe6'),
+  btnFg: v('btn-fg', '#ffffff'),
+  inputBg: v('input-bg', '#1b1529'),
+  danger: v('danger', '#ff5a5f'),
+  dangerBg: v('danger-bg', 'rgba(255,90,95,0.14)'),
+  dangerSolid: v('danger-solid', '#b42318'),
+  success: v('success', '#3fb27f'),
   warning: v('warning', '#f59e0b'),
   // Nomes antigos, mantidos como alias.
-  primary: v('accent', '#ff0000'),
-  primaryDim: v('accent-light', 'rgba(255,0,0,0.18)'),
+  primary: v('accent', '#8a3fe6'),
+  primaryDim: v('accent-light', 'rgba(138,63,230,0.24)'),
   userBubble: v('btn-bg', '#ffffff'),
-  yuiBubble: v('card-2', '#262626'),
+  yuiBubble: v('card-2', '#1b1529'),
 } as const;
 
 export const radius = { sm: 8, md: 16, lg: 24, pill: 999 } as const;

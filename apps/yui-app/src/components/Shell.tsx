@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 import { getTheme, setTheme, type ThemeMode } from '../web.ts';
-import { Icon, IconButton, TABS, TabBar, type TabKey } from './ui.tsx';
+import { Icon, IconButton, TABS, TabBar, tabVisible, type TabKey } from './ui.tsx';
 
 type Props = {
   tab: TabKey;
@@ -80,7 +80,7 @@ export function Shell({ tab, onChange, showAdmin, showCode = false, roleLabel, o
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nav}>
-          {TABS.filter((t) => (t.key !== 'admin' || showAdmin) && (t.key !== 'code' || showCode)).map((t) => (
+          {TABS.filter((t) => tabVisible(t.key, { showAdmin, showCode })).map((t) => (
             <NavItem
               key={t.key}
               testID={`tab-${t.key}`}

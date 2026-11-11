@@ -12,6 +12,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { colors, fonts, radius, spacing } from '../theme.ts';
+import { TABS, tabVisible, type TabKey } from '../tabs.ts';
 
 /** Ícones Material Symbols (a mesma família do BDS) na web; emoji no Android. */
 const ICON_FALLBACK: Record<string, string> = {
@@ -36,6 +37,18 @@ const ICON_FALLBACK: Record<string, string> = {
   cancel: '✖',
   timer_off: '⏱',
   refresh: '⟳',
+  dashboard: '📊',
+  dns: '🖥️',
+  memory: '🧬',
+  storage: '💾',
+  hub: '🔗',
+  history: '🕘',
+  bolt: '⚡',
+  tune: '🎚️',
+  notifications: '🔔',
+  event: '📅',
+  forum: '💬',
+  groups: '👥',
 };
 
 export function Icon({ name, size = 22, color = colors.text, style }: { name: string; size?: number; color?: string; style?: StyleProp<TextStyle> }) {
@@ -191,21 +204,13 @@ export function Chip({ label, on, onPress, testID }: { label: string; on: boolea
   );
 }
 
-export type TabKey = 'chat' | 'code' | 'memory' | 'admin' | 'status';
-
-export const TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: 'chat', label: 'Chat', icon: 'chat_bubble' },
-  { key: 'code', label: 'Código', icon: 'code' },
-  { key: 'memory', label: 'Memória', icon: 'psychology' },
-  { key: 'admin', label: 'Admin', icon: 'admin_panel_settings' },
-  { key: 'status', label: 'Status', icon: 'monitor_heart' },
-];
+export { TABS, tabVisible, type TabKey } from '../tabs.ts';
 
 /** Barra inferior (telas estreitas). Em telas largas o App usa a barra lateral. */
 export function TabBar({ active, onChange, showAdmin = false, showCode = false }: { active: TabKey; onChange: (k: TabKey) => void; showAdmin?: boolean; showCode?: boolean }) {
   return (
     <View style={styles.tabBar}>
-      {TABS.filter((t) => (t.key !== 'admin' || showAdmin) && (t.key !== 'code' || showCode)).map((t) => {
+      {TABS.filter((t) => tabVisible(t.key, { showAdmin, showCode })).map((t) => {
         const on = t.key === active;
         return (
           <Pressable

@@ -10,6 +10,7 @@ import { ChatScreen } from './src/screens/ChatScreen.tsx';
 import { CodeScreen } from './src/screens/CodeScreen.tsx';
 import { ConnectScreen } from './src/screens/ConnectScreen.tsx';
 import { MemoryScreen } from './src/screens/MemoryScreen.tsx';
+import { OverviewScreen } from './src/screens/OverviewScreen.tsx';
 import { StatusScreen } from './src/screens/StatusScreen.tsx';
 import { clearAll, loadSettings, saveSettings, type Settings } from './src/storage.ts';
 import { colors } from './src/theme.ts';
@@ -53,7 +54,9 @@ export default function App() {
             // O servidor vem da configuração do build, nunca do que ficou salvo.
             const baseUrl = serverUrl ?? saved.baseUrl;
             const client = createClient({ baseUrl, token: saved.token });
-            setSession({ settings: { ...saved, baseUrl }, me: await client.me() });
+            const me = await client.me();
+            setSession({ settings: { ...saved, baseUrl }, me });
+            if (me.role === 'OWNER') setTab('home'); // o dono abre na Visão Geral
           } catch (e) {
             // Token/sessão recusado: esquece. Servidor offline: mantém para tentar de novo.
             if (e instanceof ApiError && e.status === 401) {
@@ -89,7 +92,7 @@ export default function App() {
     await saveSettings(settings);
     setNotice(null);
     setSession({ settings, me });
-    setTab('chat');
+    setTab(me.role === 'OWNER' ? 'home' : 'chat');
   }
 
   async function logout() {
@@ -123,6 +126,7 @@ export default function App() {
         <ConnectScreen serverUrl={serverUrl} notice={notice} onConnected={onConnected} />
       ) : (
         <Shell tab={tab} onChange={setTab} showAdmin={isOwner} showCode={isOwner && codeEnabled} roleLabel={ROLE_LABEL[session.me.role] ?? session.me.role} onLogout={logout}>
+          {tab === 'home' && isOwner ? <OverviewScreen client={client} me={session.me} onNavigate={setTab} showCode={codeEnabled} /> : null}
           {tab === 'chat' ? <ChatScreen client={client} /> : null}
           {tab === 'code' && isOwner && codeEnabled ? <CodeScreen client={client} /> : null}
           {tab === 'memory' ? <MemoryScreen client={client} /> : null}

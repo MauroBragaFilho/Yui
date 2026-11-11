@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import * as memory from '../memory/store.js';
 import { listTools } from '../agent/tools.js';
@@ -68,6 +69,26 @@ async function defaultDeps() {
     getAutoBlockMode: ban.getAutoBlockMode,
     isServerAccepted: tos.isServerAccepted,
   };
+}
+
+/**
+ * Saúde da máquina que roda a Yui: RAM e disco livres (a pasta de trabalho). Nunca lança: o que não der para ler vem null.
+ * Entra no painel porque o notebook tem 4 GB e HD: é o primeiro lugar onde se vê se ele está apertado.
+ */
+export function readHostStats({ osImpl = os, fsImpl = fs, cwd = process.cwd() } = {}) {
+  const mb = (bytes) => Math.round(bytes / 1024 / 1024);
+  const gb = (bytes) => Math.round((bytes / 1024 / 1024 / 1024) * 10) / 10;
+  const out = { platform: osImpl.platform(), ramTotalMB: null, ramFreeMB: null, diskTotalGB: null, diskFreeGB: null };
+  try {
+    out.ramTotalMB = mb(osImpl.totalmem());
+    out.ramFreeMB = mb(osImpl.freemem());
+  } catch { /* sem leitura de RAM */ }
+  try {
+    const st = fsImpl.statfsSync(cwd);
+    out.diskTotalGB = gb(st.blocks * st.bsize);
+    out.diskFreeGB = gb(st.bavail * st.bsize);
+  } catch { /* sem leitura de disco */ }
+  return out;
 }
 
 /** Lê as últimas `limit` linhas do arquivo de auditoria sem carregá-lo inteiro. */
@@ -240,6 +261,12 @@ export function createAdmin({
           channels: Object.keys(bans.channels || {}).length,
         },
         memoryUsers: mem,
+        // Nome para a saudação do painel (opcional: YUI_OWNER_NAME). Sem ele a tela só diz "Boa noite.".
+        ownerName: String(process.env.YUI_OWNER_NAME || '').trim().slice(0, 40) || null,
+        host: deps?.hostStats ? deps.hostStats() : readHostStats(),
+        // Atividade recente: só quando, o quê e por qual canal (nunca o conteúdo de mensagens nem os detalhes do evento).
+        activity: tailAudit(auditFile || auditFilePath(), 8).map((e) => ({ ts: e.ts ?? null, event: String(e.event ?? ''), role: e.role ?? null, platform: e.platform ?? null })),
+        retention: { ownerPermanent: true, othersDays: safeRetentionDays() },
         flags: {
           readOnly: isReadOnlyMode(),
           memoryEnabled: isMemoryEnabled(),
@@ -563,6 +590,15 @@ export function createAdmin({
       return { ok: true, message: 'Reiniciando… volto em alguns segundos.' };
     },
   };
+}
+
+function safeRetentionDays() {
+  try {
+    const n = Number(memory.retentionDays());
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
 }
 
 function mem_count(ctx) {

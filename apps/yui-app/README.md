@@ -6,6 +6,7 @@ Cliente da **Yui** para **Android** e **web/desktop**, feito com **Expo (React N
 
 | Aba | Função |
 |-----|--------|
+| 📊 **Início** (Visão Geral) | *Só para o dono; é a tela em que ele abre.* Estado da Yui (Discord, IA, tempo ligada), servidores ativos, pessoas com memória, **saúde do computador** (RAM e disco livres, com alerta quando aperta), atividade recente (do registro de auditoria, sem o texto das conversas), regras de retenção da memória e atalhos. Atualiza sozinha a cada 30 s. Custos de IA, gráfico de 24 h e "Yui Live" ainda não existem e não aparecem com número inventado. O nome na saudação vem de `YUI_OWNER_NAME` (opcional). |
 | 💬 **Chat** | Conversa com a Yui pelo Agent. Mostra quando uma ferramenta foi executada e pede **confirmação** (botões Confirmar/Cancelar) para ações sensíveis. O histórico fica salvo no aparelho. |
 | ⌨️ **Código** | *Só para o dono, e só com `YUI_DEV_ENABLED=true` no servidor.* A Yui lê e responde sobre os seus projetos (árvore de arquivos, arquivo "em foco", modos Yui/Desenvolvedora/Revisora...) e, se você liberar (`YUI_READ_ONLY=false`), edita arquivos e roda comandos **pedindo a sua aprovação a cada vez, no computador** (pelo celular ela só lê). Guia: [Código](../../docs/content_pt/CODIGO.md). |
 | 🧠 **Memória** | Lista, adiciona e apaga o que a Yui lembra de você. Mostra se é a memória **pessoal (permanente)** ou **temporária (30 dias)**. |
@@ -14,7 +15,7 @@ Cliente da **Yui** para **Android** e **web/desktop**, feito com **Expo (React N
 
 ## Visual
 
-O app segue o formato do **Braga Digital Studio**: fundo preto, cartões planos com borda de 1px, botões em pílula (brancos no tema escuro, pretos no claro), vermelho só como acento, títulos em Montserrat e texto em Inter, ícones Material Symbols. Em telas largas há uma **barra lateral recolhível**; em telas estreitas, uma barra de abas embaixo. O tema **escuro** (padrão) e o **claro** podem ser trocados na barra lateral ou em **Status → Aparência** (só na web, lembrado no navegador). As fontes ficam em `public/fonts` (sem CDN; licenças OFL/Apache).
+O app usa as **cores da Yui**: fundo preto com toque violeta, cartões planos com borda de 1px, botões em pílula roxa e roxo neon como acento (o vermelho fica só para ações perigosas e erros). Paleta (tema escuro): fundo `#0B0912`, cartões `#130F1D`/`#1B1529`, borda `#2B2240`, roxo `#8A3FE6` e destaque `#C77DFF`; tudo definido em `src/theme.ts` (Android) e `src/web.ts` (web), e o avatar fica em `assets/yui-avatar.webp`. No mais, segue o formato do **Braga Digital Studio**: títulos em Montserrat e texto em Inter, ícones Material Symbols. Em telas largas há uma **barra lateral recolhível**; em telas estreitas, uma barra de abas embaixo. O tema **escuro** (padrão) e o **claro** podem ser trocados na barra lateral ou em **Status → Aparência** (só na web, lembrado no navegador). As fontes ficam em `public/fonts` (sem CDN; licenças OFL/Apache).
 
 O **papel** (dono, membro…) e o **tipo de memória** são decididos pelo servidor a partir do token. O app nunca escolhe isso.
 
@@ -109,7 +110,7 @@ A versão web (`dist/`) já funciona no navegador do PC. Para uma **janela próp
 
 - Só a **sessão temporária** fica no armazenamento do app (no Android, restrito ao app; na web, no `localStorage`); a senha e a chave de uso único nunca são guardadas. Use **Sair deste dispositivo** em aparelhos emprestados.
 - Sessão inválida (401) é apagada; servidor offline não apaga, para você poder tentar de novo.
-- A aba **Admin** só aparece para o dono, e o servidor recusa (403) qualquer outro papel.
+- As abas **Início** e **Admin** só aparecem para o dono, e o servidor recusa (403) qualquer outro papel.
 - O painel **não** altera o modo somente leitura, senhas nem chaves; isso só muda no `.env`.
 - O app não executa nada por conta própria: ações sensíveis só rodam depois do **Confirmar**, e o servidor revalida a permissão.
 

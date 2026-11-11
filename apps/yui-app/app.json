@@ -7,14 +7,14 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0e0e14",
+    "backgroundColor": "#0b0912",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "br.dev.braga.yui",
       "adaptiveIcon": {
-        "backgroundColor": "#0e0e14",
+        "backgroundColor": "#0b0912",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

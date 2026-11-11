@@ -10,6 +10,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-app-'));
 process.env.DATABASE_DIR = tmp;
 process.env.YUI_OWNER_ID = '111';
 process.env.YUI_MEMORY_ENABLED = 'true';
+process.env.YUI_OWNER_NAME = 'Dono Teste';
 process.env.YUI_AI_SETTINGS_FILE = path.join(tmp, 'secrets', 'ai-providers.json');
 for (const k of ['GROQ_API_KEY', 'GROQ_API_KEYS', 'YUI_GATEWAY_DISABLE', 'YUI_GATEWAY_CUSTOM']) delete process.env[k];
 const editCalls = [];
@@ -183,6 +184,7 @@ const fakeDeps = {
   getAutoBlockMode: (g) => modes[g] ?? 'both',
   isServerAccepted: () => true,
   logDir,
+  hostStats: () => ({ platform: 'win32', ramTotalMB: 4096, ramFreeMB: 1024, diskTotalGB: 465.7, diskFreeGB: 120.5 }),
   radio: { sessions: () => [radioSession], getSession: (g) => (g === radioSession.guildId ? radioSession : null), connected: () => true, pause: async () => { radioCalls.push('pause'); return true; }, resume: async () => true, stopMusic: async () => {}, leave: async () => { radioCalls.push('leave'); } },
   setGuildChannel: async (g, col, ch) => { editCalls.push(['channel', g, col, ch]); },
   addYoutube: async (x) => { editCalls.push(['yt+', x.input, x.discordChannelId, x.shorts, x.liveMode]); return { added: true, channelId: 'UCxyz123456', name: 'Canal' }; },
@@ -266,6 +268,13 @@ test('painel: o dono vê visão geral, servidores, bans, memória e ferramentas'
   const ov = await admin.overview();
   assert.equal(ov.discord.online, true);
   assert.equal(ov.flags.readOnly, true);
+  // Visão Geral: saúde do computador, atividade recente (sem detalhes dos eventos), retenção da memória e nome do dono
+  assert.deepEqual(ov.host, { platform: 'win32', ramTotalMB: 4096, ramFreeMB: 1024, diskTotalGB: 465.7, diskFreeGB: 120.5 });
+  assert.equal(ov.ownerName, 'Dono Teste');
+  assert.equal(ov.retention.ownerPermanent, true);
+  assert.ok(ov.retention.othersDays === null || ov.retention.othersDays > 0);
+  assert.ok(Array.isArray(ov.activity) && ov.activity.length > 0 && ov.activity.length <= 8, 'o login anterior aparece na atividade');
+  for (const e of ov.activity) assert.deepEqual(Object.keys(e).sort(), ['event', 'platform', 'role', 'ts'], 'só quando, o quê e por onde: nada dos detalhes');
   const guilds = await admin.guilds();
   assert.equal(guilds[0].name, 'Servidor X');
   assert.equal((await admin.setAutomod('444444444444444444', 'trigger')).automod, 'trigger');
