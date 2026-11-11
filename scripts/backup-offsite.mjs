@@ -58,7 +58,7 @@ export function logLine(msg, file = cfg.logFile) {
 function git(args, { cwd = cfg.workDir, allowFail = false } = {}) {
   const sshCmd = `ssh -i "${cfg.sshKey}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="${path.join(stateDir, 'known_hosts')}" -o BatchMode=yes`;
   try {
-    return execFileSync(gitExe, ['-c', 'user.name=Yui Backup', '-c', 'user.email=yui-backup@users.noreply.github.com', ...args], {
+    return execFileSync(gitExe, ['-c', 'safe.directory=*', '-c', 'user.name=Yui Backup', '-c', 'user.email=yui-backup@users.noreply.github.com', ...args], {
       cwd, env: { ...env, GIT_SSH_COMMAND: sshCmd, GIT_TERMINAL_PROMPT: '0' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180_000,
     }).trim();
   } catch (err) {
