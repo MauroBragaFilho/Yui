@@ -305,7 +305,9 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 |----------|-----------|--------|
 | `GTA_WEEKLY_ENABLED` | Liga a checagem do evento semanal | `true` |
 | `GTA_WEEKLY_INTERVAL_MINUTES` | Intervalo da checagem | `30` |
-| `REDDIT_FETCH_MODE` | `browser` (Chrome/Edge via Puppeteer, com fallback) ou `cookies` | `browser` |
+| `REDDIT_FETCH_MODE` | `browser` (Chrome/Edge via Puppeteer, um único Chrome por ciclo e sem plano B por cookies) ou `cookies` | `browser` |
+| `REDDIT_BACKOFF_MIN` / `REDDIT_BACKOFF_MAX_MIN` | Espera (min) antes de abrir o Chrome de novo depois de uma falha do Reddit; dobra a cada falha seguida até o teto. Um sucesso zera | `60` / `720` |
+| `REDDIT_BROWSER_DEADLINE_MS` | Prazo total da busca no Chrome; passou, o Chrome que a Yui abriu é encerrado | `60000` |
 | `REDDIT_BROWSER_PATH` | Caminho do Chrome/Edge (também vale `PUPPETEER_EXECUTABLE_PATH`) | detecta |
 | `REDDIT_USER_AGENT` | Identificação no método de cookies | — |
 | `NEWSWIRE_ENABLED` | Liga a checagem automática do Rockstar Newswire | `false` |

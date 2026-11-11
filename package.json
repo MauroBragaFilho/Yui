@@ -29,6 +29,7 @@
     "test:weekly-gtaforums": "node tests/test-weekly-gtaforums.js",
     "test:weekly-reddit": "node tests/test-weekly-reddit.js",
     "test:weekly-browser": "node tests/test-weekly-reddit-browser.js",
+    "test:redditguard": "node tests/test-reddit-guard.js",
     "test:gtacars": "node tests/test-gtacars.js",
     "test:ask-gtacars": "node tests/test-ask-gtacars.js",
     "test:media": "node tests/test-media-urls.js",

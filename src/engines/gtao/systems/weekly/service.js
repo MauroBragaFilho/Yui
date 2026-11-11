@@ -183,7 +183,8 @@ export const weeklyService = {
     try {
       post = await fetchLatest();
     } catch (err) {
-      logger.error(`[Weekly] Erro ao consultar Reddit: ${err.message}`);
+      if (err.code === 'REDDIT_COOLDOWN') logger.info(`[Weekly] ${err.message}.`);
+      else logger.error(`[Weekly] Erro ao consultar Reddit: ${err.message}`);
       // Reddit indisponível: NÃO toca no cache e não publica nada.
       return { status: 'error', reason: err.code || 'REDDIT_ERROR' };
     }

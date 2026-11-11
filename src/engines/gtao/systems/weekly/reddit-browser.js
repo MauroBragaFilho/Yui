@@ -1,4 +1,6 @@
 import fs from 'fs';
+import os from 'os';
+import { withDeadline } from './redditGuard.js';
 import * as cheerio from 'cheerio';
 import { logger } from '../../../../utils/logger.js';
 
@@ -27,6 +29,9 @@ export const FEED_URL =
   '&restrict_sr=1&sort=new&limit=5';
 
 const NAV_TIMEOUT_MS = 30000;
+// Prazo da busca inteira (abrir o Chrome + baixar o feed). Passou disso, o Chrome é encerrado (no notebook de 4 GB ele chegou a ficar minutos a 100% de CPU).
+const TOTAL_DEADLINE_MS = Number(process.env.REDDIT_BROWSER_DEADLINE_MS) || 60000;
+const LAUNCH_TIMEOUT_MS = 40000;
 
 const SYSTEM_BROWSERS = {
   win32: [
@@ -187,33 +192,52 @@ export async function fetchWeeklyFeedViaBrowser() {
   logger.info(`[Weekly][Browser] Abrindo ${executablePath ? 'navegador do sistema' : 'Chrome do Puppeteer'}...`);
 
   let browser;
+  let cancelled = false; // prazo vencido: um Chrome que ainda estava abrindo é fechado assim que aparece (não vaza)
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      ...(executablePath ? { executablePath } : {}),
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-blink-features=AutomationControlled'],
-    });
-    const page = await browser.newPage();
-    await page.setUserAgent((await browser.userAgent()).replace('HeadlessChrome', 'Chrome'));
+    const work = (async () => {
+      browser = await puppeteer.launch({
+        headless: true,
+        timeout: LAUNCH_TIMEOUT_MS,
+        ...(executablePath ? { executablePath } : {}),
+        args: [
+          '--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-blink-features=AutomationControlled',
+          '--disable-extensions', '--disable-dev-shm-usage', '--no-first-run', '--mute-audio',
+          '--disable-background-networking', '--blink-settings=imagesEnabled=false',
+        ],
+      });
+      if (cancelled) { try { await browser.close(); } catch { /* best-effort */ } throw new Error('Busca cancelada'); }
+      // Prioridade baixa: o Chrome do Weekly nunca deve atrapalhar a Yui (só mexe no processo que nós mesmos abrimos).
+      try {
+        const pid = browser.process()?.pid;
+        if (pid) os.setPriority(pid, os.constants.priority.PRIORITY_LOW);
+      } catch { /* sem permissão: segue na prioridade normal */ }
+      const page = await browser.newPage();
+      await page.setUserAgent((await browser.userAgent()).replace('HeadlessChrome', 'Chrome'));
 
-    const resp = await page.goto(FEED_URL, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
-    const status = resp?.status();
-    const xml = resp ? await resp.text() : '';
+      const resp = await page.goto(FEED_URL, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
+      const status = resp?.status();
+      const xml = resp ? await resp.text() : '';
 
-    if (status === 403 || !xml.includes('<feed')) {
-      const err = new Error(status === 403
-        ? 'Reddit bloqueou o navegador (403 / blocked by network security)'
-        : `Feed do Reddit inválido (HTTP ${status})`);
-      err.code = status === 403 ? 'REDDIT_FORBIDDEN' : 'REDDIT_INVALID_PAYLOAD';
-      throw err;
-    }
+      if (status === 403 || !xml.includes('<feed')) {
+        const err = new Error(status === 403
+          ? 'Reddit bloqueou o navegador (403 / blocked by network security)'
+          : `Feed do Reddit inválido (HTTP ${status})`);
+        err.code = status === 403 ? 'REDDIT_FORBIDDEN' : 'REDDIT_INVALID_PAYLOAD';
+        throw err;
+      }
 
-    const items = parseAtomFeed(xml);
-    logger.info(`[Weekly][Browser] Feed carregado: ${items.length} post(s).`);
-    return items;
+      const items = parseAtomFeed(xml);
+      logger.info(`[Weekly][Browser] Feed carregado: ${items.length} post(s).`);
+      return items;
+    })();
+    work.catch(() => null); // se o prazo vencer primeiro, o erro tardio do trabalho não vira "unhandled rejection"
+    return await withDeadline(work, TOTAL_DEADLINE_MS, 'REDDIT_DEADLINE', 'Busca do Weekly no navegador');
   } finally {
+    cancelled = true;
     if (browser) {
-      try { await browser.close(); } catch { /* best-effort */ }
+      try { await withDeadline(browser.close(), 8000, 'REDDIT_CLOSE_TIMEOUT', 'Fechar o navegador'); } catch { /* best-effort */ }
+      // Chrome que não fechou sozinho: encerra o processo que NÓS abrimos (guardado pelo Puppeteer; nunca um PID achado por varredura).
+      try { const proc = browser.process(); if (proc && !proc.killed) proc.kill('SIGKILL'); } catch { /* já saiu */ }
     }
   }
 }

@@ -23,6 +23,7 @@ npm run test:gtao         # sistemas diários e semanais do GTA Online
 npm run test:newswire     # Newswire (Puppeteer; acessa a internet)
 npm run test:weekly-reddit    # parser/validação/cache do evento semanal
 npm run test:weekly-browser   # feed do Reddit via Chrome (offline; LIVE=1 consulta o Reddit)
+npm run test:redditguard   # recuo depois de falha, um Chrome por vez e prazo da busca do Weekly
 npm run test:weekly-gtaforums # fonte alternativa do evento semanal
 npm run test:gtacars      # base de veículos GTACars
 npm run test:ask-gtacars  # contexto técnico de veículos no /yui
@@ -163,6 +164,7 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:lists` | 17 | Listas pessoais ("anota na lista X: ...", "mostra", "tira o item 3", "em JSON"): armazenamento por usuário, gravação atômica, limites, pedidos em português, conversa comum não é capturada, entrada hostil |
 | `test:docssync` | 14 | `package.json` e scripts, variáveis novas no `.env_example` (comentadas) e no ENVIRONMENT.md, padrões iguais aos do código, links internos dos docs, textos desatualizados que não podem voltar |
 | `test:weekly-browser` | 9 | Feed Atom → markdown, fallback de cookies |
+| `test:redditguard` | 19 | Recuo que dobra a cada falha (com teto e zerar no sucesso), um Chrome por vez (chamadas simultâneas dividem a busca) e prazo da busca |
 | embed semanal | 53 + 23 + 33 | Páginas, limites do Discord, tradução |
 
 ## 📝 Observações

@@ -2,6 +2,7 @@ import { logger } from '../../../../utils/logger.js';
 import { config } from '../../../../config/index.js';
 import { getCookies, refreshCookies } from './reddit-cookies.js';
 import { fetchWeeklyFeedViaBrowser } from './reddit-browser.js';
+import { redditGuard } from './redditGuard.js';
 
 /**
  * Cliente isolado de acesso ao Reddit para o Weekly do GTA Online.
@@ -157,35 +158,49 @@ export async function searchWeeklyPosts() {
   const userAgent = config.weekly.userAgent ||
     'nodejs:yui-gta-bot:1.0 (by /u/your_reddit_username)';
 
+  // Recuo depois de falha: o Reddit bloqueia este IP e cada tentativa abre um Chrome pesado. Em espera, nem abre (sem log de erro).
+  const gate = redditGuard.canTry();
+  if (!gate.ok) {
+    const err = new Error(`Reddit em espera depois de falhas seguidas; nova tentativa em ${Math.ceil(gate.retryInMs / 60000)} min`);
+    err.code = 'REDDIT_COOLDOWN';
+    throw err;
+  }
+
   try {
     logger.info('[Weekly] Consultando Reddit (r/gtaonline) por Weekly Bonuses and Discounts...');
 
-    // Modo padrão: navegador real (Puppeteer) lendo o feed RSS, que o Reddit
-    // não bloqueia. REDDIT_FETCH_MODE=cookies usa só o método antigo.
-    let children = null;
-    const mode = (process.env.REDDIT_FETCH_MODE || 'browser').toLowerCase();
-    if (mode === 'browser') {
+    // UM Chrome por vez e no máximo UM por ciclo (antes: navegador + cookies + renovação = até 3 aberturas).
+    const children = await redditGuard.run(async () => {
       try {
-        children = (await fetchWeeklyFeedViaBrowser()).map((data) => ({ data }));
-      } catch (browserErr) {
-        logger.warn(`[Weekly] Via navegador falhou (${browserErr.message}); tentando o método de cookies...`);
+        // Modo padrão: navegador real (Puppeteer) lendo o feed RSS, que o Reddit
+        // não bloqueia. REDDIT_FETCH_MODE=cookies usa só o método antigo.
+        const mode = (process.env.REDDIT_FETCH_MODE || 'browser').toLowerCase();
+        let found;
+        if (mode === 'browser') {
+          // Sem plano B por cookies: ele também abre o Chrome e, bloqueado o navegador, só repete o mesmo 403.
+          found = (await fetchWeeklyFeedViaBrowser()).map((data) => ({ data }));
+        } else {
+          // Método anterior: 1ª tentativa com cookies do cache.
+          let cookieStr = await getCookies();
+          let res = await rawFetch(cookieStr);
+
+          // Se 403, renova cookies e tenta uma vez mais.
+          if (res.status === 403) {
+            logger.warn('[Weekly] Reddit retornou 403; renovando cookies...');
+            cookieStr = await refreshCookies();
+            res = await rawFetch(cookieStr);
+          }
+
+          found = await parseResponse(res);
+        }
+        redditGuard.recordSuccess();
+        return found;
+      } catch (err) {
+        const waitMs = redditGuard.recordFailure();
+        logger.warn(`[Weekly] Reddit falhou (${err.message}); só tento de novo em ${Math.round(waitMs / 60000)} min.`);
+        throw err;
       }
-    }
-
-    if (!children) {
-      // Método anterior: 1ª tentativa com cookies do cache.
-      let cookieStr = await getCookies();
-      let res = await rawFetch(cookieStr);
-
-      // Se 403, renova cookies e tenta uma vez mais.
-      if (res.status === 403) {
-        logger.warn('[Weekly] Reddit retornou 403; renovando cookies...');
-        cookieStr = await refreshCookies();
-        res = await rawFetch(cookieStr);
-      }
-
-      children = await parseResponse(res);
-    }
+    });
 
     const normalized = [];
     for (const child of children) {
