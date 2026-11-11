@@ -290,7 +290,7 @@ O que o atualizador faz, em ordem:
 3. Faz backup de `src/`, `package.json` e `package-lock.json` em `C:\Yui-backup\` (guarda os 3 mais recentes).
 4. Copia a versão nova por cima de `C:\Yui`, **sem tocar** em: `.env`, `Yui.pem`, `database/`, `logs/`, `secrets/`, `node_modules/`, `.venv-deemix/`, `.venv-spotdl/`, `.git/`, `apps/`, nos arquivos `*.db` e em `bans.json`, `vehicles.json`, `tunables-decrypted.json`, `cache.json` e `reddit-cookies-cache.json`.
 5. Se o `package-lock.json` mudou, roda `npm install`.
-6. Reinicia a tarefa `YuiBot` e, depois de 75 s, confere se o `node src/index.js` está de pé há pelo menos 45 s. Se estiver, grava a versão nova em `.versao-instalada`. Se não, **volta** `src/` e os `package*.json` do backup, reinstala as dependências se for o caso, reinicia a Yui e **não** marca a versão (tenta de novo no dia seguinte).
+6. Reinicia a tarefa `YuiBot` (esperando antes a tarefa antiga sair de "Running") e espera até 4 minutos para o `node src/index.js` ficar de pé há pelo menos 60 s (no notebook o primeiro carregamento depois de trocar o código passa de 30 s). Se estiver, grava a versão nova em `.versao-instalada`. Se não, **volta** `src/` e os `package*.json` do backup, reinstala as dependências se for o caso, reinicia a Yui e **não** marca a versão (tenta de novo no dia seguinte).
 
 Uma execução por vez (uma segunda sai com "Ja existe uma atualizacao em andamento"). Tudo vai para `C:\Tools\atualizar-yui.log`, com linhas como `Sem novidades (versao abc1234).`, `Atualizando de 'abc1234' para def5678...`, `OK: Yui rodando na versao def5678.`, `ERRO: a Yui nao ficou de pe. Voltando a versao anterior...`, `Rollback concluido...` e `FALHA: <motivo>`.
 

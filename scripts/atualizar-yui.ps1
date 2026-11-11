@@ -33,8 +33,21 @@ function YuiRodando([int]$minSegundos) {
 
 function Reiniciar-Yui {
     Stop-ScheduledTask -TaskName YuiBot -ErrorAction SilentlyContinue
-    for ($i = 0; $i -lt 15 -and (Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'src.index.js' }); $i++) { Start-Sleep 2 }
+    # espera o node antigo morrer E a tarefa sair de "Running": com a tarefa ainda Running o Start e ignorado (MultipleInstances=IgnoreNew)
+    # e a Yui so voltava no reinicio automatico, 1 minuto depois (foi o que fez o update de 11/11 ser desfeito sem motivo).
+    for ($i = 0; $i -lt 20 -and ((Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'src.index.js' }) -or (Get-ScheduledTask -TaskName YuiBot).State -eq 'Running'); $i++) { Start-Sleep 2 }
     Start-ScheduledTask -TaskName YuiBot
+}
+
+# Espera a Yui ficar de pe: no notebook (HD, 4 GB) o primeiro carregamento depois de trocar o codigo leva mais de 30 s.
+# Passou quando o processo vive ha pelo menos `minSegundos`; um erro de inicializacao reinicia o processo a cada ~15 s e nunca chega la.
+function Esperar-Yui([int]$minSegundos, [int]$maxSegundos) {
+    $fim = (Get-Date).AddSeconds($maxSegundos)
+    while ((Get-Date) -lt $fim) {
+        if (YuiRodando $minSegundos) { return $true }
+        Start-Sleep 5
+    }
+    return $false
 }
 
 $mutex = New-Object Threading.Mutex($false, 'Global\YuiAtualizar')
@@ -66,8 +79,11 @@ try {
     $lockAntes = if (Test-Path "$Destino\package-lock.json") { (Get-FileHash "$Destino\package-lock.json").Hash } else { '' }
 
     # copia por cima (sem apagar nada) e sem tocar em dados da maquina
+    # As pastas excluidas sao as da RAIZ (caminho completo). Excluir so pelo nome pulava tambem src\database (codigo da Yui) e a
+    # Yui nova caia com ERR_MODULE_NOT_FOUND ao importar arquivo novo dessa pasta (update de 11/11).
+    $xd = 'database', 'logs', 'secrets', 'node_modules', '.venv-deemix', '.venv-spotdl', '.git', 'apps' | ForEach-Object { Join-Path $novo $_ }
     robocopy $novo $Destino /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP `
-        /XD database logs secrets node_modules .venv-deemix .venv-spotdl .git apps `
+        /XD $xd `
         /XF .env Yui.pem bans.json vehicles.json tunables-decrypted.json cache.json reddit-cookies-cache.json *.db | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "robocopy falhou (codigo $LASTEXITCODE)" }
     $global:LASTEXITCODE = 0
@@ -81,9 +97,8 @@ try {
     }
 
     Reiniciar-Yui
-    Log 'Yui reiniciada; aguardando 75 s para conferir...'
-    Start-Sleep 75
-    if (YuiRodando 45) {
+    Log 'Yui reiniciada; aguardando ate 4 min para ela ficar de pe...'
+    if (Esperar-Yui 60 240) {
         Set-Content $arqVersao $remoto -Encoding ascii
         Log "OK: Yui rodando na versao $($remoto.Substring(0,7))."
     } else {
