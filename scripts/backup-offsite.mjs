@@ -37,6 +37,8 @@ const cfg = {
   dataDir: path.resolve('src', 'data'),
 };
 
+// Arquivos de estado (known_hosts e último hash) ficam ao lado da chave de acesso (C:\Tools\backup), nunca na raiz do disco.
+const stateDir = path.dirname(cfg.sshKey);
 const stamp = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
 export function logLine(msg, file = cfg.logFile) {
@@ -51,7 +53,7 @@ export function logLine(msg, file = cfg.logFile) {
 }
 
 function git(args, { cwd = cfg.workDir, allowFail = false } = {}) {
-  const sshCmd = `ssh -i "${cfg.sshKey}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="${path.join(cfg.workDir, '..', 'yui-backup-known-hosts')}" -o BatchMode=yes`;
+  const sshCmd = `ssh -i "${cfg.sshKey}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="${path.join(stateDir, 'known_hosts')}" -o BatchMode=yes`;
   try {
     return execFileSync('git', ['-c', 'user.name=Yui Backup', '-c', 'user.email=yui-backup@users.noreply.github.com', ...args], {
       cwd, env: { ...env, GIT_SSH_COMMAND: sshCmd, GIT_TERMINAL_PROMPT: '0' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180_000,
@@ -65,7 +67,8 @@ function git(args, { cwd = cfg.workDir, allowFail = false } = {}) {
 
 function ensureClone() {
   if (!fs.existsSync(path.join(cfg.workDir, '.git'))) {
-    fs.mkdirSync(path.dirname(cfg.workDir), { recursive: true });
+    const parent = path.dirname(cfg.workDir);
+    if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });   // mkdir recursivo em C:\ (que já existe) dá EPERM no Windows
     git(['clone', cfg.repoUrl, cfg.workDir], { cwd: path.dirname(cfg.workDir) });
   }
   // remoto vazio (primeiro uso) não tem ramo para puxar
@@ -88,7 +91,7 @@ export function sourcesFingerprint({ dbDir = cfg.dbDir, dataDir = cfg.dataDir } 
 async function backup({ force }) {
   if (!cfg.keyFile || !fs.existsSync(cfg.keyFile)) throw new Error(`chave de cifra não encontrada (${cfg.keyFile || 'YUI_BACKUP_KEY_FILE'})`);
   const remoteHadMain = ensureClone();
-  const stateFile = path.join(cfg.workDir, '..', 'yui-backup-last-sha');
+  const stateFile = path.join(stateDir, 'last-sha');
   const fp = sourcesFingerprint();
   const last = fs.existsSync(stateFile) ? fs.readFileSync(stateFile, 'utf8').trim() : '';
   if (!force && fp === last) {
