@@ -53,6 +53,21 @@ await test('health é público; demais rotas exigem token', async () => {
   assert.equal((await call('GET', '/v1/me')).status, 401);
   assert.equal((await call('GET', '/v1/me', { token: 'token-errado-0123456789' })).status, 401);
 });
+await test('health informa o tempo ligada e (quando o app informa) o estado do Discord, para o supervisor', async () => {
+  const h = await call('GET', '/v1/health');
+  assert.equal(h.json.ok, true);
+  assert.ok(h.json.uptimeSeconds >= 0);
+  assert.equal(h.json.discord, undefined, 'sem health() injetado não há campo discord');
+  const s2 = createApiServer({ tokens: parseTokens(`${OWNER}=111`), health: () => ({ discord: { online: false } }) });
+  await new Promise((r) => s2.listen(0, '127.0.0.1', r));
+  const j = await (await fetch(`http://127.0.0.1:${s2.address().port}/v1/health`)).json();
+  assert.deepEqual(j.discord, { online: false });
+  s2.close();
+  const s3 = createApiServer({ tokens: parseTokens(`${OWNER}=111`), health: () => { throw new Error('quebrou'); } });
+  await new Promise((r) => s3.listen(0, '127.0.0.1', r));
+  assert.equal((await fetch(`http://127.0.0.1:${s3.address().port}/v1/health`)).status, 200, 'health() com erro não derruba o endpoint');
+  s3.close();
+});
 await test('token curto (<16) é descartado na configuração', async () => {
   assert.equal((await call('GET', '/v1/me', { token: 'curto' })).status, 401);
 });

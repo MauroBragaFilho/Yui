@@ -33,7 +33,7 @@ A Fase 1 (política) e a Fase 2 (rotina pessoal, só com IA na nuvem) seguem val
 - Item 4 (rede): prazo padrão de 45 s para todo `fetch` e `axios` que não define o seu (`YUI_HTTP_TIMEOUT_MS`).
 - Item 5 (backup fora do notebook): feito. Tarefa `YuiBackup` (05:30) cifra e envia ao repositório privado `Yui-backup`; restauração testada (`--verify`). Falta você guardar a chave de cifra fora do notebook.
 - Item 6 (permissões): feito, com teste (`test:permgaps`).
-- Item 7 (supervisão que religa só a Yui): pendente.
+- Item 7 (supervisão): feito. `YuiWatchdog` (a cada 2 min) religa só a Yui travada, pela tarefa, no máximo 3x por hora (`scripts/supervisor-yui.ps1`).
 
 ## 2. Visão geral
 

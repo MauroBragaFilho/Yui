@@ -79,6 +79,22 @@ export function readLastUpdate({ file, readFile = fs.readFileSync } = {}) {
   return null;
 }
 
+/** Religadas feitas pelo supervisor nas últimas 24 h: { count, last } ou null se não há log (supervisor não instalado). */
+export function readSupervisorStats({ file, now = Date.now(), readFile = fs.readFileSync } = {}) {
+  if (!file) return null;
+  let text;
+  try { text = String(readFile(file, 'utf8')); } catch { return null; }
+  let count = 0; let last = null;
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) RELIGADA: (.*)$/.exec(line);
+    if (!m) continue;
+    const at = new Date(`${m[1]}T${m[2]}`).getTime();
+    if (Number.isNaN(at) || now - at > DAY) continue;
+    count += 1; last = m[3].slice(0, 80);
+  }
+  return { count, last };
+}
+
 export function formatUptime(seconds) {
   const s = Math.max(0, Math.floor(Number(seconds) || 0));
   const d = Math.floor(s / 86400); const h = Math.floor((s % 86400) / 3600); const m = Math.floor((s % 3600) / 60);
@@ -90,6 +106,7 @@ export function collectHealth({
   now = Date.now(), osImpl = os, fsImpl = fs, cwd = process.cwd(), logDir = path.resolve('logs'),
   uptimeSeconds = process.uptime(), rssBytes = process.memoryUsage().rss, interactions = interactionSeries, updateLog = process.env.YUI_UPDATE_LOG || (process.platform === 'win32' ? 'C:\\Tools\\atualizar-yui.log' : ''),
   backupLog = process.env.YUI_BACKUP_LOG || (process.platform === 'win32' ? 'C:/Tools/backup/backup.log' : ''),
+  supervisorLog = process.env.YUI_SUPERVISOR_LOG || (process.platform === 'win32' ? 'C:/Tools/supervisor/supervisor.log' : ''),
   discordOnline = null, readFile, statFile,
 } = {}) {
   const gb = (b) => Math.round((b / 1024 / 1024 / 1024) * 10) / 10;
@@ -101,6 +118,7 @@ export function collectHealth({
     replies24h: null,
     lastUpdate: readLastUpdate({ file: updateLog, readFile }),
     lastBackup: readLastUpdate({ file: backupLog, readFile }),
+    supervisor: readSupervisorStats({ file: supervisorLog, now, readFile }),
   };
   try { data.ramTotalGB = gb(osImpl.totalmem()); data.ramFreeGB = gb(osImpl.freemem()); } catch { /* sem leitura */ }
   try { const st = fsImpl.statfsSync(cwd); data.diskTotalGB = gb(st.blocks * st.bsize); data.diskFreeGB = gb(st.bavail * st.bsize); } catch { /* sem leitura */ }
@@ -123,6 +141,7 @@ export function buildHealthReport(d) {
   if (d.lastUpdate && !d.lastUpdate.ok) issues.push('a última atualização falhou');
   if (d.lastBackup && !d.lastBackup.ok) issues.push('o último backup falhou');
   else if (d.lastBackup?.at && d.now - d.lastBackup.at > 36 * 3600 * 1000) issues.push('o backup fora do notebook está atrasado (mais de 36 h)');
+  if (d.supervisor?.count > 0) issues.push(`o supervisor religou a Yui ${d.supervisor.count}x (${d.supervisor.last})`);
   if (d.uptimeSeconds < 6 * 3600) issues.push(`reiniciou há ${formatUptime(d.uptimeSeconds)}`);
 
   const tags = Object.entries(d.byTag || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t} ${n}`).join(', ');
@@ -136,6 +155,7 @@ export function buildHealthReport(d) {
     `Erros no log (24 h): ${d.errors}${tags ? ` (${tags})` : ''}`,
     d.lastUpdate ? `Atualizador: ${d.lastUpdate.text}` : null,
     d.lastBackup ? `Backup fora do notebook: ${d.lastBackup.text}` : null,
+    d.supervisor ? `Religadas pelo supervisor (24 h): ${d.supervisor.count}` : null,
   ].filter(Boolean);
   return { level: issues.length ? 'warn' : 'info', title: 'Relatório diário de saúde', body: lines.join('\n').slice(0, 480), issues };
 }

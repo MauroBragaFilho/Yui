@@ -352,6 +352,7 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 | `YUI_ALERTS` | `false` desliga os avisos automáticos por DM quando algo dá errado (no máximo 10 por hora). A falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada não vira DM de "Erro grave": vai só para o log, porque a Yui reconecta sozinha | `true` |
 | `YUI_ALERTS_COOLDOWN_MINUTES` | Intervalo mínimo para repetir o mesmo aviso | `30` |
 | `YUI_HEALTH_REPORT` / `YUI_HEALTH_REPORT_HOUR` | Relatório diário de saúde por DM ao dono (uptime, RAM, disco, respostas da IA, reconexões, erros, última atualização). `false` desliga; hora de Brasília (0 a 23) | `true` / `8` |
+| `YUI_SUPERVISOR_LOG` | Log do watchdog (`YuiWatchdog`) lido pelo relatório diário | `C:\Tools\supervisor\supervisor.log` (Windows) |
 | `YUI_UPDATE_LOG` | Log do atualizador lido pelo relatório | `C:\Tools\atualizar-yui.log` (Windows) |
 | `YUI_HTTP_TIMEOUT_MS` | Prazo padrão de toda chamada de rede (`fetch` e `axios`) que não define o seu; `0` desliga | `45000` |
 | `YUI_PANEL_AI_EDIT` | `false` trava a edição de chaves e provedores de IA pelo painel | `true` |

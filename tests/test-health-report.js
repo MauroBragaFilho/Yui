@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseLogLine, readLogStats, readLastUpdate, collectHealth, buildHealthReport, sendHealthReport, healthReportSchedule, formatUptime } from '../src/core/healthReport.js';
+import { parseLogLine, readSupervisorStats, readLogStats, readLastUpdate, collectHealth, buildHealthReport, sendHealthReport, healthReportSchedule, formatUptime } from '../src/core/healthReport.js';
 
 let ok = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); ok += 1; };
@@ -94,6 +94,19 @@ assert.ok(oldBk.issues.includes('o backup fora do notebook está atrasado (mais 
 const badBk = buildHealthReport({ ...withBk, lastBackup: { ok: false, at: now, text: 'ERRO: x' } });
 assert.ok(badBk.issues.includes('o último backup falhou')); ok += 1;
 eq(buildHealthReport({ ...withBk, lastBackup: null }).body.includes('Backup fora do notebook'), false, 'sem log de backup a linha some');
+
+// supervisor
+const sv = path.join(dir, 'supervisor.log');
+const dt = (ms) => stamp(ms);
+fs.writeFileSync(sv, [`${dt(now - 30 * H)} RELIGADA: velha demais`, `${dt(now - 5 * H)} RELIGADA: a API nao respondeu 3 vezes seguidas`, `${dt(now - 4 * H)} ATENCAO: API sem resposta (1 de 3)`, `${dt(now - 1 * H)} RELIGADA: o Discord esta fora ha 11 min`].join(String.fromCharCode(10)));
+const st = readSupervisorStats({ file: sv, now });
+eq(st, { count: 2, last: 'o Discord esta fora ha 11 min' }, 'conta só RELIGADA das últimas 24 h');
+eq(readSupervisorStats({ file: path.join(dir, 'nao-existe.log'), now }), null, 'sem log = supervisor não instalado');
+const rs = buildHealthReport({ ...withBk, supervisor: st });
+assert.ok(rs.issues.some((i) => /supervisor religou a Yui 2x/.test(i))); ok += 1;
+assert.match(rs.body, /Religadas pelo supervisor \(24 h\): 2/); ok += 1;
+eq(buildHealthReport({ ...withBk, supervisor: { count: 0, last: null } }).level, 'info', 'zero religadas não é problema');
+eq(buildHealthReport({ ...withBk, supervisor: null }).body.includes('supervisor'), false, 'sem supervisor a linha some');
 
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`OK: health-report (${ok} verificações)`);

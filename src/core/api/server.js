@@ -198,6 +198,7 @@ export function createApiServer({
   requestLimiter = createLoginLimiter({ max: 3, windowMs: 10 * 60 * 1000 }), // pedidos de chave (evita encher a DM)
   codeLimiter = createLoginLimiter({ max: 5, windowMs: 15 * 60 * 1000 }),    // chaves erradas
   ownerId = ownerUserId(),
+  health = null, // () => objeto extra do /v1/health (ex.: estado do Discord); usado pelo supervisor
 } = {}) {
   const discordKeyEnabled = Boolean(notify && ownerId);
   const hits = new Map();       // userId -> [timestamps]
@@ -334,7 +335,9 @@ export function createApiServer({
       }
 
       if (route === 'GET /v1/health') {
-        return send(res, 200, { ok: true, memory: isMemoryEnabled(), readOnly: isReadOnlyMode(), backends: ai.listBackends() });
+        let extra = {};
+        try { extra = typeof health === 'function' ? (health() || {}) : {}; } catch { extra = {}; }
+        return send(res, 200, { ok: true, memory: isMemoryEnabled(), readOnly: isReadOnlyMode(), backends: ai.listBackends(), uptimeSeconds: Math.round(process.uptime()), ...extra });
       }
 
       // ── Login por usuário e senha (públicas) ──
@@ -585,6 +588,8 @@ export function startApi(client = null, overrides = {}) {
     dev: overrides.dev ?? createDev(),
     // Chave por DM: usa o próprio bot do Discord para falar com o dono em privado (fora de qualquer servidor).
     notify: overrides.notify ?? (client ? async (userId, text) => (await client.users.fetch(userId)).send(text) : null),
+    // O supervisor lê o estado do Discord aqui: API de pé com o Discord fora por muito tempo é motivo para religar.
+    health: () => ({ discord: { online: client?.isReady?.() ?? null } }),
   });
   server.listen(port, host, () =>
     logger.info(`[API] Yui API ouvindo em http://${host}:${port} (${tokens.length} token(s); login por senha ${panel.enabled ? 'ATIVO' : 'desativado'})`)

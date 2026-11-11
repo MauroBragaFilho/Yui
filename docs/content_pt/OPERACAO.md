@@ -60,6 +60,17 @@ Consequências práticas:
 - Deixe o notebook **na tomada**: o `scripts/instalar-ssh.ps1` desliga a suspensão, a hibernação e a ação de fechar a tampa só para quando ele está na tomada.
 - As ferramentas que olham o computador (informações do PC, busca de arquivos, abrir projetos e a aba **Código**) agem **no notebook**, e não no PC de desenvolvimento. Se for usá-las, ajuste `YUI_PROJECTS` e `YUI_FILE_ROOTS` no `.env` do notebook (o instalador avisa quando ainda apontam para caminhos do PC antigo).
 
+### 🩺 Watchdog: religa só a Yui travada (`scripts/supervisor-yui.ps1`)
+
+O laço da tarefa `YuiBot` já religa o `node` quando o processo **morre**. O watchdog cobre o outro caso: a Yui **de pé mas travada**. A tarefa `YuiWatchdog` (SYSTEM) roda a cada 2 minutos e consulta `http://127.0.0.1:3939/v1/health`, que também informa `uptimeSeconds` e `discord.online`.
+
+- **Quando religa:** a API não responde 3 vezes seguidas (cerca de 6 min), ou o Discord fica fora por mais de 10 min com a API de pé, ou a tarefa está rodando mas não há processo da Yui por vários minutos. Se a tarefa `YuiBot` nem está rodando e não há processo, ele só a inicia.
+- **Como religa:** só pela tarefa do agendador (`Stop-ScheduledTask YuiBot`, espera o `node` sair, `Start-ScheduledTask YuiBot`). Nunca encerra processo por PID achado em varredura e **nunca inicia um segundo `node` por fora da tarefa**. Se o `node` antigo não sair, ele não inicia outro e registra o erro.
+- **Quando não age:** durante a atualização (mutex `Global\YuiAtualizar`) e nos 5 minutos depois de a Yui subir. No máximo **3 religadas por hora**; passou disso, só registra.
+- **Registro:** `C:\Tools\supervisor\supervisor.log` (linhas `RELIGADA: motivo`) e `estado.json`. O relatório diário de saúde mostra quantas religadas houve nas últimas 24 h e avisa se houve alguma.
+- **Testar sem religar:** `powershell -ExecutionPolicy Bypass -File scripts/supervisor-yui.ps1 -DryRun`.
+- **Diferença para o `yui-supervisor.ps1` abaixo:** aquele inicia o seu próprio `node` (por isso não pode rodar junto com a `YuiBot`); este só usa a tarefa existente.
+
 ### 🐕 Supervisor, Watchdog e Auto-Start no Windows (R08)
 
 > **Não está instalado no notebook.** A produção usa o laço das tarefas acima. O `YuiSupervisor` **inicia o seu próprio** `node src/index.js`: instalado junto com a `YuiBot`, haveria duas Yuis com o mesmo token. Se um dia for usá-lo, é **no lugar** da `YuiBot` (desativada), lembrando que o instalador dele registra a tarefa **no logon do usuário**, e não no boot.
