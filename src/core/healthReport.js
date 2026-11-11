@@ -72,7 +72,8 @@ export function readLastUpdate({ file, readFile = fs.readFileSync } = {}) {
     const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}):\d{2} (OK: .*|ERRO: .*|FALHA: .*|Rollback .*|Sem novidades.*)$/.exec(lines[i]);
     if (m) {
       const [, d, hm, what] = m;
-      return { ok: /^(OK|Sem novidades)/.test(what), text: `${what.slice(0, 70)} (${d.slice(8, 10)}/${d.slice(5, 7)} ${hm})` };
+      const at = new Date(`${d}T${hm}:00`).getTime();
+      return { ok: /^(OK|Sem novidades)/.test(what), at: Number.isNaN(at) ? null : at, text: `${what.slice(0, 70)} (${d.slice(8, 10)}/${d.slice(5, 7)} ${hm})` };
     }
   }
   return null;
@@ -88,6 +89,7 @@ export function formatUptime(seconds) {
 export function collectHealth({
   now = Date.now(), osImpl = os, fsImpl = fs, cwd = process.cwd(), logDir = path.resolve('logs'),
   uptimeSeconds = process.uptime(), rssBytes = process.memoryUsage().rss, interactions = interactionSeries, updateLog = process.env.YUI_UPDATE_LOG || (process.platform === 'win32' ? 'C:\\Tools\\atualizar-yui.log' : ''),
+  backupLog = process.env.YUI_BACKUP_LOG || (process.platform === 'win32' ? 'C:\Tools\backup\backup.log' : ''),
   discordOnline = null, readFile, statFile,
 } = {}) {
   const gb = (b) => Math.round((b / 1024 / 1024 / 1024) * 10) / 10;
@@ -98,6 +100,7 @@ export function collectHealth({
     ...readLogStats({ logDir, now, readFile, statFile }),
     replies24h: null,
     lastUpdate: readLastUpdate({ file: updateLog, readFile }),
+    lastBackup: readLastUpdate({ file: backupLog, readFile }),
   };
   try { data.ramTotalGB = gb(osImpl.totalmem()); data.ramFreeGB = gb(osImpl.freemem()); } catch { /* sem leitura */ }
   try { const st = fsImpl.statfsSync(cwd); data.diskTotalGB = gb(st.blocks * st.bsize); data.diskFreeGB = gb(st.bavail * st.bsize); } catch { /* sem leitura */ }
@@ -118,6 +121,8 @@ export function buildHealthReport(d) {
   if (d.reconnects >= 5) issues.push(`${d.reconnects} reconexões`);
   if (d.errors >= 20) issues.push(`${d.errors} erros no log`);
   if (d.lastUpdate && !d.lastUpdate.ok) issues.push('a última atualização falhou');
+  if (d.lastBackup && !d.lastBackup.ok) issues.push('o último backup falhou');
+  else if (d.lastBackup?.at && d.now - d.lastBackup.at > 36 * 3600 * 1000) issues.push('o backup fora do notebook está atrasado (mais de 36 h)');
   if (d.uptimeSeconds < 6 * 3600) issues.push(`reiniciou há ${formatUptime(d.uptimeSeconds)}`);
 
   const tags = Object.entries(d.byTag || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t} ${n}`).join(', ');
@@ -130,6 +135,7 @@ export function buildHealthReport(d) {
     `Reconexões do Discord (24 h): ${d.reconnects}`,
     `Erros no log (24 h): ${d.errors}${tags ? ` (${tags})` : ''}`,
     d.lastUpdate ? `Atualizador: ${d.lastUpdate.text}` : null,
+    d.lastBackup ? `Backup fora do notebook: ${d.lastBackup.text}` : null,
   ].filter(Boolean);
   return { level: issues.length ? 'warn' : 'info', title: 'Relatório diário de saúde', body: lines.join('\n').slice(0, 480), issues };
 }

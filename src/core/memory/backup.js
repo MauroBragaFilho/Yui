@@ -128,12 +128,19 @@ export const MEMORY_DATABASES = [
   'memory-context-personal.db',
 ];
 
+/** Outros bancos que não se refazem sozinhos (seguidos do YouTube/Twitch e o core). Entram no backup junto com os de memória. */
+export const EXTRA_DATABASES = ['core.db', 'social-youtube.db', 'social-twitch.db'];
+
+/** Arquivos de configuração da Yui em src/data que se perderiam com o disco (bloqueios, termos aceitos, ajustes por servidor). Só entram com `dataDir`. */
+export const DATA_FILES = ['bans.json', 'accepted_servers.json', 'server_settings.json', 'server_tools.json'];
+
 /**
  * Executa o backup consistente e cifrado dos bancos de memória.
  * @param {object} options
  * @param {string} [options.dbDir] Diretório dos bancos originais (padrão: config.database.dir)
  * @param {string} [options.backupDir] Destino do backup (padrão: process.env.YUI_BACKUP_DIR ou ../yui-backups fora do repo)
  * @param {number} [options.maxKeep] Quantidade de backups retidos (padrão: 7)
+ * @param {string} [options.dataDir] Pasta src/data: quando informada, DATA_FILES entram no backup (e os EXTRA_DATABASES sempre entram)
  * @param {string|Buffer|Uint8Array} [options.key] Chave de 32 bytes
  */
 export async function createMemoryBackup(options = {}) {
@@ -161,8 +168,11 @@ export async function createMemoryBackup(options = {}) {
     const backupBatchFolder = path.join(backupDir, `backup-${timestamp}`);
     fs.mkdirSync(backupBatchFolder, { recursive: true });
 
-    for (const dbName of MEMORY_DATABASES) {
-      const srcPath = path.join(dbDir, dbName);
+    const sources = [
+      ...[...MEMORY_DATABASES, ...EXTRA_DATABASES].map((name) => ({ name, srcPath: path.join(dbDir, name) })),
+      ...(options.dataDir ? DATA_FILES.map((name) => ({ name, srcPath: path.join(options.dataDir, name) })) : []),
+    ];
+    for (const { name: dbName, srcPath } of sources) {
       if (!fs.existsSync(srcPath)) {
         continue;
       }

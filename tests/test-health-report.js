@@ -82,5 +82,18 @@ eq(healthReportSchedule({ YUI_HEALTH_REPORT_HOUR: '7' }).cron, '0 7 * * *');
 eq(healthReportSchedule({ YUI_HEALTH_REPORT_HOUR: '99' }).hour, 8, 'hora inválida volta ao padrão');
 eq(healthReportSchedule({ YUI_HEALTH_REPORT: 'false' }), null, 'desligável');
 
+// backup fora do notebook
+const bk = path.join(dir, 'backup.log');
+fs.writeFileSync(bk, `${stamp(now - 5 * H).slice(0, 10)} ${stamp(now - 5 * H).slice(11)} OK: backup cifrado enviado (7 arquivos, pasta backup-x).`);
+const withBk = collectHealth({ now, osImpl: fakeOs, fsImpl: fakeFs, logDir: dir, uptimeSeconds: 3 * 86400, rssBytes: 1, interactions: () => ({ total: 1 }), updateLog: '', backupLog: bk });
+eq(withBk.lastBackup.ok, true);
+assert.match(buildHealthReport(withBk).body, /Backup fora do notebook: OK: backup cifrado enviado/); ok += 1;
+eq(buildHealthReport(withBk).level, 'info', 'backup recente não é problema');
+const oldBk = buildHealthReport({ ...withBk, lastBackup: { ok: true, at: now - 40 * H, text: 'OK (09/11 05:00)' } });
+assert.ok(oldBk.issues.includes('o backup fora do notebook está atrasado (mais de 36 h)')); ok += 1;
+const badBk = buildHealthReport({ ...withBk, lastBackup: { ok: false, at: now, text: 'ERRO: x' } });
+assert.ok(badBk.issues.includes('o último backup falhou')); ok += 1;
+eq(buildHealthReport({ ...withBk, lastBackup: null }).body.includes('Backup fora do notebook'), false, 'sem log de backup a linha some');
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`OK: health-report (${ok} verificações)`);

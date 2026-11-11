@@ -33,6 +33,7 @@
     "test:netdefaults": "node tests/test-net-defaults.js",
     "test:permgaps": "node tests/test-permission-gaps.js",
     "test:healthreport": "node tests/test-health-report.js",
+    "test:backupoffsite": "node tests/test-backup-offsite.js",
     "test:gtacars": "node tests/test-gtacars.js",
     "test:ask-gtacars": "node tests/test-ask-gtacars.js",
     "test:media": "node tests/test-media-urls.js",

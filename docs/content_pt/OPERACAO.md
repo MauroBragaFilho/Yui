@@ -267,6 +267,17 @@ A memória da Yui (`memory-personal.db`, `memory-discord.db`, `memory-context*.d
    npm run test:backup
    ```
 
+#### Backup fora do notebook, num repositório privado do GitHub (`scripts/backup-offsite.mjs`)
+
+Todo dia, depois da atualização das 04:00, a tarefa `YuiBackup` (SYSTEM) cifra os bancos e os envia para o repositório **privado** `MauroBragaFilho/Yui-backup`. Só vão arquivos cifrados; o texto em claro nunca sai do notebook. Entram: memória e contexto, `core.db`, os seguidos do YouTube e da Twitch, e de `src/data` os bloqueios, os servidores que aceitaram os Termos e as configurações por servidor. **Não entram** `.env`, tokens e chaves: se o notebook morrer, recrie-os.
+
+- **Só envia se algo mudou** desde o último envio, e mantém os últimos 30 backups (`YUI_BACKUP_KEEP`).
+- **Acesso:** uma *deploy key* do repositório (`C:\Toolsackup\yui_backup_deploy`), com escrita só nele. **Nunca** use o repositório público da Yui para isso.
+- **Chave de cifra:** `C:\Toolsackupackup.key` (64 caracteres hex). **Guarde uma cópia FORA do notebook** (gerenciador de senhas): sem ela o backup não abre, e só no notebook ela some junto com o disco.
+- **Teste de restauração:** `node scripts/backup-offsite.mjs --verify` baixa o último backup, decifra e abre cada banco (`PRAGMA integrity_check`). Rode depois de criar a tarefa e de vez em quando.
+- **Aviso:** o relatório diário de saúde mostra o último resultado (`C:\Toolsackupackup.log`) e avisa se o backup falhou ou passou de 36 h.
+- **Restaurar de verdade:** baixe o repositório num PC, rode `node scripts/restore-memory.mjs --from <pasta backup-...> --to <destino>` com `YUI_BACKUP_KEY_FILE` apontando para a sua cópia da chave, e copie os `.db` para `C:\Yui\database` e os `.json` para `C:\Yui\src\data` com a Yui parada.
+
 **Backup manual recomendado** (copie para um disco externo ou nuvem pessoal, com a Yui parada ou não). Os dados que valem são os **da produção**: rode na pasta da Yui do notebook (`C:\Yui`) e leve a cópia para fora dele:
 
 ```powershell
