@@ -108,7 +108,8 @@ Tudo escuta apenas em **`127.0.0.1`** (acessível só pela própria máquina; na
 | Porta | Serviço | Ativação |
 |-------|---------|----------|
 | `3939` | **Yui API** | `YUI_API_ENABLED=true` |
-| `8081` | **App web** (arquivos do `apps/yui-app/dist`) | tarefa `YuiWebApp` |
+| `80` e `8081` | **App web** (arquivos do `apps/yui-app/dist`). No notebook escuta nas duas, em `0.0.0.0` (abre em `http://192.168.15.12/`); a `80` também repassa `/api/*` ao BDS Server | tarefa `YuiWebApp` |
+| `8090` | **BDS Server** (servidor de arquivos), só em `127.0.0.1`: a Yui o usa (`YUI_BDS_URL`) e o painel o repassa em `/api/*` na porta 80 | tarefa `BDSServer` |
 | `20130` | **Yui Gateway** (servidor de IA, compatível com OpenAI) | `YUI_GATEWAY_ENABLED=true` + `YUI_GATEWAY_KEYS` |
 
 Acesso de outros aparelhos, **somente pela sua rede privada do Tailscale**. Os comandos rodam na máquina da Yui (hoje, o notebook, que já está na tailnet); confira com `tailscale serve status` o que está publicado antes de mudar:
@@ -128,6 +129,8 @@ tailscale serve --bg --https=8443 http://127.0.0.1:8081     # app em https://<m�
 ```env
 YUI_API_CORS_ORIGINS=http://localhost:8081,http://127.0.0.1:8081,https://<máquina>.<tailnet>.ts.net:8443
 ```
+
+**Painel na porta 80 (sem número de porta).** Desde 11/11/2026 o notebook abre o painel em `http://192.168.15.12/` (ou `http://yui.bds/`, se o seu PC tiver o nome no `hosts`). A tarefa `YuiWebApp` roda `serve-web.mjs` com `HOST=0.0.0.0`, `PORTS=80,8081` e `BDS_API_UPSTREAM=http://127.0.0.1:8090`: tudo que começa com `/api/` vai para o BDS Server (que passou da porta 80 para a **8090**, só no próprio notebook), então a API do BDS (BDS desktop, chaves) segue no mesmo endereço de antes. O firewall da porta 80 (só a rede local e o Tailscale) já existia. A auditoria do BDS passa a mostrar `127.0.0.1` como origem (o IP real vai em `X-Forwarded-For`). O `.env` da Yui precisa de `YUI_BDS_URL=http://127.0.0.1:8090` e das origens `http://192.168.15.12` e `http://yui.bds` em `YUI_API_CORS_ORIGINS`. O atualizador leva o `serve-web.mjs` e reinicia a `YuiWebApp` quando ele muda.
 
 Na própria máquina da Yui, abra `http://localhost:8081`. O app usa o mesmo endereço em que a página foi aberta, na porta `3939`: abrir pelo **IP da rede local** (ex.: `192.168.x.x:8081`) não funciona, porque a API só escuta em `127.0.0.1`.
 

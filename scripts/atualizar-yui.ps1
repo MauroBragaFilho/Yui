@@ -72,32 +72,53 @@ function Testar-Subida([string]$pasta, [string]$modulos) {
 }
 
 # Leva o painel web versionado (apps\yui-app\painel-web) do codigo novo para C:\Yui\apps\yui-app\dist, com troca atomica e a versao anterior
-# guardada em dist-antigo. So roda DEPOIS de a Yui nova ter subido, e NUNCA lanca erro: o painel nao pode derrubar a atualizacao da Yui.
-# Devolve o texto para o log.
-function Atualizar-Painel([string]$novo, [string]$destino) {
+# guardada em dist-antigo. Tambem leva o servidor do painel (apps\yui-app\scripts\serve-web.mjs) e, se ele mudou, reinicia a tarefa do painel
+# (`aoMudarServidor`, injetavel para teste). So roda DEPOIS de a Yui nova ter subido, e NUNCA lanca erro: o painel nao pode derrubar a
+# atualizacao da Yui. Devolve o texto para o log.
+function Atualizar-Painel([string]$novo, [string]$destino, [scriptblock]$aoMudarServidor = { Stop-ScheduledTask -TaskName YuiWebApp -ErrorAction SilentlyContinue; Start-Sleep 3; Start-ScheduledTask -TaskName YuiWebApp }) {
     $app = Join-Path $destino 'apps\yui-app'
     $tmp = Join-Path $app 'dist-novo'
     try {
         $origem = Join-Path $novo 'apps\yui-app\painel-web'
         if (-not (Test-Path "$origem\index.html")) { return 'painel: o codigo novo nao traz apps\yui-app\painel-web; nada a fazer' }
         if (-not (Test-Path $app)) { return 'painel: nao existe apps\yui-app aqui; nada a fazer' }
+        $partes = @()
+
+        # 1) o painel compilado
         $fonteNova = Get-Content "$origem\.fonte" -ErrorAction SilentlyContinue | Select-Object -First 1
         $fonteAtual = if (Test-Path "$app\dist\.fonte") { Get-Content "$app\dist\.fonte" | Select-Object -First 1 } else { '' }
-        if ($fonteNova -and $fonteNova -eq $fonteAtual) { return 'painel: ja esta na versao do codigo novo' }
-        if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-        robocopy $origem $tmp /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
-        if ($LASTEXITCODE -ge 8) { throw "robocopy do painel falhou (codigo $LASTEXITCODE)" }
-        $global:LASTEXITCODE = 0
-        if (-not (Test-Path "$tmp\index.html")) { throw 'a copia do painel nao tem index.html' }
-        $html = Get-Content "$tmp\index.html" -Raw
-        if ($html -match 'src="(/_expo/static/js/web/[^"]+\.js)"') {
-            $bundle = Join-Path $tmp ($Matches[1].TrimStart('/').Replace('/', '\'))
-            if (-not (Test-Path $bundle)) { throw 'o bundle citado no index.html nao esta na copia' }
+        if ($fonteNova -and $fonteNova -eq $fonteAtual) {
+            $partes += 'painel: ja esta na versao do codigo novo'
+        } else {
+            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+            robocopy $origem $tmp /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "robocopy do painel falhou (codigo $LASTEXITCODE)" }
+            $global:LASTEXITCODE = 0
+            if (-not (Test-Path "$tmp\index.html")) { throw 'a copia do painel nao tem index.html' }
+            $html = Get-Content "$tmp\index.html" -Raw
+            if ($html -match 'src="(/_expo/static/js/web/[^"]+\.js)"') {
+                $bundle = Join-Path $tmp ($Matches[1].TrimStart('/').Replace('/', '\'))
+                if (-not (Test-Path $bundle)) { throw 'o bundle citado no index.html nao esta na copia' }
+            }
+            if (Test-Path "$app\dist-antigo") { Remove-Item "$app\dist-antigo" -Recurse -Force }
+            if (Test-Path "$app\dist") { Rename-Item "$app\dist" 'dist-antigo' }
+            Rename-Item $tmp 'dist'
+            $partes += 'painel: atualizado (a versao anterior ficou em apps\yui-app\dist-antigo)'
         }
-        if (Test-Path "$app\dist-antigo") { Remove-Item "$app\dist-antigo" -Recurse -Force }
-        if (Test-Path "$app\dist") { Rename-Item "$app\dist" 'dist-antigo' }
-        Rename-Item $tmp 'dist'
-        return 'painel: atualizado (a versao anterior ficou em apps\yui-app\dist-antigo)'
+
+        # 2) o servidor do painel (compara o texto sem o CR, porque a copia feita a mao pode ter CRLF e o zip do GitHub tem LF)
+        $srvNovo = Join-Path $novo 'apps\yui-app\scripts\serve-web.mjs'
+        $srvAtual = Join-Path $app 'scripts\serve-web.mjs'
+        if (Test-Path $srvNovo) {
+            $txtNovo = (Get-Content $srvNovo -Raw) -replace "`r", ''
+            $txtAtual = if (Test-Path $srvAtual) { (Get-Content $srvAtual -Raw) -replace "`r", '' } else { '' }
+            if ($txtNovo -ne $txtAtual) {
+                New-Item -ItemType Directory -Force (Split-Path $srvAtual) | Out-Null
+                Copy-Item $srvNovo $srvAtual -Force
+                try { & $aoMudarServidor; $partes += 'servidor do painel: atualizado e reiniciado' } catch { $partes += "AVISO: servidor do painel copiado, mas nao reiniciei ($($_.Exception.Message))" }
+            }
+        }
+        return ($partes -join '; ')
     } catch {
         $erro = $_.Exception.Message
         if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }

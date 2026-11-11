@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const FILES = ['App.tsx', 'index.ts', 'app.json', 'package.json', 'package-lock.json', 'tsconfig.json'];
+const FILES = ['App.tsx', 'index.ts', 'app.json', 'package-lock.json', 'tsconfig.json']; // package.json fora de propósito: mexer nos scripts de teste não muda o painel (as dependências estão no package-lock)
 const DIRS = ['src', 'assets', 'public'];
 const TEXT = new Set(['.ts', '.tsx', '.js', '.mjs', '.json', '.css', '.md', '.txt']);
 
