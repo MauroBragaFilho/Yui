@@ -39,8 +39,9 @@ const cfg = {
 
 // Arquivos de estado (known_hosts e último hash) ficam ao lado da chave de acesso (C:\Tools\backup), nunca na raiz do disco.
 const stateDir = path.dirname(cfg.sshKey);
-// git: o do PATH; no notebook (sem Git instalado) o MinGit portátil em C:\Tools\git. YUI_GIT_PATH força outro caminho.
-const gitExe = env.YUI_GIT_PATH || (win && fs.existsSync('C:\Tools\git\cmd\git.exe') ? 'C:\Tools\git\cmd\git.exe' : 'git');
+// git: o do PATH; no notebook (sem Git instalado) o MinGit portátil em C:/Tools/git. YUI_GIT_PATH força outro caminho.
+const MINGIT = 'C:/Tools/git/cmd/git.exe'; // barras normais: o Windows aceita e o JS não trata como escape
+const gitExe = env.YUI_GIT_PATH || (win && fs.existsSync(MINGIT) ? MINGIT : 'git');
 const stamp = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
 export function logLine(msg, file = cfg.logFile) {
