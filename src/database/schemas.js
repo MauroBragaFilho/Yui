@@ -82,6 +82,7 @@ export const YOUTUBE_SCHEMA = `
     notify_videos INTEGER DEFAULT 1,
     notify_shorts INTEGER DEFAULT 1,
     notify_lives INTEGER DEFAULT 1,
+    live_mode TEXT DEFAULT 'auto',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(guild_id, youtube_channel_id, discord_channel_id)
   );

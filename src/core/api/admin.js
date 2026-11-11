@@ -49,6 +49,13 @@ function requireId(value, label = 'ID') {
   return id;
 }
 
+const LIVE_MODE_VALUES = ['auto', 'new', 'edit'];
+function requireLiveMode(value) {
+  const mode = String(value ?? '').trim().toLowerCase();
+  if (!LIVE_MODE_VALUES.includes(mode)) throw new AdminError(400, `Modo de live inválido. Use: ${LIVE_MODE_VALUES.join(', ')}.`);
+  return mode;
+}
+
 /** Dependências reais do bot, carregadas só quando necessário (os testes injetam fakes). */
 async function defaultDeps() {
   const ban = await import('../../handlers/banHandler.js');
@@ -136,7 +143,7 @@ async function defaultSetGuildChannel(guildId, column, channelId) {
   guildRepository.setChannel(guildId, column, channelId);
 }
 
-async function defaultAddYoutube({ guildId, input, discordChannelId, roleId, videos, shorts, lives }) {
+async function defaultAddYoutube({ guildId, input, discordChannelId, roleId, videos, shorts, lives, liveMode }) {
   const { resolveChannel } = await import('../../handlers/youtubeApiHandler.js');
   const { youtubeRepository } = await import('../../database/repositories/youtubeRepo.js');
   let resolved;
@@ -156,8 +163,14 @@ async function defaultAddYoutube({ guildId, input, discordChannelId, roleId, vid
     notifyVideos: videos ? 1 : 0,
     notifyShorts: shorts ? 1 : 0,
     notifyLives: lives ? 1 : 0,
+    liveMode,
   });
   return { added: r.changes > 0, channelId: resolved.channelId, name: resolved.title };
+}
+
+async function defaultSetYoutubeLiveMode(guildId, youtubeChannelId, discordChannelId, mode) {
+  const { youtubeRepository } = await import('../../database/repositories/youtubeRepo.js');
+  return youtubeRepository.setLiveMode(guildId, youtubeChannelId, discordChannelId, mode).changes > 0;
 }
 
 async function defaultRemoveYoutube(guildId, youtubeChannelId, discordChannelId) {
@@ -380,9 +393,22 @@ export function createAdmin({
       const result = await (dep.addYoutube ?? defaultAddYoutube)({
         guildId: guild.id, input, discordChannelId, roleId,
         videos: body.videos !== false, shorts: body.shorts !== false, lives: body.lives !== false,
+        liveMode: body.liveMode === undefined ? 'auto' : requireLiveMode(body.liveMode),
       });
       audit('admin.follow.youtube.add', ctx, { guild: guild.id, youtube: result.channelId, channel: discordChannelId });
       return { ok: true, added: result.added, name: result.name };
+    },
+
+    /** Muda como os avisos de live saem em UMA inscrição ('auto' | 'new' | 'edit'). */
+    async setYoutubeLiveMode(ctx, guildId, youtubeChannelId, discordChannelId, liveMode) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      if (!/^[\w-]{3,80}$/.test(String(youtubeChannelId))) throw new AdminError(400, 'ID do canal do YouTube inválido.');
+      const mode = requireLiveMode(liveMode);
+      const dep = await d();
+      const updated = await (dep.setYoutubeLiveMode ?? defaultSetYoutubeLiveMode)(guild.id, youtubeChannelId, requireId(discordChannelId, 'ID do canal'), mode);
+      audit('admin.follow.youtube.liveMode', ctx, { guild: guild.id, youtube: youtubeChannelId, mode });
+      return { ok: true, updated, liveMode: mode };
     },
 
     async removeYoutubeFollow(ctx, guildId, youtubeChannelId, discordChannelId) {

@@ -320,6 +320,14 @@ function buildEvent(type, item, details, channelId, channelName) {
     thumbs.default?.url ||
     `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 
+  // Horários reais da live (a API só os traz em vídeos que são/foram live); servem para mostrar a duração.
+  const live = details?.liveStreamingDetails || {};
+  const actualStart = live.actualStartTime || null;
+  const actualEnd = live.actualEndTime || null;
+  const startMs = actualStart ? Date.parse(actualStart) : NaN;
+  const endMs = actualEnd ? Date.parse(actualEnd) : NaN;
+  const durationMs = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs ? endMs - startMs : null;
+
   return {
     type,
     videoId,
@@ -329,6 +337,10 @@ function buildEvent(type, item, details, channelId, channelName) {
     url,
     thumbnailUrl,
     publishedAt,
+    scheduledStart: live.scheduledStartTime || null,
+    actualStart,
+    actualEnd,
+    durationMs,
   };
 }
 

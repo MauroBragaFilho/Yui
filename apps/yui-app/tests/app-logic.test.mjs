@@ -185,7 +185,8 @@ const fakeDeps = {
   logDir,
   radio: { sessions: () => [radioSession], getSession: (g) => (g === radioSession.guildId ? radioSession : null), connected: () => true, pause: async () => { radioCalls.push('pause'); return true; }, resume: async () => true, stopMusic: async () => {}, leave: async () => { radioCalls.push('leave'); } },
   setGuildChannel: async (g, col, ch) => { editCalls.push(['channel', g, col, ch]); },
-  addYoutube: async (x) => { editCalls.push(['yt+', x.input, x.discordChannelId, x.shorts]); return { added: true, channelId: 'UCxyz123456', name: 'Canal' }; },
+  addYoutube: async (x) => { editCalls.push(['yt+', x.input, x.discordChannelId, x.shorts, x.liveMode]); return { added: true, channelId: 'UCxyz123456', name: 'Canal' }; },
+  setYoutubeLiveMode: async (g, y, c, mode) => { editCalls.push(['yt-mode', y, c, mode]); return true; },
   removeYoutube: async (g, y, c) => { editCalls.push(['yt-', y, c]); return true; },
   addTwitch: async (x) => { editCalls.push(['tw+', x.login]); return { added: true, login: x.login, name: x.login }; },
   removeTwitch: async (g, l, c) => { editCalls.push(['tw-', l, c]); return true; },
@@ -282,18 +283,25 @@ test('painel: o dono vê visão geral, servidores, bans, memória e ferramentas'
   await admin.setGuildChannel('444444444444444444', 'diario', '777777777777777777');
   await admin.setGuildChannel('444444444444444444', 'diario', null);
   await admin.followYoutube('444444444444444444', { channel: '@Canal', discordChannelId: '777777777777777777', videos: true, shorts: false, lives: true });
+  await admin.followYoutube('444444444444444444', { channel: '@Outro', discordChannelId: '777777777777777777', videos: true, shorts: true, lives: true, liveMode: 'edit' });
+  const modeRes = await admin.setYoutubeLiveMode('444444444444444444', 'UCxyz123456', '777777777777777777', 'new');
+  assert.equal(modeRes.liveMode, 'new');
   await admin.unfollowYoutube('444444444444444444', 'UCxyz123456', '777777777777777777');
   await admin.followTwitch('444444444444444444', { streamer: 'https://twitch.tv/Alanzoka', discordChannelId: '777777777777777777' });
   await admin.unfollowTwitch('444444444444444444', 'alanzoka', '777777777777777777');
   assert.deepEqual(editCalls, [
     ['channel', '444444444444444444', 'daily_channel_id', '777777777777777777'],
     ['channel', '444444444444444444', 'daily_channel_id', null],
-    ['yt+', '@Canal', '777777777777777777', false],
+    ['yt+', '@Canal', '777777777777777777', false, 'auto'],
+    ['yt+', '@Outro', '777777777777777777', true, 'edit'],
+    ['yt-mode', 'UCxyz123456', '777777777777777777', 'new'],
     ['yt-', 'UCxyz123456', '777777777777777777'],
     ['tw+', 'alanzoka'],
     ['tw-', 'alanzoka', '777777777777777777'],
   ]);
   await assert.rejects(admin.setGuildChannel('444444444444444444', 'diario', '123456789012345678'), (e) => e.status === 400);
+  await assert.rejects(admin.setYoutubeLiveMode('444444444444444444', 'UCxyz123456', '777777777777777777', 'invalido'), (e) => e.status === 400 && /Modo de live/.test(e.message));
+  await assert.rejects(admin.followYoutube('444444444444444444', { channel: '@Canal', discordChannelId: '777777777777777777', liveMode: 'xyz' }), (e) => e.status === 400);
 
   // chaves de IA: entram, aparecem só como "…4 últimos" e saem
   const SECRET = 'gsk_chave_do_app_teste_WXYZ9876';

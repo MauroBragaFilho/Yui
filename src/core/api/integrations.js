@@ -222,6 +222,7 @@ export async function loadGuildDetail(guild, { dataDir = path.join(process.cwd()
       videos: Boolean(s.notify_videos),
       shorts: Boolean(s.notify_shorts),
       lives: Boolean(s.notify_lives),
+      liveMode: ['auto', 'new', 'edit'].includes(s.live_mode) ? s.live_mode : 'new',
     })),
     twitch: tw.map((s) => ({ id: s.twitch_login, name: s.twitch_login, role: s.mention_role_id || null, channel: link(s.discord_channel_id) })),
     tools: tools ? { enabled: tools.enabled ?? [], disabled: tools.disabled ?? [] } : null,

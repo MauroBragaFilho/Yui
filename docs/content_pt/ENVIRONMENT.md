@@ -311,6 +311,7 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 | `NEWSWIRE_ENABLED` | Liga a checagem automática do Rockstar Newswire | `false` |
 | `NEWSWIRE_INTERVAL_MINUTES` | Intervalo do Newswire | `30` |
 | `YOUTUBE_API_KEY`, `YOUTUBE_INTERVAL_MINUTES` | Avisos de YouTube | — / `5` |
+| `YUI_YT_LIVE_AUTO_EDIT_MIN` | Modo automático das lives: se a live começa em até esse tempo (minutos, 5 a 1440) depois de agendada, edita a mensagem; senão avisa de novo | `120` |
 | `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_INTERVAL_MINUTES` | Avisos de Twitch | — / `2` |
 
 > O Reddit responde `429` se for consultado demais. Evite testes ao vivo em sequência. Detalhes em [GTA Online](GTA_ONLINE.md).

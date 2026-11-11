@@ -167,7 +167,8 @@ Os logs são **somente leitura** e só dos arquivos `app-AAAA-MM-DD.log` e `erro
 | Rota | O que faz |
 |------|-----------|
 | `PUT /v1/admin/guilds/:id/channels` `{ type: "noticias", "diario" ou "semanal", channelId: ID ou null }` | Define (ou limpa) o canal de publicação. Só canais de **texto** do próprio servidor |
-| `POST /v1/admin/guilds/:id/youtube` `{ channel, discordChannelId, roleId?, videos?, shorts?, lives? }` | Passa a seguir um canal do YouTube (aceita @handle, ID UC... ou URL) |
+| `POST /v1/admin/guilds/:id/youtube` `{ channel, discordChannelId, roleId?, videos?, shorts?, lives?, liveMode? }` | Passa a seguir um canal do YouTube (aceita @handle, ID UC... ou URL). `liveMode`: `auto` (padrão), `new` ou `edit` |
+| `PUT /v1/admin/guilds/:id/youtube/:ytId/:discordChannelId` `{ liveMode: "auto" \| "new" \| "edit" }` | Muda como os avisos de live saem naquela inscrição (o detalhe do servidor devolve `liveMode` de cada canal seguido) |
 | `DELETE /v1/admin/guilds/:id/youtube/:ytId/:discordChannelId` | Para de seguir |
 | `POST /v1/admin/guilds/:id/twitch` `{ streamer, discordChannelId, roleId? }` | Passa a seguir um streamer (aceita login ou URL) |
 | `DELETE /v1/admin/guilds/:id/twitch/:login/:discordChannelId` | Para de seguir |

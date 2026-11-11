@@ -62,12 +62,14 @@ export interface AdminGuildDetail {
   respondToEveryone: boolean | null;
   textChannels: { id: string; name: string }[];
   roles: { id: string; name: string }[];
-  youtube: { id: string; name: string; role: string | null; channel: ChannelRef | null; videos: boolean; shorts: boolean; lives: boolean }[];
+  youtube: { id: string; name: string; role: string | null; channel: ChannelRef | null; videos: boolean; shorts: boolean; lives: boolean; liveMode?: YoutubeLiveMode }[];
   twitch: { id: string; name: string; role: string | null; channel: ChannelRef | null }[];
   tools: { enabled: string[]; disabled: string[] } | null;
 }
 export type GuildChannelType = 'noticias' | 'diario' | 'semanal';
-export interface FollowYoutubeInput { channel: string; discordChannelId: string; roleId?: string | null; videos: boolean; shorts: boolean; lives: boolean }
+/** Como os avisos de live saem: 'auto' (edita se a live começa logo), 'new' (mensagem nova a cada etapa) ou 'edit' (sempre a mesma mensagem). */
+export type YoutubeLiveMode = 'auto' | 'new' | 'edit';
+export interface FollowYoutubeInput { channel: string; discordChannelId: string; roleId?: string | null; videos: boolean; shorts: boolean; lives: boolean; liveMode?: YoutubeLiveMode }
 export interface AiKeyHint { index: number; hint: string }
 export interface AiProvider {
   id: string; label: string; url: string | null; needsAccount: boolean; accountConfigured: boolean | null;
@@ -317,6 +319,8 @@ export function createClient(options: ClientOptions) {
         request<{ ok: boolean }>('PUT', `/v1/admin/guilds/${guildId}/channels`, { type, channelId }, 20_000),
       followYoutube: (guildId: string, input: FollowYoutubeInput) =>
         request<{ ok: boolean; added: boolean; name: string }>('POST', `/v1/admin/guilds/${guildId}/youtube`, input, 30_000),
+      setYoutubeLiveMode: (guildId: string, youtubeId: string, discordChannelId: string, liveMode: YoutubeLiveMode) =>
+        request<{ ok: boolean; updated: boolean; liveMode: YoutubeLiveMode }>('PUT', `/v1/admin/guilds/${guildId}/youtube/${encodeURIComponent(youtubeId)}/${discordChannelId}`, { liveMode }, 20_000),
       unfollowYoutube: (guildId: string, youtubeId: string, discordChannelId: string) =>
         request<{ ok: boolean }>('DELETE', `/v1/admin/guilds/${guildId}/youtube/${encodeURIComponent(youtubeId)}/${discordChannelId}`, undefined, 20_000),
       followTwitch: (guildId: string, input: { streamer: string; discordChannelId: string; roleId?: string | null }) =>

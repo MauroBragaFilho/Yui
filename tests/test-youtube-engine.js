@@ -139,6 +139,22 @@ await test('transição upcoming -> live gera live_started; live -> ended_vod ge
   assert.deepEqual(events.map((e) => `${e.videoId}:${e.type}`), ['s1:live_started', 's2:live_ended']);
   assert.deepEqual(t.upserts.map((u) => `${u.id}:${u.st}`), ['s1:live', 's2:ended_vod']);
 });
+await test('live encerrada leva os horários reais e a duração; sem horário de fim, duração nula', async () => {
+  const seen = { e1: seenVideo(5 * HOUR, 'live'), e2: seenVideo(5 * HOUR, 'live') };
+  const detailsFor = (id) => details(id, {
+    snippet: { title: id, channelTitle: 'Canal X', publishedAt: '2026-10-14T10:00:00Z', liveBroadcastContent: 'none' },
+    liveStreamingDetails: id === 'e1'
+      ? { scheduledStartTime: '2026-10-14T07:00:00Z', actualStartTime: '2026-10-14T08:00:00Z', actualEndTime: '2026-10-14T11:12:00Z' }
+      : { actualStartTime: '2026-10-14T08:00:00Z' },
+  });
+  const t = make({ channels: { C1: ['e1', 'e2'] }, seen, detailsFor });
+  const [e1, e2] = await t.engine.checkYoutubeChannels();
+  assert.equal(e1.type, 'live_ended');
+  assert.equal(e1.durationMs, (3 * 60 + 12) * 60_000);
+  assert.equal(e1.actualStart, '2026-10-14T08:00:00Z');
+  assert.equal(e1.scheduledStart, '2026-10-14T07:00:00Z');
+  assert.equal(e2.durationMs, null);
+});
 await test('ID que a API não devolve (null): segue o comportamento antigo e anuncia como vídeo', async () => {
   const t = make({ channels: { C1: ['fantasma'] }, detailsFor: () => null });
   const events = await t.engine.checkYoutubeChannels();

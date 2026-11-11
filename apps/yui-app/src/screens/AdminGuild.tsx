@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ApiError, type AdminGuildDetail, type ChannelRef, type GuildChannelType, type YuiClient } from '../api/client.ts';
+import { ApiError, type AdminGuildDetail, type ChannelRef, type GuildChannelType, type YoutubeLiveMode, type YuiClient } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
 import { Button, Chip } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
@@ -40,6 +40,27 @@ function RolePicker({ roles, value, onPick }: { roles: { id: string; name: strin
   );
 }
 
+const LIVE_MODE_OPTIONS: { value: YoutubeLiveMode; label: string; hint: string }[] = [
+  { value: 'auto', label: 'Automático', hint: 'Edita a mensagem se a live começa logo depois de agendada; se foi agendada para longe, avisa de novo no início. O fim sempre edita.' },
+  { value: 'new', label: 'Mensagem nova', hint: 'Uma mensagem nova a cada etapa (agendada, ao vivo, encerrada).' },
+  { value: 'edit', label: 'Editar sempre', hint: 'Uma mensagem só, editada a cada etapa. Editar não notifica ninguém.' },
+];
+
+/** Escolha de como os avisos de live saem (por canal do YouTube seguido), com a explicação da opção marcada. */
+function LiveModeChips({ value, onPick, testID }: { value: YoutubeLiveMode; onPick: (mode: YoutubeLiveMode) => void; testID?: string }) {
+  const current = LIVE_MODE_OPTIONS.find((o) => o.value === value) ?? LIVE_MODE_OPTIONS[1];
+  return (
+    <View style={{ gap: 4 }}>
+      <View style={styles.chips}>
+        {LIVE_MODE_OPTIONS.map((o) => (
+          <Chip key={o.value} testID={testID ? `${testID}-${o.value}` : undefined} label={o.label} on={o.value === value} onPress={() => { if (o.value !== value) onPick(o.value); }} />
+        ))}
+      </View>
+      <Text style={styles.hint}>{current.hint}</Text>
+    </View>
+  );
+}
+
 /** Canais do servidor e avisos de YouTube/Twitch, com edição. */
 export function GuildEditor({ client, data, reload }: { client: YuiClient; data: AdminGuildDetail; reload: () => Promise<void> }) {
   const id = data.id;
@@ -53,6 +74,7 @@ export function GuildEditor({ client, data, reload }: { client: YuiClient; data:
   const [ytVideos, setYtVideos] = useState(true);
   const [ytShorts, setYtShorts] = useState(true);
   const [ytLives, setYtLives] = useState(true);
+  const [ytLiveMode, setYtLiveMode] = useState<YoutubeLiveMode>('auto');
   // novo Twitch
   const [twInput, setTwInput] = useState('');
   const [twChannel, setTwChannel] = useState<string | null>(null);
@@ -84,10 +106,10 @@ export function GuildEditor({ client, data, reload }: { client: YuiClient; data:
   async function addYoutube() {
     if (!ytChannel) return;
     const ok = await run(
-      () => client.admin.followYoutube(id, { channel: ytInput.trim(), discordChannelId: ytChannel, roleId: ytRole, videos: ytVideos, shorts: ytShorts, lives: ytLives }),
+      () => client.admin.followYoutube(id, { channel: ytInput.trim(), discordChannelId: ytChannel, roleId: ytRole, videos: ytVideos, shorts: ytShorts, lives: ytLives, liveMode: ytLiveMode }),
       'Canal do YouTube adicionado.'
     );
-    if (ok) { setYtInput(''); setYtChannel(null); setYtRole(null); setOpen(null); }
+    if (ok) { setYtInput(''); setYtChannel(null); setYtRole(null); setYtLiveMode('auto'); setOpen(null); }
   }
 
   async function addTwitch() {
@@ -131,6 +153,18 @@ export function GuildEditor({ client, data, reload }: { client: YuiClient; data:
             <Text style={styles.hint}>
               {chan(y.channel)} • {[y.videos && 'vídeos', y.shorts && 'shorts', y.lives && 'lives'].filter(Boolean).join(', ') || 'nada'}
             </Text>
+            {y.lives ? (
+              <View style={{ gap: 4 }}>
+                <Text style={styles.hint}>Avisos de live</Text>
+                <LiveModeChips
+                  testID={`yt-mode-${y.id}`}
+                  value={y.liveMode ?? 'new'}
+                  onPick={(mode) =>
+                    run(() => client.admin.setYoutubeLiveMode(id, y.id, y.channel?.id ?? '', mode), 'Modo das lives atualizado.')
+                  }
+                />
+              </View>
+            ) : null}
           </View>
           <Button
             testID={`yt-remove-${y.id}`}
@@ -157,6 +191,12 @@ export function GuildEditor({ client, data, reload }: { client: YuiClient; data:
             <Chip label="Shorts" on={ytShorts} onPress={() => setYtShorts(!ytShorts)} />
             <Chip label="Lives" on={ytLives} onPress={() => setYtLives(!ytLives)} />
           </View>
+          {ytLives ? (
+            <>
+              <Text style={styles.label}>Avisos de live</Text>
+              <LiveModeChips testID="yt-form-mode" value={ytLiveMode} onPick={setYtLiveMode} />
+            </>
+          ) : null}
           <View style={styles.chips}>
             <Button testID="yt-save" label="Seguir canal" onPress={addYoutube} loading={busy} disabled={!ytInput.trim() || !ytChannel} style={styles.smallBtn} />
             <Button label="Cancelar" variant="ghost" onPress={() => setOpen(null)} style={styles.smallBtn} />

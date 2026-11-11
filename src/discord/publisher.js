@@ -1,6 +1,8 @@
 import { guildRepository } from '../database/repositories/guildRepo.js';
 import { publicationRepository } from '../database/repositories/publicationRepo.js';
 import { youtubeRepository } from '../database/repositories/youtubeRepo.js';
+import { normalizeLiveMode } from '../database/liveModes.js';
+import { pickLiveEditTarget } from './youtubeLive.js';
 import { twitchRepository } from '../database/repositories/twitchRepo.js';
 import { gtaoRepository } from '../database/repositories/gtaoRepo.js';
 import { createNewswireEmbed } from './embeds/newswireEmbed.js';
@@ -350,6 +352,31 @@ export const discordPublisher = {
       const contentId = `${event.videoId}:${event.type}`;
       if (publicationRepository.isPublished('youtube', contentId, sub.guild_id)) {
         continue;
+      }
+
+      // Live: conforme o modo da inscrição, em vez de mandar outra mensagem edita a que já saiu (agendada -> ao vivo -> encerrada).
+      // Se não der para editar (mensagem apagada, sem permissão, canal sumiu), cai no envio normal logo abaixo.
+      if (event.type === 'live_started' || event.type === 'live_ended') {
+        const target = pickLiveEditTarget({
+          mode: normalizeLiveMode(sub.live_mode, 'new'),
+          type: event.type,
+          scheduledRec: publicationRepository.getPublished('youtube', `${event.videoId}:live_scheduled`, sub.guild_id),
+          startedRec: publicationRepository.getPublished('youtube', `${event.videoId}:live_started`, sub.guild_id),
+        });
+        if (target) {
+          try {
+            const oldChannel = await client.channels.fetch(target.channel_id);
+            const oldMessage = await oldChannel.messages.fetch(target.message_id);
+            await oldMessage.edit({ embeds: [embed] });
+            // Mesma mensagem, nova etapa: o registro impede editar duas vezes e deixa o fim achar a mensagem.
+            publicationRepository.recordPublication('youtube', contentId, sub.guild_id, target.channel_id, target.message_id);
+            logger.info(`[Publisher] YouTube "${event.title}" (${event.type}) atualizou a mensagem já enviada na guilda ${sub.guild_id}`);
+            published++;
+            continue;
+          } catch (error) {
+            logger.warn(`[Publisher] Não consegui editar a mensagem anterior da live (guilda ${sub.guild_id}): ${error.message}. Envio uma nova.`);
+          }
+        }
       }
 
       try {

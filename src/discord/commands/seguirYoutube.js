@@ -1,8 +1,15 @@
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import { setGlobalContext } from '../setGlobalContext.js';
 import { youtubeRepository } from '../../database/repositories/youtubeRepo.js';
+import { normalizeLiveMode } from '../../database/liveModes.js';
 import { resolveChannel } from '../../handlers/youtubeApiHandler.js';
 import { clampText } from '../embedLimits.js';
+
+const LIVE_MODE_LABELS = {
+  auto: 'automático (edita a mensagem se a live começa logo; senão avisa de novo)',
+  new: 'mensagem nova a cada etapa',
+  edit: 'editar sempre a mesma mensagem',
+};
 
 export const seguirYoutubeCommand = {
   data: setGlobalContext(
@@ -47,6 +54,17 @@ export const seguirYoutubeCommand = {
           .setDescription('Anunciar lives (agendada/ao vivo/encerrada) (padrão: sim)')
           .setRequired(false)
       )
+      .addStringOption((option) =>
+        option
+          .setName('modo_live')
+          .setDescription('Como avisar as lives: automático (padrão), mensagem nova a cada etapa, ou editar a mesma mensagem')
+          .addChoices(
+            { name: 'Automático (edita se a live começa logo; senão avisa de novo)', value: 'auto' },
+            { name: 'Mensagem nova a cada etapa', value: 'new' },
+            { name: 'Editar sempre a mesma mensagem', value: 'edit' }
+          )
+          .setRequired(false)
+      )
   ),
 
   async execute(interaction) {
@@ -56,6 +74,8 @@ export const seguirYoutubeCommand = {
     const notifyVideos = interaction.options.getBoolean('notificar_videos') ?? true;
     const notifyShorts = interaction.options.getBoolean('notificar_shorts') ?? true;
     const notifyLives = interaction.options.getBoolean('notificar_lives') ?? true;
+    const liveModeOption = interaction.options.getString('modo_live');
+    const liveMode = normalizeLiveMode(liveModeOption);
 
     if (!interaction.guildId) {
       return interaction.reply({
@@ -91,6 +111,7 @@ export const seguirYoutubeCommand = {
       notifyVideos: notifyVideos ? 1 : 0,
       notifyShorts: notifyShorts ? 1 : 0,
       notifyLives: notifyLives ? 1 : 0,
+      liveMode,
     });
 
     const preferences = [
@@ -100,6 +121,13 @@ export const seguirYoutubeCommand = {
     ].filter(Boolean).join(', ');
 
     if (result.changes === 0) {
+      // Já seguia: se o admin escolheu o modo de live, atualiza só isso (é assim que se muda o modo de uma inscrição que já existe).
+      if (liveModeOption) {
+        youtubeRepository.setLiveMode(interaction.guildId, resolved.channelId, discordChannel.id, liveMode);
+        return interaction.editReply({
+          content: `🔁 Já seguia **${clampText(resolved.title, 100)}** em ${discordChannel}. Atualizei o modo das lives: **${LIVE_MODE_LABELS[liveMode]}**.`,
+        });
+      }
       return interaction.editReply({
         content: `⚠️ Este servidor **já segue** o canal **${clampText(resolved.title, 100)}** neste canal (${discordChannel}).`,
       });
@@ -111,7 +139,9 @@ export const seguirYoutubeCommand = {
         `📺 **Canal:** ${clampText(resolved.title, 100)}\n` +
         `📍 **Publicação:** ${discordChannel}\n` +
         `${mentionRole ? `👥 **Menção:** <@&${mentionRole.id}>\n` : ''}` +
-        `🔔 **Notificações:** ${preferences}`,
+        `🔔 **Notificações:** ${preferences}
+` +
+        `🔴 **Modo das lives:** ${LIVE_MODE_LABELS[liveMode]}`,
     });
   },
 };

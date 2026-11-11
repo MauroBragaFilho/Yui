@@ -236,6 +236,10 @@ export function createApiServer({
       return admin.setGuildChannel(ctx, r[1], body.type, body.channelId ?? null);
     }
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/youtube$/)) && m === 'POST') return admin.addYoutubeFollow(ctx, r[1], await readJson(req));
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/youtube\/([\w-]+)\/(\d+)$/)) && m === 'PUT') {
+      const body = await readJson(req);
+      return admin.setYoutubeLiveMode(ctx, r[1], r[2], r[3], body.liveMode);
+    }
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/youtube\/([\w-]+)\/(\d+)$/)) && m === 'DELETE') return admin.removeYoutubeFollow(ctx, r[1], r[2], r[3]);
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/twitch$/)) && m === 'POST') return admin.addTwitchFollow(ctx, r[1], await readJson(req));
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/twitch\/(\w+)\/(\d+)$/)) && m === 'DELETE') return admin.removeTwitchFollow(ctx, r[1], r[2], r[3]);

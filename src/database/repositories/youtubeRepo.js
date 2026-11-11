@@ -1,6 +1,20 @@
 import { getDbWrapper } from '../db.js';
+import { LIVE_MODES, DEFAULT_LIVE_MODE, normalizeLiveMode } from '../liveModes.js';
 
 const dbWrapper = getDbWrapper('social-youtube');
+
+export { LIVE_MODES, DEFAULT_LIVE_MODE, normalizeLiveMode };
+
+/**
+ * Bancos criados antes do modo de live não têm a coluna. As inscrições que já existiam ficam em 'new' (o comportamento de antes:
+ * nada muda sozinho); as novas nascem em 'auto'. Idempotente.
+ */
+export function ensureYoutubeSchema() {
+  const cols = dbWrapper.prepare('PRAGMA table_info(youtube_subscriptions)').all();
+  if (cols.some((c) => c.name === 'live_mode')) return false;
+  dbWrapper.prepare("ALTER TABLE youtube_subscriptions ADD COLUMN live_mode TEXT DEFAULT 'new'").run();
+  return true;
+}
 
 export const youtubeRepository = {
   // ── Subscriptions ──────────────────────────────────────────────
@@ -47,12 +61,13 @@ export const youtubeRepository = {
     notifyVideos = 1,
     notifyShorts = 1,
     notifyLives = 1,
+    liveMode = DEFAULT_LIVE_MODE,
   }) {
     const stmt = dbWrapper.prepare(`
       INSERT OR IGNORE INTO youtube_subscriptions
         (guild_id, youtube_channel_id, channel_name, uploads_playlist_id,
-         discord_channel_id, mention_role_id, notify_videos, notify_shorts, notify_lives)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         discord_channel_id, mention_role_id, notify_videos, notify_shorts, notify_lives, live_mode)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
       guildId,
@@ -63,8 +78,17 @@ export const youtubeRepository = {
       mentionRoleId,
       notifyVideos,
       notifyShorts,
-      notifyLives
+      notifyLives,
+      normalizeLiveMode(liveMode)
     );
+  },
+
+  /** Muda o modo de live de UMA inscrição (servidor + canal do YouTube + canal do Discord). */
+  setLiveMode(guildId, youtubeChannelId, discordChannelId, mode) {
+    const stmt = dbWrapper.prepare(
+      'UPDATE youtube_subscriptions SET live_mode = ? WHERE guild_id = ? AND youtube_channel_id = ? AND discord_channel_id = ?'
+    );
+    return stmt.run(normalizeLiveMode(mode), guildId, youtubeChannelId, discordChannelId);
   },
 
   removeSubscription(guildId, youtubeChannelId, discordChannelId) {

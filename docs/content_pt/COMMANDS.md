@@ -222,7 +222,7 @@ Consulta informações oficiais, preço e status na loja da Steam.
 
 Avisos automáticos por servidor (checagem a cada 5 min no YouTube e 2 min na Twitch). Os quatro comandos vêm liberados no Discord só para quem tem **Administrador** (permissão padrão do comando, que o servidor pode mudar em Integrações).
 
-- **`/yui-seguir-youtube canal: canal_discord: cargo:`** Avisa novos vídeos, Shorts e lives (`notificar_videos`, `notificar_shorts`, `notificar_lives`).
+- **`/yui-seguir-youtube canal: canal_discord: cargo: modo_live:`** Avisa novos vídeos, Shorts e lives (`notificar_videos`, `notificar_shorts`, `notificar_lives`). `modo_live` escolhe como a live é avisada, por canal seguido: **automático** (padrão: edita a mesma mensagem quando a live começa logo depois de agendada; se foi agendada para longe, manda mensagem nova no início, com o cargo, e o fim edita essa), **novo** (uma mensagem a cada etapa) ou **editar** (uma mensagem só, sempre editada; editar não notifica). Em live encerrada o aviso mostra a **duração**. Para mudar o modo de um canal que já segue, repita o comando com `modo_live`. Inscrições feitas antes dessa opção ficam em **novo** até serem alteradas (aqui ou no painel). Se a Yui não conseguir editar a mensagem (apagada, sem permissão), envia uma nova. A janela do automático é `YUI_YT_LIVE_AUTO_EDIT_MIN` (padrão 120 min, de 5 a 1440).
 - **`/yui-seguir-twitch streamer: canal_discord: cargo:`** Avisa quando o streamer entra ao vivo.
 - **`/yui-listar-seguindo`:** Lista o que o servidor segue.
 - **`/yui-parar-seguir plataforma: alvo:`** Para de seguir.

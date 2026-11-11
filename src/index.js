@@ -5,6 +5,7 @@ import { CORE_SCHEMA, NEWSWIRE_SCHEMA, GTA_DAILY_SCHEMA, GTA_WEEKLY_SCHEMA, YOUT
 import { createDiscordClient } from './discord/client.js';
 import { startScheduler } from './scheduler/scheduler.js';
 import { deploySlashCommands } from './discord/deployCommands.js';
+import { ensureYoutubeSchema } from './database/repositories/youtubeRepo.js';
 import { downloadTunables } from './utils/tunables.js';
 import { downloadVehicleData } from './utils/vehicleData.js';
 import { downloadWeaponData } from './utils/weaponData.js';
@@ -48,6 +49,7 @@ async function bootstrap() {
   await initDatabase('gta-diario', GTA_DAILY_SCHEMA);
   await initDatabase('gta-semanal', GTA_WEEKLY_SCHEMA);
   await initDatabase('social-youtube', YOUTUBE_SCHEMA);
+  try { if (ensureYoutubeSchema()) logger.info('[Bootstrap] Banco do YouTube atualizado: modo de live por inscrição (as já existentes ficam em "new").'); } catch (err) { logger.warn(`[Bootstrap] Não consegui atualizar o banco do YouTube: ${err.message}`); }
   await initDatabase('social-twitch', TWITCH_SCHEMA);
   // Junta as chaves/provedores salvos pelo painel com o .env (antes de qualquer provedor de IA).
   applyAiSettings();

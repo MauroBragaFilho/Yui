@@ -34,7 +34,8 @@ npm run test:llmsafety    # segurança da IA: dado não confiável, conversa sen
 npm run test:longreply    # respostas longas: divisor de mensagens, anexo, corte por tokens, ordem de envio
 npm run test:context      # contexto por horas: retenção, escopo, bancos separados, apagar-tudo (leva ~45 s)
 npm run test:voicerobust  # voz e rádio: ouvintes que não derrubam o bot, Opus, disjuntor, yt-dlp automático
-npm run test:youtubeengine # motor do YouTube: gasto de cota, falhas isoladas, pausa por cota diária
+npm run test:youtubeengine # motor do YouTube: gasto de cota, falhas isoladas, pausa por cota diária, duração da live
+npm run test:youtubelive   # avisos de live que editam a mensagem (auto/novo/editar), duração, migração da coluna
 npm run test:tts-text     # TTS: normalização do texto para fala e divisão em frases
 npm run test:tts-audio    # TTS: conversão de áudio, provedor SAPI (processo falso e, no Windows, a voz real)
 npm run test:tts-engine   # TTS: política (quem pode falar) e motor de provedores
@@ -120,7 +121,8 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:longreply` | 89 | Divisor (caso dos 74 itens, tokens indivisíveis, propriedade com 150 sementes), envio sequencial, efêmero, falhas e prazo, corte por tokens nos provedores, nova tentativa da edição final (5xx, 404, edição pendurada), plano B com mensagem nova e limpeza do «Processando...», aviso quando as partes 2+ falham |
 | `test:context` | 63 | Retenção por idade da fala, usuários isolados, limites, desligado por padrão, escopo dono, reinício e arquivo corrompido, `apagar-tudo`, fila real do `llmHandler` |
 | `test:voicerobust` | 68 | Ouvinte de `speaking.start` que nunca propaga exceção, backoff e desligar após falhas, `error` em streams/conexão/player, Opus, disjuntor do rádio, atualização do yt-dlp |
-| `test:youtubeengine` | 18 | Detalhes só do que precisa e em lote, falha de um item não perde os outros, pausa com `quotaExceeded` |
+| `test:youtubeengine` | 19 | Detalhes só do que precisa e em lote, falha de um item não perde os outros, pausa com `quotaExceeded` |
+| `test:youtubelive` | 18 | Modo de live por inscrição: decisão de editar ou mandar nova, janela do automático, duração, migração da coluna `live_mode`, publicador com Discord de mentira (edição, falha de edição, vários servidores) |
 | `test:tts-text` | 437 | Markdown, emoji, menções, números por extenso, léxico, divisão em frases, entradas patológicas |
 | `test:tts-audio` | 66 | WAV/PCM 48 kHz, provedor falso, SAPI com processo falso, contrato com o `@discordjs/voice` real (a voz real do Windows só é testada se houver uma voz pt-BR) |
 | `test:tts-engine` | 151 | Política (quem pode falar, limites, conteúdo proibido, eco) e motor de provedores |
