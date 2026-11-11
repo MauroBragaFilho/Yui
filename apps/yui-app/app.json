@@ -14,7 +14,7 @@
     "android": {
       "package": "br.dev.braga.yui",
       "adaptiveIcon": {
-        "backgroundColor": "#0b0912",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
