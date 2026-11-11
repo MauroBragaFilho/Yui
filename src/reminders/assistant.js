@@ -15,9 +15,12 @@ import { parseWhen, normChars, describeWhen, describeRepeat } from './when.js';
 
 const MAX_HEAD = 400;
 
+// Jeitos educados de pedir, antes do verbo: "poderia me lembrar...", "você pode me lembrar...", "dá pra me lembrar...", "queria que você me lembrasse..."
+const POLITE = '(?:(?:voce\\s+)?(?:poderia|podia|pode|consegue|conseguiria|daria)\\s+|da\\s+(?:pra|para)\\s+(?:voce\\s+)?|(?:queria|quero|gostaria|preciso)\\s+que\\s+(?:voce\\s+)?|por favor[, ]*)?';
+
 const RE = {
-  add: /^(?:por favor[, ]*)?(?:me )?(?:lembra|lembre|lembrar|avisa|avise|avisar)(?:-me)?\b(.*)$/,
-  addNoun: /^(?:por favor[, ]*)?(?:cria|crie|criar|agenda|agende|adiciona|adicione|programa|programe|coloca|coloque|poe|ponha|faz|faca|salva|salve|anota|anote)\s+(?:um |uma |o |a )?(?:novo |nova )?lembrete\b[:,]?(.*)$/,
+  add: new RegExp(`^${POLITE}(?:me )?(?:lembra|lembre|lembrar|lembrasse|lembrares|avisa|avise|avisar|avisasse)(?:-me)?\\b(.*)$`),
+  addNoun: new RegExp(`^${POLITE}(?:cria|crie|criar|agenda|agende|adiciona|adicione|programa|programe|coloca|coloque|poe|ponha|faz|faca|salva|salve|anota|anote)\\s+(?:um |uma |o |a )?(?:novo |nova )?lembrete\\b[:,]?(.*)$`),
   noun: /^lembrete\b[:,]?(.*)$/,
   list: /^(?:me )?(?:mostra|mostre|ve|ver|lista|liste|quais?(?: sao)?|manda|mande|envia|envie|cade|exibe|exiba)?\s*(?:os |todos os |meus )*lembretes?(?: (?:de |para |pra )?(hoje|amanha|pendentes|ativos|cadastrados|marcados))?\s*[?!.]*$/,
   hasAny: /^(?:eu )?(?:tenho|tem) (?:algum |algum outro )?lembrete(?:s)?(?: (?:de |para |pra )?(hoje|amanha))?\s*[?!.]*$/,
@@ -69,7 +72,9 @@ export function parseReminderRequest(raw, now = new Date()) {
   else if ((m = RE.noun.exec(head))) { trigger = 'noun'; bodyHead = m[1]; }
   else if ((m = RE.add.exec(head))) { trigger = 'verb'; bodyHead = m[1]; }
   if (trigger === null) return null;
-  if (trigger === 'verb' && /\?\s*$/.test(headOriginal)) return null; // "me lembra o que falamos?" é pergunta para a IA
+  // Pergunta ("poderia me lembrar daqui 15 minutos de ir para casa?") só vira lembrete se achou um horário válido; sem isso
+  // ("me lembra o que falamos ontem?") é conversa e segue para a IA.
+  const isQuestion = /\?\s*$/.test(headOriginal);
   const start = head.length - bodyHead.length;
   const body = headOriginal.slice(start).trim();
   if (!body) return trigger === 'noun' ? { action: 'ask-text' } : null;
@@ -86,6 +91,7 @@ export function parseReminderRequest(raw, now = new Date()) {
     if (trigger === 'noun' || /^(?:de|para|pra)\s+\p{L}+r\b/u.test(nb)) return { action: 'ask-when', text: cleanBody(body) };
     return null;
   }
+  if (isQuestion) return null; // pergunta sem horário utilizável ("o que falamos ontem?"): é conversa
   return { action: 'error', message: w.message };
 }
 

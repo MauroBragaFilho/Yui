@@ -165,6 +165,17 @@ eq(p('me lembra de pagar a conta').action, 'ask-when');
 eq(p('me lembra ontem de x').action, 'error');
 // conversa normal nunca é capturada
 for (const frase of ['você lembra do Gabriel?', 'me lembra o que falamos ontem?', 'me avisa quando chegar', 'lembra daquele filme?', 'qual o lembrete mais comum em apps?', 'anota na lista compras: leite', 'oi tudo bem', 'amanhã às 9h tem jogo']) eq(p(frase), null, frase);
+// pedidos educados e perguntas (o caso real: "poderia me lembrar daqui 15 minutos parar ir para casa?")
+eq(p('poderia me lembrar daqui 15 minutos para ir para casa?').action, 'add');
+eq(p('poderia me lembrar daqui 15 minutos para ir para casa?').text, 'ir para casa');
+eq(new Date(p('poderia me lembrar daqui 15 minutos para ir para casa?').at).getTime(), NOW.getTime() + 15 * 60_000, 'daqui 15 minutos (sem o "a")');
+eq(p('poderia me lembrar daqui 15 minutos parar ir para casa?').text, 'parar ir para casa', 'erro de digitação no texto é mantido, o horário vale');
+eq(p('você pode me lembrar amanhã às 9h de pagar a conta?').text, 'pagar a conta');
+eq(p('Yui, dá pra me lembrar em 1 hora de ligar pra Ana?').text, 'ligar pra Ana');
+eq(p('queria que você me lembrasse às 18h de buscar o pão').text, 'buscar o pão');
+eq(p('por favor me lembra daqui a 10 minutos de desligar o forno').text, 'desligar o forno');
+eq(p('poderia me lembrar de pagar a conta?').action, 'ask-when', 'pedido claro sem horário: pergunta quando');
+for (const frase of ['você pode me lembrar do que falamos ontem?', 'poderia me avisar quando o download acabar?', 'você pode me lembrar quem ganhou?']) eq(p(frase), null, frase);
 eq(p('meus lembretes').action, 'list'); eq(p('meus lembretes de hoje').scope, 'hoje'); eq(p('tenho algum lembrete?').action, 'list');
 eq(p('cancela o lembrete 2'), { action: 'cancel', id: 2 }); eq(p('cancela todos os lembretes').all, true);
 eq(p('cancela o lembrete da reunião').text, 'reunião');
