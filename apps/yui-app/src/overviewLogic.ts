@@ -129,3 +129,40 @@ export function systemSummary({ discordOnline, aiOk, hostLevel }: SummaryInput):
   const joined = problems.length === 1 ? problems[0] : `${problems.slice(0, -1).join(', ')} e ${problems[problems.length - 1]}`;
   return { ok: false, text: `Preciso de atenção: ${joined}.` };
 }
+
+export interface Bar { hour: string; count: number; heightPercent: number; label: string }
+
+/** Barras do gráfico de 24 h: altura proporcional ao maior valor (mínimo 6% quando há resposta, 0 quando não há) e a hora local de cada barra. */
+export function chartBars(series: { hour: string; count: number }[] | null | undefined): Bar[] {
+  const list = Array.isArray(series) ? series : [];
+  const max = list.reduce((m, s) => Math.max(m, Number(s.count) || 0), 0);
+  return list.map((s) => {
+    const count = Math.max(0, Number(s.count) || 0);
+    const d = new Date(s.hour);
+    return {
+      hour: s.hour,
+      count,
+      heightPercent: max === 0 || count === 0 ? 0 : Math.max(6, Math.round((count / max) * 100)),
+      label: Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}h`,
+    };
+  });
+}
+
+export interface Problems { loginFail: number; toolError: number; toolDenied: number; alertFail: number }
+export interface AlertItem { text: string; level: 'warn' | 'danger' }
+
+/** Alertas para o dono, só com o que a API mediu: estado atual (Discord, IA, computador) e problemas das últimas 24 h. Lista vazia = nada a avisar. */
+export function buildAlerts(input: { discordOnline: boolean; aiOk: boolean | null; hostLevel: Level; problems?: Problems | null }): AlertItem[] {
+  const out: AlertItem[] = [];
+  if (!input.discordOnline) out.push({ level: 'danger', text: 'O Discord está desconectado.' });
+  if (input.aiOk === false) out.push({ level: 'danger', text: 'Nenhum provedor de IA está disponível.' });
+  if (input.hostLevel === 'danger') out.push({ level: 'danger', text: 'O computador está com pouca memória ou disco.' });
+  else if (input.hostLevel === 'warn') out.push({ level: 'warn', text: 'O computador está apertado em memória ou disco.' });
+  const p = input.problems;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  if (p?.loginFail) out.push({ level: 'warn', text: `${plural(p.loginFail, 'tentativa de login recusada', 'tentativas de login recusadas')} nas últimas 24 h.` });
+  if (p?.toolError) out.push({ level: 'warn', text: `${plural(p.toolError, 'ferramenta com erro', 'ferramentas com erro')} nas últimas 24 h.` });
+  if (p?.toolDenied) out.push({ level: 'warn', text: `${plural(p.toolDenied, 'ferramenta negada', 'ferramentas negadas')} nas últimas 24 h.` });
+  if (p?.alertFail) out.push({ level: 'danger', text: `${plural(p.alertFail, 'aviso ao dono que não foi entregue', 'avisos ao dono que não foram entregues')} nas últimas 24 h.` });
+  return out;
+}

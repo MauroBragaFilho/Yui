@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ApiError, type AdminOverview, type GatewayStatus, type Me, type YuiClient } from '../api/client.ts';
 import { Badge, Button, Card, Icon, PageHeader, type TabKey } from '../components/ui.tsx';
-import { formatUptime, greetingFor, groupEvents, levelForFree, percent, relativeTime, systemSummary, type Level } from '../overviewLogic.ts';
+import { buildAlerts, chartBars, formatUptime, greetingFor, groupEvents, levelForFree, percent, relativeTime, systemSummary, type Level } from '../overviewLogic.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 
 type Props = { client: YuiClient; me: Me; onNavigate: (tab: TabKey) => void; showCode: boolean };
@@ -15,7 +15,7 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Não conse
 
 /**
  * Visão Geral (só o dono): estado da Yui, números do dia, saúde do computador, atividade recente e atalhos.
- * Tudo vem da API; o que ela não mede (custo de IA, gráfico de 24h, Yui Live) não aparece com número inventado.
+ * Tudo vem da API; o que ela não mede (custo de IA, Yui Live) não aparece com número inventado.
  */
 export function OverviewScreen({ client, onNavigate, showCode }: Props) {
   const [data, setData] = useState<AdminOverview | null>(null);
@@ -54,6 +54,8 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
   const ramLevel = levelForFree(ramFree);
   const diskLevel = levelForFree(diskFree);
   const worst: Level = [ramLevel, diskLevel].includes('danger') ? 'danger' : [ramLevel, diskLevel].includes('warn') ? 'warn' : ramLevel === 'unknown' && diskLevel === 'unknown' ? 'unknown' : 'ok';
+  const bars = chartBars(data?.interactions?.series);
+  const alerts = data ? buildAlerts({ discordOnline: data.discord.online, aiOk, hostLevel: worst, problems: data.problems }) : [];
   const summary = data ? systemSummary({ discordOnline: data.discord.online, aiOk, hostLevel: worst }) : null;
 
   return (
@@ -87,9 +89,46 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
             <View style={styles.grid}>
               <Kpi testID="kpi-servers" icon="dns" value={String(data.discord.guilds)} label="Servidores ativos" />
               <Kpi testID="kpi-memory-users" icon="psychology" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} label="Pessoas com memória" />
+              <Kpi testID="kpi-interactions" icon="forum" value={data.interactions ? String(data.interactions.total) : '—'} label="Respostas da IA (24 h)" />
               <Kpi testID="kpi-uptime" icon="schedule" value={formatUptime(data.uptimeSeconds)} label="Tempo ligada" />
               <Kpi testID="kpi-ram" icon="memory" value={`${data.memoryMB} MB`} label="Memória da Yui" />
             </View>
+
+            <Card style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>Alertas</Text>
+                <Badge label={alerts.length === 0 ? 'Tudo certo' : `${alerts.length} aviso${alerts.length === 1 ? '' : 's'}`} color={alerts.some((a) => a.level === 'danger') ? colors.danger : alerts.length ? colors.warning : colors.success} />
+              </View>
+              {alerts.length === 0 ? <Text style={styles.hint}>Nada a avisar: Discord, IA e computador normais, sem problemas registrados nas últimas 24 h.</Text> : alerts.map((a, i) => (
+                <View key={i} style={styles.eventRow} testID="overview-alert">
+                  <Icon name={a.level === 'danger' ? 'error' : 'warning'} size={20} color={a.level === 'danger' ? colors.danger : colors.warning} />
+                  <Text style={[styles.eventLabel, { flexShrink: 1 }]}>{a.text}</Text>
+                </View>
+              ))}
+            </Card>
+
+            <Card style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>Respostas da IA por hora</Text>
+                <Text style={styles.hint}>últimas 24 h</Text>
+              </View>
+              {data.interactions ? (
+                <>
+                  <View style={styles.chart}>
+                    {bars.map((b) => (
+                      <View key={b.hour} style={styles.barCol} accessibilityLabel={`${b.label}: ${b.count} respostas`}>
+                        <View style={[styles.bar, { height: `${b.heightPercent}%` }]} />
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.hint}>{bars[0]?.label}</Text>
+                    <Text style={styles.hint}>{bars[bars.length - 1]?.label}</Text>
+                  </View>
+                  <Text style={styles.hint}>Conta as respostas do Discord e do app desde {data.interactions.since ? new Date(data.interactions.since).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'} (zera quando a Yui reinicia). Não guarda texto nem quem pediu.</Text>
+                </>
+              ) : <Text style={styles.hint}>Este servidor ainda não conta as respostas (atualize a Yui).</Text>}
+            </Card>
 
             <Card style={styles.card}>
               <View style={styles.rowBetween}>
@@ -217,6 +256,9 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' },
   meterLabel: { color: colors.text, fontSize: 13 },
   meterValue: { fontSize: 13, fontWeight: '600' },
+  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 96 },
+  barCol: { flex: 1, height: '100%', justifyContent: 'flex-end', backgroundColor: colors.surfaceAlt, borderRadius: 3, overflow: 'hidden' },
+  bar: { width: '100%', backgroundColor: colors.accent, borderRadius: 3 },
   track: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   fill: { height: 8, borderRadius: radius.pill },
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border },

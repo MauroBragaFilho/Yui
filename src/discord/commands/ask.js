@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { setGlobalContext } from '../setGlobalContext.js';
 import { config } from '../../config/index.js';
+import { recordInteraction } from '../../core/interactionStats.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { getKnowledgeContext } from '../../utils/knowledgeBase.js';
 import { generateResponse, runResearchFor, isToolDisabled, stripThinking, isSystemReply } from '../../handlers/llmHandler.js';
@@ -504,6 +505,7 @@ export const askCommand = {
             onMeta: (m) => { meta = m; },
           }
         ));
+        recordInteraction();
         // Portas C e D: se o modelo só PROMETEU pesquisar ("Vou pesquisar isso!") isso vira pesquisa de verdade, recusa honesta ou a resposta final;
         // o que ainda for só promessa nunca chega à pessoa. Resposta com a busca automática já feita (meta.usedSearch) não pesquisa de novo.
         const reviewed = await reviewResearchReply({

@@ -6,6 +6,7 @@ import { listTools } from '../agent/tools.js';
 import { checkToolAccess, isOwnerId, isReadOnlyMode, ROLES } from '../permissions.js';
 import { isMemoryEnabled } from '../discordAdapter.js';
 import { audit, auditFilePath } from '../audit.js';
+import { interactionSeries } from '../interactionStats.js';
 import { listRadio, RADIO_ACTIONS, defaultRadioDeps } from './radioAdmin.js';
 import { readLogs } from './panelLogs.js';
 import { buildIntegrations, loadGuildDetail, loadIntegrationData } from './integrations.js';
@@ -111,6 +112,20 @@ function tailAudit(file, limit) {
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
   }
+}
+
+/** Conta, nas últimas 24 h da auditoria, os eventos que merecem atenção do dono (sem detalhes, só quantos). */
+export function countProblems(rows, now = Date.now()) {
+  const out = { loginFail: 0, toolError: 0, toolDenied: 0, alertFail: 0 };
+  for (const e of rows || []) {
+    const t = Date.parse(e?.ts);
+    if (Number.isNaN(t) || now - t > 24 * 60 * 60 * 1000) continue;
+    if (e.event === 'auth.login.fail') out.loginFail += 1;
+    else if (e.event === 'agent.tool.error') out.toolError += 1;
+    else if (e.event === 'agent.tool.denied') out.toolDenied += 1;
+    else if (e.event === 'alert.fail') out.alertFail += 1;
+  }
+  return out;
 }
 
 const CHANNEL_COLUMNS = { noticias: 'news_channel_id', diario: 'daily_channel_id', semanal: 'weekly_channel_id' };
@@ -267,6 +282,9 @@ export function createAdmin({
         // Atividade recente: só quando, o quê e por qual canal (nunca o conteúdo de mensagens nem os detalhes do evento).
         activity: tailAudit(auditFile || auditFilePath(), 8).map((e) => ({ ts: e.ts ?? null, event: String(e.event ?? ''), role: e.role ?? null, platform: e.platform ?? null })),
         retention: { ownerPermanent: true, othersDays: safeRetentionDays() },
+        // Respostas da IA por hora nas últimas 24 h (contador em memória: vale desde `since`) e problemas vistos na auditoria no mesmo período.
+        interactions: deps?.interactions ? deps.interactions() : interactionSeries(),
+        problems: countProblems(tailAudit(auditFile || auditFilePath(), 1500)),
         flags: {
           readOnly: isReadOnlyMode(),
           memoryEnabled: isMemoryEnabled(),

@@ -42,6 +42,8 @@ export interface AdminOverview {
   activity?: { ts: string | null; event: string; role: string | null; platform: string | null }[];
   /** Retenção da memória: a do dono é permanente; as demais expiram em `othersDays` dias. */
   retention?: { ownerPermanent: boolean; othersDays: number | null };
+  interactions?: { series: { hour: string; count: number }[]; total: number; since: string };
+  problems?: { loginFail: number; toolError: number; toolDenied: number; alertFail: number };
 }
 export type AutomodMode = 'off' | 'trigger' | 'mcp' | 'both';
 export interface AdminGuild { id: string; name: string; members: number | null; automod: AutomodMode; tosAccepted: boolean }

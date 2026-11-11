@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { logger } from '../../utils/logger.js';
+import { recordInteraction } from '../interactionStats.js';
 import { buildPersonaPrompt } from '../persona.js';
 // Agente de pesquisa (módulos PUROS, sem rede nem Discord): a pesquisa fora da fila usa o MESMO agente da fila (ver "Pesquisa na web" abaixo).
 import { readResearchConfig, privateSearchAllowed, failureMessage } from '../../handlers/researchAgent.js';
@@ -81,6 +82,7 @@ export async function chat({ prompt, system = '', history = [], ctx, memoryBlock
   const started = Date.now();
   const text = await backend.chat({ prompt, system: persona, history, ctx, memoryBlock, ...(deadlineAt ? { deadlineAt } : {}) });
   logger.info(`[AI] backend=${backend.name} ${Date.now() - started}ms`);
+  recordInteraction();
   return text;
 }
 

@@ -40,6 +40,7 @@
     "test:voicerobust": "node tests/test-voice-robust.js",
     "test:youtubeengine": "node tests/test-youtube-engine.js",
     "test:youtubelive": "node tests/test-youtube-live-edit.js",
+    "test:interactionstats": "node tests/test-interaction-stats.js",
     "test:tts-text": "node tests/test-tts-text.js",
     "test:tts-audio": "node tests/test-tts-audio.js",
     "test:tts-azure": "node tests/test-tts-azure.js",

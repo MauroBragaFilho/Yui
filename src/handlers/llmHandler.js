@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { recordInteraction } from '../core/interactionStats.js';
 import { contextFromDiscord, buildMemoryBlock, captureFromUserText, isMemoryEnabled } from '../core/discordAdapter.js';
 import { memory as coreMemory, audit as coreAudit } from '../core/index.js';
 import { forgetUserContext } from '../core/context/contextStore.js';
@@ -2687,6 +2688,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             logger.info(`[Imagem] Porta I: pedido de imagem por conversa (${imageReq.vague ? 'assunto criativo' : 'com assunto'}, ${imageSubject.length} caracteres)`);
             rawResponse = JSON.stringify({ thought: 'pedido de imagem por conversa', tool: 'generate_image', args: { prompt: imageSubject, negative_prompt: '' } });
         } else do {
+            recordInteraction();
             rawResponse = await generateResponse(prompt, channelId, {
                 ...options,
                 onMeta: (meta) => { genMeta = meta; },

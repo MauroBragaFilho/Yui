@@ -1,7 +1,7 @@
 // Testes da lógica da Visão Geral do painel (sem React e sem rede). Execução: npm test (dentro de apps/yui-app)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeEvent, formatUptime, greetingFor, groupEvents, levelForFree, percent, relativeTime, systemSummary } from '../src/overviewLogic.ts';
+import { buildAlerts, chartBars, describeEvent, formatUptime, greetingFor, groupEvents, levelForFree, percent, relativeTime, systemSummary } from '../src/overviewLogic.ts';
 import { TABS, tabVisible } from '../src/tabs.ts';
 
 test('saudação por horário', () => {
@@ -108,4 +108,25 @@ test('leitura da saúde do computador: converte as unidades e nunca lança', asy
   const broken = { platform: () => 'linux', totalmem: () => { throw new Error('x'); }, freemem: () => { throw new Error('x'); } };
   const noDisk = { statfsSync: () => { throw new Error('sem permissão'); } };
   assert.deepEqual(readHostStats({ osImpl: broken, fsImpl: noDisk }), { platform: 'linux', ramTotalMB: null, ramFreeMB: null, diskTotalGB: null, diskFreeGB: null });
+});
+
+test('gráfico de 24 h: altura proporcional, vazio sem inventar barra', () => {
+  const s = [{ hour: '2026-11-11T10:00:00.000Z', count: 0 }, { hour: '2026-11-11T11:00:00.000Z', count: 2 }, { hour: '2026-11-11T12:00:00.000Z', count: 10 }, { hour: '2026-11-11T13:00:00.000Z', count: 1 }];
+  const bars = chartBars(s);
+  assert.deepEqual(bars.map((b) => b.heightPercent), [0, 20, 100, 10]);
+  assert.equal(chartBars([{ hour: 'x', count: 1 }, { hour: 'y', count: 100 }])[0].heightPercent, 6); // mínimo visível
+  assert.deepEqual(chartBars([{ hour: '2026-11-11T10:00:00.000Z', count: 0 }]).map((b) => b.heightPercent), [0]);
+  assert.deepEqual(chartBars(null), []);
+  assert.equal(chartBars([{ hour: 'lixo', count: 3 }])[0].label, '');
+});
+
+test('alertas só com o que foi medido', () => {
+  assert.deepEqual(buildAlerts({ discordOnline: true, aiOk: true, hostLevel: 'ok', problems: { loginFail: 0, toolError: 0, toolDenied: 0, alertFail: 0 } }), []);
+  assert.deepEqual(buildAlerts({ discordOnline: true, aiOk: null, hostLevel: 'unknown' }), []); // sem leitura da IA não afirma nada
+  const a = buildAlerts({ discordOnline: false, aiOk: false, hostLevel: 'warn', problems: { loginFail: 1, toolError: 2, toolDenied: 0, alertFail: 1 } });
+  assert.equal(a.length, 6);
+  assert.equal(a[0].level, 'danger');
+  assert.match(a.map((x) => x.text).join('|'), /1 tentativa de login recusada/);
+  assert.match(a.map((x) => x.text).join('|'), /2 ferramentas com erro/);
+  assert.equal(a.find((x) => /apertado/.test(x.text)).level, 'warn');
 });
