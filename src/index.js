@@ -1,3 +1,4 @@
+import './utils/netDefaultsBoot.js'; // prazo padrão de rede (fetch e axios): precisa vir antes de tudo
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { initDatabase } from './database/db.js';

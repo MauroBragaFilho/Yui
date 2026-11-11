@@ -25,6 +25,16 @@ Por enquanto a Yui **fica no notebook** e a **IA fica na nuvem**. Ficam adiadas 
 
 A Fase 1 (política) e a Fase 2 (rotina pessoal, só com IA na nuvem) seguem valendo, mas só depois dos itens 1 a 5.
 
+**Andamento em 11/11/2026:**
+
+- Item 1 (atualizador): feito o que dava para fazer sem hardware novo. Antes de aplicar, ele sobe o código novo numa pasta temporária e confere que chega ao login do Discord (pega arquivo faltando e erro de sintaxe); espera até 4 min a Yui ficar de pé; não pula mais `src\database`. Falta cobrir `apps/` (o painel ainda é copiado à mão, porque o build não está no git).
+- Item 2 (observabilidade): relatório diário de saúde por DM às 08:00 (`YUI_HEALTH_REPORT`).
+- Item 3 (memória e disco): o Chrome do Weekly agora tem recuo depois de falha, um por vez, prazo de 60 s e prioridade baixa. Os backups do atualizador já guardam só 3 e os logs rodam em 14 dias.
+- Item 4 (rede): prazo padrão de 45 s para todo `fetch` e `axios` que não define o seu (`YUI_HTTP_TIMEOUT_MS`).
+- Item 5 (backup fora do notebook): **pendente, depende de escolher o destino** (PC, Drive ou outro).
+- Item 6 (permissões): feito, com teste (`test:permgaps`).
+- Item 7 (supervisão que religa só a Yui): pendente.
+
 ## 2. Visão geral
 
 | Fase | Nome | Roda no notebook? | Depende de |

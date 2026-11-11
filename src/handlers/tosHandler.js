@@ -269,7 +269,7 @@ async function handleTosInteraction(interaction) {
             const updatesEmbed = new EmbedBuilder()
                 .setColor(0x7C3AED)
                 .setTitle('📢 Central de Updates Configurada')
-                .setDescription(`O canal <#${targetUpdateChannel.id}> foi registrado para receber as novidades e atualizações da Yui.\n\nCaso um administrador queira alterar este canal, utilize o comando:\n\`/chat_updates [canal]\``);
+                .setDescription(`O canal <#${targetUpdateChannel.id}> foi registrado para receber as novidades e atualizações da Yui.\n\nCaso um administrador queira alterar este canal, utilize o comando:\n\`/yui-servidor canal_updates:#canal\``);
             await targetUpdateChannel.send({ embeds: [updatesEmbed] }).catch(() => {});
             console.log(`[TOS-DEBUG] Servidor ${guild.id} aceitou.`);
         } else {

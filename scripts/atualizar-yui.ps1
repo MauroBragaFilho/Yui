@@ -41,6 +41,36 @@ function Reiniciar-Yui {
 
 # Espera a Yui ficar de pe: no notebook (HD, 4 GB) o primeiro carregamento depois de trocar o codigo leva mais de 30 s.
 # Passou quando o processo vive ha pelo menos `minSegundos`; um erro de inicializacao reinicia o processo a cada ~15 s e nunca chega la.
+# Teste de subida ANTES de mexer em C:\Yui: sobe o codigo novo numa pasta temporaria, sem token real e sem portas, e confere que ele chega ate
+# o login do Discord sem erro de importacao/sintaxe. Pega o tipo de defeito que derrubou o update de 11/11 (arquivo novo que nao chegava).
+# Devolve $null se passou, ou o motivo se falhou.
+function Testar-Subida([string]$pasta, [string]$modulos) {
+    $nodeExe = 'C:\Program Files\nodejs\node.exe'
+    if (-not (Test-Path $nodeExe)) { return $null }   # sem node no caminho padrao: nao ha como testar, segue como antes
+    if (-not (Test-Path "$pasta\node_modules")) { cmd /c mklink /J "$pasta\node_modules" $modulos | Out-Null }
+    $out = Join-Path $pasta 'preflight-saida.txt'; $err = Join-Path $pasta 'preflight-erro.txt'
+    $antes = @{}
+    foreach ($k in 'DISCORD_TOKEN', 'YUI_API_ENABLED', 'YUI_GATEWAY_ENABLED', 'GTA_WEEKLY_ENABLED') { $antes[$k] = [Environment]::GetEnvironmentVariable($k, 'Process') }
+    $env:DISCORD_TOKEN = 'token-falso-de-teste'; $env:YUI_API_ENABLED = 'false'; $env:YUI_GATEWAY_ENABLED = 'false'; $env:GTA_WEEKLY_ENABLED = 'false'
+    $p = $null
+    try {
+        $p = Start-Process $nodeExe -ArgumentList 'src/index.js' -WorkingDirectory $pasta -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -WindowStyle Hidden
+        $fim = (Get-Date).AddSeconds(150)
+        while (-not $p.HasExited -and (Get-Date) -lt $fim) { Start-Sleep 3 }
+        if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }   # o processo que NOS abrimos (guardado em $p), nunca um achado por varredura
+    } finally {
+        foreach ($k in $antes.Keys) { [Environment]::SetEnvironmentVariable($k, $antes[$k], 'Process') }
+    }
+    $saida = if (Test-Path $out) { Get-Content $out -Raw -Encoding UTF8 } else { '' }
+    $erro = if (Test-Path $err) { Get-Content $err -Raw -Encoding UTF8 } else { '' }
+    if ($erro -match 'ERR_MODULE_NOT_FOUND|SyntaxError|ReferenceError|Cannot find (module|package)|ERR_PACKAGE_PATH_NOT_EXPORTED') {
+        return ('erro ao carregar o codigo novo: ' + (($erro -split "`n" | Where-Object { $_ -match 'Error' } | Select-Object -First 1) -replace '\s+', ' ').Trim())
+    }
+    if ($saida -notmatch 'Inicializando Yui') { return 'o codigo novo nem chegou a iniciar (sem "Inicializando Yui" na saida)' }
+    if ($saida -notmatch 'Falha ao logar no Discord|DISCORD_TOKEN') { return 'o codigo novo nao chegou ate o login do Discord em 150 s' }
+    return $null
+}
+
 function Esperar-Yui([int]$minSegundos, [int]$maxSegundos) {
     $fim = (Get-Date).AddSeconds($maxSegundos)
     while ((Get-Date) -lt $fim) {
@@ -69,6 +99,22 @@ try {
     Expand-Archive "$tmp\yui.zip" "$tmp\x" -Force
     $novo = (Get-ChildItem "$tmp\x" -Directory | Select-Object -First 1).FullName
     if (-not (Test-Path "$novo\package.json")) { throw 'zip baixado nao parece ser a Yui (sem package.json)' }
+
+    # Teste de subida do codigo novo antes de tocar na Yui. Se o package-lock mudou, as dependencias novas ainda nao estao em node_modules
+    # (o npm install roda depois), entao nesse caso o teste e pulado e a conferencia fica por conta do rollback.
+    $lockNovo = if (Test-Path "$novo\package-lock.json") { (Get-FileHash "$novo\package-lock.json").Hash } else { '' }
+    $lockAtual = if (Test-Path "$Destino\package-lock.json") { (Get-FileHash "$Destino\package-lock.json").Hash } else { '' }
+    if ($lockNovo -eq $lockAtual) {
+        Log 'Testando a subida do codigo novo antes de aplicar...'
+        $motivo = Testar-Subida $novo (Join-Path $Destino 'node_modules')
+        if ($motivo) {
+            Log "ERRO: o teste de subida falhou ($motivo). Nada foi alterado em $Destino; tenta de novo amanha."
+            return
+        }
+        Log 'Teste de subida: OK.'
+    } else {
+        Log 'package-lock mudou: teste de subida pulado (dependencias novas).'
+    }
 
     # backup do codigo atual (so o que muda de versao para versao)
     $bk = Join-Path $backups ((Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $(if ($local) { $local.Substring(0, 7) } else { 'anterior' }))

@@ -9,6 +9,7 @@ import { baixarMusicaCommand } from './commands/baixarMusica.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { checkBan } from '../handlers/banHandler.js';
+import { isOwnerId } from '../core/permissions.js';
 
 // Mapeia o subcomando digitado (ex: "+yui diario") para o mesmo objeto
 // de comando usado pelos slash commands (/gta-diario). Aceita também
@@ -78,11 +79,19 @@ export function freeTextAfterSubcommand(rest) {
   return String(rest ?? '').trim().replace(/^\S+/, '').trim();
 }
 
+/** Mensagem privada (DM) de quem NÃO é o dono: a Yui não responde nada, nem aviso (mesma regra da conversa por menção). */
+export function isForeignDm(message, isOwner = isOwnerId) {
+  return !(message?.guildId ?? message?.guild?.id) && !isOwner(message?.author?.id);
+}
+
 export async function handlePrefixCommand(message) {
   const prefix = config.discord.prefix.toLowerCase();
   const contentLower = message.content.toLowerCase();
 
   if (!contentLower.startsWith(prefix)) return;
+
+  // "+yui ..." no privado de quem não é o dono: silêncio total. Antes o comando respondia (e gastava IA) para qualquer pessoa em DM.
+  if (isForeignDm(message)) return;
 
   // Ban de usuário, servidor ou canal vale também no prefixo (antes só valia na menção, no comando de barra e na fila: "+yui perguntar" e
   // "+yui musica" contornavam o ban). Sem resposta, para o banido não gerar uma conversa com o bot a cada mensagem; só o log.

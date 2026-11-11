@@ -62,12 +62,20 @@ function checkBan(userId, guildId, channelId) {
         // Registros antigos podem ter motivo enorme: quem exibe (embeds de "banido") recebe o texto já cortado.
         return clampBanReason(r);
     };
+    if (isProtectedOwner(userId)) return null; // registro antigo no bans.json também não derruba o dono
     if (bans.users[userId]) return { type: 'user', typeName: 'Usuário', reason: sanitize(bans.users[userId].reason) };
     if (guildId && bans.guilds[guildId]) return { type: 'guild', typeName: 'Servidor', reason: sanitize(bans.guilds[guildId].reason) };
     if (channelId && bans.channels[channelId]) return { type: 'channel', typeName: 'Canal', reason: sanitize(bans.channels[channelId].reason) };
     return null;
 }
+/** O dono nunca é banido nem bloqueado (nem por engano, nem por registro antigo no arquivo). Vale OWNER_ID, OWNER_IDS e YUI_OWNER_ID. */
+function isProtectedOwner(id) {
+    const v = String(id ?? '').trim();
+    if (!v) return false;
+    return Boolean(config.isOwner?.(v)) || v === String(process.env.YUI_OWNER_ID || '').trim();
+}
 function addBan(type, id, reason = "Violação dos Termos de Uso.") {
+    if (type === 'user' && isProtectedOwner(id)) return false;
     const banInfo = { reason: clampBanReason(reason), timestamp: new Date().toISOString() };
     if (type === 'user') bans.users[id] = banInfo;
     else if (type === 'guild') bans.guilds[id] = banInfo;

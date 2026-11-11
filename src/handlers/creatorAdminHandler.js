@@ -77,7 +77,9 @@ async function handleCreatorAdminCommand(interaction, client) {
         const id = interaction.options.getString('id');
         // O motivo é gravado cortado (BAN_REASON_MAX) e o eco mostra exatamente o que foi gravado.
         const motivo = clampBanReason(interaction.options.getString('motivo') || 'Violação dos termos.');
-        addBan(tipo, id, motivo);
+        if (addBan(tipo, id, motivo) === false) {
+            return interaction.reply({ content: '🔒 Não é possível banir o dono da Yui.', ephemeral: true });
+        }
         const embed = new EmbedBuilder()
             .setColor(0xE11D48)
             .setTitle('🔒 Restrição Aplicada')
@@ -376,7 +378,9 @@ async function handleCreatorAdminInteraction(interaction, client) {
         const motivo = clampBanReason(interaction.fields.getTextInputValue('motivo') || 'Violação.');
 
         if (acao === 'banir') {
-            addBan(tipo, id, motivo);
+            if (addBan(tipo, id, motivo) === false) {
+                return interaction.reply({ content: '🔒 Não é possível banir o dono da Yui.', ephemeral: true });
+            }
             const embed = new EmbedBuilder()
                 .setColor(0xE11D48)
                 .setTitle('🛑 Bloqueio Aplicado')
