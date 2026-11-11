@@ -7,7 +7,6 @@ import { Shell } from './src/components/Shell.tsx';
 import { type TabKey } from './src/components/ui.tsx';
 import { AdminScreen } from './src/screens/AdminScreen.tsx';
 import { ChatScreen } from './src/screens/ChatScreen.tsx';
-import { CodeScreen } from './src/screens/CodeScreen.tsx';
 import { ConnectScreen } from './src/screens/ConnectScreen.tsx';
 import { MemoryScreen } from './src/screens/MemoryScreen.tsx';
 import { OverviewScreen } from './src/screens/OverviewScreen.tsx';
@@ -27,7 +26,6 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('chat');
-  const [codeEnabled, setCodeEnabled] = useState(false);
   const expiring = useRef(false);
 
   /** Sessão/token recusado pelo servidor: esquece a sessão e volta ao login. */
@@ -78,16 +76,6 @@ export default function App() {
     [session, handleUnauthorized]
   );
 
-  // A aba "Código" só aparece para o dono e quando o módulo está ligado no servidor.
-  useEffect(() => {
-    let alive = true;
-    setCodeEnabled(false);
-    if (client && session?.me.role === 'OWNER') {
-      client.dev.status().then((s) => { if (alive) setCodeEnabled(s.enabled); }).catch(() => {});
-    }
-    return () => { alive = false; };
-  }, [client, session]);
-
   async function onConnected(settings: Settings, me: Me) {
     await saveSettings(settings);
     setNotice(null);
@@ -125,10 +113,9 @@ export default function App() {
       {!session || !client ? (
         <ConnectScreen serverUrl={serverUrl} notice={notice} onConnected={onConnected} />
       ) : (
-        <Shell tab={tab} onChange={setTab} showAdmin={isOwner} showCode={isOwner && codeEnabled} roleLabel={ROLE_LABEL[session.me.role] ?? session.me.role} onLogout={logout}>
-          {tab === 'home' && isOwner ? <OverviewScreen client={client} me={session.me} onNavigate={setTab} showCode={codeEnabled} /> : null}
+        <Shell tab={tab} onChange={setTab} showAdmin={isOwner} roleLabel={ROLE_LABEL[session.me.role] ?? session.me.role} onLogout={logout}>
+          {tab === 'home' && isOwner ? <OverviewScreen client={client} me={session.me} onNavigate={setTab} /> : null}
           {tab === 'chat' ? <ChatScreen client={client} /> : null}
-          {tab === 'code' && isOwner && codeEnabled ? <CodeScreen client={client} /> : null}
           {tab === 'memory' ? <MemoryScreen client={client} /> : null}
           {tab === 'admin' && isOwner ? <AdminScreen client={client} /> : null}
           {tab === 'status' ? <StatusScreen client={client} me={session.me} onLogout={logout} /> : null}

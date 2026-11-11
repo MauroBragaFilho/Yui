@@ -37,7 +37,7 @@ A Yui começou como um bot de Discord sobre o **GTA Online** e hoje é uma **pla
 | **Yui API** | Interface HTTP do Core (login, chat, memória, painel) | `src/core/api` |
 | **Yui Gateway** | Servidor de IA próprio, compatível com OpenAI, com failover | `src/gateway` |
 | **App da Yui** | Cliente Android e web (chat, **código**, memória, painel do dono) | `apps/yui-app` |
-| **Código** | A Yui lendo e editando os seus projetos, com aprovação (aba **Código**; o que era do Jarvis). Age na máquina onde a Yui roda (hoje, o notebook) | `src/core/dev` |
+| **Código** | A Yui lendo e editando os seus projetos, com aprovação (sem tela no painel desde 11/11/2026; o que era do Jarvis). Age na máquina onde a Yui roda (hoje, o notebook) | `src/core/dev` |
 | **Atualizador** | Traz o `main` do GitHub para o notebook uma vez por dia, com volta automática se a Yui não subir | `scripts/atualizar-yui.ps1` (no notebook, `C:\Tools\atualizar-yui.ps1`) |
 | **Scripts do notebook** | Instalação sem internet, SSH e limpeza do Windows | `scripts/instalar-tudo-offline.ps1`, `scripts/instalar-ssh.ps1`, `scripts/otimizar-windows.ps1` |
 | **Yui Desktop** | A janela do app no computador (Electron), com seletor de pasta e "Iniciar a Yui" | `D:\Projetos\Projeto Jarvis\Yui Desktop` (fora deste repositório) |

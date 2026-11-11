@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 import { getTheme, setTheme, type ThemeMode } from '../web.ts';
 import { Icon, IconButton, TABS, TabBar, tabVisible, type TabKey } from './ui.tsx';
@@ -8,7 +8,6 @@ type Props = {
   tab: TabKey;
   onChange: (tab: TabKey) => void;
   showAdmin: boolean;
-  showCode?: boolean;
   roleLabel: string;
   onLogout: () => void;
   children: React.ReactNode;
@@ -29,7 +28,7 @@ function loadCollapsed(): boolean {
  * Casca do app, no formato do BDS: barra lateral (recolhível) em telas largas e
  * barra de abas embaixo em telas estreitas.
  */
-export function Shell({ tab, onChange, showAdmin, showCode = false, roleLabel, onLogout, children }: Props) {
+export function Shell({ tab, onChange, showAdmin, roleLabel, onLogout, children }: Props) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const [collapsed, setCollapsed] = useState(loadCollapsed);
@@ -39,7 +38,7 @@ export function Shell({ tab, onChange, showAdmin, showCode = false, roleLabel, o
     return (
       <View style={styles.root}>
         <View style={styles.main}>{children}</View>
-        <TabBar active={tab} onChange={onChange} showAdmin={showAdmin} showCode={showCode} />
+        <TabBar active={tab} onChange={onChange} showAdmin={showAdmin} />
       </View>
     );
   }
@@ -68,19 +67,22 @@ export function Shell({ tab, onChange, showAdmin, showCode = false, roleLabel, o
         <View style={[styles.brand, collapsed && styles.brandCollapsed]}>
           {collapsed ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Expandir menu" onPress={toggleCollapsed}>
-              <Text style={styles.brandMark}>Y</Text>
+              <Image source={require('../../assets/yui-avatar.webp')} style={styles.brandAvatar} accessibilityLabel="Yui" />
             </Pressable>
           ) : (
             <>
-              <Text style={styles.brandMark}>YUI</Text>
-              <Text numberOfLines={1} style={styles.brandText}>ASSISTENTE</Text>
+              <Image source={require('../../assets/yui-avatar.webp')} style={styles.brandAvatar} accessibilityLabel="Yui" />
+              <View style={{ flexShrink: 1 }}>
+                <Text style={styles.brandMark}>YUI</Text>
+                <Text numberOfLines={1} style={styles.brandText}>ASSISTENTE</Text>
+              </View>
               <IconButton icon="menu_open" label="Recolher menu" size={28} onPress={toggleCollapsed} style={{ marginLeft: 'auto' }} />
             </>
           )}
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.nav}>
-          {TABS.filter((t) => tabVisible(t.key, { showAdmin, showCode })).map((t) => (
+          {TABS.filter((t) => tabVisible(t.key, { showAdmin })).map((t) => (
             <NavItem
               key={t.key}
               testID={`tab-${t.key}`}
@@ -141,7 +143,7 @@ function NavItem({
         active ? { backgroundColor: colors.accentLight } : state.hovered ? { backgroundColor: colors.surfaceAlt } : null,
       ]}
     >
-      <Icon name={icon} size={22} color={active ? colors.accent : colors.muted} />
+      <Icon name={icon} size={24} color={active ? colors.accent : colors.muted} />
       {collapsed ? null : (
         <Text numberOfLines={1} style={[styles.navLabel, { color: active ? colors.accentText : colors.muted }]}>
           {label}
@@ -160,7 +162,7 @@ const styles = StyleSheet.create({
     borderRightColor: colors.border,
   },
   brand: {
-    height: 64,
+    height: 72,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
@@ -169,19 +171,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   brandCollapsed: { justifyContent: 'center', paddingHorizontal: 0 },
-  brandMark: { color: colors.accent, fontFamily: fonts.title, fontWeight: '900', fontSize: 18, letterSpacing: 1 },
-  brandText: { flexShrink: 1, color: colors.text, fontFamily: fonts.title, fontWeight: '700', fontSize: 11, letterSpacing: 0.4 },
+  brandAvatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.border },
+  brandMark: { color: colors.text, fontFamily: fonts.title, fontWeight: '700', fontSize: 14, letterSpacing: 0.6 },
+  brandText: { color: colors.muted, fontWeight: '600', fontSize: 10, letterSpacing: 0.6 },
   nav: { padding: spacing.md, gap: 4 },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: 10,
+    paddingVertical: 13,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
   },
   navItemCollapsed: { justifyContent: 'center', paddingHorizontal: 0 },
-  navLabel: { fontWeight: '600', fontSize: 13, flexShrink: 1 },
+  navLabel: { fontWeight: '600', fontSize: 14, flexShrink: 1 },
   footer: { padding: spacing.md, gap: 4, borderTopWidth: 1, borderTopColor: colors.border },
   footerText: { color: colors.muted, fontSize: 12, textAlign: 'center', paddingTop: spacing.sm },
 });

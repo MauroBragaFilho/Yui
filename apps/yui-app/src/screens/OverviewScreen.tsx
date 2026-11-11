@@ -5,7 +5,7 @@ import { Badge, Button, Card, Icon, PageHeader, type TabKey } from '../component
 import { buildAlerts, chartBars, formatUptime, greetingFor, groupEvents, levelForFree, percent, relativeTime, systemSummary, type Level } from '../overviewLogic.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 
-type Props = { client: YuiClient; me: Me; onNavigate: (tab: TabKey) => void; showCode: boolean };
+type Props = { client: YuiClient; me: Me; onNavigate: (tab: TabKey) => void };
 
 const REFRESH_MS = 30_000;
 const LEVEL_COLOR: Record<Level, string> = { ok: colors.success, warn: colors.warning, danger: colors.danger, unknown: colors.muted };
@@ -17,7 +17,7 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Não conse
  * Visão Geral (só o dono): estado da Yui, números do dia, saúde do computador, atividade recente e atalhos.
  * Tudo vem da API; o que ela não mede (custo de IA, Yui Live) não aparece com número inventado.
  */
-export function OverviewScreen({ client, onNavigate, showCode }: Props) {
+export function OverviewScreen({ client, onNavigate }: Props) {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [gateway, setGateway] = useState<GatewayStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +96,7 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
 
             <Card style={styles.card}>
               <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>Alertas</Text>
+                <SectionTitle icon="notifications" title="Alertas" />
                 <Badge label={alerts.length === 0 ? 'Tudo certo' : `${alerts.length} aviso${alerts.length === 1 ? '' : 's'}`} color={alerts.some((a) => a.level === 'danger') ? colors.danger : alerts.length ? colors.warning : colors.success} />
               </View>
               {alerts.length === 0 ? <Text style={styles.hint}>Nada a avisar: Discord, IA e computador normais, sem problemas registrados nas últimas 24 h.</Text> : alerts.map((a, i) => (
@@ -109,7 +109,7 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
 
             <Card style={styles.card}>
               <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>Respostas da IA por hora</Text>
+                <SectionTitle icon="bar_chart" title="Respostas da IA por hora" />
                 <Text style={styles.hint}>últimas 24 h</Text>
               </View>
               {data.interactions ? (
@@ -132,7 +132,7 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
 
             <Card style={styles.card}>
               <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>Saúde do computador</Text>
+                <SectionTitle icon="monitor_heart" title="Saúde do computador" />
                 <Badge label={LEVEL_TEXT[worst]} color={LEVEL_COLOR[worst]} />
               </View>
               <Meter testID="meter-ram" label="Memória RAM livre" freePercent={ramFree} level={ramLevel}
@@ -143,7 +143,7 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
             </Card>
 
             <Card style={styles.card}>
-              <Text style={styles.cardTitle}>Atividade recente</Text>
+              <SectionTitle icon="history" title="Atividade recente" />
               {data.activity && data.activity.length > 0 ? (
                 groupEvents(data.activity).map((v, i) => {
                   const tone = v.tone === 'good' ? colors.success : v.tone === 'bad' ? colors.danger : colors.accentText;
@@ -162,7 +162,7 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
             </Card>
 
             <Card style={styles.card}>
-              <Text style={styles.cardTitle}>Sistema de memória</Text>
+              <SectionTitle icon="psychology" title="Sistema de memória" />
               <View style={styles.memRow}>
                 <View style={styles.memBox}>
                   <Text style={styles.memTitle}>Proprietário</Text>
@@ -177,19 +177,18 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
             </Card>
 
             <Card style={styles.card}>
-              <Text style={styles.cardTitle}>Atalhos</Text>
+              <SectionTitle icon="bolt" title="Atalhos" />
               <View style={styles.badges}>
                 <Shortcut testID="go-chat" icon="chat_bubble" label="Chat" onPress={() => onNavigate('chat')} />
                 <Shortcut testID="go-memory" icon="psychology" label="Memória" onPress={() => onNavigate('memory')} />
                 <Shortcut testID="go-admin" icon="admin_panel_settings" label="Admin" onPress={() => onNavigate('admin')} />
-                {showCode ? <Shortcut testID="go-code" icon="code" label="Código" onPress={() => onNavigate('code')} /> : null}
                 <Shortcut testID="go-status" icon="monitor_heart" label="Status" onPress={() => onNavigate('status')} />
               </View>
             </Card>
 
             <Card style={styles.card}>
               <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>Personal Assistant</Text>
+                <SectionTitle icon="person" title="Personal Assistant" />
                 <Badge label="Em breve" color={colors.muted} />
               </View>
               <Text style={styles.hint}>Agenda, lembretes, tarefas e o que a Yui sabe sobre você, num só lugar. Ainda não existe: vem depois da estabilidade no notebook.</Text>
@@ -199,6 +198,15 @@ export function OverviewScreen({ client, onNavigate, showCode }: Props) {
           </>
         ) : null}
       </ScrollView>
+    </View>
+  );
+}
+
+function SectionTitle({ icon, title }: { icon: string; title: string }) {
+  return (
+    <View style={styles.sectionTitle}>
+      <Icon name={icon} size={22} color={colors.accent} />
+      <Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>
     </View>
   );
 }
@@ -240,19 +248,20 @@ function Shortcut({ icon, label, onPress, testID }: { icon: string; label: strin
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md, width: '100%', maxWidth: 980, alignSelf: 'center' },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, flexWrap: 'wrap' },
+  content: { padding: spacing.xl, gap: spacing.lg, width: '100%', maxWidth: 1100, alignSelf: 'center' },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, flexWrap: 'wrap', padding: spacing.xl, borderRadius: radius.lg },
   avatar: { width: 84, height: 84, borderRadius: 42, borderWidth: 1, borderColor: colors.border },
   heroText: { flex: 1, minWidth: 220, gap: spacing.sm },
   greeting: { color: colors.text, fontSize: 22, fontFamily: fonts.title, fontWeight: '700' },
   summary: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  kpi: { flexGrow: 1, flexBasis: 150, gap: 4 },
-  kpiValue: { color: colors.text, fontSize: 24, fontFamily: fonts.title, fontWeight: '700' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
+  kpi: { flexGrow: 1, flexBasis: 180, gap: 6, paddingVertical: 24, paddingHorizontal: 20 },
+  kpiValue: { color: colors.text, fontSize: 26, fontFamily: fonts.title, fontWeight: '700' },
   kpiLabel: { color: colors.muted, fontSize: 12 },
-  card: { gap: spacing.sm },
-  cardTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  card: { gap: spacing.md, padding: spacing.xl, borderRadius: radius.lg },
+  cardTitle: { color: colors.text, fontSize: 18, fontFamily: fonts.title, fontWeight: '700', letterSpacing: -0.2 },
+  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' },
   meterLabel: { color: colors.text, fontSize: 13 },
   meterValue: { fontSize: 13, fontWeight: '600' },

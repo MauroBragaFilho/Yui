@@ -201,7 +201,7 @@ Como funciona e o que protege:
 
 ## 💻 Código: rotas do módulo
 
-Rotas `/v1/dev/*`, usadas pela aba **Código** do app (as funções do Jarvis dentro da Yui). Exigem o papel **OWNER** (membros recebem `403`) e `YUI_DEV_ENABLED=true` (senão `503`, exceto `GET /v1/dev/status`, que diz se está ligado). Guia de uso e segurança: [Código](CODIGO.md).
+Rotas `/v1/dev/*`, que antes eram usadas pela aba **Código** do app (removida em 11/11/2026; as rotas continuam, as funções do Jarvis dentro da Yui). Exigem o papel **OWNER** (membros recebem `403`) e `YUI_DEV_ENABLED=true` (senão `503`, exceto `GET /v1/dev/status`, que diz se está ligado). Guia de uso e segurança: [Código](CODIGO.md).
 
 | Rota | O que faz |
 |------|-----------|

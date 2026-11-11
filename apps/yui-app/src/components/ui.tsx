@@ -174,12 +174,13 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
   const wide = width >= 900;
   return (
     <View style={[styles.pageHeader, { paddingHorizontal: wide ? 32 : spacing.lg }]}>
-      <View style={{ flexShrink: 1 }}>
-        <Text accessibilityRole="header" numberOfLines={1} style={[styles.pageTitle, { fontSize: wide ? 24 : 20 }]}>
+      <View style={[{ flexShrink: 1 }, wide && styles.pageLeftWide]}>
+        <Text accessibilityRole="header" numberOfLines={1} style={[styles.pageTitle, { fontSize: wide ? 26 : 20 }]}>
           {title}
         </Text>
+        {subtitle && wide ? <View style={styles.pageDivider} /> : null}
         {subtitle ? (
-          <Text numberOfLines={1} style={styles.pageSubtitle}>
+          <Text numberOfLines={1} style={[styles.pageSubtitle, wide && { marginTop: 0 }]}>
             {subtitle}
           </Text>
         ) : null}
@@ -207,10 +208,10 @@ export function Chip({ label, on, onPress, testID }: { label: string; on: boolea
 export { TABS, tabVisible, type TabKey } from '../tabs.ts';
 
 /** Barra inferior (telas estreitas). Em telas largas o App usa a barra lateral. */
-export function TabBar({ active, onChange, showAdmin = false, showCode = false }: { active: TabKey; onChange: (k: TabKey) => void; showAdmin?: boolean; showCode?: boolean }) {
+export function TabBar({ active, onChange, showAdmin = false }: { active: TabKey; onChange: (k: TabKey) => void; showAdmin?: boolean }) {
   return (
     <View style={styles.tabBar}>
-      {TABS.filter((t) => tabVisible(t.key, { showAdmin, showCode })).map((t) => {
+      {TABS.filter((t) => tabVisible(t.key, { showAdmin })).map((t) => {
         const on = t.key === active;
         return (
           <Pressable
@@ -266,6 +267,8 @@ const styles = StyleSheet.create({
   },
   pageTitle: { color: colors.text, fontFamily: fonts.title, fontWeight: '700', letterSpacing: -0.2 },
   pageSubtitle: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  pageLeftWide: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  pageDivider: { width: 1, height: 16, backgroundColor: colors.border },
   pageRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 0 },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   chipOn: { backgroundColor: colors.accentLight, borderColor: 'transparent' },

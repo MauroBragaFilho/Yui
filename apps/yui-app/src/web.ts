@@ -17,9 +17,9 @@ const CSS = `
 
 :root, [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b0912; --card: #130f1d; --card-2: #1b1529; --line: #2b2240;
+  --bg: #08060e; --card: #181222; --card-2: #221a30; --line: #32273f;
   --text: #f4f0fa; --muted: #9c93b3;
-  --btn-bg: #8a3fe6; --btn-fg: #ffffff; --input-bg: #1b1529;
+  --btn-bg: #8a3fe6; --btn-fg: #ffffff; --input-bg: #221a30;
   --accent: #8a3fe6; --accent-text: #c77dff; --accent-light: rgba(138,63,230,0.24);
   --danger: #ff5a5f; --danger-bg: rgba(255,90,95,0.14); --danger-solid: #b42318;
   --success: #3fb27f; --warning: #f59e0b;
@@ -59,7 +59,7 @@ export function setTheme(mode: ThemeMode): void {
   if (Platform.OS !== 'web') return;
   document.documentElement.setAttribute('data-theme', mode);
   const meta = document.querySelector('meta[name="theme-color"]');
-  meta?.setAttribute('content', mode === 'light' ? '#f6f3fb' : '#0b0912');
+  meta?.setAttribute('content', mode === 'light' ? '#f6f3fb' : '#08060e');
   try {
     localStorage.setItem(KEY, mode);
   } catch {

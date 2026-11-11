@@ -72,13 +72,12 @@ test('frase de estado diz a verdade', () => {
   assert.match(systemSummary({ discordOnline: false, aiOk: true, hostLevel: 'ok' }).text, /^Preciso de atenção: o Discord está desconectado\.$/);
 });
 
-test('abas: Visão Geral e Admin só para o dono, Código só com o módulo ligado', () => {
+test('abas: Visão Geral e Admin só para o dono; a aba Código foi removida', () => {
   assert.equal(TABS[0].key, 'home');
   assert.equal(tabVisible('home', {}), false);
   assert.equal(tabVisible('home', { showAdmin: true }), true);
   assert.equal(tabVisible('admin', { showAdmin: false }), false);
-  assert.equal(tabVisible('code', { showAdmin: true }), false);
-  assert.equal(tabVisible('code', { showAdmin: true, showCode: true }), true);
+  assert.equal(TABS.some((t) => t.key === 'code'), false, 'a aba Código não existe mais');
   assert.equal(tabVisible('chat', {}), true);
   assert.equal(tabVisible('memory', {}), true);
   assert.equal(tabVisible('status', {}), true);

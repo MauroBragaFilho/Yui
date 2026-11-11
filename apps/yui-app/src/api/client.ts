@@ -106,31 +106,6 @@ export interface LogEntry { time: string; level: string; text: string }
 export interface LogFile { name: string; kind: LogKind; date: string; size: number }
 export interface LogsResult { files: LogFile[]; file: string | null; entries: LogEntry[]; truncated: boolean }
 export interface LogsQuery { kind?: LogKind; date?: string | null; level?: LogLevel | null; q?: string; limit?: number }
-// ── Código (as funções do Jarvis dentro da Yui) ──
-export interface DevProject { id: string; name: string; source: 'env' | 'panel'; exists: boolean }
-export interface DevMode { id: string; label: string; description: string; readOnly: boolean }
-export interface DevStatus {
-  enabled: boolean;
-  coreReadOnly: boolean;
-  /** O pedido veio do próprio computador da Yui (só nele dá para aprovar e cadastrar projetos). */
-  local: boolean;
-  canWrite: boolean;
-  approval: 'ask' | 'auto' | 'readonly';
-  projects: DevProject[];
-  modes: DevMode[];
-}
-export interface DevTreeItem { name: string; isDirectory: boolean; path: string }
-export interface DevFile { name: string; path: string; content: string; language: string }
-export interface DevHistoryMessage { role: 'user' | 'assistant'; content: string }
-export type DevEvent =
-  | { seq: number; type: 'step'; iteration: number; text: string }
-  | { seq: number; type: 'thought'; text: string }
-  | { seq: number; type: 'tool'; action: string; status: 'waiting' | 'running' | 'ok' | 'denied' | 'error'; summary: string; preview?: string }
-  | { seq: number; type: 'approval'; id: string; action: string; summary: string; preview: string }
-  | { seq: number; type: 'approval_done'; id: string; approved: boolean; reason?: string }
-  | { seq: number; type: 'final'; text: string; provider?: string; model?: string }
-  | { seq: number; type: 'done'; ok: boolean; changed?: string[]; cancelled?: boolean; error?: string; limitReached?: boolean };
-export interface DevEvents { status: 'running' | 'done' | 'error' | 'cancelled'; last: number; approval: string; events: DevEvent[] }
 export interface AdminTool { name: string; description: string; access: string; confirm: boolean; allowed: boolean; reason: string | null }
 
 export interface Backend {
@@ -286,25 +261,6 @@ export function createClient(options: ClientOptions) {
     discordVerify: (code: string) => request<LoginResult>('POST', '/v1/auth/discord/verify', { code }, 20_000),
     login: (user: string, password: string) => request<LoginResult>('POST', '/v1/auth/login', { user, password }, 20_000),
     logout: () => request<{ ok: boolean; revoked: boolean }>('POST', '/v1/auth/logout', {}, 10_000),
-
-    // ── Código: projetos, conversa com ferramentas e aprovações (só o dono) ──
-    dev: {
-      status: () => request<DevStatus>('GET', '/v1/dev/status', undefined, 20_000),
-      addProject: (name: string, path: string) => request<{ ok: boolean; project: DevProject }>('POST', '/v1/dev/projects', { name, path }, 20_000),
-      removeProject: (id: string) => request<{ ok: boolean }>('DELETE', `/v1/dev/projects/${encodeURIComponent(id)}`, undefined, 20_000),
-      tree: async (id: string, path = '') =>
-        (await request<{ items: DevTreeItem[] }>('GET', `/v1/dev/projects/${encodeURIComponent(id)}/tree?path=${encodeURIComponent(path)}`, undefined, 20_000)).items,
-      file: async (id: string, path: string) =>
-        (await request<{ file: DevFile }>('GET', `/v1/dev/projects/${encodeURIComponent(id)}/file?path=${encodeURIComponent(path)}`, undefined, 20_000)).file,
-      history: async (id: string) => (await request<{ messages: DevHistoryMessage[] }>('GET', `/v1/dev/projects/${encodeURIComponent(id)}/history`, undefined, 20_000)).messages,
-      clearHistory: (id: string) => request<{ ok: boolean }>('DELETE', `/v1/dev/projects/${encodeURIComponent(id)}/history`, undefined, 20_000),
-      startRun: (id: string, input: { message: string; mode: string; activeFile?: string | null }) =>
-        request<{ runId: string; approval: string }>('POST', `/v1/dev/projects/${encodeURIComponent(id)}/runs`, input, 30_000),
-      events: (runId: string, after: number) => request<DevEvents>('GET', `/v1/dev/runs/${runId}/events?after=${after}`, undefined, 20_000),
-      approve: (runId: string, approvalId: string, approve: boolean) =>
-        request<{ ok: boolean }>('POST', `/v1/dev/runs/${runId}/approvals/${approvalId}`, { approve }, 20_000),
-      cancel: (runId: string) => request<{ ok: boolean }>('POST', `/v1/dev/runs/${runId}/cancel`, {}, 20_000),
-    },
 
     // ── Painel de administração (somente o dono) ──
     admin: {

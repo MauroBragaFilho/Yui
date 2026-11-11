@@ -406,11 +406,11 @@ As demais chaves dos provedores do Gateway reaproveitam as da seção 2 (Groq, G
 
 ## ⌨️ 9. Yui Core: Código
 
-A aba **Código** do app (a Yui lendo e editando os seus projetos). Só o dono. Guia completo: [Código](CODIGO.md).
+O módulo Código (a Yui lendo e editando os seus projetos; a aba saiu do painel em 11/11/2026, ficam as rotas `/v1/dev/*`). Só o dono. Guia completo: [Código](CODIGO.md).
 
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
-| `YUI_DEV_ENABLED` | Liga o módulo e as rotas `/v1/dev/*` (a aba **Código** aparece para o dono) | `false` |
+| `YUI_DEV_ENABLED` | Liga o módulo e as rotas `/v1/dev/*` (sem tela no painel desde 11/11/2026) | `false` |
 | `YUI_DEV_APPROVAL` | `ask`: pergunta antes de gravar e de rodar comando. `auto`: grava sem perguntar (com backup); comandos ainda perguntam. Pelo celular ou com `YUI_READ_ONLY=true`, vale sempre "somente leitura" | `ask` |
 | `YUI_DEV_MAX_STEPS` | Máximo de passos (ferramentas) por pergunta | `12` |
 | `YUI_DEV_PROJECTS_FILE` | Onde ficam os projetos cadastrados pelo app | `secrets/dev-projects.json` |

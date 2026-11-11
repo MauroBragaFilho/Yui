@@ -1,6 +1,8 @@
 # ⌨️ Código: a Yui mexendo nos seus projetos
 
-A aba **Código** do app é onde a Yui lê o código de um projeto seu, responde sobre ele, revisa, sugere e, se você liberar, **edita arquivos e roda comandos, sempre pedindo a sua aprovação**. Ela traz para dentro da Yui o que o **Projeto Jarvis** queria ser (um assistente pessoal controlado pelo PC), com os problemas dele corrigidos. Não é outra assistente: é a mesma Yui, a mesma interface e o mesmo Core. Código em `src/core/dev/`.
+> **Em 11/11/2026 a aba Código saiu do painel web e do app.** O módulo do servidor (`YUI_DEV_ENABLED`, rotas `/v1/dev/*`) continua existindo, mas hoje não há tela para ele. As instruções abaixo valem para quem usar a API ou recolocar a tela.
+
+A aba **Código** do app era onde a Yui lê o código de um projeto seu, responde sobre ele, revisa, sugere e, se você liberar, **edita arquivos e roda comandos, sempre pedindo a sua aprovação**. Ela traz para dentro da Yui o que o **Projeto Jarvis** queria ser (um assistente pessoal controlado pelo PC), com os problemas dele corrigidos. Não é outra assistente: é a mesma Yui, a mesma interface e o mesmo Core. Código em `src/core/dev/`.
 
 > **Resumo:** só o **dono**, só em projetos da **lista**, **somente leitura por padrão** e, quando liberado, **aprovação a cada gravação ou comando, dada no próprio computador**.
 

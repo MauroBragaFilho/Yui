@@ -12,10 +12,10 @@ const web = Platform.OS === 'web';
 const v = (name: string, dark: string) => (web ? `var(--${name})` : dark);
 
 export const colors = {
-  bg: v('bg', '#0b0912'),
-  surface: v('card', '#130f1d'),
-  surfaceAlt: v('card-2', '#1b1529'),
-  border: v('line', '#2b2240'),
+  bg: v('bg', '#08060e'),
+  surface: v('card', '#181222'),
+  surfaceAlt: v('card-2', '#221a30'),
+  border: v('line', '#32273f'),
   text: v('text', '#f4f0fa'),
   muted: v('muted', '#9c93b3'),
   /** Destaque (vermelho). `accentText` é a versão legível sobre as superfícies. */
@@ -25,7 +25,7 @@ export const colors = {
   /** Botão primário em pílula, no roxo da Yui com texto branco. */
   btnBg: v('btn-bg', '#8a3fe6'),
   btnFg: v('btn-fg', '#ffffff'),
-  inputBg: v('input-bg', '#1b1529'),
+  inputBg: v('input-bg', '#221a30'),
   danger: v('danger', '#ff5a5f'),
   dangerBg: v('danger-bg', 'rgba(255,90,95,0.14)'),
   dangerSolid: v('danger-solid', '#b42318'),
@@ -35,7 +35,7 @@ export const colors = {
   primary: v('accent', '#8a3fe6'),
   primaryDim: v('accent-light', 'rgba(138,63,230,0.24)'),
   userBubble: v('btn-bg', '#ffffff'),
-  yuiBubble: v('card-2', '#1b1529'),
+  yuiBubble: v('card-2', '#221a30'),
 } as const;
 
 export const radius = { sm: 8, md: 16, lg: 24, pill: 999 } as const;
