@@ -38,7 +38,7 @@ Auditoria somente leitura de 2026-11-05. IDs `R..` correspondem às recomendaç�
 | Atualização automática | Implementada (10/11/2026) | `scripts/atualizar-yui.ps1` (diária pela tarefa `YuiAtualizar`, com volta de versão); ver I6 |
 | DM só com o dono | Implementada e funcional (10/11/2026) | `dd96b15`; `Partials.Channel` (`client.js:21`), `isForeignDirectMessage` (`messageCreate.js:331-341`); `test:dmowner` 4/4 (rodado em 10/11/2026) |
 | Imagem por conversa (Porta I) | Implementada (10/11/2026) | `271a6a9`; `src/handlers/imageIntent.js`, `llmHandler.js:96,2611`; `test:imageintent` 9/9 (rodado em 10/11/2026) |
-| Memória e resumo por conversa (Portas N e R) | **Presente, não integrada** (10/11/2026) | `d29d29b`; `src/handlers/chatIntents.js` + `test:chatintents` 11/11 (rodado), mas nenhum arquivo de `src/` importa o módulo: o fluxo da conversa não o chama. Ver T14 |
+| Memória e resumo por conversa (Portas N e R) | **Integrada** (10/11/2026) | `d29d29b` + ligação no `llmHandler.js`; `test:chatintents` 12/12. Ver T14 (resolvido) |
 | Biblioteca por conversa (Porta B) | Implementada, **não commitada** (10/11/2026) | `src/handlers/libraryIntent.js`, `src/services/bdsLibrary.js` (só GET, `:57`), `llmHandler.js:19,2593`; só o dono, só no privado; desligada sem `YUI_BDS_URL`; `test:library` 10/10 (rodado em 10/11/2026) |
 | Papéis TRUSTED/GUEST | Presentes, sem função | Pendência 6 |
 | Recados de membros ao dono | Planejada | Pendência 14 |
@@ -106,7 +106,7 @@ Auditoria somente leitura de 2026-11-05. IDs `R..` correspondem às recomendaç�
 | T11 | Vários testes dependem de rede e não foram reexecutados. **Corrigido em 10/11/2026 (o achado estava impreciso):** `adminListUsers`/`adminListMetadata` e `captureFromUserText` já são cobertos por `tests/test-core.js:92-112,147-167` | R20 |
 | T12 | Working tree sujo: 12 modificados + 4 não rastreados em 05/11; 27 modificados + 7 não rastreados no início da revisão de 10/11/2026 (bancos, cookies, auditorias e o trabalho ainda não commitado da Porta B e da reconexão do Discord) | R07/R16 |
 | T13 | Persona legada `persona/arquivo-prompt-antigo.md` (9,8 KB) | R16 |
-| T14 | `src/handlers/chatIntents.js` (Portas N e R, `d29d29b`) commitado com teste, mas sem nenhum chamador em `src/`; `docs/content_pt/CONVERSA_E_COMANDOS.md` dá as duas portas como prontas | — |
+| T14 | `src/handlers/chatIntents.js` (Portas N e R, `d29d29b`) commitado sem chamador; **resolvido em 10/11/2026**: ligado no `llmHandler.js` | — |
 | T15 | O nome "Porta B" é usado para duas coisas no `llmHandler.js`: agente de pesquisa (`:3329`) e biblioteca (`:2593`) | R16 |
 
 ## 6. Itens que a auditoria não conseguiu verificar

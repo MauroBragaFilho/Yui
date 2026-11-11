@@ -101,7 +101,7 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:audit` | 8 | Auditoria com hash encadeado: adulteração, remoção e reordenação são detectadas |
 | `test:library` | 10 | Biblioteca por conversa (Porta B) e cliente do BDS Server: detecção, só dono/privado, só leitura (GET), formatação e falhas |
 | `test:imageintent` | 9 | Imagem por conversa (Porta I): detecção, pedido vago, filtros de segurança e limite por hora |
-| `test:chatintents` | 11 | Memória (Porta N) e resumo do chat (Porta R) por conversa: detecção estrita, confirmação de "apagar tudo", privacidade em canal público, limite de resumo |
+| `test:chatintents` | 12 | Memória (Porta N) e resumo do chat (Porta R) por conversa: detecção estrita, confirmação de "apagar tudo", privacidade em canal público, limite de resumo |
 | `test:cleanbootstrap` | 1 | A Yui cria os bancos ausentes a partir de um diretório limpo |
 | `test:mentions` | 17 | Conversão de `@nome` em menção real, sem `@everyone`; mensagens do rádio só notificam quem pediu |
 | `test:persona` | 17 | Personalidade pessoal × pública, regras de resposta longa |

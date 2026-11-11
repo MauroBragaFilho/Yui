@@ -6,74 +6,64 @@
     "auditLog": "D:\\Projetos\\Yui\\logs\\.3a5ac170a539f7655f2b5798968a5ac930d06c0c-audit.json",
     "files": [
         {
-            "date": 1791301674896,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-06.log",
-            "hash": "26c0ec6dff1f7e2abc8f3cf49cf8b580619287c48546bb1b0fb660dc9474ebd2"
+            "date": 1793185222226,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-28.log",
+            "hash": "895d063c1972ac087ede78f66ed35c0d6217cd63ebf2dd44126c38b0addb497d"
         },
         {
-            "date": 1791342000661,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-07.log",
-            "hash": "01317455c7081721e6e2c587188751feb1620971fe287f6dc7167de772d5205b"
+            "date": 1793272810300,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-29.log",
+            "hash": "ecbd61184e7f360ba5c6dfc370aec50c5dba602a0b3ff9bb4f446c11052686ee"
         },
         {
-            "date": 1791428520273,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-08.log",
-            "hash": "03146d296820d5dd9005610948a59366a871575f0630c15a1e8af6797387c72b"
+            "date": 1793329200562,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-30.log",
+            "hash": "28e6af93b55e59179465d61feac0c1e41f3e18a623e7cac7e1aa7475b2b57f0f"
         },
         {
-            "date": 1791514800788,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-09.log",
-            "hash": "3ee8e9fd716e5bd089400ee8c3243ff6ac93220018a8ae318d66d91953166ee3"
+            "date": 1793525542420,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-01.log",
+            "hash": "f68784fd3fb02e8dba39d6eb9b9bbc5ba0dae8cbaaaf127a4384315c56086c92"
         },
         {
-            "date": 1791601200257,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-10.log",
-            "hash": "e387734bb9c88237b36877a6db538dbc4ec3217cb5e8beea9de7c8bda530db4d"
+            "date": 1793592000224,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-02.log",
+            "hash": "4b51befa7dbfc12a68fac8d57b36dad0132484455264f9826a96924ee9340ba8"
         },
         {
-            "date": 1791687600150,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-11.log",
-            "hash": "cdcb5c51db6c6415125fcc3b737ff5b5854ae7c272d983faa5f5727fb8ae6050"
+            "date": 1793678400638,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-03.log",
+            "hash": "55c4baadda830ee9a8628a1c88095b627fdc5504b14e51067993ae803ab7ecb1"
         },
         {
-            "date": 1791774000743,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-12.log",
-            "hash": "a78c1a8660603783ee0ee1f3b61dec208c430be6372f51a24a6b5268805fc1c0"
+            "date": 1793764800860,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-04.log",
+            "hash": "967bd316f919904963af61764575e4c42880f5ba9379e22df27b3bf7998b6486"
         },
         {
-            "date": 1791860400900,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-13.log",
-            "hash": "fa28bcbc62e750550243117e3e19912bc466c46d96c64ac586260ef486cde220"
+            "date": 1793852148298,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-05.log",
+            "hash": "05184a90433f5e96e6bfd480438c0bc543dda21839864de40f2152063e1a1e6b"
         },
         {
-            "date": 1791946920060,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-14.log",
-            "hash": "8c2befb46a80e35828918f5e832037485e04a041ae1777f23dec035b689eafc8"
+            "date": 1793937600450,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-06.log",
+            "hash": "71780ce301d687771bbab6ae27367d0689a54682fd7dcb8d998fe5018d543b8c"
         },
         {
-            "date": 1792033200880,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-15.log",
-            "hash": "4b08dc64d9dba487045b9b6e0d27bc32885a0a5e6b93c9522fd832f6316531dc"
+            "date": 1794160725267,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-08.log",
+            "hash": "1fc22e1435e74570ef04cf7167af5a52c9a09058aef47db11cce6b2218586393"
         },
         {
-            "date": 1792119600396,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-16.log",
-            "hash": "9ccef698e7690b0a1b7d22ce5c2a4b6a9bc11451f4b0254c6420a095c8f170f1"
+            "date": 1794282469049,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-09.log",
+            "hash": "4f128f25f11011a6965bb95c213e6e593ac805fa3acbe6f2ca1aa71fc1114b85"
         },
         {
-            "date": 1792206000392,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-17.log",
-            "hash": "97d42690df878fbb10b4726422f71406013eaca2c5d1514129fe9b69b7eecea4"
-        },
-        {
-            "date": 1792308549416,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-18.log",
-            "hash": "c7c37a2e305d6e37f29da9239498857e3fb64f5b022fa458e3e71a429bfc3e60"
-        },
-        {
-            "date": 1792378800548,
-            "name": "D:\\Projetos\\Yui\\logs\\app-2026-10-19.log",
-            "hash": "6b99f73750123e03bb768f967f21df711792375dfb34dc77aaf60f3a7f03a221"
+            "date": 1794283972472,
+            "name": "D:\\Projetos\\Yui\\logs\\app-2026-11-10.log",
+            "hash": "832108bfd6f3704bd5546820944d24b68355607e062e76589609803cb225a5e9"
         }
     ],
     "hashType": "sha256"

@@ -1,0 +1,15 @@
+{
+  "schema": "braga-hub.tasks/1",
+  "tasks": [
+    {
+      "project": "03cef2f3-a2df-43f0-81b2-7ee9f127906c",
+      "title": "Yui: revisar rotas de conversa (imagem, memória, resumo do chat)",
+      "description": "Entregue em 2026-11-05 (commit 271a6a9 no GitHub para imagem; memória e resumo ainda sem commit, no working tree). Princípio do dono: toda função da Yui também deve funcionar por conversa, não só por comando (docs/content_pt/CONVERSA_E_COMANDOS.md). Feito: Porta I (src/handlers/imageIntent.js, 'yui gera uma imagem'), Porta N (memória: ver, esquecer por número ou texto, apagar tudo com confirmação 'sim, apagar tudo' em 2 min; canal público só mostra a contagem), Porta R (resumo do chat, 5 a 100 mensagens, 1 por minuto por pessoa) em src/handlers/chatIntents.js, ligadas em src/handlers/llmHandler.js. Testes offline: npm run test:imageintent (9) e test:chatintents (9). A Yui local foi reiniciada com tudo isso. Revise o código e o quadro de estado; NÃO conversar com a Yui real pedindo para apagar ou formatar memória (use os testes). Pendente para a próxima rodada: GTA sob demanda e modo rádio por conversa; depois seguir/parar canais e banir (dependem do motor de política da Fase 1). Sem commit, push nem deploy sem aprovação do dono; nunca encerrar processo por PID de varredura.",
+      "objective": "Revisão independente das rotas de conversa e plano para fechar GTA sob demanda e modo rádio.",
+      "completion_criteria": "1) Revisão dos riscos de falso positivo das Portas I, N e R. 2) Proposta de rota de conversa para GTA sob demanda e modo rádio, com testes offline. 3) Quadro CONVERSA_E_COMANDOS.md atualizado. 4) Sem commit.",
+      "priority": "normal",
+      "execution_type": "revisao",
+      "workspace": ""
+    }
+  ]
+}

@@ -172,3 +172,16 @@ test('Modo rádio por conversa', async () => {
     assert.equal(detectRadioIntent('eu gosto de musica classica', ctx).kind, 'none');
     assert.equal(detectRadioIntent('toca lofi', { ...ctx, direct: false }).kind, 'none');
 });
+
+test('Portas N e R estão ligadas ao fluxo da conversa (llmHandler)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../src/handlers/llmHandler.js', import.meta.url), 'utf8');
+    for (const name of ['detectMemoryIntent', 'runMemoryIntent', 'hasForgetAllPending', 'detectSummaryRequest', 'takeSummaryQuota', 'pickMessagesToSummarize']) {
+        assert.ok(src.includes(`${name}(`), `${name} deve ser chamado no llmHandler`);
+    }
+    // a pré-rota só vale para pedido direto, em texto, fora de voz/rádio/log de terceiros
+    const start = src.indexOf('Portas N e R (conversa)');
+    assert.ok(start > 0);
+    const guard = src.slice(start, start + 600);
+    assert.match(guard, /directToYui && !isVoice && options\.radioMode !== true && options\.thirdPartyPrompt !== true && ownQuestion/);
+});

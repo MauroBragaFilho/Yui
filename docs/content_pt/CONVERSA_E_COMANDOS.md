@@ -15,7 +15,7 @@ Está registrado como princípio 9 em [Assistente pessoal](ASSISTENTE_PESSOAL.md
 
 ## Estado atual (leitura do código em 2026-11-05; nada aqui foi verificado em um Discord real)
 
-Revisado de novo contra o código em 2026-11-10 (Porta B, Portas N e R ainda soltas, nomes dos comandos). Lembrete: "pela conversa" vale em servidor (menção, nome da Yui ou resposta a ela) e na DM **do dono**; a DM de qualquer outra pessoa é ignorada em silêncio (essas pessoas usam os comandos).
+Revisado de novo contra o código em 2026-11-10 (Porta B, nomes dos comandos); em 2026-11-10 as Portas N e R foram ligadas ao `llmHandler`. Lembrete: "pela conversa" vale em servidor (menção, nome da Yui ou resposta a ela) e na DM **do dono**; a DM de qualquer outra pessoa é ignorada em silêncio (essas pessoas usam os comandos).
 
 Legenda: ✅ por conversa · 🔶 parcial · ⚠️ módulo pronto e testado, ainda não ligado ao fluxo da conversa · ❌ só por comando · 🔒 exige confirmação/política quando for feito
 
@@ -36,8 +36,8 @@ Legenda: ✅ por conversa · 🔶 parcial · ⚠️ módulo pronto e testado, ai
 | Lista de mods | ✅ | Porta M (Modrinth) |
 | Biblioteca de arquivos (BDS Server; sem comando de barra) | ✅ | **Porta B** (só dono, **só leitura**; em canal público ela avisa e não mostra nada, o conteúdo só sai em DM/canal privado): "yui procura Matrix na biblioteca", "o que eu tenho de filmes?", "o que chegou de novo na biblioteca?", "quanto espaço tem no servidor de arquivos?". Exige `YUI_BDS_URL`; só dispara citando a biblioteca/servidor de arquivos ou uma pasta sua ("meus filmes", "o que eu tenho de séries"). Ferramentas `bds.buscar/listar/recentes/status`. Teste: `npm run test:library` |
 | Lembrar algo (`/yui-memoria lembrar`) | 🔶 | captura "lembra que...", "meu nome é...", "eu gosto de..." |
-| Ver/esquecer/apagar a própria memória (`/yui-memoria`) | ⚠️ | **Porta N** (`src/handlers/chatIntents.js`, ainda não chamada pelo `llmHandler`; por enquanto use `/yui-memoria`): "o que você sabe de mim?", "esquece a lembrança #3", "esquece que eu gosto de X", "apaga tudo que sabe de mim" 🔒 (pede "sim, apagar tudo" em até 2 min). Em canal público só mostra a contagem; o conteúdo aparece na DM. Teste: `npm run test:chatintents` |
-| Resumo do chat (`/chat_resumo`) | ⚠️ | **Porta R** (mesmo módulo, ainda não ligado; por enquanto use `/chat_resumo`): "yui resume as últimas 50 mensagens", "faz um resumo da conversa" (5 a 100, padrão 20; 1 por minuto por pessoa, dono sem limite) |
+| Ver/esquecer/apagar a própria memória (`/yui-memoria`) | ✅ | **Porta N** (`src/handlers/chatIntents.js`, chamada pelo `llmHandler` logo depois da Porta B; `/yui-memoria` continua valendo): "o que você sabe de mim?", "esquece a lembrança #3", "esquece que eu gosto de X", "apaga tudo que sabe de mim" 🔒 (pede "sim, apagar tudo" em até 2 min). Em canal público só mostra a contagem; o conteúdo aparece na DM. Teste: `npm run test:chatintents` |
+| Resumo do chat (`/chat_resumo`) | ✅ | **Porta R** (mesmo módulo, ligado ao `llmHandler`; `/chat_resumo` continua valendo): "yui resume as últimas 50 mensagens", "faz um resumo da conversa" (5 a 100, padrão 20; 1 por minuto por pessoa, dono sem limite) |
 | Reset/novidades do GTA Online (`/gta-diario`, `/gta-semanal`, `/gta-noticias`) e estado da Yui (`/yui-status`) | ❌ | só responde de memória do contexto de GTA; falta chamar o publicador sob demanda. A detecção do GTA por conversa (`detectGtaIntent`, "Porta G" no `chatIntents.js`) existe e tem teste, mas também não está ligada |
 | Seguir/parar/listar canais do YouTube e da Twitch (`/yui-seguir-youtube`, `/yui-seguir-twitch`, `/yui-parar-seguir`, `/yui-listar-seguindo`) | ❌ | 🔒 os comandos exigem *Administrador* (permissão padrão no Discord); por conversa, exigiria confirmação |
 | Modo rádio (`/modo-radio`) | ❌ | dentro do rádio já há controle por voz e botões; a detecção de pedidos de rádio pelo chat (`detectRadioIntent` no `chatIntents.js`) existe e tem teste, mas não está ligada |

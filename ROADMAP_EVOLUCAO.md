@@ -54,7 +54,7 @@ Conferido no código da árvore de trabalho (inclui o que ainda não foi commita
 | R01 Política | Só especificação | `docs/ESPECIFICACAO_MOTOR_POLITICAS_FASE1.md`; não existe `src/core/policy` | Toda a implementação (Fase 1) |
 | Demais (R02, R03, R06, R09–R20) | Não iniciadas | Nada novo no código para elas | — |
 
-Entregas fora das fases, já no código: DM só com o dono (`dd96b15`, `test:dmowner`); imagem por conversa, Porta I (`271a6a9`, `test:imageintent`); memória e resumo por conversa, Portas N e R (`d29d29b`, `test:chatintents`; o módulo `src/handlers/chatIntents.js` ainda não é chamado por nenhum arquivo de `src/`); biblioteca por conversa, Porta B (não commitada: `src/handlers/libraryIntent.js`, `src/services/bdsLibrary.js`, `test:library`); contorno do defeito da `@discordjs/ws` na reconexão (não commitado: `src/discord/gatewayGuard.js`, `test:discordreconnect`; ver `GAPS_E_DEBITOS_TECNICOS.md` §7).
+Entregas fora das fases, já no código: DM só com o dono (`dd96b15`, `test:dmowner`); imagem por conversa, Porta I (`271a6a9`, `test:imageintent`); memória e resumo por conversa, Portas N e R (`d29d29b`, `test:chatintents`; ligadas ao `llmHandler.js` em 10/11/2026); biblioteca por conversa, Porta B (não commitada: `src/handlers/libraryIntent.js`, `src/services/bdsLibrary.js`, `test:library`); contorno do defeito da `@discordjs/ws` na reconexão (não commitado: `src/discord/gatewayGuard.js`, `test:discordreconnect`; ver `GAPS_E_DEBITOS_TECNICOS.md` §7).
 
 ## Riscos do plano e mitigações
 

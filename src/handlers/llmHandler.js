@@ -1,5 +1,9 @@
 import axios from 'axios';
-import { contextFromDiscord, buildMemoryBlock, captureFromUserText } from '../core/discordAdapter.js';
+import { contextFromDiscord, buildMemoryBlock, captureFromUserText, isMemoryEnabled } from '../core/discordAdapter.js';
+import { memory as coreMemory, audit as coreAudit } from '../core/index.js';
+import { forgetUserContext } from '../core/context/contextStore.js';
+import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize } from './chatIntents.js';
+import { buildThirdPartyLogPrompt } from './llmSafety.js';
 import { resolveMentions, neutralizeMassMentions } from '../discord/mentions.js';
 import { alertOwner } from '../core/alerts.js';
 import { applyPersona, applyVoicePersona, buildPersonaPrompt, publicPersonaText } from '../core/persona.js';
@@ -23,7 +27,7 @@ import { getMediaUserMessage, formatDeezerDelivery, codeSafe, isUploadTooLargeEr
 // Textos grandes: corte que não parte emoji, limite de upload, orçamento de prompt e leitor de linhas do stream SSE (TG-02, 05, 08, 11, 16, 37).
 import { clampText } from '../discord/embedLimits.js';
 import { getUploadLimitBytes, limitLabelMB, formatUploadLimit, formatMB } from '../utils/uploadLimit.js';
-import { estimateTokens, isTooLargeError, sizeErrorText, drainErrorBody } from '../utils/promptBudget.js';
+import { estimateTokens, isTooLargeError, sizeErrorText, drainErrorBody, buildChatLog } from '../utils/promptBudget.js';
 import { createLineSplitter, sseDataOf } from '../utils/sseLines.js';
 // Fala (TTS) da Yui na call: o gancho e as regras puras de voz. O serviço recebe tudo por `deps` e não importa este arquivo (sem ciclo).
 import { interruptSpeech, speakVoiceReply } from '../services/tts/index.js';
@@ -2606,6 +2610,56 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     channelKind: guildId ? 'servidor' : 'DM', durationMs: Date.now() - startTime, deliveryMs: libDelivery.durationMs
                 }));
                 return;
+            }
+        }
+        // Portas N e R (conversa): memória própria ("o que você sabe de mim?", "esquece a lembrança #3", "apaga tudo" com confirmação) e resumo do chat
+        // ("yui resume as últimas 50 mensagens"). O CÓDIGO decide e executa; só pedido direto em texto (src/handlers/chatIntents.js). Falha ou não-pedido: segue para o modelo.
+        if (directToYui && !isVoice && options.radioMode !== true && options.thirdPartyPrompt !== true && ownQuestion) {
+            const intentCtx = {
+                direct: directToYui, voice: isVoice, radioMode: options.radioMode === true, disableTools: options.disableTools === true,
+                thirdPartyPrompt: options.thirdPartyPrompt === true, hasAttachment: typeof options.attachmentBlock === 'string' && options.attachmentBlock.length > 0
+            };
+            const memIntent = detectMemoryIntent(ownQuestion, { ...intentCtx, pendingForgetAll: hasForgetAllPending(userId) });
+            if (memIntent.kind !== 'none' && !coreCtx.isBlocked) {
+                const memRun = await runMemoryIntent(memIntent, {
+                    userId, isDM: !guildId, enabled: isMemoryEnabled(), memoryCtx: coreCtx, memory: coreMemory, audit: coreAudit,
+                    scopeLabel: coreCtx.memoryScope === 'personal' ? '🔒 memória pessoal (permanente)' : `🕒 memória temporária (${coreMemory.retentionDays()} dias sem interação)`,
+                    wipeContext: async (uid) => { try { return (await forgetUserContext(uid)).turns; } catch (_) { return 0; } }
+                });
+                if (memRun.handled) {
+                    await unifiedReply(memRun.text);
+                    return;
+                }
+            }
+            const sumReq = detectSummaryRequest(ownQuestion, intentCtx);
+            if (sumReq.explicit && interaction?.channel?.messages?.fetch) {
+                const quota = takeSummaryQuota(userId, { isOwner: isOwnerId(userId) });
+                if (!quota.ok) {
+                    await unifiedReply(`Calma, só faço um resumo por minuto. Tenta de novo em ${Math.ceil(quota.retryAfterMs / 1000)} s.`);
+                    return;
+                }
+                try {
+                    const fetched = await interaction.channel.messages.fetch({ limit: Math.min(100, sumReq.amount + 3) });
+                    const asc = [...fetched.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+                    const picked = pickMessagesToSummarize(asc, { requesterId: userId, amount: sumReq.amount });
+                    const { toLogEntries, summaryInstruction } = await import('../events/interactionCreate.js');
+                    const chatLog = buildChatLog(toLogEntries(picked));
+                    if (chatLog.used === 0) {
+                        await unifiedReply('Não achei nenhuma mensagem com texto para resumir neste canal.');
+                        return;
+                    }
+                    logger.info(`[ChatResumo] Porta R: mensagens usadas ${chatLog.used} de ${chatLog.total}`);
+                    const summaryText = stripThinking(String(await generateResponse(
+                        buildThirdPartyLogPrompt(chatLog.log, { instruction: summaryInstruction(chatLog) }), channelId,
+                        { allowSearch: false, disableTools: true, thirdPartyPrompt: true, noHistory: true, guildId, userId, sensitive: sensitiveChat, persona: buildPersonaPrompt(coreCtx) }
+                    ) ?? '')).trim();
+                    if (summaryText && !isSystemReply(summaryText) && !looksLikeToolJson(summaryText)) {
+                        await unifiedReply(summaryText);
+                        return;
+                    }
+                } catch (err) {
+                    logger.warn(`[ChatResumo] Porta R falhou, segue para o modelo: ${scrubLogText(err?.message, 100)}`);
+                }
             }
         }
         // Porta I (imagem por conversa): "yui gera uma imagem de um gato" => o CÓDIGO chama generate_image, sem depender de o modelo lembrar da ferramenta.
