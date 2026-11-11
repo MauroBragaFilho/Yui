@@ -180,6 +180,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
               <SectionTitle icon="bolt" title="Atalhos" />
               <View style={styles.badges}>
                 <Shortcut testID="go-chat" icon="chat_bubble" label="Chat" onPress={() => onNavigate('chat')} />
+                <Shortcut testID="go-files" icon="folder" label="Arquivos" onPress={() => onNavigate('files')} />
                 <Shortcut testID="go-memory" icon="psychology" label="Memória" onPress={() => onNavigate('memory')} />
                 <Shortcut testID="go-admin" icon="admin_panel_settings" label="Admin" onPress={() => onNavigate('admin')} />
                 <Shortcut testID="go-status" icon="monitor_heart" label="Status" onPress={() => onNavigate('status')} />

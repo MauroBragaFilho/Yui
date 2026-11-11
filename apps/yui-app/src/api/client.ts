@@ -106,6 +106,10 @@ export interface LogEntry { time: string; level: string; text: string }
 export interface LogFile { name: string; kind: LogKind; date: string; size: number }
 export interface LogsResult { files: LogFile[]; file: string | null; entries: LogEntry[]; truncated: boolean }
 export interface LogsQuery { kind?: LogKind; date?: string | null; level?: LogLevel | null; q?: string; limit?: number }
+// ── Arquivos (BDS Server, pela API da Yui) ──
+export interface BdsEntry { nome: string; tipo: 'pasta' | 'arquivo'; caminho?: string; tamanho?: number | null; modificado?: string | null; [k: string]: unknown }
+export interface BdsList { caminho?: string; itens?: BdsEntry[]; [k: string]: unknown }
+export interface BdsStatus { versao?: string; [k: string]: unknown }
 export interface AdminTool { name: string; description: string; access: string; confirm: boolean; allowed: boolean; reason: string | null }
 
 export interface Backend {
@@ -261,6 +265,47 @@ export function createClient(options: ClientOptions) {
     discordVerify: (code: string) => request<LoginResult>('POST', '/v1/auth/discord/verify', { code }, 20_000),
     login: (user: string, password: string) => request<LoginResult>('POST', '/v1/auth/login', { user, password }, 20_000),
     logout: () => request<{ ok: boolean; revoked: boolean }>('POST', '/v1/auth/logout', {}, 10_000),
+
+    // ── Arquivos do BDS Server (só o dono): a Yui é a única porta de entrada ──
+    bds: {
+      status: () => request<BdsStatus>('GET', '/v1/admin/bds/status', undefined, 35_000),
+      roots: () => request<any>('GET', '/v1/admin/bds/roots', undefined, 35_000),
+      list: (caminho: string) => request<BdsList>('GET', `/v1/admin/bds/list?caminho=${encodeURIComponent(caminho)}`, undefined, 35_000),
+      search: (q: string) => request<any>('GET', `/v1/admin/bds/search?q=${encodeURIComponent(q)}`, undefined, 35_000),
+      recent: (limite = 30) => request<any>('GET', `/v1/admin/bds/recent?limite=${limite}`, undefined, 35_000),
+      usage: () => request<any>('GET', '/v1/admin/bds/usage', undefined, 35_000),
+      trash: () => request<any>('GET', '/v1/admin/bds/trash', undefined, 35_000),
+      audit: (limite = 50) => request<any>('GET', `/v1/admin/bds/audit?limite=${limite}`, undefined, 35_000),
+      mkdir: (caminho: string) => request<any>('POST', '/v1/admin/bds/mkdir', { caminho }, 35_000),
+      rename: (de: string, para: string) => request<any>('POST', '/v1/admin/bds/rename', { de, para }, 35_000),
+      remove: (caminho: string) => request<any>('POST', '/v1/admin/bds/delete', { caminho, confirmar: true }, 35_000),
+      restore: (caminho: string) => request<any>('POST', '/v1/admin/bds/restore', { caminho }, 35_000),
+      purge: (caminho: string) => request<any>('POST', '/v1/admin/bds/purge', { caminho, confirmar: true }, 35_000),
+      /** Endereço curto (10 min) para abrir/baixar um arquivo no navegador sem cabeçalho de login. `inline` = tocar/mostrar em vez de baixar. */
+      link: async (caminho: string, inline: boolean): Promise<string> => {
+        const r = await request<{ url: string }>('POST', '/v1/admin/bds/link', { caminho, inline }, 20_000);
+        return `${baseUrl}${r.url}`;
+      },
+      /** Envia um arquivo (web): corpo em fluxo, com progresso. Devolve { bytes }. */
+      upload: (caminho: string, file: Blob, onProgress?: (enviado: number, total: number) => void) =>
+        new Promise<{ bytes?: number }>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('PUT', `${baseUrl}/v1/admin/bds/upload?caminho=${encodeURIComponent(caminho)}`);
+          if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+          xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+          xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total); };
+          xhr.onerror = () => reject(new ApiError(0, 'Não foi possível enviar: a conexão caiu.'));
+          xhr.onabort = () => reject(new ApiError(0, 'Envio cancelado.'));
+          xhr.onload = () => {
+            let data: any = null;
+            try { data = JSON.parse(xhr.responseText); } catch { /* sem corpo */ }
+            if (xhr.status === 401 && token && options.onUnauthorized) options.onUnauthorized();
+            if (xhr.status >= 200 && xhr.status < 300) resolve(data ?? {});
+            else reject(new ApiError(xhr.status, messageForStatus(xhr.status, data?.error)));
+          };
+          xhr.send(file);
+        }),
+    },
 
     // ── Painel de administração (somente o dono) ──
     admin: {

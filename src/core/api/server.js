@@ -13,6 +13,7 @@ import { loadPanelCredentials, createSessionStore, createLoginLimiter, createPai
 import { createAdmin } from './admin.js';
 import { createDev } from '../dev/index.js';
 import { createDevRoutes } from '../dev/routes.js';
+import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES } from './bds.js';
 
 /**
  * Yui API — interface HTTP do Yui Core para apps (mobile/desktop).
@@ -83,7 +84,7 @@ function applyCors(req, res, origins) {
   if (!origin || !origins.has(origin)) return false;
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Max-Age', '600');
   return true;
@@ -199,12 +200,67 @@ export function createApiServer({
   codeLimiter = createLoginLimiter({ max: 5, windowMs: 15 * 60 * 1000 }),    // chaves erradas
   ownerId = ownerUserId(),
   health = null, // () => objeto extra do /v1/health (ex.: estado do Discord); usado pelo supervisor
+  bds = createBdsProxy(), // ponte para o BDS Server (o painel da Yui é a única porta de entrada para os arquivos)
 } = {}) {
   const discordKeyEnabled = Boolean(notify && ownerId);
   const hits = new Map();       // userId -> [timestamps]
   const histories = new Map();  // userId -> [{role, content}]
 
   const devRoute = createDevRoutes(dev);
+
+  /** Escreve a resposta de um download/preview do BDS Server (Range incluído) e fecha a conexão com ele se o navegador desistir. */
+  async function pipeBdsDownload(req, res, { caminho, inline }) {
+    const abort = new AbortController();
+    res.on('close', () => { if (!res.writableEnded) abort.abort(); });
+    const d = await bds.openDownload({ caminho, inline, range: req.headers.range || '', abort });
+    res.writeHead(d.status, d.headers);
+    if (!d.stream) return res.end();
+    d.stream.on('error', () => res.destroy());
+    d.stream.pipe(res);
+  }
+
+  /** Rotas /v1/admin/bds/* (só o dono). Devolve true se tratou a requisição (a resposta já foi escrita). */
+  async function bdsRoute(req, res, url, ctx) {
+    const p = url.pathname;
+    if (!p.startsWith('/v1/admin/bds/')) return false;
+    if (ctx.role !== 'OWNER') { send(res, 403, { error: 'somente o dono' }); return true; }
+    const sub = p.slice('/v1/admin/bds/'.length);
+    const m = req.method;
+    try {
+      if (m === 'PUT' && sub === 'upload') {
+        const abort = new AbortController();
+        res.on('close', () => { if (!res.writableEnded) abort.abort(); });
+        const out = await bds.upload({ caminho: url.searchParams.get('caminho'), req, abort });
+        audit('admin.bds.upload', ctx, { bytes: out?.bytes ?? null });
+        send(res, 200, out);
+        return true;
+      }
+      if (m === 'POST' && sub === 'link') {
+        const b = await readJson(req);
+        const l = bds.mintLink({ caminho: b.caminho, inline: b.inline !== false });
+        audit('admin.bds.link', ctx, { inline: b.inline !== false });
+        send(res, 200, { url: l.path, expiresInSec: l.expiresInSec });
+        return true;
+      }
+      const def = BDS_JSON_ROUTES[`${m} ${sub}`];
+      if (!def) { send(res, 404, { error: 'rota não encontrada' }); return true; }
+      const query = {};
+      for (const k of def.query || []) query[k] = url.searchParams.get(k);
+      let body;
+      if (def.body) {
+        const b = await readJson(req);
+        body = {};
+        for (const k of def.body) if (b[k] !== undefined) body[k] = b[k];
+      }
+      const out = await bds.json(m, def.sub, { query, body });
+      if (m !== 'GET') audit(`admin.bds.${sub}`, ctx, {});
+      send(res, 200, out);
+    } catch (err) {
+      if (err instanceof BdsProxyError) { if (!res.headersSent) send(res, err.status, { error: err.message }); else res.destroy(); return true; }
+      throw err;
+    }
+    return true;
+  }
   let dmHits = []; // mensagens ao Discord pedidas pelo painel (limite de 5 a cada 10 min)
 
   /** Rotas /v1/admin/* (só o dono). Retorna undefined se a rota não for de admin. */
@@ -340,6 +396,17 @@ export function createApiServer({
         return send(res, 200, { ok: true, memory: isMemoryEnabled(), readOnly: isReadOnlyMode(), backends: ai.listBackends(), uptimeSeconds: Math.round(process.uptime()), ...extra });
       }
 
+      // ── Link curto de vídeo/áudio/foto do BDS Server: o próprio código do link é a credencial (10 min, um só caminho) ──
+      if (req.method === 'GET' && url.pathname.startsWith('/v1/bds/get/')) {
+        const link = bds.resolveLink(url.pathname.slice('/v1/bds/get/'.length));
+        if (!link) return send(res, 404, { error: 'link expirado ou inválido' });
+        try { await pipeBdsDownload(req, res, link); } catch (err) {
+          if (err instanceof BdsProxyError) { if (!res.headersSent) send(res, err.status, { error: err.message }); else res.destroy(); return; }
+          throw err;
+        }
+        return;
+      }
+
       // ── Login por usuário e senha (públicas) ──
       if (route === 'GET /v1/auth/status') {
         return send(res, 200, { passwordLogin: panel.enabled, discordKey: discordKeyEnabled });
@@ -436,6 +503,9 @@ export function createApiServer({
       if (route === 'GET /v1/me') {
         return send(res, 200, { userId: ctx.userId, role: ctx.role, memoryScope: ctx.memoryScope, auth: session.via });
       }
+
+      // ── Arquivos do BDS Server pelo painel (só o dono; fluxo direto, sem limite de 64 KB do corpo JSON) ──
+      if (await bdsRoute(req, res, url, ctx)) return;
 
       // ── Painel de administração (só o dono) ──
       const adminResult = await adminRoute(req, url, ctx);
