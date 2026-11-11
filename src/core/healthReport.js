@@ -89,7 +89,7 @@ export function formatUptime(seconds) {
 export function collectHealth({
   now = Date.now(), osImpl = os, fsImpl = fs, cwd = process.cwd(), logDir = path.resolve('logs'),
   uptimeSeconds = process.uptime(), rssBytes = process.memoryUsage().rss, interactions = interactionSeries, updateLog = process.env.YUI_UPDATE_LOG || (process.platform === 'win32' ? 'C:\\Tools\\atualizar-yui.log' : ''),
-  backupLog = process.env.YUI_BACKUP_LOG || (process.platform === 'win32' ? 'C:\Tools\backup\backup.log' : ''),
+  backupLog = process.env.YUI_BACKUP_LOG || (process.platform === 'win32' ? 'C:/Tools/backup/backup.log' : ''),
   discordOnline = null, readFile, statFile,
 } = {}) {
   const gb = (b) => Math.round((b / 1024 / 1024 / 1024) * 10) / 10;

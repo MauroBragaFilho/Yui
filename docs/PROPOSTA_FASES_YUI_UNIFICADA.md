@@ -31,7 +31,7 @@ A Fase 1 (política) e a Fase 2 (rotina pessoal, só com IA na nuvem) seguem val
 - Item 2 (observabilidade): relatório diário de saúde por DM às 08:00 (`YUI_HEALTH_REPORT`).
 - Item 3 (memória e disco): o Chrome do Weekly agora tem recuo depois de falha, um por vez, prazo de 60 s e prioridade baixa. Os backups do atualizador já guardam só 3 e os logs rodam em 14 dias.
 - Item 4 (rede): prazo padrão de 45 s para todo `fetch` e `axios` que não define o seu (`YUI_HTTP_TIMEOUT_MS`).
-- Item 5 (backup fora do notebook): **pendente, depende de escolher o destino** (PC, Drive ou outro).
+- Item 5 (backup fora do notebook): feito. Tarefa `YuiBackup` (05:30) cifra e envia ao repositório privado `Yui-backup`; restauração testada (`--verify`). Falta você guardar a chave de cifra fora do notebook.
 - Item 6 (permissões): feito, com teste (`test:permgaps`).
 - Item 7 (supervisão que religa só a Yui): pendente.
 

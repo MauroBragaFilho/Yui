@@ -352,7 +352,7 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 | `YUI_ALERTS` | `false` desliga os avisos automáticos por DM quando algo dá errado (no máximo 10 por hora). A falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada não vira DM de "Erro grave": vai só para o log, porque a Yui reconecta sozinha | `true` |
 | `YUI_ALERTS_COOLDOWN_MINUTES` | Intervalo mínimo para repetir o mesmo aviso | `30` |
 | `YUI_HEALTH_REPORT` / `YUI_HEALTH_REPORT_HOUR` | Relatório diário de saúde por DM ao dono (uptime, RAM, disco, respostas da IA, reconexões, erros, última atualização). `false` desliga; hora de Brasília (0 a 23) | `true` / `8` |
-| `YUI_UPDATE_LOG` | Log do atualizador lido pelo relatório | `C:\Toolstualizar-yui.log` (Windows) |
+| `YUI_UPDATE_LOG` | Log do atualizador lido pelo relatório | `C:\Tools\atualizar-yui.log` (Windows) |
 | `YUI_HTTP_TIMEOUT_MS` | Prazo padrão de toda chamada de rede (`fetch` e `axios`) que não define o seu; `0` desliga | `45000` |
 | `YUI_PANEL_AI_EDIT` | `false` trava a edição de chaves e provedores de IA pelo painel | `true` |
 | `YUI_AI_SETTINGS_FILE` | Onde o painel guarda as chaves/provedores que você adicionou | `secrets/ai-providers.json` |
@@ -377,7 +377,7 @@ Como entrar e as rotas: [Yui API](YUI_API.md).
 | `YUI_MCP_READ_ONLY` | Dentre as liberadas, as que só leem (as demais ficam bloqueadas em somente leitura) |
 | `YUI_BACKUP_KEY` / `YUI_BACKUP_KEY_FILE` | Chave de 32 bytes (hex de 64 caracteres ou base64; outro texto vira chave pelo SHA-256 dele) do **backup cifrado da memória** (`node scripts/backup-memory.mjs`), direta ou por arquivo. **Guarde fora do repositório** e faça uma cópia offline: sem ela o backup não abre | (obrigatória para fazer backup) |
 | `YUI_BACKUP_DIR` | Destino dos backups (fora do repositório). Padrão: uma pasta `yui-backups` ao lado do projeto | `../yui-backups` |
-| `YUI_BACKUP_REPO_URL` / `YUI_BACKUP_SSH_KEY` / `YUI_BACKUP_WORKDIR` / `YUI_BACKUP_LOG` / `YUI_BACKUP_KEEP` | Backup cifrado fora do notebook (`scripts/backup-offsite.mjs`): repositório **privado** do GitHub, chave de acesso (deploy key), clone de trabalho, log lido pelo relatório diário e quantos backups manter. A chave de cifra é a `YUI_BACKUP_KEY_FILE` | `git@github.com:MauroBragaFilho/Yui-backup.git` / `C:\Toolsackup\yui_backup_deploy` / `C:\Yui-backup-offsite` / `C:\Toolsackupackup.log` / `30` |
+| `YUI_BACKUP_REPO_URL` / `YUI_BACKUP_SSH_KEY` / `YUI_BACKUP_WORKDIR` / `YUI_BACKUP_LOG` / `YUI_BACKUP_KEEP` | Backup cifrado fora do notebook (`scripts/backup-offsite.mjs`): repositório **privado** do GitHub, chave de acesso (deploy key), clone de trabalho, log lido pelo relatório diário e quantos backups manter. A chave de cifra é a `YUI_BACKUP_KEY_FILE` | `git@github.com:MauroBragaFilho/Yui-backup.git` / `C:\Tools\backup\yui_backup_deploy` / `C:\Yui-backup-offsite` / `C:\Tools\backup\backup.log` / `30` |
 | `YUI_BACKUP_MAX_KEEP` | Quantos backups manter (rotação) | `7` |
 | `YUI_AUDIT_MAX_BYTES` / `YUI_AUDIT_MAX_ROTATE` | Tamanho máximo do `core-audit.jsonl` antes de girar e quantos arquivos girados guardar | `10485760` (10 MB) e `5` |
 | `YUI_IMAGE_PRE_ROUTE` | `false` desliga a **Porta I** (imagem por conversa: "yui gera uma imagem de um gato" vira `generate_image` pelo código). Padrão `true`. A ferramenta chamada pelo modelo continua valendo | `true` |
