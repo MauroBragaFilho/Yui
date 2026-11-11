@@ -106,6 +106,10 @@ export interface LogEntry { time: string; level: string; text: string }
 export interface LogFile { name: string; kind: LogKind; date: string; size: number }
 export interface LogsResult { files: LogFile[]; file: string | null; entries: LogEntry[]; truncated: boolean }
 export interface LogsQuery { kind?: LogKind; date?: string | null; level?: LogLevel | null; q?: string; limit?: number }
+// ── Lembretes e relatório matinal ──
+export interface ReminderView { id: number; text: string; at: string; repeat: { kind: string; hour: number; minute: number; weekday?: number; day?: number } | null; whenText: string; repeatText: string | null; tries: number }
+export interface RemindersResult { reminders: ReminderView[]; now: string }
+
 // ── Arquivos (BDS Server, pela API da Yui) ──
 export interface BdsEntry { nome: string; tipo: 'pasta' | 'arquivo'; caminho?: string; tamanho?: number | null; modificado?: string | null; [k: string]: unknown }
 export interface BdsList { caminho?: string; itens?: BdsEntry[]; [k: string]: unknown }
@@ -265,6 +269,17 @@ export function createClient(options: ClientOptions) {
     discordVerify: (code: string) => request<LoginResult>('POST', '/v1/auth/discord/verify', { code }, 20_000),
     login: (user: string, password: string) => request<LoginResult>('POST', '/v1/auth/login', { user, password }, 20_000),
     logout: () => request<{ ok: boolean; revoked: boolean }>('POST', '/v1/auth/logout', {}, 10_000),
+
+    // ── Lembretes e relatório matinal (só o dono) ──
+    reminders: {
+      list: () => request<RemindersResult>('GET', '/v1/admin/reminders', undefined, 20_000),
+      /** `when` em português ("amanhã às 9h", "em 2 horas", "todo dia às 8h"): o servidor interpreta. */
+      add: (text: string, when: string) => request<{ reminder: ReminderView }>('POST', '/v1/admin/reminders', { text, when }, 20_000),
+      remove: (id: number) => request<{ ok: boolean }>('DELETE', `/v1/admin/reminders/${id}`, undefined, 20_000),
+      snooze: (id: number, by: { minutes?: number; when?: string }) => request<{ reminder: ReminderView }>('POST', `/v1/admin/reminders/${id}/snooze`, by, 20_000),
+      morningPreview: () => request<{ text: string }>('GET', '/v1/admin/morning', undefined, 30_000),
+      morningSend: () => request<{ ok: boolean }>('POST', '/v1/admin/morning/send', {}, 30_000),
+    },
 
     // ── Arquivos do BDS Server (só o dono): a Yui é a única porta de entrada ──
     bds: {

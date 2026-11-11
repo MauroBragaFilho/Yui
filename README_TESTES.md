@@ -27,6 +27,8 @@ npm run test:redditguard   # recuo depois de falha, um Chrome por vez e prazo da
 npm run test:netdefaults   # prazo padrão de rede (fetch e axios) para não ficar preso numa queda de internet
 npm run test:permgaps   # dono nunca banido, +yui em DM de estranho em silêncio, aviso do ToS com comando real
 npm run test:healthreport   # relatório diário de saúde (logs, RAM, disco, atualizador, backup) e sua agenda
+npm run test:reminders   # lembretes: horários em português, armazenamento, entrega, conversa e relatório matinal (relógio fixo)
+npm run test:remindersapi   # API dos lembretes e do resumo do dia (só o dono, sem texto na auditoria)
 npm run test:bdsproxy   # ponte do painel com o BDS Server (BDS de mentira): dono, Range, envio em fluxo de 3 MB, link curto, erros
 npm run test:atualizarpainel   # troca atômica do painel web pelo atualizador (só Windows)
 npm run test:supervisor   # decisão do watchdog (só Windows): quando religar a Yui travada, limite por hora, carência
@@ -95,7 +97,7 @@ node tests/test-weekly-embed-ptbr.js       # embed semanal (página 1 e detalhes
 node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 ```
 
-**App:** em `apps/yui-app`, `npm test` roda a lógica do app (51 testes: API real, painel de lives, Visão Geral, saúde do computador, tela de Arquivos, servidor do painel com repasse ao BDS e o painel compilado em dia com o código-fonte) e `npx tsc --noEmit` confere os tipos.
+**App:** em `apps/yui-app`, `npm test` roda a lógica do app (57 testes: API real, lembretes, painel de lives, Visão Geral, saúde do computador, tela de Arquivos, servidor do painel com repasse ao BDS e o painel compilado em dia com o código-fonte) e `npx tsc --noEmit` confere os tipos.
 
 **Yui Desktop** (janela do computador, em `D:\Projetos\Projeto Jarvis\Yui Desktop`): `npm test` (14) e `npm run smoke` (abre a janela de verdade contra uma Yui falsa; nunca toca a Yui real).
 
@@ -173,6 +175,8 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:weekly-browser` | 9 | Feed Atom → markdown, fallback de cookies |
 | `test:netdefaults` | 13 | Prazo padrão do `fetch` e do `axios` (servidor que nunca responde), quem passa o próprio prazo manda, não embrulha duas vezes, 0 desliga |
 | `test:permgaps` | 14 | Dono protegido de ban (OWNER_ID, YUI_OWNER_ID, registro antigo), `+yui` em DM de quem não é dono, aviso do ToS com comando que existe |
+| `test:reminders` | 170 | Interpretador de horários (relativos, dia da semana, data, hora do dia, repetições, recusas), armazenamento com ids que não voltam e arquivo corrompido, entrega (atrasado, repetição avisa uma vez, falha tenta de novo, auditoria sem texto), conversa (não captura conversa comum, só o dono), relatório matinal e recuperação depois de queda, envio ao dono |
+| `test:remindersapi` | 6 | Só o dono, criar com "quando" em português ou ISO, recusas, adiar, apagar, resumo do dia (ver e mandar, 503 se a DM não sai), auditoria sem texto |
 | `test:bdsproxy` | 10 | Só o dono entra, listar/escrever repassam só os campos permitidos (X-BDS-Client e chave), erros do BDS voltam iguais, 504/503, envio em fluxo de 3 MB, link curto com Range sem vazar Set-Cookie, link vencido/inválido/de membro, auditoria sem caminhos |
 | `test:atualizarpainel` | 22 | Atualização do painel pelo atualizador: troca, guarda o anterior, mesmo carimbo não mexe, sem painel no código novo, cópia quebrada mantém o anterior, destino sem `apps`, primeira instalação (só Windows) |
 | `test:supervisor` | 18 | Decisão do watchdog: atualizador em andamento, sem processo, carência de 5 min, API muda (3 falhas), Discord fora (10 min), limite de 3 religadas por hora (só Windows) |

@@ -153,9 +153,42 @@ export function createAlerter({ notify = null, ownerId = null, env = process.env
 // ── Instância do processo (configurada na inicialização) ──
 let current = createAlerter();
 
+let owner = { notify: null, ownerId: null };
+
 export function configureAlerts(options) {
   current = createAlerter(options);
+  owner = { notify: options?.notify ?? null, ownerId: options?.ownerId ?? null };
   return current;
+}
+
+/** Quebra um texto em pedaços de até `max` caracteres, preferindo cortar em quebra de linha. */
+export function splitForDiscord(text, max = 1900) {
+  const out = [];
+  let rest = String(text ?? '');
+  while (rest.length > max) {
+    let cut = rest.lastIndexOf(String.fromCharCode(10), max);
+    if (cut < max * 0.5) cut = rest.lastIndexOf(' ', max);
+    if (cut < max * 0.5) cut = max;
+    out.push(rest.slice(0, cut).trimEnd());
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest) out.push(rest);
+  return out;
+}
+
+/**
+ * Manda uma mensagem privada ao dono (lembretes e relatório matinal). Sem cooldown e sem filtro de tamanho: quem chama
+ * decide o conteúdo. Devolve true se TODAS as partes saíram; false (sem lançar erro) se o Discord não está pronto ou falhou.
+ */
+export async function sendOwnerMessage(text) {
+  if (!owner.notify || !owner.ownerId) return false;
+  try {
+    for (const part of splitForDiscord(redact(String(text ?? ''), process.env))) await owner.notify(owner.ownerId, part);
+    return true;
+  } catch (err) {
+    audit('alert.fail', null, { key: 'owner-dm', error: String(err?.message ?? err).slice(0, 100) });
+    return false;
+  }
 }
 
 /** Avisa o dono (sem esperar e sem nunca lançar erro). */

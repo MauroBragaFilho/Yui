@@ -7,6 +7,8 @@ import { checkToolAccess, isOwnerId, isReadOnlyMode, ROLES } from '../permission
 import { isMemoryEnabled } from '../discordAdapter.js';
 import { audit, auditFilePath } from '../audit.js';
 import { interactionSeries } from '../interactionStats.js';
+import { parseWhen, describeWhen, describeRepeat } from '../../reminders/when.js';
+import { ReminderError } from '../../reminders/store.js';
 import { listRadio, RADIO_ACTIONS, defaultRadioDeps } from './radioAdmin.js';
 import { readLogs } from './panelLogs.js';
 import { buildIntegrations, loadGuildDetail, loadIntegrationData } from './integrations.js';
@@ -233,15 +235,31 @@ async function defaultRemoveTwitch(guildId, login, discordChannelId) {
   return twitchRepository.removeSubscription(guildId, login, discordChannelId).changes > 0;
 }
 
+/** Como o painel vê um lembrete: o próprio dado mais os textos prontos ("amanhã às 09:00", "todo dia às 08:00"). */
+function reminderView(r, now = new Date()) {
+  return { id: r.id, text: r.text, at: r.at, repeat: r.repeat, whenText: describeWhen(r.at, now), repeatText: r.repeat ? describeRepeat(r.repeat) : null, tries: r.tries || 0 };
+}
+
 export function createAdmin({
   client = null,
   deps = null,
+  reminders = null, // { store, compose(now), send(text) }: injetável para teste; o padrão é o armazenamento e o envio reais
+
   auditFile = null,
   exit = () => process.exit(0),
   startedAt = Date.now(),
 } = {}) {
   let cached = deps;
   const d = async () => (cached ??= await defaultDeps());
+  let remCache = reminders;
+  const rem = async () => {
+    if (remCache) return remCache;
+    const { getReminderStore } = await import('../../reminders/assistant.js');
+    const { createMorningComposer } = await import('../../reminders/service.js');
+    const { sendOwnerMessage } = await import('../alerts.js');
+    remCache = { store: getReminderStore(), compose: createMorningComposer({ client }), send: sendOwnerMessage };
+    return remCache;
+  };
 
   const guildList = () => (client?.guilds?.cache ? [...client.guilds.cache.values()] : []);
   let radioCache = null;
@@ -291,6 +309,83 @@ export function createAdmin({
           pcToolsEnabled: String(process.env.YUI_TOOLS_PC_ENABLED || 'false').toLowerCase() === 'true',
         },
       };
+    },
+
+    // ── Lembretes e relatório matinal (só o dono) ──
+    async reminders(ctx) {
+      requireOwner(ctx);
+      const r = await rem();
+      const now = new Date();
+      return { reminders: r.store.list().map((x) => reminderView(x, now)), now: now.toISOString() };
+    },
+
+    /** `when` em português ("amanhã às 9h", "em 2 horas", "todo dia às 8h") ou `at` (ISO). */
+    async addReminder(ctx, { text, when, at } = {}) {
+      requireOwner(ctx);
+      const r = await rem();
+      const now = new Date();
+      let whenAt; let repeat = null; let clean = String(text ?? '');
+      if (at) {
+        whenAt = new Date(at);
+        if (Number.isNaN(whenAt.getTime())) throw new AdminError(400, 'Data inválida.');
+      } else {
+        const w = parseWhen(String(when ?? ''), now);
+        if (!w.ok) throw new AdminError(400, w.reason === 'sem-horario' ? 'Diga quando, por exemplo: "amanhã às 9h" ou "em 2 horas".' : w.message);
+        whenAt = w.at; repeat = w.repeat;
+      }
+      if (!clean.trim()) throw new AdminError(400, 'Do que devo te lembrar?');
+      try {
+        const added = r.store.add({ text: clean, at: whenAt, repeat });
+        audit('admin.reminder.add', ctx, { repeat: Boolean(repeat) });
+        return { reminder: reminderView(added, now) };
+      } catch (err) {
+        if (err instanceof ReminderError) throw new AdminError(400, err.message);
+        throw err;
+      }
+    },
+
+    async removeReminder(ctx, id) {
+      requireOwner(ctx);
+      const r = await rem();
+      if (!r.store.remove(id)) throw new AdminError(404, 'Lembrete não encontrado.');
+      audit('admin.reminder.remove', ctx, {});
+      return { ok: true };
+    },
+
+    /** Adia: `minutes` (a partir de agora) ou `when` em português ("amanhã às 9h"). */
+    async snoozeReminder(ctx, id, { minutes, when } = {}) {
+      requireOwner(ctx);
+      const r = await rem();
+      const now = new Date();
+      let to;
+      if (Number.isFinite(Number(minutes)) && Number(minutes) > 0) to = new Date(now.getTime() + Math.min(Number(minutes), 60 * 24 * 365) * 60_000);
+      else {
+        const w = parseWhen(String(when ?? ''), now);
+        if (!w.ok) throw new AdminError(400, w.message);
+        to = w.at;
+      }
+      const upd = r.store.reschedule(id, to);
+      if (!upd) throw new AdminError(404, 'Lembrete não encontrado.');
+      audit('admin.reminder.snooze', ctx, {});
+      return { reminder: reminderView(upd, now) };
+    },
+
+    /** O texto do relatório matinal de agora (sem enviar). */
+    async morningPreview(ctx) {
+      requireOwner(ctx);
+      const r = await rem();
+      return { text: await r.compose(new Date()) };
+    },
+
+    /** Manda o relatório matinal ao dono por DM agora. */
+    async morningSend(ctx) {
+      requireOwner(ctx);
+      const r = await rem();
+      const text = await r.compose(new Date());
+      const ok = (await r.send(text)) === true;
+      audit('admin.morning.send', ctx, { ok });
+      if (!ok) throw new AdminError(503, 'Não consegui enviar a mensagem privada (o Discord está desconectado?).');
+      return { ok: true };
     },
 
     /** Servidores em que a Yui está, com o modo de AutoMod de cada um. */

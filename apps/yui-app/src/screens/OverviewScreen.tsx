@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ApiError, type AdminOverview, type GatewayStatus, type Me, type YuiClient } from '../api/client.ts';
+import { ApiError, type AdminOverview, type GatewayStatus, type Me, type ReminderView, type YuiClient } from '../api/client.ts';
 import { Badge, Button, Card, Icon, PageHeader, type TabKey } from '../components/ui.tsx';
 import { buildAlerts, chartBars, formatUptime, greetingFor, groupEvents, levelForFree, percent, relativeTime, systemSummary, type Level } from '../overviewLogic.ts';
+import { groupReminders, summarizeReminders } from '../remindersLogic.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 
 type Props = { client: YuiClient; me: Me; onNavigate: (tab: TabKey) => void };
@@ -24,9 +25,12 @@ export function OverviewScreen({ client, onNavigate }: Props) {
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
+  const [reminders, setReminders] = useState<ReminderView[] | null>(null);
+  const [morningMsg, setMorningMsg] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
-    const [overview, gw] = await Promise.allSettled([client.admin.overview(), client.admin.gateway()]);
+    const [overview, gw, rem] = await Promise.allSettled([client.admin.overview(), client.admin.gateway(), client.reminders.list()]);
+    setReminders(rem.status === 'fulfilled' ? rem.value.reminders : null); // servidor antigo sem lembretes: o cartão só diz que não há dado
     if (overview.status === 'fulfilled') {
       setData(overview.value);
       setError(null);
@@ -189,10 +193,27 @@ export function OverviewScreen({ client, onNavigate }: Props) {
 
             <Card style={styles.card}>
               <View style={styles.rowBetween}>
-                <SectionTitle icon="person" title="Personal Assistant" />
-                <Badge label="Em breve" color={colors.muted} />
+                <SectionTitle icon="alarm" title="Lembretes" />
+                <Badge label={reminders ? summarizeReminders(reminders) : 'sem dado'} color={reminders && groupReminders(reminders).overdue.length ? colors.warning : colors.accentText} />
               </View>
-              <Text style={styles.hint}>Agenda, lembretes, tarefas e o que a Yui sabe sobre você, num só lugar. Ainda não existe: vem depois da estabilidade no notebook.</Text>
+              {reminders === null ? <Text style={styles.hint}>Este servidor ainda não tem lembretes (atualize a Yui).</Text> : (
+                <>
+                  {[...groupReminders(reminders).overdue, ...groupReminders(reminders).today, ...groupReminders(reminders).upcoming].slice(0, 3).map((r) => (
+                    <View key={r.id} style={styles.eventRow} testID="overview-reminder">
+                      <Icon name={r.repeat ? 'repeat' : 'alarm'} size={20} color={colors.accentText} />
+                      <Text style={styles.eventLabel} numberOfLines={1}>{r.text}</Text>
+                      <Text style={styles.eventTime}>{r.repeatText ? r.repeatText : r.whenText}</Text>
+                    </View>
+                  ))}
+                  {reminders.length === 0 ? <Text style={styles.hint}>Nada marcado. Diga à Yui: “me lembra amanhã às 9h de pagar a conta”.</Text> : null}
+                </>
+              )}
+              <View style={styles.badges}>
+                <Shortcut testID="go-reminders" icon="alarm" label="Lembretes" onPress={() => onNavigate('reminders')} />
+                <Shortcut testID="morning-now" icon="wb_sunny" label="Enviar o resumo do dia agora" onPress={async () => { setMorningMsg(null); try { await client.reminders.morningSend(); setMorningMsg('Resumo enviado por mensagem privada.'); } catch (e) { setMorningMsg(errText(e)); } }} />
+              </View>
+              {morningMsg ? <Text testID="morning-msg" style={styles.hint}>{morningMsg}</Text> : null}
+              <Text style={styles.hint}>Todo dia de manhã a Yui manda o resumo (lembretes, pendências e a saúde dela). Agenda do Google e e-mail ainda não estão ligados.</Text>
             </Card>
 
             {updatedAt ? <Text style={styles.hint}>Atualizado às {new Date(updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (a cada 30 s)</Text> : null}

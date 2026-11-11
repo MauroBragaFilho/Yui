@@ -9,6 +9,7 @@ import { AdminScreen } from './src/screens/AdminScreen.tsx';
 import { ChatScreen } from './src/screens/ChatScreen.tsx';
 import { ConnectScreen } from './src/screens/ConnectScreen.tsx';
 import { FilesScreen } from './src/screens/FilesScreen.tsx';
+import { RemindersScreen } from './src/screens/RemindersScreen.tsx';
 import { MemoryScreen } from './src/screens/MemoryScreen.tsx';
 import { OverviewScreen } from './src/screens/OverviewScreen.tsx';
 import { StatusScreen } from './src/screens/StatusScreen.tsx';
@@ -117,6 +118,7 @@ export default function App() {
         <Shell tab={tab} onChange={setTab} showAdmin={isOwner} roleLabel={ROLE_LABEL[session.me.role] ?? session.me.role} onLogout={logout}>
           {tab === 'home' && isOwner ? <OverviewScreen client={client} me={session.me} onNavigate={setTab} /> : null}
           {tab === 'chat' ? <ChatScreen client={client} /> : null}
+          {tab === 'reminders' && isOwner ? <RemindersScreen client={client} /> : null}
           {tab === 'files' && isOwner ? <FilesScreen client={client} /> : null}
           {tab === 'memory' ? <MemoryScreen client={client} /> : null}
           {tab === 'admin' && isOwner ? <AdminScreen client={client} /> : null}

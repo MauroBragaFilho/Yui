@@ -13,6 +13,7 @@ import { routeExplicitResearch, reviewResearchReply } from '../../core/ai/manage
 // Lista de mods (Minecraft): o CÓDIGO procura cada nome no Modrinth (a IA não inventa link). Fora da fila, como o resto do /yui.
 import { routeModList } from '../../handlers/modListResolver.js';
 import { routeLists } from '../../handlers/listAssistant.js';
+import { routeReminders } from '../../reminders/assistant.js';
 import { SAFE_ALLOWED_MENTIONS } from '../mentions.js';
 import { sendLongReply, parseMaxParts, formatDeliveryLog, createProgressReporter } from '../longReply.js';
 import {
@@ -479,7 +480,9 @@ export const askCommand = {
       // YUI_MODLIST_ENABLED=false desliga; conversa normal devolve { handled: false } na hora (mesmo contrato da Porta A, researched: true).
       // Porta L (listas pessoais: "anota na lista X: ...", "mostra a lista X"): o código executa; a lista é dado pessoal e não vai ao contexto.
       const listRouted = await routeLists(entry);
-      const modRouted = listRouted.handled ? listRouted : await routeModList(entry, deps);
+      // Porta T (lembretes do dono: "me lembra amanhã às 9h de ...", "meus lembretes", "resumo do dia"): o código interpreta o horário e grava; só o dono.
+      const remRouted = listRouted.handled ? listRouted : await routeReminders(entry, { report: async () => (await import('../../reminders/service.js')).createMorningComposer()() });
+      const modRouted = remRouted.handled ? remRouted : await routeModList(entry, deps);
       // Porta A (só com YUI_RESEARCH_PRE_ROUTE=true): pedido explícito e estrito pesquisa por código, sem consultar o modelo.
       const routed = modRouted.handled ? modRouted : await routeExplicitResearch(entry, deps);
       if (routed.handled) {

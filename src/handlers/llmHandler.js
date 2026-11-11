@@ -23,6 +23,7 @@ import { isOwnerId } from '../core/permissions.js';
 import { routeModList } from './modListResolver.js';
 import { routeLibrary } from './libraryIntent.js';
 import { routeLists } from './listAssistant.js';
+import { routeReminders } from '../reminders/assistant.js';
 import { logger } from '../utils/logger.js';
 import { getMediaUserMessage, formatDeezerDelivery, codeSafe, isUploadTooLargeError, MEDIA_MESSAGES } from '../utils/mediaUrls.js';
 // Textos grandes: corte que não parte emoji, limite de upload, orçamento de prompt e leitor de linhas do stream SSE (TG-02, 05, 08, 11, 16, 37).
@@ -2574,6 +2575,15 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             const listRouted = await routeLists({ text: ownQuestion, userId });
             if (listRouted.handled) {
                 await unifiedReply(listRouted.text);
+                return;
+            }
+        }
+        // Porta T (lembretes do dono): "me lembra amanhã às 9h de pagar a conta", "meus lembretes", "adia o lembrete 2 por 30 minutos", "resumo do dia":
+        // o CÓDIGO interpreta o horário e grava no arquivo de lembretes (só o dono; o aviso sai por DM no minuto certo). Nada vai ao histórico nem ao contexto. YUI_REMINDERS_ENABLED=false desliga.
+        if (directToYui && !isVoice && options.radioMode !== true && options.thirdPartyPrompt !== true && ownQuestion) {
+            const remRouted = await routeReminders({ text: ownQuestion, userId }, { report: async () => (await import('../reminders/service.js')).createMorningComposer()() });
+            if (remRouted.handled) {
+                await unifiedReply(remRouted.text);
                 return;
             }
         }

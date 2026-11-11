@@ -10,7 +10,7 @@ import { logger } from '../utils/logger.js';
 import { getCurrentWeekKey } from '../utils/weekKey.js';
 import { weeklyService } from '../engines/gtao/systems/weekly/service.js';
 import { memory } from '../core/index.js';
-import { sendHealthReport, healthReportSchedule } from '../core/healthReport.js';
+import { startReminderService } from '../reminders/service.js';
 
 /** Converte "a cada N minutos" em cron válido (o passo de minutos só vai até 59). */
 export function minutesToCron(minutes) {
@@ -203,14 +203,8 @@ export function startScheduler(client) {
     logger.warn('[Scheduler] Twitch monitoramento desativado (TWITCH_INTERVAL_MINUTES = 0).');
   }
 
-  // 7. Relatório diário de saúde para o dono (uma DM por dia; YUI_HEALTH_REPORT=false desliga, YUI_HEALTH_REPORT_HOUR muda a hora).
-  const health = healthReportSchedule();
-  if (health) {
-    cron.schedule(health.cron, () => {
-      sendHealthReport({ client }).catch((err) => logger.warn(`[Scheduler] Relatório de saúde falhou: ${err.message}`));
-    }, { timezone: health.timezone });
-    logger.info(`[Scheduler] Relatório diário de saúde às ${String(health.hour).padStart(2, '0')}:00 (${health.timezone}).`);
-  }
+  // 7. Lembretes (a cada minuto) e relatório matinal do dono (08:00; inclui a saúde da Yui). YUI_MORNING_REPORT=false volta ao relatório de saúde sozinho.
+  startReminderService({ cron, client, logger });
 }
 
 export default { startScheduler };

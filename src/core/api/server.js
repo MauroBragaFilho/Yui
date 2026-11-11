@@ -301,6 +301,14 @@ export function createApiServer({
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/twitch$/)) && m === 'POST') return admin.addTwitchFollow(ctx, r[1], await readJson(req));
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/twitch\/(\w+)\/(\d+)$/)) && m === 'DELETE') return admin.removeTwitchFollow(ctx, r[1], r[2], r[3]);
 
+    // Lembretes e relatório matinal
+    if (m === 'GET' && p === '/v1/admin/reminders') return admin.reminders(ctx);
+    if (m === 'POST' && p === '/v1/admin/reminders') return admin.addReminder(ctx, await readJson(req));
+    if ((r = p.match(/^\/v1\/admin\/reminders\/(\d+)$/)) && m === 'DELETE') return admin.removeReminder(ctx, r[1]);
+    if ((r = p.match(/^\/v1\/admin\/reminders\/(\d+)\/snooze$/)) && m === 'POST') return admin.snoozeReminder(ctx, r[1], await readJson(req));
+    if (m === 'GET' && p === '/v1/admin/morning') return admin.morningPreview(ctx);
+    if (m === 'POST' && p === '/v1/admin/morning/send') return admin.morningSend(ctx);
+
     if (m === 'GET' && p === '/v1/admin/ai') return admin.ai(ctx);
     if (m === 'POST' && p === '/v1/admin/ai/keys') {
       const body = await readJson(req);

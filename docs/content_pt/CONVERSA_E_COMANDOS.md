@@ -33,6 +33,7 @@ Legenda: ✅ por conversa · 🔶 parcial · ⚠️ módulo pronto e testado, ai
 | Baixar a música do seu status (`/baixar_musica_atual`) | ✅ | ferramenta `get_current_music` ("yui, baixa a música do meu status"); por conversa vale só a música de quem pediu |
 | Info de jogo e "meu PC roda?" (sem comando de barra) | ✅ | ferramentas `check_game_info` (RAWG + HowLongToBeat) e `check_pc_compatibility` |
 | Listas pessoais | ✅ | Porta L ("anota na lista X: ...") |
+| Lembretes e resumo do dia (só o dono) | ✅ | **Porta T** ("me lembra amanhã às 9h de pagar a conta", "meus lembretes", "cancela o lembrete 2", "adia o lembrete 2 por 30 minutos", "resumo do dia"); o aviso sai por DM no minuto certo |
 | Lista de mods | ✅ | Porta M (Modrinth) |
 | Biblioteca de arquivos (BDS Server; sem comando de barra) | ✅ | **Porta B** (só dono, **só leitura**; em canal público ela avisa e não mostra nada, o conteúdo só sai em DM/canal privado): "yui procura Matrix na biblioteca", "o que eu tenho de filmes?", "o que chegou de novo na biblioteca?", "quanto espaço tem no servidor de arquivos?". Exige `YUI_BDS_URL`; só dispara citando a biblioteca/servidor de arquivos ou uma pasta sua ("meus filmes", "o que eu tenho de séries"). Ferramentas `bds.buscar/listar/recentes/status`. Teste: `npm run test:library` |
 | Lembrar algo (`/yui-memoria lembrar`) | 🔶 | captura "lembra que...", "meu nome é...", "eu gosto de..." |
