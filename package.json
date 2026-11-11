@@ -34,6 +34,7 @@
     "test:permgaps": "node tests/test-permission-gaps.js",
     "test:healthreport": "node tests/test-health-report.js",
     "test:backupoffsite": "node tests/test-backup-offsite.js",
+    "test:atualizarpainel": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-atualizar-painel.ps1",
     "test:supervisor": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-supervisor.ps1",
     "test:gtacars": "node tests/test-gtacars.js",
     "test:ask-gtacars": "node tests/test-ask-gtacars.js",

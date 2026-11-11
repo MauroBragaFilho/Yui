@@ -326,7 +326,7 @@ Get-Content C:\Tools\atualizar-yui.log -Tail 20                                 
 
 O que o atualizador **não** faz (continua manual no notebook):
 
-- **Não atualiza o app web** (`apps/` fica de fora). Se o app mudou, gere o build no PC (`npm run web:build` em `apps\yui-app`) e copie a pasta `apps\yui-app\dist` para `C:\Yui\apps\yui-app\dist` (por exemplo com `scp -r`). O `serve-web.mjs` lê os arquivos a cada pedido, então basta atualizar o navegador.
+- **O painel web vai junto, já compilado.** O código-fonte do app (`apps/`) não é copiado, mas a pasta `apps/yui-app/painel-web/` (o build versionado) é: **depois** de a Yui nova subir, o atualizador copia essa pasta para `apps\yui-app\dist-novo`, confere o `index.html` e o bundle que ele cita, troca por `dist` e guarda o anterior em `dist-antigo`. Se algo falhar, registra `AVISO: painel NAO atualizado` e segue o painel anterior (nunca derruba a atualização da Yui). Quem mudar o app precisa rodar `npm run painel:build` em `apps/yui-app` e comitar `painel-web/` junto; o teste `npm test` do app falha se o código-fonte mudou sem recompilar. O `serve-web.mjs` lê os arquivos a cada pedido, então basta atualizar o navegador (`Ctrl+F5`).
 - **Não reinstala os ambientes Python** (`.venv-deemix`, `.venv-spotdl`): se os `requirements-*.txt` mudaram, rode no notebook os comandos `pip` do bloco abaixo.
 - **Não apaga** arquivos que saíram do repositório (ele copia por cima, sem espelhar).
 - **Não se atualiza:** a tarefa roda a cópia em `C:\Tools`. Se `scripts/atualizar-yui.ps1` mudar, copie-o de novo para lá.

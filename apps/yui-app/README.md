@@ -35,6 +35,7 @@ npm install
 
 ```bash
 npm run web:build      # gera dist/
+npm run painel:build   # gera painel-web/ (o build VERSIONADO que o atualizador leva ao notebook): rode e comite ANTES de dar push de mudança no app
 npm run web:serve      # http://localhost:8081
 ```
 

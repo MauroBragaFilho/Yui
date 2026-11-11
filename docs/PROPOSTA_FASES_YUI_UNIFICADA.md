@@ -27,7 +27,7 @@ A Fase 1 (política) e a Fase 2 (rotina pessoal, só com IA na nuvem) seguem val
 
 **Andamento em 11/11/2026:**
 
-- Item 1 (atualizador): feito o que dava para fazer sem hardware novo. Antes de aplicar, ele sobe o código novo numa pasta temporária e confere que chega ao login do Discord (pega arquivo faltando e erro de sintaxe); espera até 4 min a Yui ficar de pé; não pula mais `src\database`. Falta cobrir `apps/` (o painel ainda é copiado à mão, porque o build não está no git).
+- Item 1 (atualizador): feito o que dava para fazer sem hardware novo. Antes de aplicar, ele sobe o código novo numa pasta temporária e confere que chega ao login do Discord (pega arquivo faltando e erro de sintaxe); espera até 4 min a Yui ficar de pé; não pula mais `src\database`. O painel web também vai: o build fica versionado em `apps/yui-app/painel-web/` (`npm run painel:build`) e o atualizador o troca depois de a Yui subir, guardando o anterior.
 - Item 2 (observabilidade): relatório diário de saúde por DM às 08:00 (`YUI_HEALTH_REPORT`).
 - Item 3 (memória e disco): o Chrome do Weekly agora tem recuo depois de falha, um por vez, prazo de 60 s e prioridade baixa. Os backups do atualizador já guardam só 3 e os logs rodam em 14 dias.
 - Item 4 (rede): prazo padrão de 45 s para todo `fetch` e `axios` que não define o seu (`YUI_HTTP_TIMEOUT_MS`).

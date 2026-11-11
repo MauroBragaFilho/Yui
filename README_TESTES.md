@@ -27,6 +27,7 @@ npm run test:redditguard   # recuo depois de falha, um Chrome por vez e prazo da
 npm run test:netdefaults   # prazo padrão de rede (fetch e axios) para não ficar preso numa queda de internet
 npm run test:permgaps   # dono nunca banido, +yui em DM de estranho em silêncio, aviso do ToS com comando real
 npm run test:healthreport   # relatório diário de saúde (logs, RAM, disco, atualizador, backup) e sua agenda
+npm run test:atualizarpainel   # troca atômica do painel web pelo atualizador (só Windows)
 npm run test:supervisor   # decisão do watchdog (só Windows): quando religar a Yui travada, limite por hora, carência
 npm run test:backupoffsite   # backup cifrado para um repositório git (aqui um local), sem texto em claro, e teste de restauração
 npm run test:weekly-gtaforums # fonte alternativa do evento semanal
@@ -93,7 +94,7 @@ node tests/test-weekly-embed-ptbr.js       # embed semanal (página 1 e detalhes
 node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 ```
 
-**App:** em `apps/yui-app`, `npm test` roda a lógica do app (32 testes: API real, painel de lives, Visão Geral e saúde do computador) e `npx tsc --noEmit` confere os tipos.
+**App:** em `apps/yui-app`, `npm test` roda a lógica do app (36 testes: API real, painel de lives, Visão Geral, saúde do computador e o painel compilado em dia com o código-fonte) e `npx tsc --noEmit` confere os tipos.
 
 **Yui Desktop** (janela do computador, em `D:\Projetos\Projeto Jarvis\Yui Desktop`): `npm test` (14) e `npm run smoke` (abre a janela de verdade contra uma Yui falsa; nunca toca a Yui real).
 
@@ -171,6 +172,7 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:weekly-browser` | 9 | Feed Atom → markdown, fallback de cookies |
 | `test:netdefaults` | 13 | Prazo padrão do `fetch` e do `axios` (servidor que nunca responde), quem passa o próprio prazo manda, não embrulha duas vezes, 0 desliga |
 | `test:permgaps` | 14 | Dono protegido de ban (OWNER_ID, YUI_OWNER_ID, registro antigo), `+yui` em DM de quem não é dono, aviso do ToS com comando que existe |
+| `test:atualizarpainel` | 15 | Atualização do painel pelo atualizador: troca, guarda o anterior, mesmo carimbo não mexe, sem painel no código novo, cópia quebrada mantém o anterior, destino sem `apps`, primeira instalação (só Windows) |
 | `test:supervisor` | 18 | Decisão do watchdog: atualizador em andamento, sem processo, carência de 5 min, API muda (3 falhas), Discord fora (10 min), limite de 3 religadas por hora (só Windows) |
 | `test:backupoffsite` | 15 | Primeiro envio ao remoto vazio, nada em claro no repositório, "sem mudanças" não envia, mudança envia, restauração conferida, chave errada e chave ausente falham |
 | `test:healthreport` | 39 | Leitura dos logs das últimas 24 h, log do atualizador, texto e nível do relatório, envio com cooldown e agenda |

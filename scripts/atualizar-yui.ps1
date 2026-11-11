@@ -71,6 +71,41 @@ function Testar-Subida([string]$pasta, [string]$modulos) {
     return $null
 }
 
+# Leva o painel web versionado (apps\yui-app\painel-web) do codigo novo para C:\Yui\apps\yui-app\dist, com troca atomica e a versao anterior
+# guardada em dist-antigo. So roda DEPOIS de a Yui nova ter subido, e NUNCA lanca erro: o painel nao pode derrubar a atualizacao da Yui.
+# Devolve o texto para o log.
+function Atualizar-Painel([string]$novo, [string]$destino) {
+    $app = Join-Path $destino 'apps\yui-app'
+    $tmp = Join-Path $app 'dist-novo'
+    try {
+        $origem = Join-Path $novo 'apps\yui-app\painel-web'
+        if (-not (Test-Path "$origem\index.html")) { return 'painel: o codigo novo nao traz apps\yui-app\painel-web; nada a fazer' }
+        if (-not (Test-Path $app)) { return 'painel: nao existe apps\yui-app aqui; nada a fazer' }
+        $fonteNova = Get-Content "$origem\.fonte" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $fonteAtual = if (Test-Path "$app\dist\.fonte") { Get-Content "$app\dist\.fonte" | Select-Object -First 1 } else { '' }
+        if ($fonteNova -and $fonteNova -eq $fonteAtual) { return 'painel: ja esta na versao do codigo novo' }
+        if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+        robocopy $origem $tmp /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) { throw "robocopy do painel falhou (codigo $LASTEXITCODE)" }
+        $global:LASTEXITCODE = 0
+        if (-not (Test-Path "$tmp\index.html")) { throw 'a copia do painel nao tem index.html' }
+        $html = Get-Content "$tmp\index.html" -Raw
+        if ($html -match 'src="(/_expo/static/js/web/[^"]+\.js)"') {
+            $bundle = Join-Path $tmp ($Matches[1].TrimStart('/').Replace('/', '\'))
+            if (-not (Test-Path $bundle)) { throw 'o bundle citado no index.html nao esta na copia' }
+        }
+        if (Test-Path "$app\dist-antigo") { Remove-Item "$app\dist-antigo" -Recurse -Force }
+        if (Test-Path "$app\dist") { Rename-Item "$app\dist" 'dist-antigo' }
+        Rename-Item $tmp 'dist'
+        return 'painel: atualizado (a versao anterior ficou em apps\yui-app\dist-antigo)'
+    } catch {
+        $erro = $_.Exception.Message
+        if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+        if (-not (Test-Path "$app\dist") -and (Test-Path "$app\dist-antigo")) { Rename-Item "$app\dist-antigo" 'dist' -ErrorAction SilentlyContinue }
+        return "AVISO: painel NAO atualizado ($erro); segue o painel anterior"
+    }
+}
+
 function Esperar-Yui([int]$minSegundos, [int]$maxSegundos) {
     $fim = (Get-Date).AddSeconds($maxSegundos)
     while ((Get-Date) -lt $fim) {
@@ -147,6 +182,7 @@ try {
     if (Esperar-Yui 60 240) {
         Set-Content $arqVersao $remoto -Encoding ascii
         Log "OK: Yui rodando na versao $($remoto.Substring(0,7))."
+        Log (Atualizar-Painel $novo $Destino)
     } else {
         Log 'ERRO: a Yui nao ficou de pe. Voltando a versao anterior...'
         robocopy "$bk\src" "$Destino\src" /E /NFL /NDL /NJH /NJS /NP | Out-Null
