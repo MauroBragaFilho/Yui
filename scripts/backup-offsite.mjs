@@ -39,6 +39,8 @@ const cfg = {
 
 // Arquivos de estado (known_hosts e último hash) ficam ao lado da chave de acesso (C:\Tools\backup), nunca na raiz do disco.
 const stateDir = path.dirname(cfg.sshKey);
+// git: o do PATH; no notebook (sem Git instalado) o MinGit portátil em C:\Tools\git. YUI_GIT_PATH força outro caminho.
+const gitExe = env.YUI_GIT_PATH || (win && fs.existsSync('C:\Tools\git\cmd\git.exe') ? 'C:\Tools\git\cmd\git.exe' : 'git');
 const stamp = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
 export function logLine(msg, file = cfg.logFile) {
@@ -55,7 +57,7 @@ export function logLine(msg, file = cfg.logFile) {
 function git(args, { cwd = cfg.workDir, allowFail = false } = {}) {
   const sshCmd = `ssh -i "${cfg.sshKey}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="${path.join(stateDir, 'known_hosts')}" -o BatchMode=yes`;
   try {
-    return execFileSync('git', ['-c', 'user.name=Yui Backup', '-c', 'user.email=yui-backup@users.noreply.github.com', ...args], {
+    return execFileSync(gitExe, ['-c', 'user.name=Yui Backup', '-c', 'user.email=yui-backup@users.noreply.github.com', ...args], {
       cwd, env: { ...env, GIT_SSH_COMMAND: sshCmd, GIT_TERMINAL_PROMPT: '0' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180_000,
     }).trim();
   } catch (err) {
