@@ -2183,7 +2183,9 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
             let strippedText = writtenCall || stripThinking(result.text);
             if (!strippedText && result.text) {
                 const recovered = extractThinkingFallback(result.text);
-                if (recovered) {
+                // Saída degenerada ("<think>" repetido, só pontuação): o que sobra depois de tirar as marcas não tem nenhuma letra nem número, então não é
+                // resposta. Sem isto o texto "resgatado" virava lixo que a limpeza final apagava e o usuário ficava só com o "Processando...".
+                if (recovered && /[\p{L}\p{N}]/u.test(recovered.replace(/<\/?think>/gi, ''))) {
                     logger.warn('[Parser] Resposta resgatada do bloco de raciocínio (thinking)');
                     strippedText = recovered;
                 }
