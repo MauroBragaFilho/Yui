@@ -232,12 +232,29 @@ eq((await gate('111111111111111111')).researched, true, 'a troca não vai ao his
   ok(loose.handled && loose.text.includes('abrir arknights'), 'enrolação antes do "me lembre"');
   eq(await as(A, 'cara, você consegue me lembrar o que falamos ontem'), { handled: false }, 'sem horário é conversa');
   eq(await as(A, 'ontem eu falei que ia me lembrar de tudo'), { handled: false }, 'sem pedido nem horário é conversa');
+  // dono pede lembrete para OUTRA pessoa (caso real: "Yui, lembra o @Yorha de ir jogar arknights daqui 2 minutos")
+  const asO = (text) => routeReminders({ text, userId: O, authorName: 'oBraga' }, { store: sp, now: NOW, isOwner: isOwn });
+  const forB = await asO(`Yui, lembra o <@${B}> de ir jogar arknights daqui 2 minutos`);
+  ok(forB.handled && forB.text.includes(`<@${B}>`) && forB.text.includes('ir jogar arknights'), 'dono cria para outra pessoa');
+  const created = sp.list().find((x) => x.text.includes('ir jogar arknights'));
+  eq([created.userId, created.from, created.fromOwner], [B, 'oBraga', true], 'lembrete é do alvo, com quem pediu');
+  ok(!sp.list().some((x) => x.userId === null && x.text.includes('Yorha')), 'NÃO cria lembrete errado para o dono');
+  ok(formatReminderMessage(created, NOW.getTime()).includes('Pedido por oBraga'), 'o aviso diz quem pediu');
+  ok((await asO('meus lembretes')).text.includes(`(para <@${B}>)`), 'dono vê para quem é');
+  ok(!(await as(A, 'meus lembretes')).text.includes('ir jogar arknights'), 'terceiro não vê');
+  ok((await as(B, 'meus lembretes')).text.includes('ir jogar arknights'), 'o alvo vê o dele');
+  ok((await asO(`cancela o lembrete ${created.id}`)).text.includes('Cancelei'), 'dono cancela o que criou para outro');
+  const noOwner = await as(A, `lembra o <@${B}> de x amanhã às 9h`);
+  ok(noOwner.handled && noOwner.text.includes('só crio lembrete para você') && !sp.list().some((x) => x.text === 'x'), 'quem não é dono NÃO cria para outros');
+  ok((await asO(`lembra o <@${B}> de ir`)).text.includes('preciso do horário'), 'sem horário: pergunta, não cria errado');
+  const self = await asO(`lembra o <@${O}> de ir dormir daqui 5 minutos`);
+  ok(self.handled && sp.list().some((x) => x.text === 'ir dormir' && !x.userId), 'alvo = o próprio dono vira lembrete normal dele');
   const idA = sp.list().find((x) => x.userId === A).id;
   ok((await as(B, `cancela o lembrete ${idA}`)).text.includes('Não achei'), 'B não cancela o de A');
   ok((await as(B, `adia o lembrete ${idA} por 30 minutos`)).text.includes('Não achei'), 'B não adia o de A');
   eq(await as(A, 'resumo do dia'), { handled: false }, 'resumo do dia é do dono');
   ok((await as(A, 'cancela todos os lembretes')).text.includes('apaguei 2'), 'apaga só os dele');
-  eq(sp.list().length, 2, 'os dos outros ficam');
+  eq(sp.list().length, 3, 'os dos outros ficam (B, dentista e ir dormir do dono)');
   for (let i = 0; i < REMINDER_LIMITS.maxPerUser; i++) sp.add({ text: `x${i}`, at: new Date(NOW.getTime() + 60000), userId: A });
   ok((await as(A, 'me lembra amanhã às 9h de mais um')).text.includes('lembretes'), 'limite por pessoa');
   // entrega: usa o userId do lembrete; falhas repetidas de outra pessoa desistem, as do dono nunca

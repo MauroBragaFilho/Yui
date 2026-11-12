@@ -17,6 +17,7 @@ export function formatReminderMessage(r, now = Date.now()) {
   const at = new Date(r.at);
   const late = now - at.getTime();
   const lines = [`⏰ **Lembrete #${r.id}**`, r.text];
+  if (r.from) lines.push(`-# Pedido por ${r.from}.`);
   if (late > LATE_MS) {
     const mins = Math.round(late / 60000);
     const quando = mins >= 1440 ? `${Math.round(mins / 1440)} dia(s) atrás` : mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min atrás` : `${mins} min atrás`;

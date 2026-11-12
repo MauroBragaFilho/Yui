@@ -85,19 +85,24 @@ export function parseReminderRequest(raw, now = new Date()) {
   // ("me lembra o que falamos ontem?") é conversa e segue para a IA.
   const isQuestion = /\?\s*$/.test(headOriginal);
   const start = head.length - bodyHead.length;
-  const body = headOriginal.slice(start).trim();
-  if (!body) return trigger === 'noun' ? { action: 'ask-text' } : null;
+  const rawBody = headOriginal.slice(start).trim();
+  // "lembra o <@id> de ir jogar daqui 2 minutos": o lembrete é para OUTRA pessoa (só o dono pode; quem decide é o runReminderRequest).
+  const tm = /^(?:o |a )?<@!?(\d{5,25})>[\s,:;-]*([\s\S]*)$/.exec(rawBody);
+  const target = tm ? tm[1] : null;
+  const body = (tm ? tm[2] : rawBody).trim();
+  const T = (o) => (target ? { ...o, target } : o);
+  if (!body) return trigger === 'noun' ? { action: 'ask-text' } : (target ? { action: 'ask-text', target } : null);
 
   const w = parseWhen(body, now);
   if (w.ok) {
     const text = cleanBody(w.text);
-    if (!text) return { action: 'ask-text', at: w.at.toISOString(), repeat: w.repeat };
-    return { action: 'add', text, at: w.at, repeat: w.repeat };
+    if (!text) return T({ action: 'ask-text', at: w.at.toISOString(), repeat: w.repeat });
+    return T({ action: 'add', text, at: w.at, repeat: w.repeat });
   }
   if (w.reason === 'sem-horario') {
     const nb = normChars(body);
     // sem horário: só pergunta "quando?" se o pedido é claro (começa com "de/para + verbo no infinitivo" ou é um "lembrete" de verdade)
-    if (trigger === 'noun' || /^(?:de|para|pra)\s+\p{L}+r\b/u.test(nb)) return { action: 'ask-when', text: cleanBody(body) };
+    if (trigger === 'noun' || /^(?:de|para|pra)\s+\p{L}+r\b/u.test(nb)) return T({ action: 'ask-when', text: cleanBody(body) });
     return null;
   }
   if (isQuestion) return null; // pergunta sem horário utilizável ("o que falamos ontem?"): é conversa
@@ -106,7 +111,7 @@ export function parseReminderRequest(raw, now = new Date()) {
 
 function line(r, now) {
   const when = r.repeat ? `${describeRepeat(r.repeat)} (próximo: ${describeWhen(r.at, now)})` : describeWhen(r.at, now);
-  return `**#${r.id}** · ${when} — ${r.text}`;
+  return `**#${r.id}** · ${when} — ${r.fromOwner && r.userId ? `(para <@${r.userId}>) ` : ''}${r.text}`;
 }
 
 export function formatReminderList(items, now = new Date(), scope = null) {
@@ -122,16 +127,27 @@ export function formatReminderList(items, now = new Date(), scope = null) {
   return [`**${head}** (${list.length})`, ...list.slice(0, 30).map((r) => line(r, now)), ...(list.length > 30 ? [`… e mais ${list.length - 30}.`] : [])].join('\n');
 }
 
-export async function runReminderRequest({ text, store, now = new Date(), report = null, isOwner = true }) {
+export async function runReminderRequest({ text, store, now = new Date(), report = null, isOwner = true, isOwnerId = () => false }) {
   const req = parseReminderRequest(text, now);
   if (!req) return null;
   if (req.action === 'agenda' && !isOwner) return null; // o resumo do dia é do dono
   try {
     if (req.action === 'agenda') return report ? await report() : 'O resumo do dia não está disponível agora.';
     if (req.action === 'list') return formatReminderList(store.list(), now, req.scope);
+    if (req.target && req.action !== 'add') {
+      if (!isOwner) return 'Eu só crio lembrete para você mesmo. Para você: “me lembra daqui 10 minutos de ...”.';
+      return `Para lembrar <@${req.target}> preciso do horário e do assunto. Exemplo: “lembra o <@${req.target}> amanhã às 9h de ...”.`;
+    }
     if (req.action === 'ask-when') return `Quando devo te lembrar${req.text ? ` de “${req.text}”` : ''}? Diga o horário, por exemplo: “me lembra amanhã às 9h ${req.text ? `de ${req.text}` : 'de pagar a conta'}” ou “daqui a 2 horas”.`;
     if (req.action === 'ask-text') return 'Do que devo te lembrar? Por exemplo: “me lembra amanhã às 9h de pagar a conta”.';
     if (req.action === 'error') return `Não consegui marcar: ${req.message}`;
+    if (req.action === 'add' && req.target && !isOwnerId(req.target)) {
+      if (!isOwner) return 'Eu só crio lembrete para você mesmo (quem me pede). Para você: “me lembra daqui 10 minutos de ...”.';
+      if (typeof store.addFor !== 'function') return 'Não consegui criar o lembrete para essa pessoa agora.';
+      const r = store.addFor(req.target, { text: req.text, at: req.at, repeat: req.repeat });
+      const quando = r.repeat ? `${describeRepeat(r.repeat)} (a primeira, ${describeWhen(r.at, now)})` : describeWhen(r.at, now);
+      return `Anotado! Vou lembrar <@${req.target}> **${quando}**: ${r.text}\n-# Lembrete #${r.id} (o aviso vai por mensagem privada para ela, dizendo que foi você quem pediu). Para ver tudo: “meus lembretes”. Para cancelar: “cancela o lembrete ${r.id}”.`;
+    }
     if (req.action === 'add') {
       const r = store.add({ text: req.text, at: req.at, repeat: req.repeat });
       if (!isOwner) return `Anotado! Vou te lembrar **${r.repeat ? `${describeRepeat(r.repeat)} (a primeira, ${describeWhen(r.at, now)})` : describeWhen(r.at, now)}**: ${r.text}\n-# Lembrete #${r.id}. O aviso vai por mensagem privada: deixe suas DMs abertas para mim. Para ver: “meus lembretes”.`;
@@ -183,10 +199,12 @@ export function getReminderStore() { return defaultStore(); }
  * Visão de um usuário sobre o armazenamento: cada pessoa vê e mexe só nos PRÓPRIOS lembretes. O dono (`ownerView`) é a pessoa
  * de `userId: null` (os de antes) e novos lembretes dele continuam com userId null.
  */
-export function scopedReminderStore(store, userId, ownerView) {
+export function scopedReminderStore(store, userId, ownerView, authorName = '') {
   const uid = ownerView ? null : String(userId);
-  const mine = (r) => r && (ownerView ? !r.userId : r.userId === uid);
+  const mine = (r) => r && (ownerView ? (!r.userId || r.fromOwner === true) : r.userId === uid);
   return {
+    // só o dono: lembrete para OUTRA pessoa (o aviso vai para ela, com "pedido por <nome>"); o dono continua podendo ver e cancelar
+    addFor: ownerView ? (targetId, data) => store.add({ ...data, userId: String(targetId), from: authorName || 'o dono', fromOwner: true }) : null,
     list: () => store.list().filter(mine),
     get: (id) => { const r = store.get(id); return mine(r) ? r : null; },
     add: (data) => store.add({ ...data, userId: uid }),
@@ -203,12 +221,12 @@ export function scopedReminderStore(store, userId, ownerView) {
  * YUI_REMINDERS_ALL_USERS=false volta a só o dono. Qualquer pessoa cria e mexe nos PRÓPRIOS lembretes (aviso por DM para ela);
  * só o dono tem o "resumo do dia".
  */
-export async function routeReminders({ text, userId } = {}, { store = null, env = process.env, now = new Date(), report = null, isOwner = null } = {}) {
+export async function routeReminders({ text, userId, authorName = '' } = {}, { store = null, env = process.env, now = new Date(), report = null, isOwner = null } = {}) {
   if (String(env?.YUI_REMINDERS_ENABLED ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
   if (!userId || !/^\d{5,25}$/.test(String(userId))) return { handled: false };
   const owner = isOwner ?? (await import('../core/permissions.js')).isOwnerId;
   const ownerView = Boolean(owner(String(userId)));
   if (!ownerView && String(env?.YUI_REMINDERS_ALL_USERS ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
-  const reply = await runReminderRequest({ text, store: scopedReminderStore(store || defaultStore(), userId, ownerView), now, report, isOwner: ownerView });
+  const reply = await runReminderRequest({ text, store: scopedReminderStore(store || defaultStore(), userId, ownerView, authorName), now, report, isOwner: ownerView, isOwnerId: (id) => Boolean(owner(String(id))) });
   return reply === null ? { handled: false } : { handled: true, text: reply, researched: true };
 }

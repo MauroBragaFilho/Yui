@@ -7,6 +7,7 @@ import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, detectSummary
 import { runGtaIntent } from './gtaChat.js';
 import { buildThirdPartyLogPrompt } from './llmSafety.js';
 import { resolveMentions, neutralizeMassMentions } from '../discord/mentions.js';
+import { restoreMentionIds } from '../utils/mentions.js';
 import { alertOwner } from '../core/alerts.js';
 import { applyPersona, applyVoicePersona, buildPersonaPrompt, publicPersonaText } from '../core/persona.js';
 import { getGateway, gatewayInChain } from '../gateway/index.js';
@@ -2582,7 +2583,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         // Porta T (lembretes do dono): "me lembra amanhã às 9h de pagar a conta", "meus lembretes", "adia o lembrete 2 por 30 minutos", "resumo do dia":
         // o CÓDIGO interpreta o horário e grava no arquivo de lembretes (só o dono; o aviso sai por DM no minuto certo). Nada vai ao histórico nem ao contexto. YUI_REMINDERS_ENABLED=false desliga.
         if (directToYui && !isVoice && options.radioMode !== true && options.thirdPartyPrompt !== true && ownQuestion) {
-            const remRouted = await routeReminders({ text: ownQuestion, userId }, { report: async () => (await import('../reminders/service.js')).createMorningComposer()() });
+            const remRouted = await routeReminders({ text: restoreMentionIds(ownQuestion, interaction?.mentions?.users), userId, authorName: interaction?.author?.username || interaction?.user?.username || '' }, { report: async () => (await import('../reminders/service.js')).createMorningComposer()() });
             if (remRouted.handled) {
                 await unifiedReply(remRouted.text);
                 return;

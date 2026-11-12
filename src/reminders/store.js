@@ -68,7 +68,7 @@ export function createReminderStore({ file = defaultReminderFile(), now = () => 
     get: (id) => { const r = load().items.find((x) => x.id === Number(id)); return r ? { ...r } : null; },
     count: () => load().items.length,
 
-    add({ text, at, repeat = null, userId = null }) {
+    add({ text, at, repeat = null, userId = null, from = '', fromOwner = false }) {
       const s = load();
       const clean = cleanReminderText(text);
       if (!clean) throw new ReminderError('vazio', 'Do que devo te lembrar?');
@@ -77,7 +77,7 @@ export function createReminderStore({ file = defaultReminderFile(), now = () => 
       if (Number.isNaN(when.getTime())) throw new ReminderError('data', 'Data inválida.');
       const uid = userId ? String(userId) : null;
       if (uid && s.items.filter((x) => x.userId === uid).length >= REMINDER_LIMITS.maxPerUser) throw new ReminderError('limite', `Você já tem ${REMINDER_LIMITS.maxPerUser} lembretes; apague alguns para criar outro.`);
-      const r = { id: s.nextId++, text: clean, at: toIso(when), repeat: repeat || null, createdAt: toIso(now()), tries: 0, lastFiredAt: null, userId: uid };
+      const r = { id: s.nextId++, text: clean, at: toIso(when), repeat: repeat || null, createdAt: toIso(now()), tries: 0, lastFiredAt: null, userId: uid, ...(from ? { from: cleanReminderText(from).slice(0, 40), fromOwner: fromOwner === true } : {}) };
       s.items.push(r);
       save();
       return { ...r };
