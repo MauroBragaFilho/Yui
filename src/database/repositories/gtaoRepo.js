@@ -18,7 +18,6 @@ export const gtaoRepository = {
   getLatestDaily: dailyRepository.getLatestDaily,
   saveDaily: dailyRepository.saveDaily,
 
-  getWeekly: weeklyRepository.getWeekly,
   getLatestWeekly: weeklyRepository.getLatestWeekly,
   saveWeekly: weeklyRepository.saveWeekly,
   getLatestValidWeekly: weeklyRepository.getLatestValidWeekly,

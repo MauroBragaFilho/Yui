@@ -20,9 +20,6 @@ export const config = {
     // sem misturar tabelas de jogos diferentes no mesmo banco.
     dir: process.env.DATABASE_DIR || './database',
   },
-  logging: {
-    level: process.env.LOG_LEVEL || 'info',
-  },
   environment: process.env.NODE_ENV || 'development',
   newswire: {
     // Habilita/desabilita a verificação automática do Rockstar Newswire
@@ -46,11 +43,6 @@ export const config = {
     // Pasta onde você pode soltar arquivos .txt/.md com dicas, builds,
     // buffs/debuffs, etc. A Yui lê tudo automaticamente antes de responder.
     knowledgeDir: process.env.AI_KNOWLEDGE_DIR || './knowledge',
-  },
-  binaries: {
-    ytdlpPath: process.env.YTDLP_PATH || '',
-    ffmpegPath: process.env.FFMPEG_PATH || '',
-    ffprobePath: process.env.FFPROBE_PATH || '',
   },
   youtube: {
     apiKey: process.env.YOUTUBE_API_KEY || '',

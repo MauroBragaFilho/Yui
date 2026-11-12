@@ -3,11 +3,6 @@ import { getDbWrapper } from '../db.js';
 const dbWrapper = getDbWrapper('newswire');
 
 export const newsRepository = {
-  getById(id) {
-    const stmt = dbWrapper.prepare('SELECT * FROM news_articles WHERE id = ?');
-    return stmt.get(id);
-  },
-
   getByUrl(url) {
     const stmt = dbWrapper.prepare('SELECT * FROM news_articles WHERE url = ?');
     return stmt.get(url);

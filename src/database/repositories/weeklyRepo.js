@@ -3,12 +3,6 @@ import { getDbWrapper } from '../db.js';
 const dbWrapper = getDbWrapper('gta-semanal');
 
 export const weeklyRepository = {
-  getWeekly(weekStr) {
-    const stmt = dbWrapper.prepare('SELECT * FROM weekly_events WHERE event_week = ?');
-    const res = stmt.get(weekStr);
-    return res ? { ...res, data: JSON.parse(res.data_json) } : null;
-  },
-
   getLatestWeekly() {
     const stmt = dbWrapper.prepare('SELECT * FROM weekly_events ORDER BY event_week DESC LIMIT 1');
     const res = stmt.get();
