@@ -56,5 +56,22 @@ assert.equal(weeklyRowAgeHours({}, n), Infinity);
 assert.equal(weeklyRowAgeHours({ created_at: 'lixo' }, n), Infinity);
 assert.equal(weeklyRowAgeHours({ created_at: '2026-11-13 00:00:00' }, n), 0, 'data no futuro não dá idade negativa');
 assert.equal(NEWSWIRE_CACHE_HOURS, 6);
-console.log('test-weekly-newswire-pick OK');
-process.exit(0);
+
+// ── /gta-semanal com Newswire sem análise da IA: o texto do artigo vira página (nunca só a página vazia de descontos) ──
+{
+  const { articleFields, buildWeeklyCombinedEmbeds } = await import('../src/engines/gtao/weeklyAnalysis.js');
+  const longo = Array.from({ length: 60 }, (_, i) => `Frase número ${i + 1} do artigo oficial sobre o evento da semana.`).join(' ');
+  const fields = articleFields(longo);
+  assert.ok(fields.length >= 2 && fields.length <= 4, `divide em campos (veio ${fields.length})`);
+  assert.ok(fields.every((f) => f.value.length <= 1000), 'cada campo cabe no limite do Discord');
+  assert.equal(articleFields('').length, 0);
+  const pages = buildWeeklyCombinedEmbeds({ source: 'newswire', title: 'Heist Event', url: 'https://www.rockstargames.com/newswire/x', fullText: longo }, null);
+  const json = pages.map((p) => p.toJSON());
+  assert.ok(json.some((j) => /Artigo oficial/.test(j.title)), 'tem a página do artigo oficial');
+  assert.ok(JSON.stringify(json).includes('Frase número 1 '), 'o texto do artigo aparece');
+  // com análise da IA, a página do artigo NÃO entra (a análise já cobre)
+  const comIa = buildWeeklyCombinedEmbeds({ source: 'newswire', title: 'Heist Event', fullText: longo, analysis: { destaques: 'Muito bônus', itensGratuitos: 'Nada' } }, null).map((p) => p.toJSON());
+  assert.ok(!comIa.some((j) => /Artigo oficial/.test(j.title)), 'com análise da IA o artigo não vira página');
+  console.log('test-weekly-newswire-pick OK');
+  process.exit(0);
+}

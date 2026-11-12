@@ -116,7 +116,7 @@ export async function generateWeeklyAnalysis(weeklyData, dailyData, channelId = 
     const normalized = normalizeAnalysis(parsed);
 
     if (!normalized) {
-      logger.warn('[WeeklyAnalysis] A Yui não retornou um JSON estruturado válido. Resposta bruta descartada.');
+      logger.warn(`[WeeklyAnalysis] A Yui não retornou um JSON estruturado válido. Resposta bruta descartada. Início da resposta: "${clampText(String(resposta ?? '').replace(/\s+/g, ' ').trim(), 160)}" (${String(resposta ?? '').length} caracteres)`);
       return null;
     }
 
@@ -134,6 +134,25 @@ export async function generateWeeklyAnalysis(weeklyData, dailyData, channelId = 
 function getGunVanDiscountedWeapons(dailyData) {
   const weapons = dailyData?.gunVan?.weapons || [];
   return weapons.filter((w) => w.discountPercent && w.discountPercent > 0);
+}
+
+/** Divide o texto do artigo em até 4 campos de até 1000 caracteres, cortando em espaço. */
+export function articleFields(text, { maxFields = 4, size = 1000 } = {}) {
+  let rest = String(text ?? '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  const fields = [];
+  while (rest && fields.length < maxFields) {
+    let part = rest;
+    if (rest.length > size) {
+      let cut = rest.lastIndexOf('\n', size);
+      if (cut < size * 0.5) cut = rest.lastIndexOf(' ', size);
+      if (cut < size * 0.5) cut = size;
+      part = rest.slice(0, cut);
+    }
+    rest = rest.slice(part.length).trim();
+    fields.push({ name: fields.length === 0 ? '📰 O que a Rockstar publicou' : '⠀', value: clampText(part.trim(), size), inline: false });
+  }
+  if (rest && fields.length) fields[fields.length - 1].value = clampText(`${fields[fields.length - 1].value.replace(/…$/, '')}…`, size);
+  return fields;
 }
 
 function truncateField(text, maxLen = 1000) {
@@ -308,7 +327,13 @@ function buildWeeklyPages(weeklyData, dailyData) {
       logger.warn(`[WeeklyAnalysis] Páginas de detalhe ignoradas (${err?.name || 'Error'}): ${clampText(err?.message, 160)}`);
     }
   }
-  const sections = [...detailSections, ...aiSections];
+  // Newswire sem a análise da IA: o texto oficial do artigo vira página, para nunca sobrar só uma página vazia de descontos.
+  const articleSections = [];
+  if (weeklyData.source === 'newswire' && !analysis.destaques && !analysis.itensGratuitos) {
+    const fields = articleFields(weeklyData.fullText);
+    if (fields.length) articleSections.push({ emoji: '📰', title: 'Artigo oficial da Rockstar', fields, footerText: 'Texto do artigo oficial (a análise da Yui não ficou pronta). Clique no título para ler o original.' });
+  }
+  const sections = [...articleSections, ...detailSections, ...aiSections];
 
   const total = pages.length + sections.length;
   const startPage = pages.length; // congela a base antes do loop (pages cresce ao push)
