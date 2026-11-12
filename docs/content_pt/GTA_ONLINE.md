@@ -22,7 +22,7 @@ Como a Yui coleta, traduz e publica as informações do GTA Online. O código vi
 | Motor | O que entrega | Fonte | Quando |
 |-------|---------------|-------|--------|
 | **GTAO Engine (diário)** | Van de Armas, Traficantes, Colecionáveis, Desafios Contra o Relógio | Cálculo determinístico a partir das *seeds* do jogo | Todo dia, **06:00 UTC** |
-| **GTAO Engine (semanal)** | Bônus, descontos, pódio, carro premiado, Van de Armas, GTA+, desafio | Post semanal do **r/gtaonline** | Verificação periódica |
+| **GTAO Engine (semanal)** | Bônus, descontos, pódio, carro premiado, Van de Armas, GTA+, desafio | Post semanal do **r/gtaonline**; reserva: artigo semanal do **Rockstar Newswire** | Verificação periódica |
 | **Newswire Engine** | Notícias da Rockstar | Página Newswire (Puppeteer) | **Desligado** por padrão |
 
 Cada servidor escolhe os canais de destino com `/yui-configurar` (`noticias`, `diario`, `semanal`).
@@ -76,6 +76,21 @@ Se o navegador falhar, a Yui cai no método antigo (cookies via Puppeteer + `fet
 
 O parser (`weekly/parser.js`) extrai período, bônus (2x/3x...), veículos (pódio e carro premiado), descontos, Van de Armas, GTA+ e desafios. O validador descarta posts incompletos, e o último post processado fica em cache para não repetir a publicação.
 
+### Ordem das fontes do semanal
+
+Quando alguém pede o semanal (por `/gta-semanal` ou pela conversa), a Yui tenta nesta ordem:
+
+1. **Reddit** (post estruturado, pelo Chrome).
+2. **Rockstar Newswire**: o artigo semanal oficial, escolhido por pontuação (veja a [seção 5](#-5-notícias-rockstar-newswire)).
+3. **Cópia guardada da mesma semana**, se nenhuma fonte responder agora.
+4. **Último semanal válido de outra semana**, sempre **com aviso** de que são dados da semana anterior e podem estar desatualizados.
+
+Registros que não são de fato um semanal (por exemplo, um artigo de notícia gravado por engano) são removidos do banco (`purgeInvalidWeekly`; a regra de validade é `isValidWeekly`, em `src/database/repositories/weeklyRepo.js`).
+
+O `/yui` e o `+yui perguntar` só usam um semanal **válido** e avisam a IA (e, por ela, o usuário) quando o dado é de outra semana.
+
+> O Reddit passou a devolver 403 para o feed RSS e para a busca mesmo com o Chrome automatizado; por isso o Newswire virou reserva de verdade. Detalhes em [DIAGNOSTICO_REDDIT_403.md](../DIAGNOSTICO_REDDIT_403.md).
+
 ---
 
 ## 🧾 4. O embed semanal
@@ -101,6 +116,21 @@ O motor abre o Chromium **sob demanda**, extrai os artigos em lote, ordena por d
 - **Desligado por padrão:** `NEWSWIRE_ENABLED=true` liga a checagem automática (intervalo em `NEWSWIRE_INTERVAL_MINUTES`, padrão 30).
 - Sempre disponível sob demanda: `/gta-noticias quantidade:N` e `/gta-semanal fonte:newswire`.
 - Os textos são traduzidos para o português antes de publicar.
+
+### Escolha do artigo semanal
+
+O artigo do evento semanal não é o mais recente, e sim o de **maior pontuação** (`pickWeeklyArticle`, em `src/engines/gtao/systems/weeklyEvents.js`):
+
+- só entram artigos da categoria **GTA Online**;
+- o título ganha pontos por pistas de semanal ("this week", "weekly") e de conteúdo (bônus, descontos, pódio, carro premiado, Contra o Relógio...);
+- **mínimo de 4 pontos** e artigos de **até 10 dias**; sem isso, a Yui prefere não ter dado a mostrar o artigo errado;
+- brindes avulsos do GTA+ ("GTA+ Members Can Now Claim a Free...") são penalizados, para não tomarem o lugar do artigo do evento; empate vai para o mais novo.
+
+O resultado do Newswire fica em cache por **6 horas** (`NEWSWIRE_CACHE_HOURS`, em `src/utils/weekKey.js`): passado esse prazo, o semanal vindo do Newswire é buscado de novo.
+
+### Tradução
+
+O tradutor (`src/utils/translate.js`, API pública MyMemory) divide o texto em pedaços de até **450 caracteres**. Um pedaço que falhe, venha vazio ou venha como mensagem de erro da API **nunca é aceito como tradução**: fica no inglês original.
 
 ---
 
@@ -139,7 +169,13 @@ Teste rápido no Discord: `/yui mensagem: qual a classe do Truffade Adder?` e `/
 | `/gta-noticias quantidade:N` | Últimas notícias do Newswire (1 a 5; padrão 2) |
 | `/yui-configurar` | Define os canais `noticias`, `diario` e `semanal` do servidor (exige *Administrador*) |
 
-Os mesmos comandos existem por prefixo: `+yui diario`, `+yui semanal`, `+yui noticias [N]` e `+yui configurar <noticias|diario|semanal> #canal` (veja [Comandos por prefixo](COMMANDS.md#-comandos-por-prefixo)). Pela conversa ("o que tem no GTA hoje?"), a Yui ainda só responde com o que sabe: a detecção desses pedidos já existe e tem teste (`detectGtaIntent` em `src/handlers/chatIntents.js`), mas não está ligada ao fluxo da conversa (veja [Conversa e comandos](CONVERSA_E_COMANDOS.md)).
+Os mesmos comandos existem por prefixo: `+yui diario`, `+yui semanal`, `+yui noticias [N]` e `+yui configurar <noticias|diario|semanal> #canal` (veja [Comandos por prefixo](COMMANDS.md#-comandos-por-prefixo)). 
+
+### Pela conversa
+
+Perguntas como "como está a semana no GTA?" ou "o que tem no GTA hoje?" executam o mesmo que `/gta-diario`, `/gta-semanal` e `/gta-noticias` (detecção em `detectGtaIntent`, `src/handlers/chatIntents.js`; execução em `src/handlers/gtaChat.js`). O **código** busca os dados; a IA recebe **todas as páginas** (até 14000 caracteres) e monta a resposta. Se a IA falhar, a Yui manda o texto direto (cortado em 3800 caracteres). Se o semanal for de outra semana, o aviso vai junto.
+
+O modelo também pode escolher a ferramenta `gta_online` (`semanal`, `diario` ou `noticias`) no chat; quem executa é sempre o código. O `/yui` e o `+yui perguntar` **não** têm ferramentas: só recebem o semanal válido como contexto. Veja [Conversa e comandos](CONVERSA_E_COMANDOS.md).
 
 Agendador (`src/scheduler/scheduler.js`, tudo em **UTC**):
 
@@ -164,6 +200,9 @@ npm run test:newswire          # Newswire (Puppeteer)
 npm run test:weekly-reddit     # parser, validação e cache do evento semanal
 npm run test:weekly-browser    # feed do Reddit via Chrome (offline com posts reais; LIVE=1 consulta o Reddit)
 npm run test:gtacars           # base de veículos GTACars
+npm run test:gtachat           # GTA por conversa (offline)
+npm run test:newswirepick      # escolha do artigo semanal por pontuação
+npm run test:translate         # tradutor em pedaços de 450 caracteres
 node tests/test-weekly-embed-ptbr.js        # embed (página 1 e detalhes), tradução e limites do Discord
 node tests/test-weekly-combined-embed.js    # composição de todas as páginas
 ```

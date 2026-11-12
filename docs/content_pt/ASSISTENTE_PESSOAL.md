@@ -139,12 +139,12 @@ A memória é **estruturada**, não um histórico colado no prompt. Cada registr
 | Banco | Conteúdo | Retenção |
 |-------|----------|----------|
 | `database/memory-personal.db` | Memória do dono | Permanente |
-| `database/memory-discord.db` | Memória dos demais usuários | `MEMORY_RETENTION_DAYS` (30) após a última interação; renovada a cada interação |
+| `database/memory-discord.db` | Memória dos demais usuários | `MEMORY_RETENTION_DAYS` (30; `0` = permanente) após a última interação; renovada a cada interação |
 
 - **Captura determinística** (sem chamar a IA, para não gastar cota): frases como "lembra que…", "meu nome é…", "eu gosto de…", **só da fala do usuário** (nunca da resposta da IA nem de ferramentas). Regras específicas vêm antes da genérica, e gravar o mesmo texto de novo só renova a lembrança.
 - **Busca:** tokeniza a pergunta (sem acentos nem stopwords), procura só no banco do escopo permitido e ordena por termos × 3 + importância + recência; injeta no prompt só os 8 melhores. O `sql.js` não tem FTS5, então é busca por termos (embeddings são evolução futura).
 - **Para o usuário:** `/yui-memoria` (`ver`, `lembrar`, `esquecer`, `apagar-tudo`), sempre efêmero e respeitando o escopo.
-- **Para o dono (administração):** `/yui-criador memorias` e **Admin → Memória** no app mostram **só metadados** (quem, quantas, última interação, expiração, tamanho e origem) e permitem apagar; **o conteúdo nunca é exibido** e a memória pessoal do dono fica fora do alcance.
+- **Para o dono (administração):** `/yui-criador memorias` e a lista de usuários de **Admin → Memória** mostram **só metadados** (quem, quantas, última interação, expiração, tamanho e origem) e permitem apagar; a memória pessoal do dono fica fora do alcance. O dono também vê e apaga o **conteúdo** de cada lembrança de cada usuário em **Admin → Memória**; a leitura do conteúdo é auditada (`memory.admin.content`, sem o texto) e membros recebem 403. Com `MEMORY_RETENTION_DAYS=0` a memória dos usuários é permanente (é o caso do notebook).
 - **Garantias:** o escopo vem de `ctx.memoryScope` (não existe parâmetro para escolher outro banco); usuário bloqueado não lê nem grava; todo acesso à memória pessoal é auditado.
 
 ### 🕒 Contexto das conversas por horas
@@ -259,7 +259,7 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 
 - **Entrada nos apps:** usuário e senha (hash scrypt) **ou** chave de uso único (5 min) enviada por **DM no Discord**; resulta em uma **sessão temporária**. O app não pede endereço do servidor: ele é configuração do build.
 - **Proteções do login:** comparação em tempo constante, erro genérico, atraso nas falhas, bloqueio após 5 erros em 15 min, pedidos de chave limitados a 3 por 10 min.
-- **Painel de administração** (aba **Admin**, só o dono): visão geral, **integrações** (o que está ligado ou falta configurar), servidores (AutoMod, **canais** e **seguidos** de YouTube/Twitch, editáveis), **rádio**, banimentos (não permite banir o dono), memória (só metadados), **IA** (chaves, provedores próprios como o OmniRoute, ordem na fila, teste), auditoria, **logs** (segredos mascarados), ferramentas, **mensagem no meu Discord** e reinício. A Yui também **avisa o dono por DM** quando algo dá errado (veja [Operação](OPERACAO.md)); a falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada (`src/discord/gatewayGuard.js` e `isHarmlessNetworkCrash` em `src/core/alerts.js`) não vira mais DM de "Erro grave": fica só no log, porque a Yui reconecta sozinha.
+- **Painel de administração** (aba **Admin**, só o dono): visão geral, **integrações** (o que está ligado ou falta configurar), servidores (AutoMod, **canais** e **seguidos** de YouTube/Twitch, editáveis), **rádio**, banimentos (não permite banir o dono), memória (só metadados), **IA** (chaves, provedores próprios como o OmniRoute, ordem na fila, teste e botão para abrir o painel do OmniRoute), auditoria, **logs** (segredos mascarados), ferramentas, **mensagem no meu Discord** e reinício. A Yui também **avisa o dono por DM** quando algo dá errado (veja [Operação](OPERACAO.md)); a falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada (`src/discord/gatewayGuard.js` e `isHarmlessNetworkCrash` em `src/core/alerts.js`) não vira mais DM de "Erro grave": fica só no log, porque a Yui reconecta sozinha.
 - **O que o painel nunca controla:** o modo somente leitura, a senha e os tokens de acesso. Só mudam no `.env`. As **chaves de IA** podem ser adicionadas pelo painel (só entram, nunca voltam; `YUI_PANEL_AI_EDIT=false` trava).
 
 ---

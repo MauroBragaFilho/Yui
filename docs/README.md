@@ -54,8 +54,8 @@ A Yui começou como um bot de Discord sobre o **GTA Online** e hoje é uma **pla
 | Publicar uma mudança na produção | [Operação: atualizar o código](content_pt/OPERACAO.md#-7-atualizar-o-código) |
 | Saber o que cada variável do `.env` faz | [Variáveis de ambiente](content_pt/ENVIRONMENT.md) · [Configuração e governança](content_pt/CONFIGURATION.md) |
 | Ver todos os comandos | [Comandos](content_pt/COMMANDS.md) |
-| Conhecer os recursos (IA, imagens, mídia, voz) | [Funcionalidades](content_pt/FEATURES.md) · [Rádio](content_pt/RADIO.md) |
-| Entender as notícias, resets e eventos semanais do GTA | [GTA Online](content_pt/GTA_ONLINE.md) |
+| Conhecer os recursos (IA, visão de imagens, mídia, voz) | [Funcionalidades](content_pt/FEATURES.md) · [Rádio](content_pt/RADIO.md) |
+| Entender as notícias, resets e eventos semanais do GTA (inclusive por conversa) | [GTA Online](content_pt/GTA_ONLINE.md) |
 | Moderação, AutoMod e termos de uso | [Moderação](content_pt/MODERATION.md) |
 | Entender o Core, a memória, as permissões e o Agent | [Assistente pessoal](content_pt/ASSISTENTE_PESSOAL.md) |
 | Usar a API (login, rotas, painel de administração) | [Yui API](content_pt/YUI_API.md) |

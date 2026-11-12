@@ -32,6 +32,7 @@ O comando principal para interagir com o cérebro da Yui.
 - **Mensagem (`mensagem`):** Sua pergunta ou pedido.
 - **Visibilidade:** Escolha entre `Público` (todos veem, o padrão) ou `Privado` (apenas você vê).
 - **No privado:** o `/yui` funciona na DM com a Yui para qualquer pessoa. Já a conversa por **mensagem** no privado é só com o dono: DM de outras pessoas é ignorada em silêncio.
+- **Imagens:** o `/yui` não lê anexos; para a Yui analisar uma imagem, mande uma mensagem normal mencionando-a com a imagem anexada (vídeo não é suportado).
 - **Advanced:** Se você mencionar outras pessoas no prompt, a Yui pode tentar entender o contexto da conversa.
 - **Tamanho:** a pergunta pode ter até 4000 caracteres (`YUI_ASK_MAX_CHARS`; o mesmo vale para `+yui perguntar`) e cada pessoa tem uma resposta por vez. Para um texto maior, mande uma **mensagem normal mencionando a Yui** com um anexo `.txt`, `.md` ou `.log`: ela lê o arquivo (até 100 KB e 12000 caracteres), tratando o conteúdo como dado, nunca como ordem. Comandos de barra não leem anexo.
 - **Respostas longas:** o Discord aceita 2000 caracteres por mensagem, então uma resposta maior é dividida em várias mensagens (a Yui escreve a lista ou o texto completo, sem prometer "parte 2"). Passando de 4 mensagens (`YUI_REPLY_MAX_PARTS`) ou de 20000 caracteres, ela manda uma introdução e o texto inteiro em anexo `.md` (`YUI_REPLY_ATTACH_EXT=txt` volta ao `.txt`). Quem é citado no arquivo e não aparece na introdução vai na linha "Citados no arquivo", porque menção dentro de anexo não notifica.
@@ -88,6 +89,8 @@ Detalhes em [GTA Online](GTA_ONLINE.md).
 
 - **`/gta-diario`:** Resumo do reset diário (Van de Armas, Traficantes, Colecionáveis, Desafios Contra o Relógio).
 - **`/gta-semanal fonte:`** Evento da semana, com a análise da Yui. `reddit` (padrão) ou `newswire`. Embed paginado com botões ◀ ▶.
+- **Pela conversa:** "como está a semana no gta" e similares fazem o mesmo que os três comandos, sem barra (a IA recebe todas as páginas e monta a resposta).
+- **`/yui` e `+yui perguntar`:** usam só o semanal válido e avisam quando ele é de outra semana. Não têm ferramentas por projeto (as ferramentas `gta_online`, `listar_lembretes` e `criar_lembrete` só existem no chat).
 - **`/gta-noticias quantidade:`** Últimas notícias do Rockstar Newswire (1 a 5).
 - **`/yui-configurar`** (Server Admin): Define os canais `noticias`, `diario` e `semanal` do servidor.
 

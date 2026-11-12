@@ -45,7 +45,7 @@ Três tarefas do **Agendador de Tarefas do Windows** cuidam da Yui, todas como c
 
 | Tarefa | O que é |
 |--------|---------|
-| `OmniRoute` | Gateway de IA em `C:\OmniRoute`, porta `20128`; a Yui pode usá-lo como provedor próprio (há um atalho **OmniRoute** para cadastrá-lo em **Admin → IA**) |
+| `OmniRoute` | Gateway de IA em `C:\OmniRoute`, porta `20128`; a Yui pode usá-lo como provedor próprio (há um atalho **OmniRoute** para cadastrá-lo em **Admin → IA**). Escuta em `0.0.0.0:20128`, mas só a rede local alcança: a regra de firewall `OmniRoute LAN 20128` do notebook libera apenas a sub-rede local (`RemoteAddress LocalSubnet`). O botão **Abrir painel do OmniRoute** (Admin → IA) abre o painel dele em outra aba, e só responde dentro da rede |
 | `BDSServer` | Servidor de arquivos (biblioteca de filmes e séries), porta `80`; é o que a Yui consulta na **Biblioteca por conversa** (`YUI_BDS_URL`; veja [Conversa e comandos](CONVERSA_E_COMANDOS.md)) |
 | `NgrokMinecraft`, `MinecraftFabric` | Servidor de Minecraft e o túnel dele |
 | `MinecraftServer`, `ModpackServer` | Manuais (não sobem sozinhas) |
@@ -317,6 +317,8 @@ O que o atualizador faz, em ordem:
 5. Se o `package-lock.json` mudou, roda `npm install`.
 6. Reinicia a tarefa `YuiBot` (esperando antes a tarefa antiga sair de "Running") e espera até 4 minutos para o `node src/index.js` ficar de pé há pelo menos 60 s (no notebook o primeiro carregamento depois de trocar o código passa de 30 s). Se estiver, grava a versão nova em `.versao-instalada`. Se não, **volta** `src/` e os `package*.json` do backup, reinstala as dependências se for o caso, reinicia a Yui e **não** marca a versão (tenta de novo no dia seguinte).
 
+Se a troca do `dist` do painel falhar sob carga (`AVISO: painel NAO atualizado`), copie a pasta `apps\yui-app\painel-web` do `main` à mão com `robocopy` para `apps\yui-app\dist`. O relógio do notebook anda cerca de 1 hora adiantado: leve isso em conta ao ler as horas do `atualizar-yui.log` e dos logs.
+
 Uma execução por vez (uma segunda sai com "Ja existe uma atualizacao em andamento"). Tudo vai para `C:\Tools\atualizar-yui.log`, com linhas como `Sem novidades (versao abc1234).`, `Atualizando de 'abc1234' para def5678...`, `OK: Yui rodando na versao def5678.`, `ERRO: a Yui nao ficou de pe. Voltando a versao anterior...`, `Rollback concluido...` e `FALHA: <motivo>`.
 
 **Aplicar agora, sem esperar o dia seguinte** (por SSH, no notebook):
@@ -355,7 +357,7 @@ Se os slash commands mudaram, a Yui os registra sozinha na inicialização (glob
 
 **yt-dlp sozinho:** a Yui atualiza o `yt-dlp` em segundo plano, uma vez 30 segundos depois de iniciar e uma vez por dia a partir das 4h (`YTDLP_UPDATE_HOUR`). Falha de atualização vira só um aviso no log. `YTDLP_AUTO_UPDATE=false` desliga. Isso cobre só o `yt-dlp` da Yui: o `yt-dlp` que vem dentro do `.venv-spotdl` é independente e se atualiza à mão (`.venv-spotdl\Scripts\python.exe -m pip install -U "yt-dlp[default]"`; se algo quebrar, reinstale com o lock).
 
-**Testes antes do push (e de reiniciar):** as suítes `test:*` rodam offline e com bancos temporários (veja [README_TESTES.md](../../README_TESTES.md)); não precisam parar a Yui nem conectar ao Discord, então rodam no PC de desenvolvimento.
+**Testes antes do push (e de reiniciar):** as suítes `test:*` rodam offline e com bancos temporários (veja [README_TESTES.md](../../README_TESTES.md)); não precisam parar a Yui nem conectar ao Discord, então rodam no PC de desenvolvimento. Suítes recentes: `test:vision`, `test:gtachat`, `test:memperm`, `test:hybrid`, `test:newswirepick`, `test:translate`. Falhas antigas conhecidas, que não vêm de mudanças recentes: `test:social` (coluna `live_mode`), `test:researchentries` (Q43), `test:researchqueue` (trava no fim), `test:gtao` (timeout) e `test-weekly-ai-translate`.
 
 ---
 

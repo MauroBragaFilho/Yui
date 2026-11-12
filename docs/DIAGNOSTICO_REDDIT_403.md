@@ -34,7 +34,13 @@ Para contornar o bloqueio de forma 100% legítima e sem violar termos de uso, a 
 ### B. Fallback Seguro
 Se o Puppeteer falhar em instanciar o navegador local:
 1. Tenta a rota de cookies armazenados com uma renovação transparente.
-2. Caso o Reddit continue respondendo 403, o `weeklyService` captura o erro `REDDIT_FORBIDDEN` e faz fallback para a **segunda fonte oficial configurada**: o **GTAForums** ou a API da **Rockstar Games**.
+2. Caso o Reddit continue respondendo 403, a Yui usa o **Rockstar Newswire** como reserva: o artigo semanal oficial, escolhido por pontuação (`pickWeeklyArticle`: categoria GTA Online, mínimo de 4 pontos, até 10 dias, brinde do GTA+ penalizado), com cache de 6 h (`NEWSWIRE_CACHE_HOURS`).
+3. Sem resposta de nenhuma fonte, usa a cópia da mesma semana; sem ela, o último semanal válido de outra semana, **com aviso** ao usuário.
+
+> O scraper do GTAForums (`gtaForumsScraper.js`) continua no código, mas não faz parte desse fluxo (código morto).
+
+### C. Achado recente
+O feed RSS e a busca, antes entregues ao Chrome automatizado, passaram a devolver 403 também. Por isso o Newswire deixou de ser só alternativa teórica e virou a reserva que sustenta o semanal quando o Reddit bloqueia.
 
 ---
 

@@ -33,23 +33,27 @@ Legenda: ✅ por conversa · 🔶 parcial · ⚠️ módulo pronto e testado, ai
 | Baixar a música do seu status (`/baixar_musica_atual`) | ✅ | ferramenta `get_current_music` ("yui, baixa a música do meu status"); por conversa vale só a música de quem pediu |
 | Info de jogo e "meu PC roda?" (sem comando de barra) | ✅ | ferramentas `check_game_info` (RAWG + HowLongToBeat) e `check_pc_compatibility` |
 | Listas pessoais | ✅ | Porta L ("anota na lista X: ...") |
-| Lembretes e resumo do dia (só o dono) | ✅ | **Porta T** ("me lembra amanhã às 9h de pagar a conta", "meus lembretes", "cancela o lembrete 2", "adia o lembrete 2 por 30 minutos", "resumo do dia"); o aviso sai por DM no minuto certo |
+| Lembretes e resumo do dia | ✅ | **Porta T** ("me lembra amanhã às 9h de pagar a conta", "meus lembretes", "cancela o lembrete 2", "adia o lembrete 2 por 30 minutos", "resumo do dia"). Cada pessoa vê e mexe só nos **próprios** lembretes (até 20 por pessoa; `YUI_REMINDERS_ALL_USERS=false` volta a só o dono). O dono também cria para outra pessoa ("lembra o @fulano às 20h de ..."). O aviso sai por mensagem privada no minuto certo; se falhar, tenta de novo a cada minuto e desiste após 60 tentativas. O relatório matinal é só do dono e abre com Bom dia (5h às 11h59), Boa tarde (12h às 17h59) ou Boa noite, pela hora de Brasília |
 | Lista de mods | ✅ | Porta M (Modrinth) |
 | Biblioteca de arquivos (BDS Server; sem comando de barra) | ✅ | **Porta B** (só dono, **só leitura**; em canal público ela avisa e não mostra nada, o conteúdo só sai em DM/canal privado): "yui procura Matrix na biblioteca", "o que eu tenho de filmes?", "o que chegou de novo na biblioteca?", "quanto espaço tem no servidor de arquivos?". Exige `YUI_BDS_URL`; só dispara citando a biblioteca/servidor de arquivos ou uma pasta sua ("meus filmes", "o que eu tenho de séries"). Ferramentas `bds.buscar/listar/recentes/status`. Teste: `npm run test:library` |
 | Lembrar algo (`/yui-memoria lembrar`) | 🔶 | captura "lembra que...", "meu nome é...", "eu gosto de..." |
 | Ver/esquecer/apagar a própria memória (`/yui-memoria`) | ✅ | **Porta N** (`src/handlers/chatIntents.js`, chamada pelo `llmHandler` logo depois da Porta B; `/yui-memoria` continua valendo): "o que você sabe de mim?", "esquece a lembrança #3", "esquece que eu gosto de X", "apaga tudo que sabe de mim" 🔒 (pede "sim, apagar tudo" em até 2 min). Em canal público só mostra a contagem; o conteúdo aparece na DM. Teste: `npm run test:chatintents` |
 | Resumo do chat (`/chat_resumo`) | ✅ | **Porta R** (mesmo módulo, ligado ao `llmHandler`; `/chat_resumo` continua valendo): "yui resume as últimas 50 mensagens", "faz um resumo da conversa" (5 a 100, padrão 20; 1 por minuto por pessoa, dono sem limite) |
-| Reset/novidades do GTA Online (`/gta-diario`, `/gta-semanal`, `/gta-noticias`) e estado da Yui (`/yui-status`) | ❌ | só responde de memória do contexto de GTA; falta chamar o publicador sob demanda. A detecção do GTA por conversa (`detectGtaIntent`, "Porta G" no `chatIntents.js`) existe e tem teste, mas também não está ligada |
+| Reset/novidades do GTA Online (`/gta-diario`, `/gta-semanal`, `/gta-noticias`) | ✅ | **Porta G** (`src/handlers/gtaChat.js`, ligada ao `llmHandler`): "como está a semana no GTA?" executa o mesmo que o comando; o código busca, a IA recebe todas as páginas (até 14000 caracteres) e monta a resposta; se a IA falha, sai o texto direto (até 3800 caracteres). Também existe a ferramenta `gta_online` (semanal, diário ou notícias). Teste: `npm run test:gtachat`. O estado da Yui (`/yui-status`) segue ❌ por conversa |
 | Seguir/parar/listar canais do YouTube e da Twitch (`/yui-seguir-youtube`, `/yui-seguir-twitch`, `/yui-parar-seguir`, `/yui-listar-seguindo`) | ❌ | 🔒 os comandos exigem *Administrador* (permissão padrão no Discord); por conversa, exigiria confirmação |
 | Modo rádio (`/modo-radio`) | ❌ | dentro do rádio já há controle por voz e botões; a detecção de pedidos de rádio pelo chat (`detectRadioIntent` no `chatIntents.js`) existe e tem teste, mas não está ligada |
 | Banir/desbanir, AutoMod (`/yui-criador banir`, `desbanir`, `bans_lista`, `automod`) | 🔶 | existe `ia_automod` (a IA bane sozinha em AutoMod `mcp`/`both`); banir/desbanir por pedido ❌ 🔒 |
 | Configurar servidor, ferramentas, IA, criador (`/yui-servidor`, `/yui-ferramentas`, `/yui-config_ia`, `/yui-criador`, `/yui-configurar`) | ❌ | 🔒 só dono/administrador, com confirmação |
-| Origem de imagem/anime (`/anime_origem`) | ❌ por desenho | a Yui não vê imagens enviadas |
+| Origem de imagem/anime (`/anime_origem`) | 🔶 | imagens anexadas (até 3 por mensagem, 4 MB cada, só do CDN do Discord) são descritas por um modelo de visão (Gemini, com Groq Qwen de reserva) e a Yui responde em cima da descrição, que entra como dado não confiável e sem ferramentas; o `/anime_origem` em si segue só por comando. Vídeo não é suportado |
 | Aceitar os Termos (`/aceitar_tos`) | ❌ por desenho | exceção da regra 6 |
+
+## Ferramentas híbridas
+
+O modelo escolhe a ferramenta e o código executa (`src/data/mcp_tools.json`). Novas: `gta_online` (semanal, diario ou noticias), `listar_lembretes` e `criar_lembrete` (`{quando, texto}`, só para a própria pessoa; menções removidas). Valem só no chat: `/yui` e `+yui perguntar` não têm ferramentas por projeto. Teste: `npm run test:hybrid`.
 
 ## Ordem sugerida para fechar o que falta
 
-1. **Somente leitura e baixo risco:** ligar ao fluxo da conversa o que já está pronto em `chatIntents.js` (memória: ver/esquecer/apagar; resumo do chat; detecção de GTA e de rádio) e completar GTA sob demanda e modo rádio.
+1. **Somente leitura e baixo risco:** ligar ao fluxo da conversa o que já está pronto em `chatIntents.js` (memória, resumo do chat e GTA já estão ligados; falta a detecção de rádio) e completar o modo rádio.
 2. **Com permissão:** seguir/parar/listar canais, banir/desbanir. Depende do motor de política da Fase 1 do roadmap (`ROADMAP_EVOLUCAO.md`) para confirmar e auditar.
 3. **Administração:** configuração do servidor, ferramentas, IA. Só dono, sempre com confirmação e auditoria.
 

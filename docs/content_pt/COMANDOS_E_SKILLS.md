@@ -2,7 +2,7 @@
 
 Três coisas que a Yui faz no chat do app (o Agent, rota `/v1/agent`, só para o dono): **ver o estado do computador onde ela roda**, **rodar comandos que você cadastrou** e **seguir skills (receitas) que você escreveu**. Mais a **biblioteca de arquivos** (BDS Server) e a configuração da **busca na web**.
 
-> No Discord a Yui **não** usa estas ferramentas do Agent (o código só chama o Agent pela API do app). No Discord, a biblioteca funciona pela conversa (Porta B; veja a [seção 5](#-5-biblioteca-de-arquivos-bds-server)) e a busca na web pelo agente de pesquisa.
+> No Discord a Yui **não** usa estas ferramentas do Agent (o código só chama o Agent pela API do app). No Discord, a biblioteca funciona pela conversa (Porta B; veja a [seção 5](#-5-biblioteca-de-arquivos-bds-server)) e a busca na web pelo agente de pesquisa. Há ainda as **ferramentas híbridas** do chat (`gta_online`, `listar_lembretes`, `criar_lembrete`), em que o modelo escolhe e o código executa; o `/yui` e o `+yui perguntar` não têm ferramentas por projeto.
 
 ---
 
