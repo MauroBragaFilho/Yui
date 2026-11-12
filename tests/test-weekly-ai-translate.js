@@ -5,7 +5,7 @@ import {
   normalizeAiResult,
   isAiAvailable,
 } from '../src/engines/gtao/systems/weekly/aiTranslate.js';
-import { createWeeklyRedditEmbed } from '../src/discord/embeds/weeklyRedditEmbed.js';
+import { createWeeklyRedditEmbed, buildWeeklyDetailSections } from '../src/discord/embeds/weeklyRedditEmbed.js';
 
 /**
  * Testa a camada de tradução via IA do embed semanal (fonte Reddit):
@@ -221,10 +221,14 @@ console.log('\n6. Fluxo completo sem IA (forceGlossary → glossário):');
   const embed2 = createWeeklyRedditEmbed(embedAbstrato);
   const data2 = embed2.data;
   assert(data2.title.includes('Bônus e Descontos da Semana'), 'título do embed traduzido');
-  const discF = data2.fields.find((f) => f.name === '🏷️ Descontos');
-  assert(discF.value.includes('Coil Cyclone II — 70% de desconto'), 'descontos do embed da IA');
-  assert(discF.value.includes('**🏎️ Legendary Motorsport**'), 'descontos do embed da IA agrupados por loja');
-  assert(discF.value.includes('**🏪 Outros**'), 'grupo Outros (veículo fora do catálogo)');
+  // O resumo traz só os destaques; os descontos completos, agrupados por loja, vão para as páginas de detalhe
+  const hiF = data2.fields.find((f) => f.name === '🔥 Destaques de Desconto');
+  assert(hiF && hiF.value.includes('Coil Cyclone II'), 'destaques de desconto do resumo do embed da IA');
+  const detailFields = buildWeeklyDetailSections(embedAbstrato).flatMap((sec) => sec.fields);
+  const discText = detailFields.map((f) => `${f.name} ${f.value}`).join(' ');
+  assert(discText.includes('Coil Cyclone II — 70% de desconto'), 'descontos do embed da IA (páginas de detalhe)');
+  assert(detailFields.some((f) => f.name.includes('🏎️ Legendary Motorsport')), 'descontos do embed da IA agrupados por loja');
+  assert(detailFields.some((f) => f.name.includes('🏪 Outros')), 'grupo Outros (veículo fora do catálogo)');
   const vehF = data2.fields.find((f) => f.name === '🚗 Veículos');
   assert(vehF.value.includes('Declasse Impaler SZ'), 'veículos mantidos em inglês no embed');
 

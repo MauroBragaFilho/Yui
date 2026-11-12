@@ -173,6 +173,12 @@ test('Modo rádio por conversa', async () => {
     assert.equal(detectRadioIntent('toca lofi', { ...ctx, direct: false }).kind, 'none');
 });
 
+test('Rádio por conversa: ligada ao llmHandler (Porta M)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../src/handlers/llmHandler.js', import.meta.url), 'utf8');
+    assert.ok(src.includes('detectRadioIntent(') && src.includes('runRadioChatIntent('), 'Porta M deve estar no llmHandler');
+});
+
 test('Portas N e R estão ligadas ao fluxo da conversa (llmHandler)', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../src/handlers/llmHandler.js', import.meta.url), 'utf8');

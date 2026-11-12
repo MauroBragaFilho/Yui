@@ -5,9 +5,9 @@
  *
  * Uso: node tests/test-social.js
  */
-import { initDatabase } from '../src/database/db.js';
+import { initDatabase, getDbWrapper } from '../src/database/db.js';
 import { YOUTUBE_SCHEMA, TWITCH_SCHEMA } from '../src/database/schemas.js';
-import { youtubeRepository } from '../src/database/repositories/youtubeRepo.js';
+import { youtubeRepository, ensureYoutubeSchema } from '../src/database/repositories/youtubeRepo.js';
 import { twitchRepository } from '../src/database/repositories/twitchRepo.js';
 import { classifyYoutubeItem, resolveChannel } from '../src/handlers/youtubeApiHandler.js';
 import { config } from '../src/config/index.js';
@@ -28,7 +28,13 @@ function assert(cond, label) {
 async function run() {
   console.log('\n=== INICIALIZANDO BANCOS ===');
   await initDatabase('social-youtube', YOUTUBE_SCHEMA);
+  ensureYoutubeSchema(); // como no boot: acrescenta live_mode em bancos criados antes do modo de live
+  // Sobras de execuções interrompidas (o teste usa os .db reais): limpa as chaves de teste antes de começar
+  getDbWrapper('social-youtube').prepare("DELETE FROM youtube_seen_items WHERE video_id = '__test_video_1__'").run();
+  getDbWrapper('social-youtube').prepare("DELETE FROM youtube_subscriptions WHERE guild_id = '__TEST_GUILD_1__'").run();
   await initDatabase('social-twitch', TWITCH_SCHEMA);
+  getDbWrapper('social-twitch').prepare("DELETE FROM twitch_stream_state WHERE twitch_login = 'streamexemplo'").run();
+  getDbWrapper('social-twitch').prepare("DELETE FROM twitch_subscriptions WHERE guild_id = '__TEST_GUILD_2__'").run();
   console.log('  ✅ Bancos social-youtube.db e social-twitch.db prontos');
 
   console.log('\n=== YOUTUBE REPOSITÓRIO ===');
@@ -62,7 +68,7 @@ async function run() {
   assert(tracked.some((t) => t.youtube_channel_id === testChannel && t.uploads_playlist_id === 'UU_test_playlist_1234567890123'), 'getAllTrackedChannels retorna uploads_playlist_id');
 
   // Seen items
-  assert(youtubeRepository.getSeenItem(testVideoId) === null, 'getSeenItem retorna null antes de upsert');
+  assert(youtubeRepository.getSeenItem(testVideoId) == null, 'getSeenItem retorna null antes de upsert');
   youtubeRepository.upsertSeenItem(testVideoId, testChannel, 'video');
   const seen1 = youtubeRepository.getSeenItem(testVideoId);
   assert(seen1 && seen1.last_known_state === 'video', 'upsertSeenItem grava estado inicial');
@@ -85,7 +91,7 @@ async function run() {
   assert(twitchByGuild.length === 1 && twitchByGuild[0].twitch_login === 'streamexemplo', 'addSubscription Twitch + getSubscriptionsByGuild');
 
   // Stream state transitions
-  assert(twitchRepository.getStreamState('streamexemplo') === null, 'getStreamState null antes');
+  assert(twitchRepository.getStreamState('streamexemplo') == null, 'getStreamState null antes');
 
   twitchRepository.upsertStreamState('streamexemplo', true, 'stream-abc-123');
   const state1 = twitchRepository.getStreamState('streamexemplo');

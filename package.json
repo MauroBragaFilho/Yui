@@ -24,6 +24,8 @@
     "test:gtachat": "node tests/test-gta-chat.js",
     "test:newswirepick": "node tests/test-weekly-newswire-pick.js",
     "test:gtabase": "node tests/test-gtabase.js",
+    "test:guilddelete": "node tests/test-guild-delete.js",
+    "test:radiochat": "node tests/test-radio-chat.js",
     "test:translate": "node tests/test-translate.js",
     "test:memperm": "node tests/test-memory-permanent.js",
     "test:hybrid": "node tests/test-hybrid-tools.js",

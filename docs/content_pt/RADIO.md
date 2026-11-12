@@ -17,7 +17,7 @@ O **Modo Rádio** da Yui é um ecossistema completo de reprodução musical e vo
 
 ## 🎵 1. Reprodução e Streaming Progressivo (YouTube & PCM)
 
-**Como ligar:** entre num canal de voz e use `/modo-radio`. A Yui entra na call e abre o painel do rádio no canal de texto; pedir de novo no mesmo canal de voz só reenvia o painel (e religa a escuta por voz, se ela tinha sido desligada por falhas). Ainda não há como ligar o rádio pela conversa (veja [Conversa e comandos](CONVERSA_E_COMANDOS.md)).
+**Como ligar:** entre num canal de voz e use `/modo-radio`. A Yui entra na call e abre o painel do rádio no canal de texto; pedir de novo no mesmo canal de voz só reenvia o painel (e religa a escuta por voz, se ela tinha sido desligada por falhas). Pela conversa também: "yui toca lofi" (com você numa call de voz) liga o rádio pelo mesmo caminho do comando, e "pausa", "continua", "passa essa música", "que música é essa?" e "desliga o rádio" controlam a rádio já ligada, só para quem está no canal de voz dela (veja [Conversa e comandos](CONVERSA_E_COMANDOS.md)).
 
 O Modo Rádio elimina a necessidade de realizar o download completo de arquivos do YouTube antes de iniciar a reprodução (as faixas do Deezer e do Spotify são baixadas para um arquivo temporário e tocadas dele).
 

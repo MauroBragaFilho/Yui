@@ -218,7 +218,7 @@ Rotas `/v1/dev/*`, que antes eram usadas pela aba **Código** do app (removida e
 | `POST /v1/dev/runs/:runId/approvals/:approvalId` `{ approve }` | Aprova ou nega (**só do computador da Yui**; `403` caso contrário). Sem resposta em 5 min conta como "não" |
 | `POST /v1/dev/runs/:runId/cancel` | Cancela a execução |
 
-O app faz a consulta dos eventos a cada ~0,7 s até chegar o `done`. Uma execução termina de qualquer forma (a Yui responde, falha ou é cancelada) e some da memória 30 minutos depois. Tudo é auditado (`dev.run.start`, `dev.tool`, `dev.approval`, `dev.project.add/remove`), sem o conteúdo dos arquivos nem das mensagens.
+**Estado hoje (12/11/2026):** as rotas estão ligadas ao servidor (`src/core/api/server.js`, mesma autenticação por token e papel OWNER das demais), mas **nenhum cliente da Yui as chama**: a aba Código do app foi removida e só os testes (`npm run test:dev`) e o `npm run dev:api` as exercitam. Ficam desligadas por padrão (`YUI_DEV_ENABLED=false`); leitura de arquivos é restrita à pasta do projeto cadastrado. Quem consultar os eventos deve fazê-lo a cada ~0,7 s até chegar o `done`. A ponte `registerMcpTools` (`src/core/agent/tools.js`) também não tem chamador fora dos testes: o transporte MCP do Agent ainda não existe (veja [Assistente pessoal](ASSISTENTE_PESSOAL.md)). Uma execução termina de qualquer forma (a Yui responde, falha ou é cancelada) e some da memória 30 minutos depois. Tudo é auditado (`dev.run.start`, `dev.tool`, `dev.approval`, `dev.project.add/remove`), sem o conteúdo dos arquivos nem das mensagens.
 
 ---
 

@@ -357,7 +357,7 @@ Se os slash commands mudaram, a Yui os registra sozinha na inicialização (glob
 
 **yt-dlp sozinho:** a Yui atualiza o `yt-dlp` em segundo plano, uma vez 30 segundos depois de iniciar e uma vez por dia a partir das 4h (`YTDLP_UPDATE_HOUR`). Falha de atualização vira só um aviso no log. `YTDLP_AUTO_UPDATE=false` desliga. Isso cobre só o `yt-dlp` da Yui: o `yt-dlp` que vem dentro do `.venv-spotdl` é independente e se atualiza à mão (`.venv-spotdl\Scripts\python.exe -m pip install -U "yt-dlp[default]"`; se algo quebrar, reinstale com o lock).
 
-**Testes antes do push (e de reiniciar):** as suítes `test:*` rodam offline e com bancos temporários (veja [README_TESTES.md](../../README_TESTES.md)); não precisam parar a Yui nem conectar ao Discord, então rodam no PC de desenvolvimento. Suítes recentes: `test:vision`, `test:gtachat`, `test:memperm`, `test:hybrid`, `test:newswirepick`, `test:gtabase`, `test:translate`. Falhas antigas conhecidas, que não vêm de mudanças recentes: `test:social` (coluna `live_mode`), `test:researchentries` (Q43), `test:researchqueue` (trava no fim), `test:gtao` (timeout) e `test-weekly-ai-translate`.
+**Testes antes do push (e de reiniciar):** as suítes `test:*` rodam offline e com bancos temporários (veja [README_TESTES.md](../../README_TESTES.md)); não precisam parar a Yui nem conectar ao Discord, então rodam no PC de desenvolvimento. Suítes recentes: `test:vision`, `test:gtachat`, `test:memperm`, `test:hybrid`, `test:newswirepick`, `test:gtabase`, `test:translate`.
 
 ---
 

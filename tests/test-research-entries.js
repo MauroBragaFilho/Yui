@@ -562,18 +562,16 @@ await test('Q43 o DONO em DM pelo +yui perguntar recebe a recusa da conversa pri
   const b = await prefixYui({ text: PS5_ASK, authorId: OWNER, channelId: 'dm-pfx', script: () => 'Vou pesquisar isso!' });
   assert.equal(b.final, 'Não pesquiso na web numa conversa privada.');
   assert.equal(searches(), 0);
-  // outra pessoa na DM: não é a conversa PESSOAL do dono (memória pública), mas para a PESQUISA a DM de qualquer pessoa é privada ("DM e app para todos, com as
-  // proteções"): com YUI_PRIVATE_SEARCH=off recusa; com "all" pesquisa (consulta literal, síntese sem provedor anônimo, nada gravado)
-  await withEnv({ YUI_RESEARCH_PRE_ROUTE: 'true' }, async () => {
-    const c = await prefixYui({ text: PS5_ASK, authorId: 'p-bob', channelId: 'dm-bob', script: (n, body) => (isSynthBody(body) ? SYNTH_ANSWER : 'x') });
-    assert.equal(c.final, 'Não pesquiso na web numa conversa privada.');
-    assert.equal(searches(), 0);
-  });
-  await withEnv({ YUI_RESEARCH_PRE_ROUTE: 'true', YUI_PRIVATE_SEARCH: 'all' }, async () => {
-    const d = await prefixYui({ text: PS5_ASK, authorId: 'p-bob', channelId: 'dm-bob', script: (n, body) => (isSynthBody(body) ? SYNTH_ANSWER : 'x') });
-    assert.ok(isResearchAnswer(d.final), d.final);
-    assert.equal(searches(), 1);
-  });
+  // outra pessoa na DM: o prefixo ignora em silêncio (isForeignDm: a Yui só conversa com o dono no privado), com qualquer YUI_PRIVATE_SEARCH: nada responde, nada pesquisa
+  for (const env of [{ YUI_RESEARCH_PRE_ROUTE: 'true' }, { YUI_RESEARCH_PRE_ROUTE: 'true', YUI_PRIVATE_SEARCH: 'all' }]) {
+    await withEnv(env, async () => {
+      const c = await prefixYui({ text: PS5_ASK, authorId: 'p-bob', channelId: 'dm-bob', script: (n, body) => (isSynthBody(body) ? SYNTH_ANSWER : 'x') });
+      assert.equal(c.final, '');
+      assert.equal(c.m.outputs.length, 0);
+      assert.equal(c.modelCalls.length, 0);
+      assert.equal(searches(), 0);
+    });
+  }
 });
 await test('Q28 +yui perguntar repetido: o limite de buscas POR PESSOA vale (5 por hora); a 6ª não chega ao buscador (antes: 7 buscas em 7 pedidos)', () => withEnv({ YUI_RESEARCH_PRE_ROUTE: 'true' }, async () => {
   resetCooldowns();

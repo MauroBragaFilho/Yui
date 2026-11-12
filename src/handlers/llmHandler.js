@@ -3,7 +3,7 @@ import { recordInteraction } from '../core/interactionStats.js';
 import { contextFromDiscord, buildMemoryBlock, captureFromUserText, isMemoryEnabled } from '../core/discordAdapter.js';
 import { memory as coreMemory, audit as coreAudit } from '../core/index.js';
 import { forgetUserContext } from '../core/context/contextStore.js';
-import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize, detectGtaIntent } from './chatIntents.js';
+import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize, detectGtaIntent, detectRadioIntent } from './chatIntents.js';
 import { runGtaIntent, buildGtaModelPrompt } from './gtaChat.js';
 import { buildThirdPartyLogPrompt, fenceUntrustedWeb } from './llmSafety.js';
 import { resolveMentions, neutralizeMassMentions } from '../discord/mentions.js';
@@ -2673,6 +2673,19 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 if (gtaAnswer) {
                     await unifiedReply(gtaAnswer);
                     return;
+                }
+            }
+            // Porta M (rádio por conversa): "yui toca lofi", "pausa o som", "passa essa música", "desliga o rádio". O CÓDIGO usa o mesmo caminho do /modo-radio e dos botões:
+            // só em servidor, só quem está no canal de voz do rádio; sem rádio ligada só "tocar" liga (os outros pedidos seguem para o modelo). Nunca lança.
+            if (guildId && interaction?.member && interaction?.channel && !coreCtx.isBlocked) {
+                const radioIntent = detectRadioIntent(ownQuestion, intentCtx);
+                if (radioIntent.kind !== 'none') {
+                    const { runRadioChatIntent } = await import('../music/radioManager.js');
+                    const radioRun = await runRadioChatIntent({ kind: radioIntent.kind, query: radioIntent.query, member: interaction.member, textChannel: interaction.channel, client: interaction.client || getDiscordClient() });
+                    if (radioRun.handled) {
+                        if (radioRun.text) await unifiedReply(radioRun.text);
+                        return;
+                    }
                 }
             }
             const sumReq = detectSummaryRequest(ownQuestion, intentCtx);

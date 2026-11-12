@@ -44,9 +44,10 @@ export function cleanTempRadioAudio(maxAgeMs = 15 * 60 * 1000) {
 
 function startAutoCleaner(intervalMs = 10 * 60 * 1000) {
     cleanTempRadioAudio(15 * 60 * 1000);
-    setInterval(() => {
+    const timer = setInterval(() => {
         cleanTempRadioAudio(15 * 60 * 1000);
     }, intervalMs);
+    timer.unref?.(); // limpeza de fundo: nunca segura o processo vivo (testes e scripts terminam sozinhos)
 }
 
 startAutoCleaner();

@@ -41,7 +41,7 @@ Legenda: ✅ por conversa · 🔶 parcial · ⚠️ módulo pronto e testado, ai
 | Resumo do chat (`/chat_resumo`) | ✅ | **Porta R** (mesmo módulo, ligado ao `llmHandler`; `/chat_resumo` continua valendo): "yui resume as últimas 50 mensagens", "faz um resumo da conversa" (5 a 100, padrão 20; 1 por minuto por pessoa, dono sem limite) |
 | Reset/novidades do GTA Online (`/gta-diario`, `/gta-semanal`, `/gta-noticias`) | ✅ | **Porta G** (`src/handlers/gtaChat.js`, ligada ao `llmHandler`): "como está a semana no GTA?" executa o mesmo que o comando; o código busca, a IA recebe todas as páginas (até 14000 caracteres) e monta a resposta; se a IA falha, sai o texto direto (até 3800 caracteres). Também existe a ferramenta `gta_online` (semanal, diário ou notícias). Teste: `npm run test:gtachat`. O estado da Yui (`/yui-status`) segue ❌ por conversa |
 | Seguir/parar/listar canais do YouTube e da Twitch (`/yui-seguir-youtube`, `/yui-seguir-twitch`, `/yui-parar-seguir`, `/yui-listar-seguindo`) | ❌ | 🔒 os comandos exigem *Administrador* (permissão padrão no Discord); por conversa, exigiria confirmação |
-| Modo rádio (`/modo-radio`) | ❌ | dentro do rádio já há controle por voz e botões; a detecção de pedidos de rádio pelo chat (`detectRadioIntent` no `chatIntents.js`) existe e tem teste, mas não está ligada |
+| Modo rádio (`/modo-radio`) | ✅ | "yui toca lofi" liga a rádio pelo mesmo caminho do comando (só em servidor e com você numa call de voz; sem call, ela avisa); "pausa", "continua", "passa essa música", "que música é essa?" e "desliga o rádio" valem só para quem está no canal de voz do rádio, e sem rádio ligada seguem para a conversa normal. Fila, voltar, aleatório e repetir continuam só nos botões e na voz (Porta M, `detectRadioIntent`) |
 | Banir/desbanir, AutoMod (`/yui-criador banir`, `desbanir`, `bans_lista`, `automod`) | 🔶 | existe `ia_automod` (a IA bane sozinha em AutoMod `mcp`/`both`); banir/desbanir por pedido ❌ 🔒 |
 | Configurar servidor, ferramentas, IA, criador (`/yui-servidor`, `/yui-ferramentas`, `/yui-config_ia`, `/yui-criador`, `/yui-configurar`) | ❌ | 🔒 só dono/administrador, com confirmação |
 | Origem de imagem/anime (`/anime_origem`) | 🔶 | imagens anexadas (até 3 por mensagem, 4 MB cada, só do CDN do Discord) são descritas por um modelo de visão (Gemini, com Groq Qwen de reserva) e a Yui responde em cima da descrição, que entra como dado não confiável e sem ferramentas; o `/anime_origem` em si segue só por comando. Vídeo não é suportado |
@@ -53,7 +53,7 @@ O modelo escolhe a ferramenta e o código executa (`src/data/mcp_tools.json`). N
 
 ## Ordem sugerida para fechar o que falta
 
-1. **Somente leitura e baixo risco:** ligar ao fluxo da conversa o que já está pronto em `chatIntents.js` (memória, resumo do chat e GTA já estão ligados; falta a detecção de rádio) e completar o modo rádio.
+1. **Somente leitura e baixo risco:** ligar ao fluxo da conversa o que já está pronto em `chatIntents.js` (memória, resumo do chat, GTA e rádio já estão ligados) e completar o modo rádio.
 2. **Com permissão:** seguir/parar/listar canais, banir/desbanir. Depende do motor de política da Fase 1 do roadmap (`ROADMAP_EVOLUCAO.md`) para confirmar e auditar.
 3. **Administração:** configuração do servidor, ferramentas, IA. Só dono, sempre com confirmação e auditoria.
 

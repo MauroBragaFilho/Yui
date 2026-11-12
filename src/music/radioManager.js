@@ -369,15 +369,21 @@ async function handleRadioCapturedAudio(pcmBuffer, userId, guildId, textChannel,
     }
 }
 
-async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChannel, client) {
-    const { parseRadioIntent } = await import('./radioIntentEngine.js');
-    const intent = parseRadioIntent(prompt);
+// `preParsed` e `notifyOverride` são usados pela conversa (runRadioChatIntent): mesma execução da voz Direct, intenção já decidida
+// pelo código e respostas devolvidas ao chat em vez da notificação de 4 s.
+async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChannel, client, preParsed = null, notifyOverride = null) {
+    let intent = preParsed;
+    if (!intent) {
+        const { parseRadioIntent } = await import('./radioIntentEngine.js');
+        intent = parseRadioIntent(prompt);
+    }
     if (!intent) return;
 
     const session = getSession(guildId);
     if (!session) return;
 
     const sendNotify = async (msgText) => {
+        if (notifyOverride) { notifyOverride(radioSafeText(msgText)); return; }
         if (!textChannel) return;
         try {
             const msg = await textChannel.send({ content: `<@${userId}> [⚡] ${radioSafeText(msgText)}`, allowedMentions: radioAllowedMentions(userId) });
@@ -703,6 +709,53 @@ function scheduleAmbiguousAutoSelect(pendingKey, messageTarget) {
     }
 }
 
+const CHAT_KIND_TO_INTENT = { pause: 'PAUSE', resume: 'RESUME', stop: 'STOP', next: 'NEXT', info: 'INFO' };
+
+/**
+ * Rádio por conversa (Porta M do chat): a intenção já foi decidida por detectRadioIntent (só pedido direto, em texto, sem anexo/terceiros).
+ * Mesmas regras do /modo-radio e dos botões: só em servidor e só quem está no canal de voz (do rádio). Sem rádio ligada, só "tocar" liga
+ * (via startRadioMode, o mesmo caminho do comando); os outros pedidos seguem para a conversa normal (handled:false).
+ * Nunca lança. Devolve { handled, text }.
+ */
+async function runRadioChatIntent({ kind, query, member, textChannel, client }) {
+    try {
+        const guildId = member?.guild?.id || null;
+        const userId = member?.id || null;
+        if (!guildId || !userId || !textChannel) return { handled: false, text: '' };
+        const voiceId = member.voice?.channelId || null;
+        let session = getSession(guildId);
+        if (!session && kind !== 'play') return { handled: false, text: '' };
+        if (!voiceId) {
+            return { handled: true, text: kind === 'play' ? 'Entra num canal de voz primeiro que eu ligo o rádio e toco pra você.' : 'Você precisa estar no canal de voz do rádio para controlar a música.' };
+        }
+        if (session && session.voiceChannelId !== voiceId) {
+            return { handled: true, text: 'Você precisa estar no mesmo canal de voz do rádio para controlar a música.' };
+        }
+        if (kind === 'play') {
+            const q = String(query || '').replace(/[.,!?:;\s]+$/, '').trim();
+            if (q.length < 2) return { handled: false, text: '' };
+            if (!session) {
+                const started = await startRadioMode(member, textChannel, client);
+                if (!started.success) return { handled: true, text: started.error || '❌ Não foi possível ativar o Modo Rádio.' };
+                session = getSession(guildId);
+                if (!session) return { handled: true, text: '❌ Não foi possível ativar o Modo Rádio.' };
+            }
+            const lines = [];
+            await processDirectRadioVoiceCommand('', userId, guildId, textChannel, client, { type: 'ADD', query: q }, (t) => lines.push(t));
+            return { handled: true, text: lines.length ? lines[lines.length - 1] : '📻 Rádio ligada.' };
+        }
+        const type = CHAT_KIND_TO_INTENT[kind];
+        if (!type) return { handled: false, text: '' };
+        const lines = [];
+        await processDirectRadioVoiceCommand('', userId, guildId, textChannel, client, { type }, (t) => lines.push(t));
+        return { handled: true, text: lines.length ? lines[lines.length - 1] : '' };
+    } catch (err) {
+        logger.warn(`[Radio] Pedido por conversa falhou: ${errMsg(err)}`);
+        return { handled: true, text: '❌ Não consegui fazer isso no rádio agora.' };
+    }
+}
+
+export { runRadioChatIntent };
 export { startRadioMode, leaveRadioCall, setupRadioVoiceReceiver, radioAmbiguousSessions, scheduleAmbiguousAutoSelect };
 // Só para os testes (M3): os caminhos que enviam texto com eco de título/busca ao canal e a regra de menção deles.
 export { processDirectRadioVoiceCommand, processRadioVoiceCommand, radioAllowedMentions };

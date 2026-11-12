@@ -592,9 +592,10 @@ export function createContextStore({ now = Date.now, env = process.env, logger =
     },
 
     /** Saída de servidor: apaga os fios daquele servidor. */
-    forgetGuild(guildId) {
+    /** `keepPersonal`: fios marcados como memória pessoal ficam (a saída de um servidor não apaga o que é da pessoa). */
+    forgetGuild(guildId, { keepPersonal = false } = {}) {
       const id = String(guildId);
-      return removeScopes([...scopes.values()].filter((s) => s.guildId === id));
+      return removeScopes([...scopes.values()].filter((s) => s.guildId === id && !(keepPersonal && s.personal)));
     },
 
     forgetKey(key) {
@@ -714,12 +715,12 @@ export async function forgetUserContext(userId) {
   return store.forgetUser(userId);
 }
 
-/** Para ligar à saída de servidor (events/guildDelete.js). */
+/** Chamado na saída de servidor (events/guildDelete.js): apaga só o contexto do servidor, nunca o de memória pessoal. */
 export async function forgetGuildContext(guildId) {
   if (!guildId) return { scopes: 0, turns: 0 };
   if (!contextEnabled() && !contextFilesExist() && !defaultStore) return { scopes: 0, turns: 0 };
   const store = await initContextStore();
-  return store.forgetGuild(guildId);
+  return store.forgetGuild(guildId, { keepPersonal: true });
 }
 
 export function purgeExpiredContext() {
