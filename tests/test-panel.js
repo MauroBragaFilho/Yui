@@ -441,7 +441,7 @@ console.log('Painel de administração');
     assert.match(r.json.error, /dono/);
     assert.equal(s.bot.bans.users[OWNER], undefined);
   });
-  await test('memória: lista usuários, mostra SÓ metadados e apaga (uma lembrança ou tudo)', async () => {
+  await test('memória: a LISTA só tem metadados; o DONO vê o conteúdo de cada lembrança, a leitura fica na auditoria (sem o texto) e dá para apagar uma ou tudo', async () => {
     const u = buildContext({ platform: 'discord', userId: '666666666666666666', guildId: 'g', channelId: 'c' });
     memory.remember(u, { content: 'CONTEUDO-SECRETO-DO-USUARIO', type: 'preference' });
     memory.remember(u, { content: 'outra lembrança' });
@@ -450,7 +450,12 @@ console.log('Painel de administração');
     assert.equal(row.count, 2);
     const meta = await adm('GET', '/memory/users/666666666666666666');
     assert.equal(meta.json.memories.length, 2);
-    assert.ok(!JSON.stringify(users).includes('CONTEUDO-SECRETO') && !JSON.stringify(meta.json).includes('CONTEUDO-SECRETO'), 'conteúdo nunca é exposto');
+    assert.ok(!JSON.stringify(users).includes('CONTEUDO-SECRETO'), 'a lista de usuários nunca traz o conteúdo');
+    assert.ok(JSON.stringify(meta.json).includes('CONTEUDO-SECRETO'), 'o dono vê o conteúdo de cada lembrança (decisão do dono)');
+    assert.ok(meta.json.memories.every((m) => typeof m.content === 'string' && m.content.length > 0 && m.id > 0), 'cada lembrança tem id e conteúdo');
+    const trail = (await adm('GET', '/audit?limit=50')).json;
+    assert.ok(trail.events.some((e) => e.event === 'memory.admin.content'), 'a leitura do conteúdo fica na auditoria');
+    assert.ok(!JSON.stringify(trail).includes('CONTEUDO-SECRETO'), 'a auditoria não guarda o texto');
     const id = meta.json.memories[0].id;
     assert.equal((await adm('DELETE', `/memory/users/666666666666666666/${id}`)).json.ok, true);
     assert.equal((await adm('GET', '/memory/users/666666666666666666')).json.memories.length, 1);
