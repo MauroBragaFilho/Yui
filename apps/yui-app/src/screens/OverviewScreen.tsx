@@ -174,7 +174,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 </View>
                 <View style={styles.memBox}>
                   <Text style={styles.memTitle}>Demais usuários</Text>
-                  <Text style={styles.memValue}>{data.retention?.othersDays ? `${data.retention.othersDays} dias` : '—'}</Text>
+                  <Text style={styles.memValue}>{data.retention?.othersPermanent ? 'Permanente' : data.retention?.othersDays ? `${data.retention.othersDays} dias` : '—'}</Text>
                 </View>
               </View>
               <Text style={styles.hint}>As regras de retenção valem no servidor, não só nesta tela. {data.flags.memoryEnabled ? '' : 'A memória está desligada neste momento.'}</Text>

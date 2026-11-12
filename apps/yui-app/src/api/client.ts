@@ -41,7 +41,7 @@ export interface AdminOverview {
   /** Últimos eventos do registro de auditoria (só quando, o quê e por onde; nunca o conteúdo). */
   activity?: { ts: string | null; event: string; role: string | null; platform: string | null }[];
   /** Retenção da memória: a do dono é permanente; as demais expiram em `othersDays` dias. */
-  retention?: { ownerPermanent: boolean; othersDays: number | null };
+  retention?: { ownerPermanent: boolean; othersPermanent?: boolean; othersDays: number | null };
   interactions?: { series: { hour: string; count: number }[]; total: number; since: string };
   problems?: { loginFail: number; toolError: number; toolDenied: number; alertFail: number };
 }
@@ -256,7 +256,7 @@ export function createClient(options: ClientOptions) {
     /** Conversa pelo Agent: responde, executa ferramenta ou pede confirmação. */
     send: (message: string) => request<AgentReply>('POST', '/v1/agent', { message }),
     confirm: (id: string, approve: boolean) => request<AgentReply>('POST', '/v1/agent/confirm', { id, approve }),
-    memories: async () => (await request<{ scope: MemoryScope; memories: MemoryItem[] }>('GET', '/v1/memory', undefined, 20_000)),
+    memories: async () => (await request<{ scope: MemoryScope; memories: MemoryItem[]; permanent?: boolean; retentionDays?: number | null }>('GET', '/v1/memory', undefined, 20_000)),
     addMemory: (content: string, type = 'note') =>
       request<{ ok: boolean; scope: MemoryScope }>('POST', '/v1/memory', { content, type }, 20_000),
     deleteMemory: (id: number) => request<{ ok: boolean }>('DELETE', `/v1/memory/${id}`, undefined, 20_000),

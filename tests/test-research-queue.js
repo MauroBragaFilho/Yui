@@ -1120,7 +1120,8 @@ await test('F1 na fila: uma saída de 60 mil caracteres só de ")a(" e outra de 
     const timer = setInterval(() => { const now = Date.now(); maxLag = Math.max(maxLag, now - last - 25); last = now; }, 25);
     try {
       const { it } = await ask({ text: 'oi yui', script: () => text, until: (x) => contentsOf(x).some((c) => !isProgressText(c)) });
-      assert.ok(contentsOf(it).some((c) => !isProgressText(c)), `${label}: o usuário recebeu uma resposta final, não só o "Processando..."`); // só <think> repetido não é resposta: a cadeia segue e, sem nenhuma resposta, sai o aviso de limites
+      assert.ok(contentsOf(it).some((c) => !isProgressText(c)), `${label}: o usuário recebeu uma resposta final, não só o "Processando..."`);
+      if (label === '<think>') assert.ok(contentsOf(it).some((c) => /respondeu algo vazio/.test(c) && !/Limites de Processamento/.test(c)), 'a frase diz que a resposta veio vazia, sem culpar a cota'); // só <think> repetido não é resposta: a cadeia segue e, sem nenhuma resposta, sai o aviso de limites
     } finally { clearInterval(timer); }
     assert.ok(maxLag < 1500, `${label}: o laço de eventos parou ${maxLag} ms`);
   }

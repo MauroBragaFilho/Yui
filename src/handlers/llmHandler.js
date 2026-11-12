@@ -629,6 +629,8 @@ function localUnreachable(provider, error) {
  */
 // Só pelo TEXTO das respostas de sistema que o generateResponse devolve ("Limites de Processamento Atingidos", o aviso de pedido grande
 // demais, "SYSTEM ERROR"). Um comentário da Yui que começa com emoji ("⚡ Que preço bom!") é comentário de verdade e NÃO é descartado.
+// Nenhuma resposta aproveitável (o modelo só "pensou" ou repetiu lixo). Contém "erro ao processar seu pedido" para o isSystemReply tratá-la como resposta de sistema.
+const EMPTY_REPLY_TEXT = '⚠️ Tive um erro ao processar seu pedido: a IA respondeu algo vazio. Tenta de novo ou reformula a pergunta.';
 const SYSTEM_REPLY_MARKER = /SYSTEM ERROR|Limites de Processamento|erro ao processar seu pedido/i;
 // Resposta que COMEÇA com emoji de erro/aviso: vale só para o texto do check_game_info (gameInfoErrorText), nunca para comentário.
 const ERROR_EMOJI_START = /^[\s*_]*(?:⚠|⚡|❌|🛑|🚨)/;
@@ -2060,6 +2062,7 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
     let nonLocalTried = 0; // provedores que não são o local e foram de fato tentados
     let sizeErrors = 0;    // provedores que recusaram o pedido por TAMANHO (TG-08)
     let otherErrors = 0;   // falhas de qualquer outro tipo (cota, rede, formato, prazo)
+    let emptyReplies = 0;  // provedores que RESPONDERAM, mas só com raciocínio/lixo (nada aproveitável depois de limpar)
     let maxEstTokens = 0;  // maior estimativa de tokens do pedido entre as tentativas
     for (const provider of providers) {
         if (options.skipLocal && provider.func === tryLocal) {
@@ -2250,6 +2253,7 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
             errorDetails = scrubLogText(errorDetails, 300);
             logger.warn(`[IA] Falha no provedor ${provider.id}. Motivo: ${errorDetails.substring(0, 100)}...`);
             lastError = errorDetails;
+            if (/^Resposta vazia/i.test(String(error?.message ?? ''))) emptyReplies++;
             if (error?.notTried !== true) {
                 if (provider.func !== tryLocal) nonLocalTried++;
                 // O provedor com várias chaves diz se TODAS as tentativas foram por tamanho; os demais são julgados pelo próprio erro.
@@ -2266,6 +2270,11 @@ VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
         return sizeErrorText(maxEstTokens);
     }
     logger.error(`[IA] ERRO CRÍTICO: Todos os ${providers.length} provedores falharam.`);
+    if (emptyReplies > 0) {
+        // Algum provedor respondeu, mas sem nada aproveitável (só raciocínio repetido): o problema não é cota nem queda, então a frase não culpa o limite.
+        logger.warn(`[IA] ${emptyReplies} provedor(es) devolveram resposta vazia (só raciocínio ou lixo).`);
+        return EMPTY_REPLY_TEXT;
+    }
     // Quando foi o PRAZO da pesquisa que cortou a cadeia, não é queda dos provedores: sem alerta ao dono.
     if (!researchDeadlineHit) alertOwner('ai-down', 'Todos os provedores de IA falharam', String(lastError ?? 'sem detalhes'), { level: 'error', cooldownMinutes: 15 });
     return `⚡ **Limites de Processamento Atingidos:** Todos os nossos provedores de IA atingiram a cota temporária de tokens ou estão temporariamente indisponíveis. Tente interagir novamente daqui algumas horas! ✨`;

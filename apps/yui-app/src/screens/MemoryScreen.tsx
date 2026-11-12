@@ -19,6 +19,7 @@ const TYPE_LABEL: Record<string, string> = {
 export function MemoryScreen({ client }: Props) {
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [scope, setScope] = useState<MemoryScope>('public');
+  const [retention, setRetention] = useState<{ permanent: boolean; days: number | null }>({ permanent: false, days: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -31,6 +32,7 @@ export function MemoryScreen({ client }: Props) {
       const res = await client.memories();
       setItems(res.memories);
       setScope(res.scope);
+      setRetention({ permanent: res.permanent === true, days: res.retentionDays ?? null });
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Não foi possível carregar a memória.');
     } finally {
@@ -84,7 +86,7 @@ export function MemoryScreen({ client }: Props) {
       <PageHeader
         title="Memória"
         subtitle="O que a Yui lembra sobre você"
-        right={<Badge label={personal ? 'Pessoal (permanente)' : 'Temporária (30 dias)'} color={personal ? colors.success : colors.warning} />}
+        right={<Badge label={personal ? 'Pessoal (permanente)' : retention.permanent ? 'Permanente' : retention.days ? `Temporária (${retention.days} dias)` : 'Temporária'} color={personal || retention.permanent ? colors.success : colors.warning} />}
       />
 
       <FlatList

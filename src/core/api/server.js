@@ -590,7 +590,7 @@ export function createApiServer({
 
       if (route === 'GET /v1/memory') {
         if (!isMemoryEnabled()) return send(res, 503, { error: 'memória desativada' });
-        return send(res, 200, { scope: ctx.memoryScope, memories: memory.listMemories(ctx, { limit: 100 }) });
+        return send(res, 200, { scope: ctx.memoryScope, memories: memory.listMemories(ctx, { limit: 100 }), permanent: memory.isPermanent(), retentionDays: memory.isPermanent() ? null : Number(memory.retentionDays()) || null });
       }
 
       if (route === 'POST /v1/memory') {
