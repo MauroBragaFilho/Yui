@@ -65,5 +65,50 @@ gtabaseDeps.get = async () => ({ data: '<html>layout novo</html>' });
 assert.equal(await fetchGtabaseWeekly({ now: new Date('2026-11-13T10:00:00Z') }), null, 'layout que mudou vira null');
 gtabaseDeps.get = original;
 
+// ── ciclo agendado: reserva do Reddit ──
+{
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { weeklyService, readCache, writeCache } = await import('../src/engines/gtao/systems/weekly/service.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-gtabase-'));
+  const cacheFile = path.join(dir, 'cache.json');
+  const published = [];
+  const onNew = async (weekly) => { published.push(weekly.id); };
+  const fetchLatest = async () => w;
+
+  let r = await weeklyService.checkFallbackSource({ onNew, fetchLatest, cacheFile, weekKey: '2026-W46' });
+  assert.deepEqual([r.status, r.id], ['published', 'gtabase-2026-11-12'], 'sem nada publicado na semana: publica');
+  assert.deepEqual(published, ['gtabase-2026-11-12']);
+  const c = readCache(cacheFile);
+  assert.deepEqual([c.postId, c.weekKey, c.periodoInicio], ['gtabase-2026-11-12', '2026-W46', '2026-11-12'], 'grava o estado');
+
+  r = await weeklyService.checkFallbackSource({ onNew, fetchLatest, cacheFile, weekKey: '2026-W46' });
+  assert.equal(r.status, 'already-published-this-week', 'não repete na mesma semana');
+  assert.equal(published.length, 1);
+
+  // o Reddit já publicou esta semana (id diferente, mesmo início de período): a reserva NÃO publica de novo
+  writeCache({ postId: 'abc123', weekKey: '2026-W45', periodoInicio: '2026-11-12' }, cacheFile);
+  r = await weeklyService.checkFallbackSource({ onNew, fetchLatest, cacheFile, weekKey: '2026-W46' });
+  assert.equal(r.status, 'already-published-this-week', 'mesmo período já publicado pelo Reddit');
+  assert.equal(published.length, 1);
+
+  // semana nova (período novo): publica
+  writeCache({ postId: 'abc123', weekKey: '2026-W45', periodoInicio: '2026-11-05' }, cacheFile);
+  r = await weeklyService.checkFallbackSource({ onNew, fetchLatest, cacheFile, weekKey: '2026-W46' });
+  assert.equal(r.status, 'published');
+  assert.equal(published.length, 2);
+
+  // sem dado: none; falha ao publicar: não grava o cache e tenta de novo depois; erro inesperado: não lança
+  writeCache({ postId: 'x', weekKey: '2026-W40', periodoInicio: null }, cacheFile);
+  assert.equal((await weeklyService.checkFallbackSource({ onNew, fetchLatest: async () => null, cacheFile, weekKey: '2026-W46' })).status, 'none');
+  r = await weeklyService.checkFallbackSource({ onNew: async () => { throw new Error('Discord fora'); }, fetchLatest, cacheFile, weekKey: '2026-W46' });
+  assert.equal(r.status, 'publish-error');
+  assert.equal(readCache(cacheFile).postId, 'x', 'falha ao publicar não marca como processado');
+  r = await weeklyService.checkFallbackSource({ onNew, fetchLatest: async () => { throw new Error('boom'); }, cacheFile, weekKey: '2026-W46' });
+  assert.equal(r.status, 'error');
+  fs.rmSync(dir, { recursive: true, force: true });
+  console.log('ok reserva do ciclo agendado');
+}
+
 console.log('test-gtabase OK');
 process.exit(0);

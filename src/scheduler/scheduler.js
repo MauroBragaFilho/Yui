@@ -114,6 +114,7 @@ export function startScheduler(client) {
   //     paralelo de timers. Uma flag evita execuções simultâneas do mesmo
   //     ciclo (rate limit / processos duplicados).
   let weeklyRunning = false;
+  let lastFallbackTry = 0; // a reserva (GTABase, site de terceiros) é consultada no máximo a cada 55 min
   const runWeeklyCheck = async () => {
     if (weeklyRunning) {
       logger.info('[Weekly] Ciclo anterior ainda em execução; ignorando novo ciclo.');
@@ -129,6 +130,13 @@ export function startScheduler(client) {
       });
       if (result.status === 'published') {
         logger.info(`[Weekly] Weekly novo publicado (${result.id}).`);
+      } else if (['error', 'none'].includes(result.status) && config.weekly.gtabaseFallback && Date.now() - lastFallbackTry > 55 * 60 * 1000) {
+        // Reddit sem resposta (403, cooldown) ou sem post: tenta a reserva (GTABase) uma vez por hora, só se a semana ainda não saiu.
+        lastFallbackTry = Date.now();
+        const fallback = await weeklyService.checkFallbackSource({
+          onNew: async (weekly) => { await discordPublisher.publishWeeklyReddit(client, weekly); },
+        });
+        if (fallback.status === 'published') logger.info(`[Weekly] Weekly novo publicado pela reserva (${fallback.id}).`);
       }
     } catch (err) {
       logger.error(`[Weekly] Falha no ciclo: ${err.message}`);

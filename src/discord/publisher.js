@@ -222,7 +222,8 @@ export const discordPublisher = {
     const minimalOnly = weekly.minimal === true;
     let weeklyData = weekly;
     try {
-      const collected = minimalOnly ? null : await gtaoEngine.collectWeekly({ source: 'reddit' });
+      const origem = weekly.source === 'gtabase' ? 'gtabase' : 'reddit';
+      const collected = minimalOnly ? null : await gtaoEngine.collectWeekly({ source: origem });
       if (collected) {
         weeklyData = collected;
       } else if (!minimalOnly) {
@@ -246,7 +247,7 @@ export const discordPublisher = {
     for (const g of guilds) {
       if (!g.weekly_channel_id) continue;
 
-      const contentId = `reddit:${weeklyData.id || weekly.id}`;
+      const contentId = `${weekly.source === 'gtabase' ? 'gtabase' : 'reddit'}:${weeklyData.id || weekly.id}`;
       if (publicationRepository.isPublished('weekly', contentId, g.guild_id)) {
         continue;
       }

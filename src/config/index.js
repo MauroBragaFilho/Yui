@@ -66,6 +66,8 @@ export const config = {
   weekly: {
     // Habilita/desabilita a busca semanal do r/gtaonline via Reddit.
     enabled: process.env.GTA_WEEKLY_ENABLED !== 'false',
+    // Reserva do ciclo agendado: quando o Reddit não responde, publica o semanal do GTABase (GTA_WEEKLY_GTABASE=false desliga).
+    gtabaseFallback: process.env.GTA_WEEKLY_GTABASE !== 'false',
     // Frequência de verificação em minutos (default: 30).
     intervalMinutes: parseInt(process.env.GTA_WEEKLY_INTERVAL_MINUTES || '30', 10),
     // User-Agent identificável exigido pelo Reddit.

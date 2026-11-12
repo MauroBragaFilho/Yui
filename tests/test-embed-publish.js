@@ -91,7 +91,7 @@ export const resetServerTools = () => {};`,
   './mcpToolPanelHandler.js': 'export const sendMcpToolsManager = async () => null;',
   './memoryAdminHandler.js': 'export const handleMemoriasAdmin = async () => null;',
   './reddit.js': 'export const getLatestWeekly = async () => null; export const searchWeeklyPosts = async () => [];',
-  './parser.js': 'export const parseWeekly = () => ({ periodo: {}, bonus: [], desafios: [], recompensas: [], descontos: [], veiculos: {}, gunVan: [], gtaPlus: {}, atualizadoEm: null });',
+  './parser.js': 'export const extractPeriod = () => ({ inicio: null, fim: null }); export const parseWeekly = () => ({ periodo: {}, bonus: [], desafios: [], recompensas: [], descontos: [], veiculos: {}, gunVan: [], gtaPlus: {}, atualizadoEm: null });',
   './validator.js': 'export const isValidWeekly = () => true;',
   axios: 'export default { get: (...a) => globalThis.__p6b.axiosGet(...a) };',
 };

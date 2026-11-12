@@ -6,6 +6,8 @@ import { alertOwner } from '../../../../core/alerts.js';
 import { getLatestWeekly, searchWeeklyPosts } from './reddit.js';
 import { parseWeekly } from './parser.js';
 import { isValidWeekly } from './validator.js';
+import { fetchGtabaseWeekly } from './gtabase.js';
+import { getCurrentWeekKey } from '../../../../utils/weekKey.js';
 
 /**
  * Serviço Weekly — orquestra o fluxo completo:
@@ -25,7 +27,7 @@ import { isValidWeekly } from './validator.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_FILE = path.join(__dirname, 'cache.json');
 
-const DEFAULT_CACHE = { postId: null, updatedAt: null };
+const DEFAULT_CACHE = { postId: null, updatedAt: null, weekKey: null, periodoInicio: null };
 
 // Falhas SEGUIDAS de publicação do mesmo post (TG-18). Fica só em memória: reiniciar zera a conta, o
 // que é aceitável (o objetivo é não repetir o mesmo erro para sempre dentro de uma execução).
@@ -42,6 +44,8 @@ export function readCache(file = CACHE_FILE) {
     return {
       postId: raw.postId ?? null,
       updatedAt: raw.updatedAt ?? null,
+      weekKey: raw.weekKey ?? null,
+      periodoInicio: raw.periodoInicio ?? null,
     };
   } catch (err) {
     logger.warn(`[Weekly][Cache] Falha ao ler cache (${err.message}); usando estado vazio.`);
@@ -50,9 +54,9 @@ export function readCache(file = CACHE_FILE) {
 }
 
 /** Salva o cache no disco (best-effort; nunca derruba o processo). */
-export function writeCache({ postId, updatedAt }, file = CACHE_FILE) {
+export function writeCache({ postId, updatedAt, weekKey = null, periodoInicio = null }, file = CACHE_FILE) {
   try {
-    const payload = { postId, updatedAt: updatedAt || new Date().toISOString() };
+    const payload = { postId, updatedAt: updatedAt || new Date().toISOString(), weekKey, periodoInicio };
     fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8');
     logger.info(`[Weekly][Cache] Estado atualizado: postId=${payload.postId}.`);
     return payload;
@@ -228,9 +232,47 @@ export const weeklyService = {
       }
     }
 
-    writeCache({ postId: post.id }, cacheFile);
+    writeCache({ postId: post.id, weekKey: getCurrentWeekKey(), periodoInicio: weekly.periodo?.inicio ?? null }, cacheFile);
     logger.info('[Weekly] Dados atualizados.');
     return { status: 'published', id: post.id };
+  },
+
+  /**
+   * Reserva do ciclo agendado: quando o Reddit não responde, publica o semanal do GTABase (site de terceiros, mesmos dados
+   * estruturados). Só publica se a semana AINDA não foi publicada por nenhuma fonte (mesma chave de semana ou mesmo início de
+   * período no cache), então nunca repete o que o Reddit já publicou. Nunca lança.
+   *
+   * @param {object} opts
+   * @param {(weekly: object) => Promise<void>} opts.onNew publicação (a mesma do Reddit)
+   * @param {Function} [opts.fetchLatest] busca do semanal (padrão: GTABase). Injetável para teste.
+   * @param {string} [opts.cacheFile] arquivo do cache (padrão: cache.json). Injetável para teste.
+   * @param {string} [opts.weekKey] chave da semana atual. Injetável para teste.
+   */
+  async checkFallbackSource({ onNew, fetchLatest = fetchGtabaseWeekly, cacheFile = CACHE_FILE, weekKey = getCurrentWeekKey() } = {}) {
+    try {
+      const cache = readCache(cacheFile);
+      if (cache.weekKey && cache.weekKey === weekKey) return { status: 'already-published-this-week' };
+      const weekly = await fetchLatest();
+      if (!weekly) return { status: 'none' };
+      if (cache.postId === weekly.id) return { status: 'already-processed', id: weekly.id };
+      if (cache.periodoInicio && weekly.periodo?.inicio && cache.periodoInicio === weekly.periodo.inicio) {
+        return { status: 'already-published-this-week', id: weekly.id };
+      }
+      if (typeof onNew === 'function') {
+        try {
+          await onNew(weekly);
+        } catch (err) {
+          logger.error(`[Weekly] Falha ao publicar o semanal da reserva (${weekly.source}): ${String(err?.message ?? err).slice(0, 160)}`);
+          return { status: 'publish-error', id: weekly.id };
+        }
+      }
+      writeCache({ postId: weekly.id, weekKey, periodoInicio: weekly.periodo?.inicio ?? null }, cacheFile);
+      logger.info(`[Weekly] Semanal publicado pela reserva ${weekly.source} (${weekly.id}).`);
+      return { status: 'published', id: weekly.id };
+    } catch (err) {
+      logger.warn(`[Weekly] A reserva do semanal falhou: ${String(err?.message ?? err).slice(0, 120)}`);
+      return { status: 'error' };
+    }
   },
 
   /** Busca posts brutos (para testes/diagnóstico do Reddit). */
