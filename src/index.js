@@ -14,6 +14,8 @@ import { updateVehicles as updateGtaCarsVehicles } from './services/gta/vehicles
 import { validateMediaTools, startYtdlpAutoUpdate } from './utils/binaries.js';
 import { initMemory } from './core/index.js';
 import { startApi } from './core/api/server.js';
+import { initInteractionStats } from './core/interactionStats.js';
+import path from 'node:path';
 import { startGatewayServer } from './gateway/index.js';
 import { applyAiSettings } from './core/aiSettings.js';
 import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail, isHarmlessNetworkCrash } from './core/alerts.js';

@@ -129,7 +129,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                     <Text style={styles.hint}>{bars[0]?.label}</Text>
                     <Text style={styles.hint}>{bars[bars.length - 1]?.label}</Text>
                   </View>
-                  <Text style={styles.hint}>Conta as respostas do Discord e do app desde {data.interactions.since ? new Date(data.interactions.since).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'} (zera quando a Yui reinicia). Não guarda texto nem quem pediu.</Text>
+                  <Text style={styles.hint}>Conta as respostas do Discord e do app desde {data.interactions.since ? new Date(data.interactions.since).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'} (continua depois de reiniciar ou atualizar). Não guarda texto nem quem pediu.</Text>
                 </>
               ) : <Text style={styles.hint}>Este servidor ainda não conta as respostas (atualize a Yui).</Text>}
             </Card>

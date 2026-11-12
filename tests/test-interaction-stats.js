@@ -38,3 +38,39 @@ assert.deepEqual(p, { loginFail: 2, toolError: 1, toolDenied: 1, alertFail: 1 })
 assert.deepEqual(countProblems(null), { loginFail: 0, toolError: 0, toolDenied: 0, alertFail: 0 });
 
 console.log('OK: interactionStats');
+
+// ── persistência: reiniciar não zera a contagem ──
+{
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { initInteractionStats, saveInteractionStats } = await import('../src/core/interactionStats.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-stats-'));
+  const f = path.join(dir, 'interaction-stats.json');
+  const base = Date.UTC(2026, 10, 12, 12, 30);
+
+  resetInteractionStats(base);
+  assert.equal(initInteractionStats(f, base), true);
+  recordInteraction(base); recordInteraction(base); recordInteraction(base - 3 * H);
+  assert.equal(saveInteractionStats(), true);
+  assert.ok(fs.existsSync(f) && !fs.existsSync(`${f}.tmp`), 'escrita atômica: sem arquivo temporário');
+
+  resetInteractionStats(base + 60_000); // "reinício": a memória zera
+  assert.equal(interactionSeries(base).total, 0);
+  initInteractionStats(f, base + 60_000); // volta a carregar do disco
+  const again = interactionSeries(base + 60_000);
+  assert.equal(again.total, 3, 'depois do reinício a contagem continua');
+  assert.equal(again.series[23].count, 2);
+  assert.equal(again.since, new Date(base).toISOString(), 'since volta do arquivo (não é o horário do reinício)');
+
+  // arquivo velho: horas fora da janela de 24 h somem; arquivo ilegível não derruba
+  resetInteractionStats(base + 30 * H);
+  initInteractionStats(f, base + 30 * H);
+  assert.equal(interactionSeries(base + 30 * H).total, 0);
+  fs.writeFileSync(f, '{lixo');
+  resetInteractionStats(base);
+  assert.doesNotThrow(() => initInteractionStats(f, base));
+  assert.equal(interactionSeries(base).total, 0);
+  resetInteractionStats(base); // desliga o arquivo (os testes seguintes não gravam)
+  fs.rmSync(dir, { recursive: true, force: true });
+}

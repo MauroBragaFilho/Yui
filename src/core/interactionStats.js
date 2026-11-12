@@ -1,12 +1,20 @@
 /**
- * Contador de respostas da IA por hora, só em memória (some quando a Yui reinicia; `since` diz desde quando vale).
+ * Contador de respostas da IA por hora. Fica em memória e, depois de initInteractionStats(arquivo), também em disco
+ * (database/interaction-stats.json, pasta que a atualização não toca): reiniciar ou atualizar a Yui não zera a contagem.
+ * `since` diz desde quando vale.
  * Não guarda texto, usuário nem canal: só "quantas respostas em cada hora". Alimenta o gráfico de 24 h da Visão Geral.
  */
+import fs from 'node:fs';
+import path from 'node:path';
+
 const HOUR = 60 * 60 * 1000;
 const HOURS = 24;
 
 const buckets = new Map(); // início da hora (ms) -> contagem
 let since = Date.now();
+let file = null; // sem arquivo: só memória (testes e quem não chamou initInteractionStats)
+let saveTimer = null;
+const SAVE_EVERY_MS = 30_000;
 
 function hourStart(ms) {
   return Math.floor(ms / HOUR) * HOUR;
@@ -23,6 +31,7 @@ export function recordInteraction(now = Date.now()) {
     const k = hourStart(now);
     buckets.set(k, (buckets.get(k) || 0) + 1);
     prune(now);
+    scheduleSave();
   } catch { /* contador nunca atrapalha a resposta */ }
 }
 
@@ -44,5 +53,45 @@ export function interactionSeries(now = Date.now()) {
 /** Zera tudo (testes). */
 export function resetInteractionStats(now = Date.now()) {
   buckets.clear();
+  file = null;
+  clearTimeout(saveTimer); saveTimer = null;
   since = now;
+}
+
+/** Grava agora (escrita atômica: arquivo temporário e renomeia). Nunca lança. */
+export function saveInteractionStats() {
+  if (!file) return false;
+  try {
+    clearTimeout(saveTimer); saveTimer = null;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ since, buckets: [...buckets.entries()] }));
+    fs.renameSync(tmp, file);
+    return true;
+  } catch { return false; }
+}
+
+function scheduleSave() {
+  if (!file || saveTimer) return;
+  saveTimer = setTimeout(saveInteractionStats, SAVE_EVERY_MS);
+  saveTimer.unref?.();
+}
+
+/**
+ * Liga a gravação em disco e carrega o que já havia (horas dentro da janela de 24 h). Arquivo ausente ou ilegível = começa do zero.
+ * Grava também ao encerrar o processo, para não perder os últimos 30 s.
+ */
+export function initInteractionStats(filePath, now = Date.now()) {
+  file = filePath ? path.resolve(filePath) : null;
+  if (!file) return false;
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (Number.isFinite(raw?.since)) since = raw.since;
+    for (const [k, v] of Array.isArray(raw?.buckets) ? raw.buckets : []) {
+      if (Number.isFinite(k) && Number.isFinite(v) && v > 0) buckets.set(k, v);
+    }
+    prune(now);
+  } catch { /* primeira vez ou arquivo ruim: segue do zero */ }
+  process.once('exit', saveInteractionStats);
+  return true;
 }
