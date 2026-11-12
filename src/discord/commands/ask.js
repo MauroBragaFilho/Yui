@@ -3,6 +3,7 @@ import { setGlobalContext } from '../setGlobalContext.js';
 import { config } from '../../config/index.js';
 import { recordInteraction } from '../../core/interactionStats.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
+import { getCurrentWeekKey } from '../../utils/weekKey.js';
 import { getKnowledgeContext } from '../../utils/knowledgeBase.js';
 import { generateResponse, runResearchFor, isToolDisabled, stripThinking, isSystemReply } from '../../handlers/llmHandler.js';
 import { contextFromDiscord } from '../../core/discordAdapter.js';
@@ -100,9 +101,13 @@ function buildGtaDataContext() {
     }
   }
 
-  const weekly = gtaoRepository.getLatestWeekly()?.data;
-  if (weekly) {
-    parts.push(`\nDADOS DA SEMANA ATUAL:\n${JSON.stringify(weekly)}`);
+  // Só semanal VÁLIDO (um artigo de notícia gravado como semanal não entra); se for de outra semana, a IA recebe o aviso.
+  const weeklyRow = gtaoRepository.getLatestValidWeekly?.() ?? gtaoRepository.getLatestWeekly();
+  if (weeklyRow?.data) {
+    const outraSemana = weeklyRow.event_week && weeklyRow.event_week !== getCurrentWeekKey();
+    parts.push(outraSemana
+      ? `\nDADOS DO SEMANAL (ATENÇÃO: são da semana ${weeklyRow.event_week}, NÃO desta semana; avise o usuário que podem estar desatualizados):\n${JSON.stringify(weeklyRow.data)}`
+      : `\nDADOS DA SEMANA ATUAL:\n${JSON.stringify(weeklyRow.data)}`);
   }
 
   return parts.length > 0 ? parts.join('\n') : null;
