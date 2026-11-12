@@ -4,7 +4,7 @@
  *   - todo dia (08:00 de Brasília por padrão): relatório matinal, e se a Yui estava fora do ar nessa hora, assim que voltar (até 12h);
  *   - com YUI_MORNING_REPORT=false, só o relatório de saúde de antes (YUI_HEALTH_REPORT).
  */
-import { sendOwnerMessage } from '../core/alerts.js';
+import { sendOwnerMessage, sendUserMessage } from '../core/alerts.js';
 import { audit } from '../core/audit.js';
 import { ownerUserId } from '../core/api/auth.js';
 import { buildHealthReport, collectHealth, sendHealthReport, healthReportSchedule } from '../core/healthReport.js';
@@ -34,7 +34,7 @@ export function startReminderService({ cron, client = null, logger, env = proces
     if (busy) return;
     busy = true;
     try {
-      const r = await runDueReminders({ store: getReminderStore(), send: sendOwnerMessage, audit });
+      const r = await runDueReminders({ store: getReminderStore(), send: (text, r) => (r?.userId ? sendUserMessage(r.userId, text) : sendOwnerMessage(text)), audit });
       if (r.fired || r.failed) logger.info(`[Lembretes] ${r.fired} aviso(s) enviado(s)${r.failed ? `, ${r.failed} adiado(s) para o próximo minuto (DM não saiu)` : ''}.`);
     } catch (err) {
       logger.warn(`[Lembretes] Falha na passada: ${err.message}`);

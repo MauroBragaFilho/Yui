@@ -207,10 +207,54 @@ eq(formatReminderList([], NOW, 'hoje'), 'Você não tem lembretes para hoje.');
 // só o dono, com chave de liga/desliga
 const gate = (userId, env = {}) => routeReminders({ text: 'me lembra amanhã às 9h de x', userId }, { store: s4, env, now: NOW, isOwner: (id) => id === '111111111111111111' });
 eq((await gate('111111111111111111')).handled, true);
-eq((await gate('222222222222222222')).handled, false, 'quem não é dono não cria lembrete (a frase segue para a conversa normal)');
+eq((await gate('222222222222222222')).handled, true, 'qualquer pessoa cria o PRÓPRIO lembrete');
+eq((await gate('222222222222222222', { YUI_REMINDERS_ALL_USERS: 'false' })).handled, false, 'YUI_REMINDERS_ALL_USERS=false volta a só o dono (a frase segue para a conversa normal)');
 eq((await gate(null)).handled, false);
 eq((await gate('111111111111111111', { YUI_REMINDERS_ENABLED: 'false' })).handled, false, 'desligável');
 eq((await gate('111111111111111111')).researched, true, 'a troca não vai ao histórico');
+
+// lembretes de outras pessoas: cada um vê e mexe só nos seus; o aviso vai para quem criou
+{
+  const sp = createReminderStore({ file: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rem-multi-')), 'l.json'), now: () => NOW.getTime() });
+  const isOwn = (id) => id === '111111111111111111';
+  const as = (userId, text) => routeReminders({ text, userId }, { store: sp, now: NOW, isOwner: isOwn });
+  const A = '222222222222222222'; const B = '333333333333333333'; const O = '111111111111111111';
+  const ra = await as(A, 'me lembra daqui 5 minutos de abrir arknights');
+  ok(ra.handled && ra.text.includes('abrir arknights') && ra.text.includes('DMs abertas'), 'cria e orienta sobre DM');
+  await as(B, 'me lembra amanhã às 9h de pagar a conta');
+  await as(O, 'me lembra amanhã às 10h de dentista');
+  eq(sp.list().map((x) => x.userId).sort(), [A, B, null].sort(), 'gravou o dono de cada um');
+  ok((await as(A, 'meus lembretes')).text.includes('arknights') && !(await as(A, 'meus lembretes')).text.includes('pagar a conta'), 'A vê só o dele');
+  ok(!(await as(B, 'meus lembretes')).text.includes('arknights'), 'B não vê o de A');
+  ok(!(await as(O, 'meus lembretes')).text.includes('arknights') && (await as(O, 'meus lembretes')).text.includes('dentista'), 'o dono vê só os dele no chat');
+  // frase com enrolação antes do verbo (caso real do Discord): vira lembrete porque tem horário; sem horário segue como conversa
+  const loose = await as(A, 'Yui, pelamor do mundo tecnológico me lembre de abrir arknights daqui 5 minutos');
+  ok(loose.handled && loose.text.includes('abrir arknights'), 'enrolação antes do "me lembre"');
+  eq(await as(A, 'cara, você consegue me lembrar o que falamos ontem'), { handled: false }, 'sem horário é conversa');
+  eq(await as(A, 'ontem eu falei que ia me lembrar de tudo'), { handled: false }, 'sem pedido nem horário é conversa');
+  const idA = sp.list().find((x) => x.userId === A).id;
+  ok((await as(B, `cancela o lembrete ${idA}`)).text.includes('Não achei'), 'B não cancela o de A');
+  ok((await as(B, `adia o lembrete ${idA} por 30 minutos`)).text.includes('Não achei'), 'B não adia o de A');
+  eq(await as(A, 'resumo do dia'), { handled: false }, 'resumo do dia é do dono');
+  ok((await as(A, 'cancela todos os lembretes')).text.includes('apaguei 2'), 'apaga só os dele');
+  eq(sp.list().length, 2, 'os dos outros ficam');
+  for (let i = 0; i < REMINDER_LIMITS.maxPerUser; i++) sp.add({ text: `x${i}`, at: new Date(NOW.getTime() + 60000), userId: A });
+  ok((await as(A, 'me lembra amanhã às 9h de mais um')).text.includes('lembretes'), 'limite por pessoa');
+  // entrega: usa o userId do lembrete; falhas repetidas de outra pessoa desistem, as do dono nunca
+  const sent = [];
+  const due = createReminderStore({ file: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rem-due-')), 'l.json'), now: () => NOW.getTime() });
+  due.add({ text: 'dele', at: new Date(NOW.getTime() - 1000), userId: A });
+  due.add({ text: 'meu', at: new Date(NOW.getTime() - 1000) });
+  await runDueReminders({ store: due, send: async (t, r) => { sent.push(r.userId || 'dono'); return true; }, now: NOW.getTime() });
+  eq(sent.sort(), [A, 'dono'].sort(), 'cada aviso vai para o dono do lembrete');
+  due.add({ text: 'fechou DM', at: new Date(NOW.getTime() - 1000), userId: B });
+  due.add({ text: 'meu falha', at: new Date(NOW.getTime() - 1000) });
+  for (let i = 0; i < 61; i++) await runDueReminders({ store: due, send: async () => false, now: NOW.getTime() });
+  eq(due.list().map((x) => x.text), ['meu falha'], 'DM que nunca sai: desiste da pessoa, o do dono fica');
+  // relatório matinal só com os do dono
+  const rep2 = await composeMorningReport({ now: new Date(2026, 10, 12, 8, 0, 0), reminderStore: sp });
+  ok(rep2.includes('dentista') && !rep2.includes('arknights') && !rep2.includes('— pagar a conta'), 'matinal só com os do dono');
+}
 
 // ───────────────────────── morning.js ─────────────────────────
 console.log('Relatório matinal');

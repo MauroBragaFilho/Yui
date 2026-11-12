@@ -71,7 +71,16 @@ export function parseReminderRequest(raw, now = new Date()) {
   if ((m = RE.addNoun.exec(head))) { trigger = 'noun'; bodyHead = m[1]; }
   else if ((m = RE.noun.exec(head))) { trigger = 'noun'; bodyHead = m[1]; }
   else if ((m = RE.add.exec(head))) { trigger = 'verb'; bodyHead = m[1]; }
-  if (trigger === null) return null;
+  if (trigger === null) {
+    // "Yui, pelamor do mundo tecnológico me lembre de abrir arknights daqui 5 minutos": até 60 caracteres de enrolação antes do
+    // "me lembra/me avisa". Só vale se acha um horário (action 'add'); sem horário continua sendo conversa comum.
+    const loose = /^(.{1,60}?\s)(me (?:lembra|lembre|lembrar|lembrasse|avisa|avise|avisar)\b.*)$/.exec(head);
+    if (loose && !loose[1].includes('?')) {
+      const sub = parseReminderRequest(headOriginal.slice(loose[1].length), now);
+      if (sub?.action === 'add') return sub;
+    }
+    return null;
+  }
   // Pergunta ("poderia me lembrar daqui 15 minutos de ir para casa?") só vira lembrete se achou um horário válido; sem isso
   // ("me lembra o que falamos ontem?") é conversa e segue para a IA.
   const isQuestion = /\?\s*$/.test(headOriginal);
@@ -113,9 +122,10 @@ export function formatReminderList(items, now = new Date(), scope = null) {
   return [`**${head}** (${list.length})`, ...list.slice(0, 30).map((r) => line(r, now)), ...(list.length > 30 ? [`… e mais ${list.length - 30}.`] : [])].join('\n');
 }
 
-export async function runReminderRequest({ text, store, now = new Date(), report = null }) {
+export async function runReminderRequest({ text, store, now = new Date(), report = null, isOwner = true }) {
   const req = parseReminderRequest(text, now);
   if (!req) return null;
+  if (req.action === 'agenda' && !isOwner) return null; // o resumo do dia é do dono
   try {
     if (req.action === 'agenda') return report ? await report() : 'O resumo do dia não está disponível agora.';
     if (req.action === 'list') return formatReminderList(store.list(), now, req.scope);
@@ -124,6 +134,7 @@ export async function runReminderRequest({ text, store, now = new Date(), report
     if (req.action === 'error') return `Não consegui marcar: ${req.message}`;
     if (req.action === 'add') {
       const r = store.add({ text: req.text, at: req.at, repeat: req.repeat });
+      if (!isOwner) return `Anotado! Vou te lembrar **${r.repeat ? `${describeRepeat(r.repeat)} (a primeira, ${describeWhen(r.at, now)})` : describeWhen(r.at, now)}**: ${r.text}\n-# Lembrete #${r.id}. O aviso vai por mensagem privada: deixe suas DMs abertas para mim. Para ver: “meus lembretes”.`;
       const quando = r.repeat ? `${describeRepeat(r.repeat)} (a primeira, ${describeWhen(r.at, now)})` : describeWhen(r.at, now);
       return `Anotado! Vou te lembrar **${quando}**: ${r.text}\n-# Lembrete #${r.id}. Aviso por mensagem privada aqui no Discord. Para ver: “meus lembretes”.`;
     }
@@ -169,15 +180,35 @@ function defaultStore() {
 export function getReminderStore() { return defaultStore(); }
 
 /**
- * Se a mensagem é um pedido de lembrete do DONO, executa e devolve { handled: true, text, researched: true }
- * (researched: true = a troca NÃO vai ao contexto/histórico). Senão { handled: false }. YUI_REMINDERS_ENABLED=false desliga.
+ * Visão de um usuário sobre o armazenamento: cada pessoa vê e mexe só nos PRÓPRIOS lembretes. O dono (`ownerView`) é a pessoa
+ * de `userId: null` (os de antes) e novos lembretes dele continuam com userId null.
+ */
+export function scopedReminderStore(store, userId, ownerView) {
+  const uid = ownerView ? null : String(userId);
+  const mine = (r) => r && (ownerView ? !r.userId : r.userId === uid);
+  return {
+    list: () => store.list().filter(mine),
+    get: (id) => { const r = store.get(id); return mine(r) ? r : null; },
+    add: (data) => store.add({ ...data, userId: uid }),
+    remove: (id) => (mine(store.get(id)) ? store.remove(id) : false),
+    removeAll: () => { let n = 0; for (const r of store.list().filter(mine)) if (store.remove(r.id)) n++; return n; },
+    reschedule: (id, at) => (mine(store.get(id)) ? store.reschedule(id, at) : null),
+    findByText: (term) => store.findByText(term).filter(mine),
+  };
+}
+
+/**
+ * Se a mensagem é um pedido de lembrete, executa e devolve { handled: true, text, researched: true }
+ * (researched: true = a troca NÃO vai ao contexto/histórico). Senão { handled: false }. YUI_REMINDERS_ENABLED=false desliga tudo;
+ * YUI_REMINDERS_ALL_USERS=false volta a só o dono. Qualquer pessoa cria e mexe nos PRÓPRIOS lembretes (aviso por DM para ela);
+ * só o dono tem o "resumo do dia".
  */
 export async function routeReminders({ text, userId } = {}, { store = null, env = process.env, now = new Date(), report = null, isOwner = null } = {}) {
   if (String(env?.YUI_REMINDERS_ENABLED ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
   if (!userId || !/^\d{5,25}$/.test(String(userId))) return { handled: false };
   const owner = isOwner ?? (await import('../core/permissions.js')).isOwnerId;
-  if (!owner(String(userId))) return { handled: false };
-  const reply = await runReminderRequest({ text, store: store || defaultStore(), now, report });
+  const ownerView = Boolean(owner(String(userId)));
+  if (!ownerView && String(env?.YUI_REMINDERS_ALL_USERS ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
+  const reply = await runReminderRequest({ text, store: scopedReminderStore(store || defaultStore(), userId, ownerView), now, report, isOwner: ownerView });
   return reply === null ? { handled: false } : { handled: true, text: reply, researched: true };
 }
-

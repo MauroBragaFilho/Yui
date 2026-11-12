@@ -10,6 +10,7 @@ import { describeRepeat } from './when.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const LATE_MS = 5 * 60 * 1000;
+const GIVE_UP_TRIES = 60; // 1 tentativa por minuto
 
 /** Texto da DM. `at` é o horário que estava marcado; `now`, o instante do envio. */
 export function formatReminderMessage(r, now = Date.now()) {
@@ -29,7 +30,7 @@ export function formatReminderMessage(r, now = Date.now()) {
 /**
  * @param {object} p
  * @param {object} p.store   createReminderStore()
- * @param {(text:string)=>Promise<boolean|void>} p.send   manda a DM ao dono; false ou erro = não saiu
+ * @param {(text:string, reminder:object)=>Promise<boolean|void>} p.send   manda a DM (ao dono, ou a quem criou o lembrete: r.userId); false ou erro = não saiu
  * @param {number} [p.now]
  * @param {(event:string, ctx:null, data:object)=>void} [p.audit]
  * @returns {Promise<{ fired: number, failed: number }>}
@@ -39,7 +40,7 @@ export async function runDueReminders({ store, send, now = Date.now(), audit = (
   let failed = 0;
   for (const r of store.due(now)) {
     let ok = false;
-    try { ok = (await send(formatReminderMessage(r, now))) !== false; } catch { ok = false; }
+    try { ok = (await send(formatReminderMessage(r, now), r)) !== false; } catch { ok = false; }
     if (ok) {
       store.complete(r.id, now);
       fired += 1;
@@ -47,6 +48,11 @@ export async function runDueReminders({ store, send, now = Date.now(), audit = (
     } else {
       store.recordFailure(r.id);
       failed += 1;
+      // Lembrete de outra pessoa que não sai há ~1 h (DM fechada, bloqueou a Yui): desiste, para não tentar para sempre.
+      if (r.userId && (r.tries || 0) + 1 >= GIVE_UP_TRIES) {
+        store.remove(r.id);
+        try { audit('reminder.drop', null, { id: r.id }); } catch { /* ok */ }
+      }
     }
   }
   return { fired, failed };

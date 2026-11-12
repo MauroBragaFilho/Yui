@@ -3,7 +3,8 @@ import { recordInteraction } from '../core/interactionStats.js';
 import { contextFromDiscord, buildMemoryBlock, captureFromUserText, isMemoryEnabled } from '../core/discordAdapter.js';
 import { memory as coreMemory, audit as coreAudit } from '../core/index.js';
 import { forgetUserContext } from '../core/context/contextStore.js';
-import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize } from './chatIntents.js';
+import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize, detectGtaIntent } from './chatIntents.js';
+import { runGtaIntent } from './gtaChat.js';
 import { buildThirdPartyLogPrompt } from './llmSafety.js';
 import { resolveMentions, neutralizeMassMentions } from '../discord/mentions.js';
 import { alertOwner } from '../core/alerts.js';
@@ -2639,6 +2640,16 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 });
                 if (memRun.handled) {
                     await unifiedReply(memRun.text);
+                    return;
+                }
+            }
+            // Porta G: GTA Online por conversa ("resumo da semana no GTA, o que tem de bônus?"): o código busca os mesmos dados do /gta-semanal,
+            // /gta-diario e /gta-noticias e mostra aqui. Falha ou não-pedido: segue para o modelo.
+            const gtaIntent = detectGtaIntent(ownQuestion, intentCtx);
+            if (gtaIntent.kind !== 'none' && !coreCtx.isBlocked) {
+                const gtaRun = await runGtaIntent(gtaIntent.kind, { logger });
+                if (gtaRun.text) {
+                    await unifiedReply(gtaRun.text);
                     return;
                 }
             }

@@ -64,7 +64,7 @@ export function buildMorningReport({ now = new Date(), reminders = [], lists = [
 
 /** Junta os dados reais (lembretes, listas do dono, saúde) e monta o texto. Tudo injetável para teste. */
 export async function composeMorningReport({ now = new Date(), reminderStore, listStore = null, ownerId = null, health = null } = {}) {
-  const reminders = reminderStore ? reminderStore.list() : [];
+  const reminders = reminderStore ? reminderStore.list().filter((r) => !r.userId) : []; // só os do dono (os de outras pessoas vão por DM para elas)
   let lists = [];
   if (listStore && ownerId) {
     try {

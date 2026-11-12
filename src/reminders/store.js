@@ -2,14 +2,15 @@
  * Lembretes do dono, guardados em UM arquivo JSON (<DATABASE_DIR>/lembretes.json, fora do Git), com gravação atômica
  * (arquivo temporário + rename). Poucos lembretes por vez, então tudo cabe em memória e cada mudança regrava o arquivo.
  *
- * Um lembrete: { id, text, at (ISO, próxima vez), repeat (null | {kind, hour, minute, weekday?, day?}), createdAt, tries, lastFiredAt }.
+ * Um lembrete: { id, text, at (ISO, próxima vez), repeat (null | {kind, hour, minute, weekday?, day?}), createdAt, tries, lastFiredAt, userId }.
+ * `userId`: null = do dono (os lembretes de antes); um id do Discord = dessa pessoa (o aviso vai por DM para ela).
  * O id é um número pequeno que nunca se repete ("cancela o lembrete 3"). Sem IA, sem rede, relógio injetável.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { nextOccurrence } from './when.js';
 
-export const REMINDER_LIMITS = Object.freeze({ maxItems: 200, maxTextChars: 300, maxFileBytes: 512 * 1024 });
+export const REMINDER_LIMITS = Object.freeze({ maxItems: 200, maxPerUser: 20, maxTextChars: 300, maxFileBytes: 512 * 1024 });
 
 export class ReminderError extends Error {
   constructor(code, message) { super(message); this.name = 'ReminderError'; this.code = code; }
@@ -67,14 +68,16 @@ export function createReminderStore({ file = defaultReminderFile(), now = () => 
     get: (id) => { const r = load().items.find((x) => x.id === Number(id)); return r ? { ...r } : null; },
     count: () => load().items.length,
 
-    add({ text, at, repeat = null }) {
+    add({ text, at, repeat = null, userId = null }) {
       const s = load();
       const clean = cleanReminderText(text);
       if (!clean) throw new ReminderError('vazio', 'Do que devo te lembrar?');
       if (s.items.length >= REMINDER_LIMITS.maxItems) throw new ReminderError('limite', `Você já tem ${REMINDER_LIMITS.maxItems} lembretes; apague alguns.`);
       const when = new Date(at);
       if (Number.isNaN(when.getTime())) throw new ReminderError('data', 'Data inválida.');
-      const r = { id: s.nextId++, text: clean, at: toIso(when), repeat: repeat || null, createdAt: toIso(now()), tries: 0, lastFiredAt: null };
+      const uid = userId ? String(userId) : null;
+      if (uid && s.items.filter((x) => x.userId === uid).length >= REMINDER_LIMITS.maxPerUser) throw new ReminderError('limite', `Você já tem ${REMINDER_LIMITS.maxPerUser} lembretes; apague alguns para criar outro.`);
+      const r = { id: s.nextId++, text: clean, at: toIso(when), repeat: repeat || null, createdAt: toIso(now()), tries: 0, lastFiredAt: null, userId: uid };
       s.items.push(r);
       save();
       return { ...r };

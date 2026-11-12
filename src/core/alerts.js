@@ -191,6 +191,18 @@ export async function sendOwnerMessage(text) {
   }
 }
 
+/** Manda uma mensagem privada a UMA pessoa (lembretes dela). Mesmo contrato do sendOwnerMessage: true se tudo saiu; false (sem lançar) se não deu (DM fechada, Discord fora). */
+export async function sendUserMessage(userId, text) {
+  if (!owner.notify || !/^\d{5,25}$/.test(String(userId ?? ''))) return false;
+  try {
+    for (const part of splitForDiscord(redact(String(text ?? ''), process.env))) await owner.notify(String(userId), part);
+    return true;
+  } catch (err) {
+    audit('alert.fail', null, { key: 'user-dm', error: String(err?.message ?? err).slice(0, 100) });
+    return false;
+  }
+}
+
 /** Avisa o dono (sem esperar e sem nunca lançar erro). */
 export function alertOwner(key, title, detail = '', options = {}) {
   current.alert(key, title, detail, options).catch(() => {});
