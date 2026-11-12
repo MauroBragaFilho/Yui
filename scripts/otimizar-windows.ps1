@@ -36,6 +36,24 @@ if ($Aplicar) {
         Checkpoint-Computer -Description 'Antes de otimizar-windows' -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
         Write-Host '[ok] Ponto de restauracao criado.' -ForegroundColor Green
     } catch { Write-Host "[aviso] Sem ponto de restauracao: $($_.Exception.Message)" -ForegroundColor Yellow }
+
+    # Retrato do estado ANTES (para desfazer sem adivinhar): como cada servico iniciava, o plano de energia e a economia do adaptador de rede.
+    try {
+        $antes = "C:\Tools\otimizar-antes-$(Get-Date -Format 'yyyyMMdd-HHmm').txt"
+        $linhas = @("# Estado antes de otimizar-windows -Aplicar ($(Get-Date -Format 's'))", '## Servicos (nome = modo de inicio)')
+        $linhas += Get-CimInstance Win32_Service | Sort-Object Name | ForEach-Object { "$($_.Name) = $($_.StartMode)" }
+        $linhas += '## Plano de energia ativo'
+        $linhas += (powercfg /getactivescheme)
+        $linhas += (powercfg /q SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN)
+        $linhas += (powercfg /q SCHEME_CURRENT SUB_DISK DISKIDLE)
+        $linhas += (powercfg /q SCHEME_CURRENT 19cbb8fa-5279-450e-9fac-8a3d5fedd0c1 12bbebe6-58d6-4636-95bb-3217ef867c1a)
+        $linhas += '## Economia de energia dos adaptadores de rede'
+        $linhas += Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object { $pm = Get-NetAdapterPowerManagement -Name $_.Name -ErrorAction SilentlyContinue; "$($_.Name): AllowComputerToTurnOffDevice=$($pm.AllowComputerToTurnOffDevice)" }
+        $linhas += '## Apps instalados (nomes)'
+        $linhas += Get-AppxPackage -AllUsers | Sort-Object Name | ForEach-Object { $_.Name } | Select-Object -Unique
+        Set-Content -Path $antes -Value $linhas -Encoding UTF8
+        Write-Host "[ok] Estado anterior gravado em $antes" -ForegroundColor Green
+    } catch { Write-Host "[aviso] Nao consegui gravar o estado anterior: $($_.Exception.Message)" -ForegroundColor Yellow }
 }
 
 Write-Host "`n-- IA / Copilot / pesquisa na web --" -ForegroundColor Cyan
@@ -130,7 +148,28 @@ Fazer 'Desativar relatorio de erros do Windows' {
     Reg 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting' 'Disabled' 1 }
 
 Write-Host "`n-- Energia e inicializacao --" -ForegroundColor Cyan
-Fazer 'Plano de energia: Alto desempenho' { powercfg /setactive SCHEME_MIN | Out-Null }
+# ATENCAO: NAO troca de plano. A protecao contra suspender (tampa fechada, tempo ocioso) foi gravada no plano ATUAL pelo instalar-ssh.ps1;
+# o plano "Alto desempenho" volta aos padroes do Windows (tampa = suspender) e a Yui sairia do ar. Por isso o ajuste e feito DENTRO do plano atual.
+Fazer 'Energia (plano atual): processador sempre a 100% na tomada e disco que nunca desliga' {
+    powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100 | Out-Null
+    powercfg /setacvalueindex SCHEME_CURRENT SUB_DISK DISKIDLE 0 | Out-Null }
+Fazer 'Energia (plano atual): reafirmar que na tomada nunca suspende nem hiberna, nem ao fechar a tampa' {
+    powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 | Out-Null
+    powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 0 | Out-Null
+    powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP HIBERNATEIDLE 0 | Out-Null }
+Fazer 'Wi-Fi: modo de economia do adaptador em desempenho maximo (plano atual)' {
+    # subgrupo "Configuracoes do adaptador sem fio" / "Modo de economia de energia": 0 = desempenho maximo
+    powercfg /setacvalueindex SCHEME_CURRENT 19cbb8fa-5279-450e-9fac-8a3d5fedd0c1 12bbebe6-58d6-4636-95bb-3217ef867c1a 0 | Out-Null
+    powercfg /setdcvalueindex SCHEME_CURRENT 19cbb8fa-5279-450e-9fac-8a3d5fedd0c1 12bbebe6-58d6-4636-95bb-3217ef867c1a 0 | Out-Null }
+Fazer 'Rede: o Windows nao pode desligar o adaptador (Wi-Fi e cabo) para economizar energia (vale depois de reiniciar)' {
+    # O cmdlet Set-NetAdapterPowerManagement nao tem esse parametro no Windows 10: o ajuste e o PnPCapabilities = 24 na chave do driver do adaptador.
+    $classe = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}'
+    $guids = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object { $_.InterfaceGuid })
+    foreach ($k in Get-ChildItem $classe -ErrorAction SilentlyContinue) {
+        $p = Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue
+        if ($p.NetCfgInstanceId -and ($guids -contains $p.NetCfgInstanceId)) {
+            New-ItemProperty -Path $k.PSPath -Name 'PnPCapabilities' -Value 24 -PropertyType DWord -Force | Out-Null } } }
+Fazer 'Energia: aplicar o plano atual com os ajustes acima' { powercfg /setactive SCHEME_CURRENT | Out-Null }
 Fazer 'Desligar hibernacao (libera disco) e inicializacao rapida (boot limpo, tarefas da Yui sobem certo)' {
     powercfg /hibernate off | Out-Null
     Reg 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' 'HiberbootEnabled' 0 }
