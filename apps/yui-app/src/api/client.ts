@@ -42,6 +42,7 @@ export interface AdminOverview {
   activity?: { ts: string | null; event: string; role: string | null; platform: string | null }[];
   /** Retenção da memória: a do dono é permanente; as demais expiram em `othersDays` dias. */
   retention?: { ownerPermanent: boolean; othersPermanent?: boolean; othersDays: number | null };
+  limits?: { dmMax: number; dmWindowMinutes: number; fileLinkMinutes: number };
   interactions?: { series: { hour: string; count: number }[]; total: number; since: string };
   problems?: { loginFail: number; toolError: number; toolDenied: number; alertFail: number };
 }
@@ -301,6 +302,11 @@ export function createClient(options: ClientOptions) {
       link: async (caminho: string, inline: boolean): Promise<string> => {
         const r = await request<{ url: string }>('POST', '/v1/admin/bds/link', { caminho, inline }, 20_000);
         return `${baseUrl}${r.url}`;
+      },
+      /** Igual a `link`, mas devolve também por quantos minutos o endereço vale (o servidor informa; a tela não chuta). */
+      linkInfo: async (caminho: string, inline: boolean): Promise<{ url: string; minutes: number | null }> => {
+        const r = await request<{ url: string; expiresInSec?: number }>('POST', '/v1/admin/bds/link', { caminho, inline }, 20_000);
+        return { url: `${baseUrl}${r.url}`, minutes: typeof r.expiresInSec === 'number' ? Math.max(1, Math.round(r.expiresInSec / 60)) : null };
       },
       /** Envia um arquivo (web): corpo em fluxo, com progresso. Devolve { bytes }. */
       upload: (caminho: string, file: Blob, onProgress?: (enviado: number, total: number) => void) =>

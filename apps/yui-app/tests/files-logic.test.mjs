@@ -101,7 +101,7 @@ test('cliente: chamadas ao BDS pela API da Yui (rotas, corpo, confirmação e li
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push({ url: String(url), method: init?.method, body: init?.body ? JSON.parse(init.body) : null, auth: init?.headers?.Authorization });
-    return new Response(JSON.stringify(String(url).endsWith('/link') ? { url: '/v1/bds/get/abc123' } : { ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(String(url).endsWith('/link') ? { url: '/v1/bds/get/abc123', expiresInSec: 600 } : { ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   const c = createClient({ baseUrl: 'http://yui.local:3939', token: 'tok-1234567890123456', fetchImpl });
   const BS = String.fromCharCode(92);
@@ -122,6 +122,8 @@ test('cliente: chamadas ao BDS pela API da Yui (rotas, corpo, confirmação e li
   const url = await c.bds.link(win('C:/f.mp4'), true);
   assert.equal(url, 'http://yui.local:3939/v1/bds/get/abc123', 'o link vem absoluto, com o endereço da Yui');
   assert.deepEqual(calls.at(-1).body, { caminho: win('C:/f.mp4'), inline: true });
+  const info = await c.bds.linkInfo(win('C:/f.mp4'), true);
+  assert.deepEqual(info, { url: 'http://yui.local:3939/v1/bds/get/abc123', minutes: 10 }, 'quanto tempo o link vale vem do servidor (expiresInSec), não de um número escrito na tela');
   await c.bds.search('matrix reloaded');
   assert.equal(calls.at(-1).url, 'http://yui.local:3939/v1/admin/bds/search?q=matrix%20reloaded');
 });

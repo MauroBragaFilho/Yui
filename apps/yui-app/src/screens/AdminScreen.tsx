@@ -105,7 +105,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 // ───────────────────────── seções ─────────────────────────
 
 /** Pede para a Yui mandar uma mensagem privada para o dono no Discord. */
-function DmCard({ client }: Props) {
+function DmCard({ client, limits }: Props & { limits?: AdminOverview['limits'] }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -125,7 +125,7 @@ function DmCard({ client }: Props) {
   return (
     <Card style={styles.card}>
       <Text style={styles.cardTitle}>Mensagem no meu Discord</Text>
-      <Text style={styles.hint}>A Yui te manda uma mensagem privada (fora de servidores). Deixe em branco para enviar um teste. Limite: 5 a cada 10 minutos.</Text>
+      <Text style={styles.hint}>A Yui te manda uma mensagem privada (fora de servidores). Deixe em branco para enviar um teste.{limits ? ` Limite: ${limits.dmMax} a cada ${limits.dmWindowMinutes} minutos.` : ''}</Text>
       <TextInput testID="dm-text" style={styles.input} value={text} onChangeText={setText} placeholder="Mensagem (opcional)" placeholderTextColor={colors.muted} maxLength={1500} multiline />
       <Button testID="btn-dm" label="Enviar para o meu Discord" onPress={send} loading={busy} />
       {msg ? <Text style={msg.ok ? { color: colors.success, fontSize: 13 } : styles.error}>{msg.text}</Text> : null}
@@ -187,7 +187,7 @@ function Geral({ client }: Props) {
             <Text style={styles.hint}>O modo somente leitura e a senha de entrada só mudam no arquivo .env, nunca por este painel. As chaves de IA você gerencia na aba IA.</Text>
           </Card>
 
-          <DmCard client={client} />
+          <DmCard client={client} limits={data?.limits} />
 
           <Button label="Atualizar" variant="ghost" onPress={reload} />
           <Button testID="btn-restart" label="Reiniciar a Yui" variant="danger" onPress={restart} />

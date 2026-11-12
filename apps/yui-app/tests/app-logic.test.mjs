@@ -273,6 +273,8 @@ test('painel: o dono vê visão geral, servidores, bans, memória e ferramentas'
   assert.equal(ov.ownerName, 'Dono Teste');
   assert.equal(ov.retention.ownerPermanent, true);
   assert.ok(ov.retention.othersDays === null || ov.retention.othersDays > 0);
+  assert.deepEqual(Object.keys(ov.limits).sort(), ['dmMax', 'dmWindowMinutes', 'fileLinkMinutes'], 'os limites mostrados na tela vêm do servidor');
+  assert.ok(ov.limits.dmMax > 0 && ov.limits.dmWindowMinutes > 0 && ov.limits.fileLinkMinutes > 0);
   assert.equal(typeof ov.retention.othersPermanent, 'boolean', 'o painel sabe dizer "permanente" para os demais usuários');
   assert.ok(Array.isArray(ov.activity) && ov.activity.length > 0 && ov.activity.length <= 8, 'o login anterior aparece na atividade');
   for (const e of ov.activity) assert.deepEqual(Object.keys(e).sort(), ['event', 'platform', 'role', 'ts'], 'só quando, o quê e por onde: nada dos detalhes');

@@ -42,7 +42,7 @@ export function FilesScreen({ client }: Props) {
   const [mk, setMk] = useState<string | null>(null); // nome da pasta nova (null = fechado)
   const [confirm, setConfirm] = useState<{ path: string; kind: 'apagar' | 'esvaziar' } | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
-  const [preview, setPreview] = useState<{ kind: Exclude<PreviewKind, null>; url: string; name: string } | null>(null);
+  const [preview, setPreview] = useState<{ kind: Exclude<PreviewKind, null>; url: string; name: string; minutes: number | null } | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<any>(null);
   const uploadId = useRef(0);
@@ -119,7 +119,7 @@ export function FilesScreen({ client }: Props) {
     if (it.isDir) { setMode('files'); setFound(null); await loadDir(it.path); return; }
     const kind = previewKind(it.name);
     try {
-      if (kind && web) { setPreview({ kind, url: await client.bds.link(it.path, true), name: it.name }); return; }
+      if (kind && web) { const l = await client.bds.linkInfo(it.path, true); setPreview({ kind, url: l.url, name: it.name, minutes: l.minutes }); return; }
       await download(it);
     } catch (e) { setError(errText(e)); }
   }
@@ -387,7 +387,7 @@ export function FilesScreen({ client }: Props) {
               {preview.kind === 'audio' ? React.createElement('audio', { src: preview.url, controls: true, autoPlay: true, style: { width: '100%' } }) : null}
               {preview.kind === 'image' ? React.createElement('img', { src: preview.url, alt: preview.name, style: { maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 12 } }) : null}
               {preview.kind === 'pdf' ? React.createElement('iframe', { src: preview.url, title: preview.name, style: { width: '100%', height: '70vh', border: 0, borderRadius: 12, background: '#fff' } }) : null}
-              <Text style={styles.hint}>O link expira em 10 minutos. Vídeos MKV/AVI não tocam no navegador: baixe ou use o HomeFlix.</Text>
+              <Text style={styles.hint}>{preview.minutes ? `O link expira em ${preview.minutes} minutos.` : 'O link expira em poucos minutos.'} Vídeos MKV/AVI não tocam no navegador: baixe ou use o HomeFlix.</Text>
             </View>
           </View>
         </Modal>

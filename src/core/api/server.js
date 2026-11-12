@@ -13,7 +13,10 @@ import { loadPanelCredentials, createSessionStore, createLoginLimiter, createPai
 import { createAdmin } from './admin.js';
 import { createDev } from '../dev/index.js';
 import { createDevRoutes } from '../dev/routes.js';
-import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES } from './bds.js';
+import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
+
+// Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
+const DM_LIMIT = { max: 5, windowMs: 10 * 60 * 1000 };
 
 /**
  * Yui API — interface HTTP do Yui Core para apps (mobile/desktop).
@@ -261,7 +264,7 @@ export function createApiServer({
     }
     return true;
   }
-  let dmHits = []; // mensagens ao Discord pedidas pelo painel (limite de 5 a cada 10 min)
+  let dmHits = []; // mensagens ao Discord pedidas pelo painel (limite em DM_LIMIT)
 
   /** Rotas /v1/admin/* (só o dono). Retorna undefined se a rota não for de admin. */
   async function adminRoute(req, url, ctx) {
@@ -270,7 +273,7 @@ export function createApiServer({
     const m = req.method;
     let r;
 
-    if (m === 'GET' && p === '/v1/admin/overview') return admin.overview(ctx);
+    if (m === 'GET' && p === '/v1/admin/overview') return { ...(await admin.overview(ctx)), limits: { dmMax: DM_LIMIT.max, dmWindowMinutes: DM_LIMIT.windowMs / 60000, fileLinkMinutes: Math.round(LINK_TTL_MS / 60000) } };
     if (m === 'GET' && p === '/v1/admin/guilds') return { guilds: await admin.guilds(ctx) };
     if (m === 'GET' && p === '/v1/admin/bans') return admin.bans(ctx);
     if (m === 'GET' && p === '/v1/admin/memory/users') return admin.memoryUsers(ctx);
@@ -361,8 +364,8 @@ export function createApiServer({
       const body = await readJson(req);
       const text = String(body.message ?? '').trim().slice(0, 1500) || 'Teste: esta mensagem foi pedida pelo painel da Yui.';
       const now = Date.now();
-      dmHits = dmHits.filter((t) => now - t < 10 * 60 * 1000);
-      if (dmHits.length >= 5) return { __status: 429, error: 'Limite de 5 mensagens a cada 10 minutos. Tente mais tarde.' };
+      dmHits = dmHits.filter((t) => now - t < DM_LIMIT.windowMs);
+      if (dmHits.length >= DM_LIMIT.max) return { __status: 429, error: `Limite de ${DM_LIMIT.max} mensagens a cada ${DM_LIMIT.windowMs / 60000} minutos. Tente mais tarde.` };
       dmHits.push(now);
       try {
         await notify(ownerId, `📣 **Mensagem do painel da Yui**\n\n${text}`);
