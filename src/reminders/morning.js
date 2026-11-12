@@ -21,6 +21,14 @@ export function dateTitle(now) {
   return txt.charAt(0).toUpperCase() + txt.slice(1);
 }
 
+/** Saudação pela hora de Brasília: 5h–11h59 Bom dia, 12h–17h59 Boa tarde, resto Boa noite (o horário do relatório pode mudar). */
+export function greeting(now = new Date()) {
+  const h = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }).format(now));
+  if (h >= 5 && h < 12) return { text: 'Bom dia', icon: '☀️' };
+  if (h >= 12 && h < 18) return { text: 'Boa tarde', icon: '🌤️' };
+  return { text: 'Boa noite', icon: '🌙' };
+}
+
 function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
 
 /**
@@ -32,7 +40,7 @@ export function buildMorningReport({ now = new Date(), reminders = [], lists = [
   const today = reminders.filter((r) => sameDay(new Date(r.at), now)).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   const late = reminders.filter((r) => Date.parse(r.at) < new Date(now).setHours(0, 0, 0, 0)); // ficaram para trás (ex.: a DM falhou)
   const nextDay = reminders.filter((r) => sameDay(new Date(r.at), tomorrow));
-  const out = [`☀️ **Bom dia!** ${dateTitle(now)}.`];
+  const out = [`${greeting(now).icon} **${greeting(now).text}!** ${dateTitle(now)}.`];
 
   out.push('', '**📌 Hoje**');
   if (today.length === 0 && late.length === 0) out.push('Nenhum lembrete para hoje.');
