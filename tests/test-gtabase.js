@@ -106,6 +106,28 @@ gtabaseDeps.get = original;
   assert.equal(readCache(cacheFile).postId, 'x', 'falha ao publicar não marca como processado');
   r = await weeklyService.checkFallbackSource({ onNew, fetchLatest: async () => { throw new Error('boom'); }, cacheFile, weekKey: '2026-W46' });
   assert.equal(r.status, 'error');
+
+  // Reddit DEPOIS do GTABase: o post do mesmo período não gera segunda mensagem, só atualiza o estado
+  const { samePeriod } = await import('../src/engines/gtao/systems/weekly/service.js');
+  assert.equal(samePeriod('2026-11-12', '2026-11-12'), true);
+  assert.equal(samePeriod('2026-11-12', '2026-11-13'), true, '1 dia de diferença ainda é o mesmo evento');
+  assert.equal(samePeriod('2026-11-12', '2026-11-19'), false);
+  assert.equal(samePeriod(null, '2026-11-12'), false);
+  const selftext = ['**Weekly Bonuses and Discounts (November 12th to November 18th, 2026)**', '', '## 2X GTA$ & RP', '- Contact Missions', '', '## Discounts', '- Castigator - 30% off', '', '## Podium Vehicle', '- Everon'].join(String.fromCharCode(10));
+  const redditPost = { id: 'r123', title: 'Weekly Bonuses and Discounts', selftext, url: 'https://reddit.com/x', createdUtc: 1 };
+  const reddit = [];
+  writeCache({ postId: 'gtabase-2026-11-12', weekKey: '2026-W46', periodoInicio: '2026-11-12' }, cacheFile);
+  r = await weeklyService.checkForUpdates({ onNew: async (x) => { reddit.push(x.id); }, fetchLatest: async () => redditPost, cacheFile });
+  assert.equal(r.status, 'already-published-this-week', 'o GTABase já publicou este período');
+  assert.equal(reddit.length, 0, 'nenhuma segunda mensagem');
+  assert.equal(readCache(cacheFile).postId, 'r123', 'marca o post como visto (não reprocessa a cada ciclo)');
+  assert.equal(readCache(cacheFile).periodoInicio, '2026-11-12');
+
+  // período NOVO do Reddit (semana seguinte) depois do GTABase: publica normal
+  writeCache({ postId: 'gtabase-2026-11-05', weekKey: '2026-W45', periodoInicio: '2026-11-05' }, cacheFile);
+  r = await weeklyService.checkForUpdates({ onNew: async (x) => { reddit.push(x.id); }, fetchLatest: async () => redditPost, cacheFile });
+  assert.equal(r.status, 'published', 'período diferente do que o GTABase publicou: o Reddit publica');
+  assert.deepEqual(reddit, ['r123']);
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('ok reserva do ciclo agendado');
 }

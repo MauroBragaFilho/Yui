@@ -133,6 +133,14 @@ async function giveUpPublishing(weekly, onNew, { alert, cacheFile, lastError }) 
   return { status: minimal ? 'published-minimal' : 'publish-abandoned', id: weekly.id };
 }
 
+/** Os dois inícios de período (AAAA-MM-DD) são do mesmo evento? Aceita 1 dia de diferença (fonte que conta a virada do reset de outro jeito). */
+export function samePeriod(a, b) {
+  if (!a || !b) return false;
+  const ta = Date.parse(`${a}T00:00:00Z`);
+  const tb = Date.parse(`${b}T00:00:00Z`);
+  return Number.isFinite(ta) && Number.isFinite(tb) && Math.abs(ta - tb) <= 86_400_000;
+}
+
 export const weeklyService = {
   /** Último post processado (estado do cache). */
   getLastProcessed() {
@@ -211,6 +219,13 @@ export const weeklyService = {
 
     const weekly = buildWeeklyOutput(post, parsed);
 
+    // O GTABase (reserva) já publicou esta mesma semana: o post do Reddit só marca o estado, sem uma segunda mensagem no canal.
+    if (String(cache.postId ?? '').startsWith('gtabase-') && samePeriod(cache.periodoInicio, weekly.periodo?.inicio)) {
+      logger.info(`[Weekly] O período ${weekly.periodo.inicio} já foi publicado pelo GTABase; não republico o post ${post.id}.`);
+      writeCache({ postId: post.id, weekKey: cache.weekKey ?? getCurrentWeekKey(), periodoInicio: cache.periodoInicio }, cacheFile);
+      return { status: 'already-published-this-week', id: post.id };
+    }
+
     // Dispara a publicação/acréscimo ANTES de atualizar o cache, conforme
     // a ordem prevista no plano (item 15).
     if (typeof onNew === 'function') {
@@ -255,7 +270,7 @@ export const weeklyService = {
       const weekly = await fetchLatest();
       if (!weekly) return { status: 'none' };
       if (cache.postId === weekly.id) return { status: 'already-processed', id: weekly.id };
-      if (cache.periodoInicio && weekly.periodo?.inicio && cache.periodoInicio === weekly.periodo.inicio) {
+      if (samePeriod(cache.periodoInicio, weekly.periodo?.inicio)) {
         return { status: 'already-published-this-week', id: weekly.id };
       }
       if (typeof onNew === 'function') {

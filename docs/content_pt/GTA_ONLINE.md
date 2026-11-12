@@ -90,6 +90,8 @@ Registros que não são de fato um semanal (por exemplo, um artigo de notícia g
 
 O `/yui` e o `+yui perguntar` só usam um semanal **válido** e avisam a IA (e, por ela, o usuário) quando o dado é de outra semana.
 
+**Publicação automática (agendador).** O ciclo agendado consulta o Reddit e, se ele não responde (403 ou cooldown) ou não tem post, tenta o GTABase como reserva: no máximo **uma vez por hora** e só se aquele período ainda não saiu. O estado (`cache.json`) guarda o id, a semana e o início do período, então nenhuma fonte republica um período já publicado: o GTABase não repete o que o Reddit publicou e, se o GTABase publicou primeiro, o post do Reddit do mesmo período só atualiza o estado, sem uma segunda mensagem (aceita 1 dia de diferença entre os inícios). `GTA_WEEKLY_GTABASE=false` desliga a reserva.
+
 > O Reddit passou a devolver 403 para o feed RSS e para a busca mesmo com o Chrome automatizado; por isso o GTABase e o Newswire viraram reservas de verdade. Detalhes em [DIAGNOSTICO_REDDIT_403.md](../DIAGNOSTICO_REDDIT_403.md).
 
 ---
