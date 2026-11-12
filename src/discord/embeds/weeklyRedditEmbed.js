@@ -224,7 +224,9 @@ export function createWeeklyRedditEmbed(weekly, options = {}) {
 
   const relTime = formatRelativeTimeBR(weekly.createdUtc);
   embed.setFooter({
-    text: `Fonte: r/gtaonline • Post ${weekly.id || ''} • Clique no título para ver o post${relTime ? ` • ${relTime}` : ''}`,
+    text: weekly.source === 'gtabase'
+      ? 'Fonte: GTABase (site de terceiros, não oficial) • Clique no título para ver a página'
+      : `Fonte: r/gtaonline • Post ${weekly.id || ''} • Clique no título para ver o post${relTime ? ` • ${relTime}` : ''}`,
   });
 
   return embed;
@@ -345,7 +347,7 @@ function buildGunVanSection(weekly, useI18n = false, options = {}) {
 export function buildWeeklyDetailSections(weekly, options = {}) {
   const useI18n = Boolean(weekly._i18n && weekly._i18n.by);
   const sections = [];
-  const footerText = `Fonte: r/gtaonline • Post ${weekly.id || ''}`;
+  const footerText = weekly.source === 'gtabase' ? 'Fonte: GTABase (site de terceiros, não oficial)' : `Fonte: r/gtaonline • Post ${weekly.id || ''}`;
 
   // Bônus completos: só quando o resumo da página 1 omitiu algo.
   if (summaryOmitsBonusInfo(weekly, useI18n)) {

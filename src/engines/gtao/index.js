@@ -4,6 +4,7 @@ import { fetchDailyCollectibles } from './systems/collectibles.js';
 import { fetchTimeTrials } from './systems/timeTrials.js';
 import { fetchWeeklyEvent } from './systems/weeklyEvents.js';
 import { weeklyService } from './systems/weekly/service.js';
+import { fetchGtabaseWeekly } from './systems/weekly/gtabase.js';
 import { generateWeeklyAnalysis } from './weeklyAnalysis.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { logger } from '../../utils/logger.js';
@@ -43,8 +44,9 @@ export const gtaoEngine = {
    * análise da IA e salva tudo no SQLite.
    *
    * @param {object} opts
-   * @param {'reddit'|'newswire'} [opts.source='reddit'] — Fonte dos dados.
+   * @param {'reddit'|'gtabase'|'newswire'} [opts.source='reddit'] — Fonte dos dados.
    *   - reddit: usa o post semanal do r/gtaonline (padrão, mais rápido e confiável).
+   *   - gtabase: página do GTABase (site de terceiros; mesmos dados estruturados do Reddit, sem bloqueio).
    *   - newswire: usa o Rockstar Newswire (tradução automática via API).
    */
   async collectWeekly({ source = 'reddit' } = {}) {
@@ -59,6 +61,9 @@ export const gtaoEngine = {
       // O weeklyService já busca, parseia e valida o post mais recente.
       // Retorna JSON normalizado com selftext preservado para a IA.
       weeklyData = await weeklyService.getLatest();
+    } else if (source === 'gtabase') {
+      // ── Fonte: GTABase (HTML pronto do servidor; já no formato do post do Reddit) ──
+      weeklyData = await fetchGtabaseWeekly();
     } else {
       // ── Fonte: Rockstar Newswire ──────────────────────────────────
       // Busca o artigo, traduz para PT-BR e monta o texto para a IA.

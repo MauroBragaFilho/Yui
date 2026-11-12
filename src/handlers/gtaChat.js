@@ -67,7 +67,7 @@ export async function runGtaIntent(kind, { deps = null, logger = null } = {}) {
             const weekKey = d.getCurrentWeekKey();
             const latest = d.gtaoRepository.getLatestWeekly();
             let data = latest?.data;
-            const cachedNewswireOld = data?.source === 'newswire' && (d.weeklyRowAgeHours ?? (() => Infinity))(latest) > (d.NEWSWIRE_CACHE_HOURS ?? 6);
+            const cachedNewswireOld = (data?.source === 'newswire' || data?.source === 'gtabase') && (d.weeklyRowAgeHours ?? (() => Infinity))(latest) > (d.NEWSWIRE_CACHE_HOURS ?? 6);
             let needsCollect = !latest || latest.event_week !== weekKey || cachedNewswireOld;
             if (!needsCollect && data?.source === 'reddit' && data?.id) {
                 try {
@@ -78,7 +78,10 @@ export async function runGtaIntent(kind, { deps = null, logger = null } = {}) {
             let stale = null;
             if (needsCollect) {
                 try { data = await d.gtaoEngine.collectWeekly({ source: 'reddit' }); } catch (err) { warn(`[GTA-Chat] Falha ao coletar o semanal: ${String(err?.message ?? err).slice(0, 80)}`); }
-                // Reddit bloqueado: o artigo semanal do Rockstar Newswire (oficial; escolhido por pontuação, nunca o brinde do GTA+).
+                // Reddit bloqueado: primeiro o GTABase (dados estruturados), depois o artigo semanal do Rockstar Newswire (oficial; escolhido por pontuação, nunca o brinde do GTA+).
+                if (!data) {
+                    try { data = await d.gtaoEngine.collectWeekly({ source: 'gtabase' }); } catch (err) { warn(`[GTA-Chat] GTABase também falhou: ${String(err?.message ?? err).slice(0, 80)}`); }
+                }
                 if (!data) {
                     try { data = await d.gtaoEngine.collectWeekly({ source: 'newswire' }); } catch (err) { warn(`[GTA-Chat] Newswire também falhou: ${String(err?.message ?? err).slice(0, 80)}`); }
                 }

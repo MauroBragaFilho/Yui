@@ -160,7 +160,7 @@ Para o dono, a Yui também é uma assistente: personalidade própria em DM/canai
 
 ## 🎮 8. GTA Online
 
-Reset diário, evento semanal (Reddit primeiro; se falhar, artigo do Rockstar Newswire escolhido por pontuação; depois cópia da mesma semana; por último o semanal válido de outra semana, com aviso), traduzido e com embed paginado, notícias da Rockstar e dados técnicos de veículos/armas injetados no `/yui`. Veja [GTA Online](GTA_ONLINE.md).
+Reset diário, evento semanal (Reddit primeiro; se falhar, a página do GTABase (site de terceiros, mesmos dados estruturados); depois o artigo do Rockstar Newswire escolhido por pontuação; depois cópia da mesma semana; por último o semanal válido de outra semana, com aviso), traduzido e com embed paginado, notícias da Rockstar e dados técnicos de veículos/armas injetados no `/yui`. Veja [GTA Online](GTA_ONLINE.md).
 
 ## 🏷️ 9. Menções reais
 

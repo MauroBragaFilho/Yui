@@ -73,15 +73,42 @@ export function buildWeeklyAnalysisPrompt(weeklyData, dailyData) {
  * extra que o modelo às vezes adiciona antes/depois mesmo quando
  * instruído a não fazer isso.
  */
-function extractJson(text) {
+export function extractJson(text) {
   if (!text) return null;
-  const match = text.match(/\{[\s\S]*\}/);
+  const match = String(text).match(/\{[\s\S]*\}/);
   if (!match) return null;
   try {
     return JSON.parse(match[0]);
-  } catch (e) {
-    return null;
+  } catch {
+    // O modelo às vezes escreve quebra de linha de verdade dentro dos textos e deixa vírgula sobrando: o JSON estrito recusa os dois.
+    try {
+      return JSON.parse(repairJson(match[0]));
+    } catch {
+      return null;
+    }
   }
+}
+
+/** Conserta os defeitos comuns: quebras de linha/tabs soltos dentro de strings e vírgula antes de } ou ]. */
+export function repairJson(raw) {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (const ch of String(raw)) {
+    if (inString) {
+      if (escaped) { out += ch; escaped = false; continue; }
+      if (ch === '\\') { out += ch; escaped = true; continue; }
+      if (ch === '"') { inString = false; out += ch; continue; }
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') continue;
+      if (ch === '\t') { out += '\\t'; continue; }
+      out += ch;
+    } else {
+      if (ch === '"') inString = true;
+      out += ch;
+    }
+  }
+  return out.replace(/,(\s*[}\]])/g, '$1');
 }
 
 const ANALYSIS_KEYS = ['titulo', 'destaques', 'itensGratuitos', 'veiculosDesconto', 'novidades', 'melhorFarm', 'avaliacao'];
@@ -106,14 +133,18 @@ function normalizeAnalysis(parsed) {
 export async function generateWeeklyAnalysis(weeklyData, dailyData, channelId = null, guildId = null) {
   try {
     const prompt = buildWeeklyAnalysisPrompt(weeklyData, dailyData);
-    const resposta = await generateResponse(prompt, channelId, {
+    const ask = () => generateResponse(prompt, channelId, {
       guildId,
       allowSearch: false,
       disableTools: true,
     });
-
-    const parsed = extractJson(resposta);
-    const normalized = normalizeAnalysis(parsed);
+    let resposta = await ask();
+    let normalized = normalizeAnalysis(extractJson(resposta));
+    if (!normalized) {
+      logger.warn('[WeeklyAnalysis] Primeira resposta sem JSON utilizável; tentando mais uma vez.');
+      resposta = await ask();
+      normalized = normalizeAnalysis(extractJson(resposta));
+    }
 
     if (!normalized) {
       logger.warn(`[WeeklyAnalysis] A Yui não retornou um JSON estruturado válido. Resposta bruta descartada. Início da resposta: "${clampText(String(resposta ?? '').replace(/\s+/g, ' ').trim(), 160)}" (${String(resposta ?? '').length} caracteres)`);

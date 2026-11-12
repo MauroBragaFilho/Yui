@@ -34,7 +34,7 @@ Para contornar o bloqueio de forma 100% legítima e sem violar termos de uso, a 
 ### B. Fallback Seguro
 Se o Puppeteer falhar em instanciar o navegador local:
 1. Tenta a rota de cookies armazenados com uma renovação transparente.
-2. Caso o Reddit continue respondendo 403, a Yui usa o **Rockstar Newswire** como reserva: o artigo semanal oficial, escolhido por pontuação (`pickWeeklyArticle`: categoria GTA Online, mínimo de 4 pontos, até 10 dias, brinde do GTA+ penalizado), com cache de 6 h (`NEWSWIRE_CACHE_HOURS`).
+2. Caso o Reddit continue respondendo 403, a Yui usa primeiro o **GTABase** (página de terceiros com os mesmos dados estruturados; `gtabase.js`) e depois o **Rockstar Newswire** como reservas. O Newswire é o artigo semanal oficial, o artigo semanal oficial, escolhido por pontuação (`pickWeeklyArticle`: categoria GTA Online, mínimo de 4 pontos, até 10 dias, brinde do GTA+ penalizado), com cache de 6 h (`NEWSWIRE_CACHE_HOURS`).
 3. Sem resposta de nenhuma fonte, usa a cópia da mesma semana; sem ela, o último semanal válido de outra semana, **com aviso** ao usuário.
 
 > O scraper do GTAForums (`gtaForumsScraper.js`) continua no código, mas não faz parte desse fluxo (código morto).

@@ -19,6 +19,7 @@ export const weeklyCommand = {
           .setRequired(false)
           .addChoices(
             { name: '🌐 Reddit r/gtaonline (padrão)', value: 'reddit' },
+            { name: '📊 GTABase (site de terceiros)', value: 'gtabase' },
             { name: '📰 Rockstar Newswire', value: 'newswire' },
           )
       )
@@ -72,11 +73,15 @@ export const weeklyCommand = {
       // Reddit bloqueado (403 tratado) ou sem resposta: tenta o artigo semanal do Rockstar Newswire (oficial, escolhido por pontuação).
       // Se o cache desta semana JÁ é do Newswire e recente, não repete a coleta (cada uma gasta chamadas de IA).
       if (!weeklyData && source === 'reddit') {
-        const cacheNewswireFresco = latest?.event_week === currentWeekKey && latest?.data?.source === 'newswire'
+        const cacheReservaFresco = latest?.event_week === currentWeekKey && ['gtabase', 'newswire'].includes(latest?.data?.source)
           && weeklyRowAgeHours(latest) <= NEWSWIRE_CACHE_HOURS;
-        if (!cacheNewswireFresco) {
-          try { weeklyData = await gtaoEngine.collectWeekly({ source: 'newswire' }); } catch (err) {
-            logger.warn(`[GTA-Semanal] Newswire também falhou: ${err.message}`);
+        if (!cacheReservaFresco) {
+          // 1º o GTABase (dados estruturados, mesmo formato do Reddit); 2º o artigo do Newswire.
+          for (const reserva of ['gtabase', 'newswire']) {
+            try { weeklyData = await gtaoEngine.collectWeekly({ source: reserva }); } catch (err) {
+              logger.warn(`[GTA-Semanal] ${reserva} também falhou: ${err.message}`);
+            }
+            if (weeklyData) break;
           }
         }
       }

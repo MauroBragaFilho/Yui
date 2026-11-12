@@ -32,6 +32,7 @@ npm run test:remindersapi   # API dos lembretes e do resumo do dia (só o dono, 
 npm run test:vision      # visão: escolha das imagens, Gemini primeiro e Groq de reserva, limites e bloco cercado no prompt (sem rede)
 npm run test:translate    # tradução (MyMemory): pedaços de até 450 caracteres e mensagens de erro da API nunca viram texto (sem rede)
 npm run test:newswirepick  # semanal do Newswire: escolha do artigo por pontuação (nunca o brinde do GTA+), idade máxima e envelhecimento do cache (sem rede)
+npm run test:gtabase       # semanal pelo GTABase: leitor do HTML salvo (fixture), período da semana, páginas do /gta-semanal e erros de rede (sem rede)
 npm run test:gtachat     # GTA Online por conversa: detecção, todas as páginas para a IA, cache, último semanal válido com aviso (sem rede)
 npm run test:memperm     # memória permanente (MEMORY_RETENTION_DAYS=0), conteúdo só para o dono e apagar item a item
 npm run test:hybrid      # ferramentas híbridas (gta_online, listar_lembretes, criar_lembrete): definições, limpeza dos argumentos do modelo e escopo por pessoa

@@ -72,6 +72,21 @@ assert.equal(NEWSWIRE_CACHE_HOURS, 6);
   // com análise da IA, a página do artigo NÃO entra (a análise já cobre)
   const comIa = buildWeeklyCombinedEmbeds({ source: 'newswire', title: 'Heist Event', fullText: longo, analysis: { destaques: 'Muito bônus', itensGratuitos: 'Nada' } }, null).map((p) => p.toJSON());
   assert.ok(!comIa.some((j) => /Artigo oficial/.test(j.title)), 'com análise da IA o artigo não vira página');
+  // JSON do modelo com quebra de linha solta e virgula sobrando: o estrito recusa, o tolerante aceita
+  const { extractJson, repairJson } = await import('../src/engines/gtao/weeklyAnalysis.js');
+  const LF = String.fromCharCode(10); const TAB = String.fromCharCode(9);
+  const corpo = '{ "titulo": "Golpes", "destaques": "linha um' + LF + 'linha dois", "melhorFarm": "farm' + TAB + 'com tab", }';
+  const ruim = '```json' + LF + corpo + LF + '```';
+  assert.throws(() => JSON.parse(corpo), 'o JSON estrito recusa');
+  const ok = extractJson(ruim);
+  assert.equal(ok.titulo, 'Golpes');
+  assert.equal(ok.destaques, 'linha um' + LF + 'linha dois', 'a quebra de linha fica dentro do texto');
+  assert.equal(ok.melhorFarm, 'farm' + TAB + 'com tab');
+  assert.deepEqual(extractJson('{"a":"x, y",}'), { a: 'x, y' }, 'virgula dentro do texto fica; a sobrando sai');
+  assert.deepEqual(extractJson(String.raw`{"a":"aspas \" escapadas"}`), { a: 'aspas " escapadas' });
+  assert.equal(extractJson('sem json aqui'), null);
+  assert.equal(extractJson('{ quebrado'), null);
+  assert.equal(repairJson('{"a":1}'), '{"a":1}', 'JSON bom passa intacto');
   console.log('test-weekly-newswire-pick OK');
   process.exit(0);
 }

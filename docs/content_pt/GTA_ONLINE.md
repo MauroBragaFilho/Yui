@@ -22,7 +22,7 @@ Como a Yui coleta, traduz e publica as informações do GTA Online. O código vi
 | Motor | O que entrega | Fonte | Quando |
 |-------|---------------|-------|--------|
 | **GTAO Engine (diário)** | Van de Armas, Traficantes, Colecionáveis, Desafios Contra o Relógio | Cálculo determinístico a partir das *seeds* do jogo | Todo dia, **06:00 UTC** |
-| **GTAO Engine (semanal)** | Bônus, descontos, pódio, carro premiado, Van de Armas, GTA+, desafio | Post semanal do **r/gtaonline**; reserva: artigo semanal do **Rockstar Newswire** | Verificação periódica |
+| **GTAO Engine (semanal)** | Bônus, descontos, pódio, carro premiado, Van de Armas, GTA+, desafio | Post semanal do **r/gtaonline**; reservas: página do **GTABase** e artigo semanal do **Rockstar Newswire** | Verificação periódica |
 | **Newswire Engine** | Notícias da Rockstar | Página Newswire (Puppeteer) | **Desligado** por padrão |
 
 Cada servidor escolhe os canais de destino com `/yui-configurar` (`noticias`, `diario`, `semanal`).
@@ -81,15 +81,16 @@ O parser (`weekly/parser.js`) extrai período, bônus (2x/3x...), veículos (pó
 Quando alguém pede o semanal (por `/gta-semanal` ou pela conversa), a Yui tenta nesta ordem:
 
 1. **Reddit** (post estruturado, pelo Chrome).
-2. **Rockstar Newswire**: o artigo semanal oficial, escolhido por pontuação (veja a [seção 5](#-5-notícias-rockstar-newswire)).
-3. **Cópia guardada da mesma semana**, se nenhuma fonte responder agora.
-4. **Último semanal válido de outra semana**, sempre **com aviso** de que são dados da semana anterior e podem estar desatualizados.
+2. **GTABase** (`src/engines/gtao/systems/weekly/gtabase.js`): página "GTA Online Weekly Update" do gtabase.com. É um site de **terceiros, não oficial**, mas o HTML já vem pronto do servidor (sem Chrome) e traz os mesmos dados estruturados do Reddit: bônus por multiplicador, descontos com percentual, pódio, carro premiado, desafio e Van de Armas. Só a parte do evento é lida (os comentários dos leitores ficam de fora) e a página só vale se o período dela cobre hoje (com 1 dia de folga); página ainda da semana passada, layout que mudou ou erro de rede viram "sem dado" e a Yui segue para a próxima fonte. O rodapé cita a fonte. Resultado em cache por **6 horas**, como o do Newswire. Também dá para pedir direto com `/gta-semanal fonte:GTABase`.
+3. **Rockstar Newswire**: o artigo semanal oficial, escolhido por pontuação (veja a [seção 5](#-5-notícias-rockstar-newswire)).
+4. **Cópia guardada da mesma semana**, se nenhuma fonte responder agora.
+5. **Último semanal válido de outra semana**, sempre **com aviso** de que são dados da semana anterior e podem estar desatualizados.
 
 Registros que não são de fato um semanal (por exemplo, um artigo de notícia gravado por engano) são removidos do banco (`purgeInvalidWeekly`; a regra de validade é `isValidWeekly`, em `src/database/repositories/weeklyRepo.js`).
 
 O `/yui` e o `+yui perguntar` só usam um semanal **válido** e avisam a IA (e, por ela, o usuário) quando o dado é de outra semana.
 
-> O Reddit passou a devolver 403 para o feed RSS e para a busca mesmo com o Chrome automatizado; por isso o Newswire virou reserva de verdade. Detalhes em [DIAGNOSTICO_REDDIT_403.md](../DIAGNOSTICO_REDDIT_403.md).
+> O Reddit passou a devolver 403 para o feed RSS e para a busca mesmo com o Chrome automatizado; por isso o GTABase e o Newswire viraram reservas de verdade. Detalhes em [DIAGNOSTICO_REDDIT_403.md](../DIAGNOSTICO_REDDIT_403.md).
 
 ---
 
@@ -202,6 +203,7 @@ npm run test:weekly-browser    # feed do Reddit via Chrome (offline com posts re
 npm run test:gtacars           # base de veículos GTACars
 npm run test:gtachat           # GTA por conversa (offline)
 npm run test:newswirepick      # escolha do artigo semanal por pontuação
+npm run test:gtabase           # semanal pelo GTABase (leitor do HTML salvo, período, páginas)
 npm run test:translate         # tradutor em pedaços de 450 caracteres
 node tests/test-weekly-embed-ptbr.js        # embed (página 1 e detalhes), tradução e limites do Discord
 node tests/test-weekly-combined-embed.js    # composição de todas as páginas
