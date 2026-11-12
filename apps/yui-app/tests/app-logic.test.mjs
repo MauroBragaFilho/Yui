@@ -433,3 +433,16 @@ test('chave por DM: limite de pedidos protege a DM do dono e a mensagem do app �
 });
 
 
+
+test('endereço do painel do OmniRoute: mesmo computador da API, porta própria', async () => {
+  const { omniRouteUrl, OMNIROUTE_DEFAULT_PORT } = await import('../src/omniRouteUrl.ts');
+  assert.equal(OMNIROUTE_DEFAULT_PORT, 20128);
+  assert.equal(omniRouteUrl('http://192.168.15.12:3939'), 'http://192.168.15.12:20128/');
+  assert.equal(omniRouteUrl('http://192.168.15.12:3939/', '21000'), 'http://192.168.15.12:21000/');
+  assert.equal(omniRouteUrl('http://192.168.15.12:3939', 'abc'), 'http://192.168.15.12:20128/', 'porta inválida volta ao padrão');
+  assert.equal(omniRouteUrl('https://yui.exemplo.com'), 'https://yui.exemplo.com:20128/');
+  assert.equal(omniRouteUrl(''), null);
+  assert.equal(omniRouteUrl(null), null);
+  assert.equal(omniRouteUrl('javascript:alert(1)'), null);
+  assert.equal(omniRouteUrl('ftp://x'), null);
+});

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError, type AiCustomProvider, type AiKeyHint, type AiOverview, type AiProvider, type YuiClient } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
 import { Badge, Button, Card, Chip } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
+import { omniRouteUrl } from '../omniRouteUrl.ts';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu errado.');
 
@@ -323,6 +324,22 @@ function AddCustom({ data, client, reload }: { data: AiOverview; client: YuiClie
   );
 }
 
+/** Atalho para o painel do OmniRoute (o roteador de IA do notebook). Abre em outra aba: ele não aceita ser embutido numa página. */
+function OmniRouteCard({ client }: { client: YuiClient }) {
+  const url = omniRouteUrl(client.baseUrl, process.env.EXPO_PUBLIC_OMNIROUTE_PORT);
+  if (!url) return null;
+  const open = () => { if (Platform.OS === 'web') window.open(url, '_blank', 'noopener'); else Linking.openURL(url).catch(() => {}); };
+  return (
+    <Card style={styles.card}>
+      <View style={styles.rowBetween}>
+        <Text style={styles.cardTitle}>OmniRoute</Text>
+        <Button label="Abrir painel do OmniRoute" variant="ghost" onPress={open} style={styles.smallBtn} testID="omniroute-open" />
+      </View>
+      <Text style={styles.hint}>Abre o painel do roteador de IA em outra aba ({url.replace(/\/$/, '')}). Ele tem login próprio e só responde dentro da sua rede.</Text>
+    </Card>
+  );
+}
+
 /** Provedores de IA: chaves, ligar/desligar, testar e adicionar provedores próprios. */
 export function AiProviders({ client, onChanged }: { client: YuiClient; onChanged: () => void }) {
   const [data, setData] = useState<AiOverview | null>(null);
@@ -348,6 +365,7 @@ export function AiProviders({ client, onChanged }: { client: YuiClient; onChange
 
   return (
     <View style={styles.section}>
+      <OmniRouteCard client={client} />
       <Text style={styles.sectionTitle}>Provedores e chaves</Text>
       {data.editable ? (
         <Text style={styles.hint}>As chaves que você colar aqui ficam só neste computador (pasta secrets/, fora do Git) e valem na hora. Elas nunca voltam para a tela: só os 4 últimos caracteres aparecem.</Text>
