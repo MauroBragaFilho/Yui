@@ -507,5 +507,88 @@
         ]
       }
     }
+  },
+  {
+    "meta": {
+      "label": "🚗 GTA Online (semanal, diário, notícias)",
+      "description": "Consulta o evento semanal (bônus, descontos, veículos), o reset diário (Gun Van, dealers) e as notícias da Rockstar. O código busca os dados; a IA só monta a resposta.",
+      "disableable": true,
+      "risk": "read"
+    },
+    "type": "function",
+    "function": {
+      "name": "gta_online",
+      "description": "Busca os dados REAIS e atuais do GTA Online: evento semanal (bônus, descontos, veículos do pódio, desafios), reset diário (Gun Van, dealers, naufrágio) ou notícias da Rockstar. CRÍTICO: use esta ferramenta sempre que o usuário perguntar o que está valendo no GTA Online, bônus, descontos, semana, Gun Van ou novidades. NUNCA invente bônus nem use 'search_web' para isso.",
+      "textual_triggers": "Gatilhos: \"como está a semana no gta online\", \"quais os bônus do gta\", \"o que tem de desconto no gta\", \"onde está a gun van\", \"novidades do gta online\"",
+      "textual_args": "{ \"tipo\": \"semanal\" }",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "semanal",
+              "diario",
+              "noticias"
+            ],
+            "description": "semanal = evento da semana (bônus e descontos); diario = reset de hoje (Gun Van, dealers); noticias = últimas da Rockstar"
+          }
+        },
+        "required": [
+          "tipo"
+        ]
+      }
+    }
+  },
+  {
+    "meta": {
+      "label": "⏰ Listar lembretes",
+      "description": "Mostra os lembretes da própria pessoa que pediu (nunca os de outras pessoas).",
+      "disableable": true,
+      "risk": "read"
+    },
+    "type": "function",
+    "function": {
+      "name": "listar_lembretes",
+      "description": "Lista os lembretes marcados da PRÓPRIA pessoa que está falando. Use quando perguntarem quais lembretes tem, o que está agendado ou 'meus lembretes'.",
+      "textual_triggers": "Gatilhos: \"meus lembretes\", \"o que eu tenho agendado\", \"quais lembretes eu tenho\"",
+      "textual_args": "{}",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "meta": {
+      "label": "⏰ Criar lembrete",
+      "description": "Cria um lembrete para a própria pessoa que pediu; o aviso chega por mensagem privada. O horário é interpretado pelo código.",
+      "disableable": true,
+      "risk": "write-self"
+    },
+    "type": "function",
+    "function": {
+      "name": "criar_lembrete",
+      "description": "Cria um lembrete para a PRÓPRIA pessoa que está falando (o aviso chega por mensagem privada). CRÍTICO: nunca para outra pessoa e nunca cite menções. Passe o horário exatamente como a pessoa disse em 'quando' (ex.: 'daqui a 5 minutos', 'amanhã às 9h', 'toda segunda às 8h') e só o assunto em 'texto' (ex.: 'abrir arknights'). Não calcule datas.",
+      "textual_triggers": "Gatilhos: \"me lembra de X daqui a 10 minutos\", \"me avisa amanhã às 9h para Y\", \"cria um lembrete para Z\"",
+      "textual_args": "{ \"quando\": \"daqui a 5 minutos\", \"texto\": \"abrir arknights\" }",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "quando": {
+            "type": "string",
+            "description": "Quando avisar, nas palavras da pessoa (ex.: 'daqui a 5 minutos', 'amanhã às 9h')"
+          },
+          "texto": {
+            "type": "string",
+            "description": "Do que lembrar, curto (ex.: 'abrir arknights')"
+          }
+        },
+        "required": [
+          "quando",
+          "texto"
+        ]
+      }
+    }
   }
 ]

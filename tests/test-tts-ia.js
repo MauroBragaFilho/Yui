@@ -262,7 +262,7 @@ const ORIGINAL_TOOLS = ['search_and_download_music', 'download_audio', 'download
 await test('voice_tts existe, é switchOnly + defaultDisabled + disableable, sem gatilhos nem parâmetros; as outras 17 ferramentas seguem na mesma ordem', () => {
   const names = tools.map((t) => t.function.name);
   assert.equal(new Set(names).size, names.length, 'nomes repetidos');
-  assert.deepEqual(names.filter((n) => n !== 'voice_tts'), ORIGINAL_TOOLS, 'as ferramentas existentes mudaram');
+  assert.deepEqual(names.filter((n) => n !== 'voice_tts' && !['gta_online', 'listar_lembretes', 'criar_lembrete'].includes(n)), ORIGINAL_TOOLS, 'as ferramentas existentes mudaram'); // as 3 híbridas são novas e podem aparecer
   const t = tools.find((x) => x.function.name === 'voice_tts');
   assert.ok(t, 'voice_tts não existe');
   assert.equal(t.meta.switchOnly, true);

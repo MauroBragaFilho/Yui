@@ -50,7 +50,7 @@ export async function handleMemoriasAdmin(interaction) {
         color: COLOR,
         title: '🧠 Usuários com memória temporária',
         description,
-        footer: `${total} usuário(s) • retenção ${memory.isPermanent() ? 'permanente' : `de ${memory.retentionDays()} dias`} • conteúdo oculto por privacidade`
+        footer: `${total} usuário(s) • retenção ${memory.isPermanent?.() ? 'permanente' : `de ${memory.retentionDays()} dias`} • conteúdo oculto por privacidade`
       });
       return reply({ embeds: [embed] });
     }

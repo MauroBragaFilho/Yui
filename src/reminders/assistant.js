@@ -230,3 +230,16 @@ export async function routeReminders({ text, userId, authorName = '' } = {}, { s
   const reply = await runReminderRequest({ text, store: scopedReminderStore(store || defaultStore(), userId, ownerView, authorName), now, report, isOwner: ownerView, isOwnerId: (id) => Boolean(owner(String(id))) });
   return reply === null ? { handled: false } : { handled: true, text: reply, researched: true };
 }
+
+/**
+ * Texto de pedido de lembrete a partir dos argumentos que o MODELO mandou na ferramenta criar_lembrete ({ quando, texto }).
+ * Só vale para a própria pessoa: menções (<@id>, @nome), canais e quebras de linha somem, e o tamanho é limitado. O horário continua sendo
+ * interpretado pelo código (parseWhen), nunca pelo modelo. Devolve null se faltar horário ou assunto.
+ */
+export function reminderTextFromTool(args = {}) {
+  const clean = (v) => String(v ?? '').replace(/<@[!&]?\d+>|<#\d+>|@\S+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  const quando = clean(args?.quando);
+  const assunto = clean(args?.texto);
+  if (!quando || !assunto) return null;
+  return `me lembra ${quando} de ${assunto}`;
+}

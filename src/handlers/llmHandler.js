@@ -25,7 +25,7 @@ import { isOwnerId } from '../core/permissions.js';
 import { routeModList } from './modListResolver.js';
 import { routeLibrary } from './libraryIntent.js';
 import { routeLists } from './listAssistant.js';
-import { routeReminders } from '../reminders/assistant.js';
+import { routeReminders, formatReminderList, scopedReminderStore, getReminderStore, reminderTextFromTool } from '../reminders/assistant.js';
 import { logger } from '../utils/logger.js';
 import { getMediaUserMessage, formatDeezerDelivery, codeSafe, isUploadTooLargeError, MEDIA_MESSAGES } from '../utils/mediaUrls.js';
 // Textos grandes: corte que não parte emoji, limite de upload, orçamento de prompt e leitor de linhas do stream SSE (TG-02, 05, 08, 11, 16, 37).
@@ -133,6 +133,27 @@ const geminiCooldowns = {};
 // A regra "toda resposta é FINAL" do [REGRAS] sem citar nenhuma ferramenta: chamadas com as ferramentas fechadas (voz, /yui, a síntese da pesquisa, pesquisa desligada)
 // não podem ter "search_web" no prompt de sistema (a IA entenderia que a oferece). Com a ferramenta disponível vale a NEVER_PROMISE_RULE completa, do llmSafety.
 const NEVER_PROMISE_RULE_NO_TOOLS = 'Toda resposta tem de ser FINAL: nunca diga que vai pesquisar, verificar ou voltar depois ("vou pesquisar", "um segundo", "já volto"), porque você não consegue mandar nada depois. Responda com o que sabe ou diga que não sabe.';
+/**
+ * Resposta de GTA Online montada pela IA com os dados de TODAS as páginas (o código busca; a IA só escreve). Compartilhada entre a
+ * Porta G (regra por código) e a ferramenta gta_online (o modelo escolheu). Se a IA falhar, devolve o texto cru das páginas. Nunca lança.
+ */
+async function composeGtaAnswer({ kind, question, channelId, guildId, userId, sensitive, coreCtx }) {
+    const gtaRun = await runGtaIntent(kind, { logger });
+    if (gtaRun.ok && gtaRun.data) {
+        try {
+            const gtaPrompt = buildGtaModelPrompt({ data: gtaRun.data, question, kind }, fenceUntrustedWeb);
+            const composed = stripThinking(String(await generateResponse(
+                gtaPrompt, channelId,
+                { allowSearch: false, disableTools: true, thirdPartyPrompt: true, noHistory: true, guildId, userId, sensitive, persona: buildPersonaPrompt(coreCtx) }
+            ) ?? '')).trim();
+            if (composed && !isSystemReply(composed) && !looksLikeToolJson(composed)) return composed;
+        } catch (err) {
+            logger.warn(`[GTA-Chat] A IA não montou a resposta, mando o texto direto: ${scrubLogText(err?.message, 100)}`);
+        }
+    }
+    return gtaRun.text || '';
+}
+
 const mcpToolsPath = path.join(__dirname, '../data/mcp_tools.json');
 const TERMS_FILE = path.join(__dirname, '../data/accepted_servers.json');
 let ALL_MCP_TOOLS = [];
@@ -2648,25 +2669,9 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             // /gta-diario e /gta-noticias e mostra aqui. Falha ou não-pedido: segue para o modelo.
             const gtaIntent = detectGtaIntent(ownQuestion, intentCtx);
             if (gtaIntent.kind !== 'none' && !coreCtx.isBlocked) {
-                const gtaRun = await runGtaIntent(gtaIntent.kind, { logger });
-                if (gtaRun.ok && gtaRun.data) {
-                    // A IA recebe os dados de TODAS as páginas e monta a resposta (persona dela); se falhar, vai o texto cru das páginas.
-                    try {
-                        const gtaPrompt = buildGtaModelPrompt({ data: gtaRun.data, question: ownQuestion, kind: gtaIntent.kind }, fenceUntrustedWeb);
-                        const composed = stripThinking(String(await generateResponse(
-                            gtaPrompt, channelId,
-                            { allowSearch: false, disableTools: true, thirdPartyPrompt: true, noHistory: true, guildId, userId, sensitive: sensitiveChat, persona: buildPersonaPrompt(coreCtx) }
-                        ) ?? '')).trim();
-                        if (composed && !isSystemReply(composed) && !looksLikeToolJson(composed)) {
-                            await unifiedReply(composed);
-                            return;
-                        }
-                    } catch (err) {
-                        logger.warn(`[GTA-Chat] A IA não montou a resposta, mando o texto direto: ${scrubLogText(err?.message, 100)}`);
-                    }
-                }
-                if (gtaRun.text) {
-                    await unifiedReply(gtaRun.text);
+                const gtaAnswer = await composeGtaAnswer({ kind: gtaIntent.kind, question: ownQuestion, channelId, guildId, userId, sensitive: sensitiveChat, coreCtx });
+                if (gtaAnswer) {
+                    await unifiedReply(gtaAnswer);
                     return;
                 }
             }
@@ -3376,6 +3381,35 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     }
                     await leaveVoiceCall(guildId, textChannel, unifiedReply);
                     savePromptToHistory(prompt, userTag, userId, `[TOOL: LEAVE_VOICE_CALL]`, interaction);
+                    return;
+                }
+                // Ferramentas HÍBRIDAS (o modelo escolhe, o CÓDIGO executa): só consultas e lembretes da PRÓPRIA pessoa. O resultado sai do código,
+                // no chat. Mesmo caminho das regras por código (Porta G, Porta T): limites, escopo por pessoa e recusa de alvo de terceiros valem aqui.
+                if (toolData.tool === 'gta_online') {
+                    const kindMap = { semanal: 'weekly', diario: 'daily', noticias: 'news' };
+                    const gtaKind = kindMap[String(toolData.args?.tipo ?? '').toLowerCase()] || 'weekly';
+                    const gtaToolAnswer = await composeGtaAnswer({ kind: gtaKind, question: ownText || prompt, channelId, guildId, userId, sensitive: sensitiveChat, coreCtx });
+                    await unifiedReply(gtaToolAnswer || 'Não consegui buscar isso do GTA Online agora. Tenta de novo daqui a pouco.');
+                    recordContextTurn('Consultei o GTA Online e mostrei o resultado.');
+                    savePromptToHistory(prompt, userTag, userId, `[TOOL: GTA_ONLINE - "${gtaKind}"]`, interaction);
+                    return;
+                }
+                if (toolData.tool === 'listar_lembretes') {
+                    const store = scopedReminderStore(getReminderStore(), userId, isOwnerId(userId));
+                    await unifiedReply(formatReminderList(store.list(), new Date(), null));
+                    savePromptToHistory(prompt, userTag, userId, `[TOOL: LISTAR_LEMBRETES]`, interaction);
+                    return;
+                }
+                if (toolData.tool === 'criar_lembrete') {
+                    // Só para quem pediu: menções e @ somem do que o modelo mandou (nada de lembrar OUTRA pessoa por esta via).
+                    const remAsk = reminderTextFromTool(toolData.args);
+                    let remText = 'Não entendi o horário nem o assunto. Diga, por exemplo: “me lembra amanhã às 9h de pagar a conta”.';
+                    if (remAsk) {
+                        const remRes = await routeReminders({ text: remAsk, userId, authorName: interaction?.author?.username || interaction?.user?.username || '' }, {});
+                        remText = remRes.handled ? remRes.text : 'Não entendi o horário. Diga, por exemplo: “me lembra daqui 10 minutos de ...” ou “me lembra amanhã às 9h de ...”.';
+                    }
+                    await unifiedReply(remText);
+                    savePromptToHistory(prompt, userTag, userId, `[TOOL: CRIAR_LEMBRETE]`, interaction);
                     return;
                 }
                 if (toolData.tool === 'generate_reply') {
