@@ -345,7 +345,7 @@ export function createApiServer({
       return admin.removeBan(ctx, r[1], r[2]);
     }
     if ((r = p.match(/^\/v1\/admin\/memory\/users\/(\d+)$/))) {
-      if (m === 'GET') return admin.memoryInspect(ctx, r[1]);
+      if (m === 'GET') return admin.memoryContent(ctx, r[1]);
       if (m === 'DELETE') return admin.memoryForgetUser(ctx, r[1]);
     }
     if ((r = p.match(/^\/v1\/admin\/memory\/users\/(\d+)\/(\d+)$/)) && m === 'DELETE') {

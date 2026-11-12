@@ -22,6 +22,7 @@
     "test:config": "node tests/test-config.js",
     "test:vision": "node tests/test-vision.js",
     "test:gtachat": "node tests/test-gta-chat.js",
+    "test:memperm": "node tests/test-memory-permanent.js",
     "panel:password": "node scripts/panel-password.mjs",
     "tts:testar": "node scripts/tts-testar.mjs",
     "tts:amostra": "node scripts/tts-amostra.mjs",

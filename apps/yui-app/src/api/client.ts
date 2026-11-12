@@ -50,8 +50,9 @@ export interface AdminGuild { id: string; name: string; members: number | null; 
 export type BanType = 'user' | 'guild' | 'channel';
 export interface BanEntry { id: string; reason: string; timestamp: string | null }
 export interface AdminBans { users: BanEntry[]; guilds: BanEntry[]; channels: BanEntry[] }
-export interface AdminMemoryUser { userId: string; count: number; lastSeen: number; expiresAt: number | null }
-export interface AdminMemoryMeta { id: number; type: string; chars: number; source: string; createdAt: number; expiresAt: number | null }
+export interface AdminMemoryUser { userId: string; name?: string | null; count: number; lastSeen: number; expiresAt: number | null }
+export interface AdminMemoryMeta { id: number; type: string; content: string; tags: string; source: string; importance: number; createdAt: number; updatedAt: number; expiresAt: number | null }
+export interface AdminMemoryList { users: AdminMemoryUser[]; total: number; permanent?: boolean }
 export interface AuditEvent { ts: string; event: string; userId: string | null; role: string | null; platform: string | null; [k: string]: unknown }
 export interface GatewayTarget {
   id: string; model: string; tier: string; available: boolean; cooldownSeconds: number;
@@ -331,7 +332,7 @@ export function createClient(options: ClientOptions) {
       bans: () => request<AdminBans>('GET', '/v1/admin/bans', undefined, 20_000),
       addBan: (type: BanType, id: string, reason: string) => request<{ ok: boolean }>('POST', '/v1/admin/bans', { type, id, reason }, 20_000),
       removeBan: (type: BanType, id: string) => request<{ ok: boolean }>('DELETE', `/v1/admin/bans/${type}/${id}`, undefined, 20_000),
-      memoryUsers: () => request<{ users: AdminMemoryUser[]; total: number }>('GET', '/v1/admin/memory/users', undefined, 20_000),
+      memoryUsers: () => request<AdminMemoryList>('GET', '/v1/admin/memory/users', undefined, 20_000),
       memoryInspect: async (userId: string) =>
         (await request<{ memories: AdminMemoryMeta[] }>('GET', `/v1/admin/memory/users/${userId}`, undefined, 20_000)).memories,
       memoryForget: (userId: string, memoryId: number) =>

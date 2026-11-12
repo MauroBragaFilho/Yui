@@ -30,6 +30,9 @@ export const weeklyCommand = {
     const source = interaction.options.getString('fonte') || 'reddit';
     const currentWeekKey = getCurrentWeekKey();
 
+    // Registro que não é um semanal (ex.: artigo do Newswire gravado como semanal) sai do banco antes de qualquer coisa.
+    try { gtaoRepository.purgeInvalidWeekly?.(); } catch { /* sem limpeza: segue */ }
+
     // ── Cache: verifica se já temos dados para esta semana e fonte ───
     const latest = gtaoRepository.getLatestWeekly();
     let weeklyData = latest?.data;
@@ -74,6 +77,16 @@ export const weeklyCommand = {
       }
     }
 
+    // Sem a coleta desta semana: mostra o último semanal VÁLIDO guardado (de outra semana), com aviso, em vez de erro.
+    let staleNote = '';
+    if (!weeklyData) {
+      const old = gtaoRepository.getLatestValidWeekly?.();
+      if (old?.data) {
+        weeklyData = old.data;
+        staleNote = `⚠️ Estes são os dados da semana anterior (${old.event_week}${old.data.periodo ? `, período: ${typeof old.data.periodo === 'string' ? old.data.periodo : JSON.stringify(old.data.periodo)}` : ''}). Não consegui buscar a desta semana agora; o evento pode já ter mudado.`;
+      }
+    }
+
     if (!weeklyData) {
       return interaction.editReply({
         content: '❌ Não foi possível carregar os dados do evento semanal no momento. Tente novamente em alguns minutos.',
@@ -89,6 +102,7 @@ export const weeklyCommand = {
     let currentPage = 0;
 
     const message = await interaction.editReply({
+      ...(staleNote ? { content: staleNote } : {}),
       embeds: [pages[currentPage]],
       components: [buildWeeklyPaginationRow(currentPage, pages.length)],
     });

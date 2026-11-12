@@ -261,6 +261,7 @@ export function createAdmin({
     return remCache;
   };
 
+  const userName = (id) => { try { return client?.users?.cache?.get(String(id))?.username ?? null; } catch { return null; } };
   const guildList = () => (client?.guilds?.cache ? [...client.guilds.cache.values()] : []);
   let radioCache = null;
   const radioDeps = async () => deps?.radio ?? (radioCache ??= await defaultRadioDeps());
@@ -450,11 +451,17 @@ export function createAdmin({
     // ── Memória dos usuários (só metadados; o conteúdo nunca é exibido) ──
     async memoryUsers(ctx) {
       requireOwner(ctx);
-      return memory.adminListUsers(ctx, { limit: 50 });
+      const r = memory.adminListUsers(ctx, { limit: 50 });
+      return { ...r, permanent: memory.isPermanent(), users: r.users.map((u) => ({ ...u, name: userName(u.userId) })) };
     },
     async memoryInspect(ctx, userId) {
       requireOwner(ctx);
       return { memories: memory.adminListMetadata(ctx, requireId(userId, 'ID do usuário'), { limit: 50 }) };
+    },
+    async memoryContent(ctx, userId) {
+      requireOwner(ctx);
+      const id = requireId(userId, 'ID do usuário');
+      return { name: userName(id), permanent: memory.isPermanent(), memories: memory.adminListContent(ctx, id, { limit: 100 }) };
     },
     async memoryForget(ctx, userId, memoryId) {
       requireOwner(ctx);

@@ -7,8 +7,8 @@ import {
   type AdminGuildDetail,
   type IntegrationGroup,
   type IntegrationStatus,
+  type AdminMemoryList,
   type AdminMemoryMeta,
-  type AdminMemoryUser,
   type AdminOverview,
   type AdminTool,
   type AuditEvent,
@@ -377,7 +377,7 @@ function Bans({ client }: Props) {
 }
 
 function Memoria({ client }: Props) {
-  const { data, error, loading, reload } = useLoad<{ users: AdminMemoryUser[]; total: number }>(() => client.admin.memoryUsers());
+  const { data, error, loading, reload } = useLoad<AdminMemoryList>(() => client.admin.memoryUsers());
   const [open, setOpen] = useState<string | null>(null);
   const [metas, setMetas] = useState<AdminMemoryMeta[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -417,17 +417,20 @@ function Memoria({ client }: Props) {
 
   return (
     <View style={styles.section}>
-      <Text style={styles.hint}>Por privacidade, o painel mostra só metadados (quantidade, datas, tamanho). O conteúdo das lembranças não é exibido.</Text>
+      <Text style={styles.hint}>
+        {data?.permanent ? 'A memória dos usuários é permanente: só some se você apagar aqui ou se a própria pessoa pedir para a Yui esquecer.' : 'A memória dos usuários expira por inatividade (MEMORY_RETENTION_DAYS; 0 deixa permanente).'}{' '}
+        Como dono, você vê o conteúdo de cada lembrança e pode apagar uma a uma. Cada consulta fica na auditoria.
+      </Text>
       <Status loading={loading} error={error} />
       {err ? <Text style={styles.error}>{err}</Text> : null}
       {data?.users.length === 0 ? <Text style={styles.hint}>Nenhum usuário com memória no momento.</Text> : null}
       {data?.users.map((u) => (
         <Card key={u.userId} style={styles.card}>
           <View style={styles.rowBetween}>
-            <Text selectable style={styles.value}>{u.userId}</Text>
+            <Text selectable style={styles.value}>{u.name ? `${u.name} · ${u.userId}` : u.userId}</Text>
             <Badge label={`${u.count} lembrança(s)`} color={colors.muted} />
           </View>
-          <Text style={styles.hint}>Última interação {formatWhen(u.lastSeen)} • expira {formatWhen(u.expiresAt)}</Text>
+          <Text style={styles.hint}>Última interação {formatWhen(u.lastSeen)} • {u.expiresAt ? `expira ${formatWhen(u.expiresAt)}` : 'permanente'}</Text>
           <View style={styles.rowGap}>
             <Button testID={`mem-open-${u.userId}`} label={open === u.userId ? 'Ocultar' : 'Ver detalhes'} variant="ghost" onPress={() => inspect(u.userId)} style={styles.smallBtn} />
             <Button label="Apagar tudo" variant="ghost" onPress={() => forgetAll(u.userId)} style={styles.smallBtn} />
@@ -435,10 +438,13 @@ function Memoria({ client }: Props) {
           {open === u.userId
             ? metas.map((m) => (
                 <View key={m.id} style={styles.metaRow}>
-                  <Text style={styles.hint}>
-                    #{m.id} • {m.type} • {m.chars} caracteres • origem {m.source || '—'} • expira {formatWhen(m.expiresAt)}
-                  </Text>
-                  <Button label="Apagar" variant="ghost" onPress={() => forgetOne(u.userId, m.id)} style={styles.smallBtn} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text selectable style={styles.value}>{m.content}</Text>
+                    <Text style={styles.hint}>
+                      #{m.id} • {m.type} • origem {m.source || '—'} • salva {formatWhen(m.createdAt)} • {m.expiresAt ? `expira ${formatWhen(m.expiresAt)}` : 'permanente'}
+                    </Text>
+                  </View>
+                  <Button label="Apagar" variant="ghost" onPress={() => forgetOne(u.userId, m.id)} style={styles.smallBtn} testID={`mem-forget-${m.id}`} />
                 </View>
               ))
             : null}

@@ -43,7 +43,7 @@ async function wipeConversationContext(userId) {
 function scopeLabel(ctx) {
   return ctx.memoryScope === 'personal'
     ? '🔒 memória pessoal (permanente)'
-    : `🕒 memória temporária (${memory.retentionDays()} dias sem interação)`;
+    : (memory.isPermanent() ? '🕒 memória do servidor (permanente)' : `🕒 memória temporária (${memory.retentionDays()} dias sem interação)`);
 }
 
 export const memoriaCommand = {

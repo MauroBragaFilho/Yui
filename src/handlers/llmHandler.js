@@ -4,8 +4,8 @@ import { contextFromDiscord, buildMemoryBlock, captureFromUserText, isMemoryEnab
 import { memory as coreMemory, audit as coreAudit } from '../core/index.js';
 import { forgetUserContext } from '../core/context/contextStore.js';
 import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize, detectGtaIntent } from './chatIntents.js';
-import { runGtaIntent } from './gtaChat.js';
-import { buildThirdPartyLogPrompt } from './llmSafety.js';
+import { runGtaIntent, buildGtaModelPrompt } from './gtaChat.js';
+import { buildThirdPartyLogPrompt, fenceUntrustedWeb } from './llmSafety.js';
 import { resolveMentions, neutralizeMassMentions } from '../discord/mentions.js';
 import { restoreMentionIds } from '../utils/mentions.js';
 import { alertOwner } from '../core/alerts.js';
@@ -2636,7 +2636,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             if (memIntent.kind !== 'none' && !coreCtx.isBlocked) {
                 const memRun = await runMemoryIntent(memIntent, {
                     userId, isDM: !guildId, enabled: isMemoryEnabled(), memoryCtx: coreCtx, memory: coreMemory, audit: coreAudit,
-                    scopeLabel: coreCtx.memoryScope === 'personal' ? '🔒 memória pessoal (permanente)' : `🕒 memória temporária (${coreMemory.retentionDays()} dias sem interação)`,
+                    scopeLabel: coreCtx.memoryScope === 'personal' ? '🔒 memória pessoal (permanente)' : (coreMemory.isPermanent?.() ? '🕒 memória do servidor (permanente)' : `🕒 memória temporária (${coreMemory.retentionDays()} dias sem interação)`),
                     wipeContext: async (uid) => { try { return (await forgetUserContext(uid)).turns; } catch (_) { return 0; } }
                 });
                 if (memRun.handled) {
@@ -2649,6 +2649,22 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             const gtaIntent = detectGtaIntent(ownQuestion, intentCtx);
             if (gtaIntent.kind !== 'none' && !coreCtx.isBlocked) {
                 const gtaRun = await runGtaIntent(gtaIntent.kind, { logger });
+                if (gtaRun.ok && gtaRun.data) {
+                    // A IA recebe os dados de TODAS as páginas e monta a resposta (persona dela); se falhar, vai o texto cru das páginas.
+                    try {
+                        const gtaPrompt = buildGtaModelPrompt({ data: gtaRun.data, question: ownQuestion, kind: gtaIntent.kind }, fenceUntrustedWeb);
+                        const composed = stripThinking(String(await generateResponse(
+                            gtaPrompt, channelId,
+                            { allowSearch: false, disableTools: true, thirdPartyPrompt: true, noHistory: true, guildId, userId, sensitive: sensitiveChat, persona: buildPersonaPrompt(coreCtx) }
+                        ) ?? '')).trim();
+                        if (composed && !isSystemReply(composed) && !looksLikeToolJson(composed)) {
+                            await unifiedReply(composed);
+                            return;
+                        }
+                    } catch (err) {
+                        logger.warn(`[GTA-Chat] A IA não montou a resposta, mando o texto direto: ${scrubLogText(err?.message, 100)}`);
+                    }
+                }
                 if (gtaRun.text) {
                     await unifiedReply(gtaRun.text);
                     return;

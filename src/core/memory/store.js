@@ -14,14 +14,35 @@ const STOPWORDS = new Set([
   'foi', 'ser', 'tem', 'isso', 'esse', 'essa', 'sobre', 'the', 'and', 'you', 'yui', 'lembra',
 ]);
 
+const FOREVER = new Set(['0', 'forever', 'permanente', 'infinito', 'nunca', 'sempre']);
+
+/** MEMORY_RETENTION_DAYS=0 (ou "permanente"): a memória dos usuários do Discord NUNCA expira (só some se alguém mandar apagar). */
+export function isPermanent(env = process.env) {
+  return FOREVER.has(String(env.MEMORY_RETENTION_DAYS ?? '').trim().toLowerCase());
+}
+
 export function retentionDays() {
   const n = parseInt(process.env.MEMORY_RETENTION_DAYS || '30', 10);
   return Number.isFinite(n) && n > 0 ? n : 30;
 }
 
+/** Texto para a tela: "permanente" ou "30 dias sem interação". */
+export function retentionLabel() {
+  return isPermanent() ? 'permanente' : `${retentionDays()} dias sem interação`;
+}
+
+/** Quando uma memória escrita agora expira (null = nunca). */
+function expiryFrom(now) {
+  return isPermanent() ? null : now + retentionDays() * DAY_MS;
+}
+
 export async function initMemory() {
   await initDatabase(DB_PERSONAL, MEMORY_PERSONAL_SCHEMA);
   await initDatabase(DB_PUBLIC, MEMORY_DISCORD_SCHEMA);
+  // Modo permanente: o que ainda tinha prazo de validade passa a valer para sempre.
+  if (isPermanent()) {
+    try { getDbWrapper(DB_PUBLIC).prepare('UPDATE memories SET expires_at = NULL WHERE expires_at IS NOT NULL').run(); } catch { /* banco novo/sem tabela: nada a fazer */ }
+  }
 }
 
 /**
@@ -57,7 +78,7 @@ export function touchUser(ctx) {
     `INSERT INTO memory_users (user_id, first_seen, last_seen) VALUES (?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET last_seen = excluded.last_seen`
   ).run(ctx.userId, now, now);
-  db.prepare('UPDATE memories SET expires_at = ? WHERE user_id = ?').run(now + retentionDays() * DAY_MS, ctx.userId);
+  db.prepare('UPDATE memories SET expires_at = ? WHERE user_id = ?').run(expiryFrom(now), ctx.userId);
 }
 
 export function remember(ctx, { type = 'fact', content, tags = [], source = '', importance = 1 }) {
@@ -67,7 +88,7 @@ export function remember(ctx, { type = 'fact', content, tags = [], source = '', 
 
   const { db, personal } = dbFor(ctx);
   const now = Date.now();
-  const expiresAt = personal ? null : now + retentionDays() * DAY_MS;
+  const expiresAt = personal ? null : expiryFrom(now);
 
   // Idempotente: o mesmo texto do mesmo usuário não vira outra linha, só renova.
   // A comparação é feita em JS (normalizada): o lower() do SQLite não trata maiúsculas acentuadas.
@@ -164,6 +185,7 @@ export function listMemories(ctx, { limit = 50 } = {}) {
 
 /** Remove memórias públicas expiradas e usuários inativos. Chamar do scheduler (ex.: 1x/dia). */
 export function purgeExpired() {
+  if (isPermanent()) return 0; // memória permanente: nada expira nem sai por inatividade
   const db = getDbWrapper(DB_PUBLIC);
   const now = Date.now();
   const { changes } = db.prepare('DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at <= ?').run(now);
@@ -209,6 +231,22 @@ export function adminListMetadata(ctx, userId, { limit = 25 } = {}) {
      ORDER BY updated_at DESC LIMIT ?`
   ).all(String(userId), now, limit);
   audit('memory.admin.inspect', ctx, { target: String(userId), results: rows.length });
+  return rows;
+}
+
+/**
+ * Lembranças de um usuário COM o conteúdo, só para o dono (decisão do dono: a memória dos usuários é dele para ver e limpar).
+ * Cada leitura fica na auditoria (memory.admin.content), sem o texto.
+ */
+export function adminListContent(ctx, userId, { limit = 100 } = {}) {
+  requireOwner(ctx);
+  const now = Date.now();
+  const rows = publicDb().prepare(
+    `SELECT id, type, content, tags, source, importance, created_at AS createdAt, updated_at AS updatedAt, expires_at AS expiresAt
+     FROM memories WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?)
+     ORDER BY updated_at DESC LIMIT ?`
+  ).all(String(userId), now, limit);
+  audit('memory.admin.content', ctx, { target: String(userId), results: rows.length });
   return rows;
 }
 

@@ -21,4 +21,6 @@ export const gtaoRepository = {
   getWeekly: weeklyRepository.getWeekly,
   getLatestWeekly: weeklyRepository.getLatestWeekly,
   saveWeekly: weeklyRepository.saveWeekly,
+  getLatestValidWeekly: weeklyRepository.getLatestValidWeekly,
+  purgeInvalidWeekly: weeklyRepository.purgeInvalidWeekly,
 };

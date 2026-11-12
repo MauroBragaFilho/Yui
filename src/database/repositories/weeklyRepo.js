@@ -15,6 +15,34 @@ export const weeklyRepository = {
     return res ? { ...res, data: JSON.parse(res.data_json) } : null;
   },
 
+  /** O registro é um semanal de verdade (bônus, descontos...)? Um artigo de notícia gravado como semanal não é. */
+  isValidWeekly(data) {
+    return Boolean(data && typeof data === 'object' && ('descontos' in data || 'bonus' in data || 'discounts' in data));
+  },
+
+  /** O semanal MAIS RECENTE que é válido (pode ser de uma semana anterior), ou null. */
+  getLatestValidWeekly() {
+    const rows = dbWrapper.prepare('SELECT * FROM weekly_events ORDER BY event_week DESC LIMIT 8').all();
+    for (const r of rows) {
+      try {
+        const data = JSON.parse(r.data_json);
+        if (weeklyRepository.isValidWeekly(data)) return { ...r, data };
+      } catch { /* linha ilegível: pula */ }
+    }
+    return null;
+  },
+
+  /** Apaga registros que não são semanais (ex.: artigo do Newswire gravado como semanal). Devolve quantos saíram. */
+  purgeInvalidWeekly() {
+    let removed = 0;
+    for (const r of dbWrapper.prepare('SELECT id, data_json FROM weekly_events').all()) {
+      let ok = false;
+      try { ok = weeklyRepository.isValidWeekly(JSON.parse(r.data_json)); } catch { ok = false; }
+      if (!ok) { dbWrapper.prepare('DELETE FROM weekly_events WHERE id = ?').run(r.id); removed += 1; }
+    }
+    return removed;
+  },
+
   saveWeekly(weekStr, data) {
     const stmt = dbWrapper.prepare(`
       INSERT INTO weekly_events (event_week, data_json)
