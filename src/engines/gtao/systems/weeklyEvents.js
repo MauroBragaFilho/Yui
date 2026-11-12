@@ -4,62 +4,60 @@ import { logger } from '../../../utils/logger.js';
 
 /**
  * Os bônus/descontos/veículos da ATUALIZAÇÃO SEMANAL do GTA Online não
- * seguem um algoritmo de seed determinístico — eles são escolhidos
- * manualmente pela Rockstar e só se tornam públicos quando ela publica
- * o artigo semanal no Newswire (geralmente às terças/quintas).
+ * seguem um algoritmo de seed determinístico: são escolhidos manualmente
+ * pela Rockstar e só ficam públicos quando ela publica o artigo semanal no
+ * Newswire (geralmente às terças/quintas).
  *
- * Esta função busca o artigo semanal mais recente no Newswire, lê o
- * conteúdo completo, traduz para PT-BR e monta os dados usados pelo
- * comando /gta-semanal, pelo /yui-resumo-semanal e pelo scheduler
- * automático. O Newswire é a única fonte do evento semanal (o antigo
- * scraper do Reddit foi removido e não é mais usado).
+ * O Newswire é a fonte oficial e responde pela API direta (sem Chrome). O
+ * Reddit continua sendo a fonte padrão (dados estruturados), mas bloqueia o
+ * acesso automatizado em boa parte do tempo (feed RSS e busca dão 403); por
+ * isso o Newswire também serve de reserva quando o Reddit não responde.
  */
 
-const WEEKLY_TITLE_KEYWORDS = [
-  'bonus',
-  'bonuses',
-  'podium',
-  'prize ride',
-  'discount',
-  'discounts',
-  'now available in gta online',
-  'gta$',
-  'twitch prime',
-  'prime gaming',
-  'reward',
-  'rewards',
-  'triple',
-  'double',
-  '2x',
-  '3x',
-  'this week',
-  'this week in',
-  'weekly',
-  'week in gta online',
-  'gta+ member',
-  'gta+ members',
-  'free this week',
-  'gta online this week',
-  'races',
-  'time trial',
+const GTA_ONLINE_CATEGORY = /gta online/i;
+// Pistas fortes de "artigo da semana" e pistas médias de conteúdo semanal.
+const STRONG_HINTS = [/\bthis week(?:['’]s)?\b/i, /\bweek['’]s\b/i, /\bweekly\b/i];
+const MEDIUM_HINTS = [
+  /\bbonus(?:es)?\b/i, /\bdiscounts?\b/i, /\b(?:double|triple|2x|3x)\b/i, /\bevent\b/i, /\bpodium\b/i,
+  /\bprize ride\b/i, /\btime trials?\b/i, /\bheist\b/i, /\bchallenges?\b/i, /\bnow available\b/i,
 ];
+// Brinde avulso do GTA+ ("GTA+ Members Can Now Claim a Free ..."): é novidade, mas NÃO é o artigo semanal.
+const FREEBIE_HINT = /\bgta\+/i;
+const FREEBIE_ACTION = /\b(?:claim|free|grab)\b/i;
 
-/**
- * Verifica se um artigo tem "cara" de atualização semanal, seja pelo
- * título (lista de palavras-chave conhecidas) ou pela categoria oficial
- * do post ("GTA Online" / "GTA V"), que costuma acompanhar esses artigos
- * mesmo quando o título é bem genérico.
- */
-function looksLikeWeeklyArticle(title, category) {
-  const lower = (title || '').toLowerCase();
-  const lowerCategory = (category || '').toLowerCase();
-  if (WEEKLY_TITLE_KEYWORDS.some((kw) => lower.includes(kw))) return true;
-  return lowerCategory.includes('gta online') || lowerCategory.includes('gta v');
+export const WEEKLY_MIN_SCORE = 4;
+
+/** Pontuação de "isto é o artigo do evento semanal" (função pura). Categoria fora de GTA Online nunca pontua. */
+export function scoreWeeklyArticle(title, category) {
+  if (!GTA_ONLINE_CATEGORY.test(String(category ?? ''))) return -Infinity;
+  const t = String(title ?? '');
+  let score = 2; // categoria GTA Online
+  if (STRONG_HINTS.some((re) => re.test(t))) score += 5;
+  score += Math.min(6, MEDIUM_HINTS.filter((re) => re.test(t)).length * 2);
+  if (FREEBIE_HINT.test(t) && FREEBIE_ACTION.test(t)) score -= 6;
+  return score;
 }
 
 /**
- * Busca e monta os dados do evento semanal a partir do Rockstar Newswire.
- * É a fonte principal (e única) do evento semanal.
+ * Escolhe o artigo semanal da lista do Newswire (vem do mais novo para o mais antigo).
+ * Ganha a MAIOR pontuação (empate: o mais novo); só entram artigos de até `maxAgeDays` dias; sem pontuação mínima devolve null
+ * (melhor não ter dado do que mostrar o artigo errado, como o do brinde do GTA+ que é mais novo que o do evento).
+ */
+export function pickWeeklyArticle(articles, { now = Date.now(), maxAgeDays = 10 } = {}) {
+  let best = null;
+  let bestScore = -Infinity;
+  for (const a of Array.isArray(articles) ? articles : []) {
+    const score = scoreWeeklyArticle(a?.title, a?.category);
+    if (score < WEEKLY_MIN_SCORE) continue;
+    const when = Date.parse(String(a?.publishedAt ?? ''));
+    if (Number.isFinite(when) && now - when > maxAgeDays * 86_400_000) continue;
+    if (score > bestScore) { best = a; bestScore = score; } // `>` mantém o mais novo nos empates
+  }
+  return best;
+}
+
+/**
+ * Busca e monta os dados do evento semanal a partir do Rockstar Newswire (fonte oficial; também a reserva quando o Reddit falha).
  */
 export async function fetchWeeklyEventFromNewswire() {
   try {
@@ -70,18 +68,11 @@ export async function fetchWeeklyEventFromNewswire() {
       return null;
     }
 
-    // Os artigos vêm ordenados do mais recente para o mais antigo.
-    let weeklyArticle = articles.find((a) => looksLikeWeeklyArticle(a.title, a.category));
-
-    // Fallback: se nenhum título/categoria bateu com as keywords conhecidas,
-    // assume o artigo mais recente. A Rockstar publica a atualização semanal
-    // quase sempre como o post mais novo do Newswire nas quintas-feiras, e os
-    // títulos variam demais para depender só de uma lista fixa de termos.
+    // Escolha por pontuação (não por recência): um brinde do GTA+ publicado depois do artigo da semana não pode tomar o lugar dele.
+    const weeklyArticle = pickWeeklyArticle(articles);
     if (!weeklyArticle) {
-      logger.warn(
-        `[GTAO] fetchWeeklyEventFromNewswire(): nenhum título reconhecido pelas keywords. Usando fallback (artigo mais recente): "${articles[0].title}"`
-      );
-      weeklyArticle = articles[0];
+      logger.warn('[GTAO] fetchWeeklyEventFromNewswire(): nenhum artigo do evento semanal reconhecido nos últimos 10 dias; sem dado do semanal.');
+      return null;
     }
 
     // Lê o corpo completo do artigo (a listagem só traz o título)
@@ -127,9 +118,7 @@ export async function fetchWeeklyEventFromNewswire() {
 }
 
 /**
- * Ponto de entrada usado pelo resto do bot (comando /gta-semanal, scheduler,
- * e o cache em `gtaoRepository.saveWeekly`). O Newswire é a única fonte do
- * evento semanal.
+ * Ponto de entrada da fonte Newswire usado pelo motor (collectWeekly com source 'newswire').
  */
 export async function fetchWeeklyEvent() {
   return fetchWeeklyEventFromNewswire();

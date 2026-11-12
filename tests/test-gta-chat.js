@@ -37,7 +37,7 @@ assert.ok(r.text.includes('Semanal b') && calls.includes('collect'), 'recolhe qu
 // coleta falha: cai no cache da semana
 r = await runGtaIntent('weekly', { deps: deps({ weeklyService: { getLatest: async () => ({ id: 'novo' }) }, gtaoEngine: { collectWeekly: async () => { throw new Error('403'); } } }) });
 assert.ok(r.ok && r.text.includes('Semanal a'), 'fallback para o cache');
-// Reddit sem dados e sem cache da semana: usa o ÚLTIMO semanal válido (de outra semana) e AVISA; nunca coleta/grava de outra fonte
+// Reddit e Newswire sem dados e sem cache da semana: usa o ÚLTIMO semanal válido (de outra semana) e AVISA
 {
   const sources = [];
   const old = { event_week: '2026-W45', data: { source: 'reddit', id: 'velho', periodo: 'November 5th to November 12th', bonus: [], descontos: [] } };
@@ -48,11 +48,47 @@ assert.ok(r.ok && r.text.includes('Semanal a'), 'fallback para o cache');
   assert.ok(r.ok && r.stale === true, 'usa o último semanal válido');
   assert.ok(r.text.includes('semana anterior') && r.text.includes('2026-W45') && r.text.includes('November 5th'), 'avisa que é da semana anterior, com o período');
   assert.ok(r.data.includes('semana anterior') && r.data.includes('Semanal velho'), 'a IA também recebe o aviso');
-  assert.deepEqual(sources, ['reddit'], 'só tenta o Reddit: nunca grava dado de outra fonte');
+  assert.deepEqual(sources, ['reddit', 'newswire'], 'tenta o Reddit e depois o Newswire (oficial) antes de cair no semanal antigo');
   // registro inválido (artigo do Newswire gravado como semanal) é apagado antes de tudo
   let purged = 0;
   await runGtaIntent('weekly', { deps: deps({ gtaoRepository: { getLatestWeekly: () => ({ event_week: '2026-W46', data: { source: 'reddit', id: 'a' } }), getLatestDaily: () => null, getLatestValidWeekly: () => null, purgeInvalidWeekly: () => { purged += 1; return 1; } } }) });
   assert.equal(purged, 1, 'limpa registro inválido a cada consulta do semanal');
+}
+
+// Reddit bloqueado: o Newswire entrega o artigo semanal; o texto do artigo oficial vai para a IA e para o texto direto
+{
+  const nw = { source: 'newswire', title: 'Eventos desta semana', fullText: 'Bônus dobrados no evento de assalto. Missões de contato de 12/11 a 2/12. Veleno GT com 25% de desconto. '.repeat(2), publishedAt: '11/5/26, 10:00 AM', url: 'https://www.rockstargames.com/newswire/article/x' };
+  const calls2 = [];
+  r = await runGtaIntent('weekly', { deps: deps({
+    gtaoRepository: { getLatestWeekly: () => null, getLatestDaily: () => null, getLatestValidWeekly: () => null, purgeInvalidWeekly: () => 0 },
+    gtaoEngine: { collectWeekly: async ({ source }) => { calls2.push(source); return source === 'newswire' ? nw : null; } },
+  }) });
+  assert.deepEqual(calls2, ['reddit', 'newswire']);
+  assert.ok(r.ok && r.source === 'newswire' && r.stale === false);
+  assert.ok(r.data.includes('Artigo oficial da Rockstar') && r.data.includes('Veleno GT') && r.data.includes('11/5/26') && r.data.includes('rockstargames.com'), 'a IA recebe o artigo oficial');
+  assert.ok(r.text.includes('Veleno GT'), 'o texto direto também leva o artigo');
+
+  // cache do Newswire recente (menos de 6 h) da semana: usa, sem coletar de novo
+  const cacheDeps = (idadeH) => deps({
+    gtaoRepository: { getLatestWeekly: () => ({ event_week: '2026-W46', created_at: 'x', data: nw }), getLatestDaily: () => null, getLatestValidWeekly: () => null, purgeInvalidWeekly: () => 0 },
+    gtaoEngine: { collectWeekly: async ({ source }) => { calls3.push(source); return source === 'newswire' ? { ...nw, title: 'Artigo novo' } : null; } },
+    weeklyRowAgeHours: () => idadeH, NEWSWIRE_CACHE_HOURS: 6,
+  });
+  const calls3 = [];
+  r = await runGtaIntent('weekly', { deps: cacheDeps(2) });
+  assert.deepEqual(calls3, [], 'cache do Newswire de 2 h: não coleta');
+  assert.ok(r.ok && r.data.includes('Eventos desta semana'));
+  // cache do Newswire velho (mais de 6 h): recoleta (a Rockstar publica o artigo novo na quinta)
+  r = await runGtaIntent('weekly', { deps: cacheDeps(30) });
+  assert.deepEqual(calls3, ['reddit', 'newswire'], 'cache do Newswire de 30 h: tenta de novo');
+  assert.ok(r.data.includes('Artigo novo'), 'mostra o artigo novo');
+  // Newswire velho e as fontes falham: ainda usa a cópia guardada (melhor do que nada)
+  calls3.length = 0;
+  r = await runGtaIntent('weekly', { deps: deps({
+    gtaoRepository: { getLatestWeekly: () => ({ event_week: '2026-W46', data: nw }), getLatestDaily: () => null, getLatestValidWeekly: () => null, purgeInvalidWeekly: () => 0 },
+    gtaoEngine: { collectWeekly: async () => null }, weeklyRowAgeHours: () => 99, NEWSWIRE_CACHE_HOURS: 6,
+  }) });
+  assert.ok(r.ok && r.data.includes('Eventos desta semana'), 'fontes fora: usa o cache guardado');
 }
 // sem nada: aviso, sem lançar
 r = await runGtaIntent('weekly', { deps: deps({ gtaoRepository: { getLatestWeekly: () => null, getLatestDaily: () => null }, gtaoEngine: { collectWeekly: async () => null } }) });

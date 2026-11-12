@@ -453,7 +453,7 @@ function resetServerPrompt(guildId) {
 }
 loadServerPrompts();
 
-const serverSettingsPath = path.join(__dirname, '../data/server_settings.json');
+const serverSettingsPath = process.env.YUI_SERVER_SETTINGS_FILE || path.join(__dirname, '../data/server_settings.json'); // o desvio existe para os testes não gravarem no arquivo real
 let serverSettings = {};
 
 function loadServerSettings() {

@@ -29,6 +29,12 @@ npm run test:permgaps   # dono nunca banido, +yui em DM de estranho em silêncio
 npm run test:healthreport   # relatório diário de saúde (logs, RAM, disco, atualizador, backup) e sua agenda
 npm run test:reminders   # lembretes: horários em português, armazenamento, entrega, conversa e relatório matinal (relógio fixo)
 npm run test:remindersapi   # API dos lembretes e do resumo do dia (só o dono, sem texto na auditoria)
+npm run test:vision      # visão: escolha das imagens, Gemini primeiro e Groq de reserva, limites e bloco cercado no prompt (sem rede)
+npm run test:translate    # tradução (MyMemory): pedaços de até 450 caracteres e mensagens de erro da API nunca viram texto (sem rede)
+npm run test:newswirepick  # semanal do Newswire: escolha do artigo por pontuação (nunca o brinde do GTA+), idade máxima e envelhecimento do cache (sem rede)
+npm run test:gtachat     # GTA Online por conversa: detecção, todas as páginas para a IA, cache, último semanal válido com aviso (sem rede)
+npm run test:memperm     # memória permanente (MEMORY_RETENTION_DAYS=0), conteúdo só para o dono e apagar item a item
+npm run test:hybrid      # ferramentas híbridas (gta_online, listar_lembretes, criar_lembrete): definições, limpeza dos argumentos do modelo e escopo por pessoa
 npm run test:bdsproxy   # ponte do painel com o BDS Server (BDS de mentira): dono, Range, envio em fluxo de 3 MB, link curto, erros
 npm run test:atualizarpainel   # troca atômica do painel web pelo atualizador (só Windows)
 npm run test:supervisor   # decisão do watchdog (só Windows): quando religar a Yui travada, limite por hora, carência

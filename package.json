@@ -22,6 +22,8 @@
     "test:config": "node tests/test-config.js",
     "test:vision": "node tests/test-vision.js",
     "test:gtachat": "node tests/test-gta-chat.js",
+    "test:newswirepick": "node tests/test-weekly-newswire-pick.js",
+    "test:translate": "node tests/test-translate.js",
     "test:memperm": "node tests/test-memory-permanent.js",
     "test:hybrid": "node tests/test-hybrid-tools.js",
     "panel:password": "node scripts/panel-password.mjs",

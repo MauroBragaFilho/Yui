@@ -17,7 +17,9 @@ export const weeklyRepository = {
 
   /** O registro é um semanal de verdade (bônus, descontos...)? Um artigo de notícia gravado como semanal não é. */
   isValidWeekly(data) {
-    return Boolean(data && typeof data === 'object' && ('descontos' in data || 'bonus' in data || 'discounts' in data));
+    if (!data || typeof data !== 'object') return false;
+    if ('descontos' in data || 'bonus' in data || 'discounts' in data) return true; // dados estruturados (Reddit)
+    return data.source === 'newswire' && typeof data.fullText === 'string' && data.fullText.length > 80 && typeof data.title === 'string'; // artigo do Newswire com texto
   },
 
   /** O semanal MAIS RECENTE que é válido (pode ser de uma semana anterior), ou null. */

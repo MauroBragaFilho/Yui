@@ -326,7 +326,7 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
 | `YUI_MEMORY_ENABLED` | Liga a memória por usuário (só `true` liga) | `false` |
-| `MEMORY_RETENTION_DAYS` | Dias sem interação até a memória pública expirar (a pessoal do dono é permanente) | `30` |
+| `MEMORY_RETENTION_DAYS` | Dias sem interação até a memória pública expirar (a pessoal do dono é permanente). `0` (ou `permanente`, `forever`, `sempre`) deixa a memória dos usuários **permanente**: só some se o dono apagar no painel (Admin, Memória, onde ele vê o conteúdo) ou se a própria pessoa pedir para esquecer | `30` |
 | `YUI_CONTEXT_ENABLED` | Liga o **contexto das conversas por horas** (a Yui lembra as últimas falas de cada pessoa em cada canal). Desligado, vale o buffer antigo (por canal, só em RAM) | `false` |
 | `YUI_CONTEXT_SCOPE` | `owner` = só o dono; `all` = todos (faça só depois de avisar nos Termos de Uso) | `owner` |
 | `YUI_CONTEXT_TTL_HOURS` | Quanto tempo cada fala fica guardada, em horas (1 a 48) | `6` |
@@ -351,7 +351,15 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 | `YUI_PANEL_USER_ID` | Dono a quem o login se aplica (se vazio, o dono) | — |
 | `YUI_ALERTS` | `false` desliga os avisos automáticos por DM quando algo dá errado (no máximo 10 por hora). A falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada não vira DM de "Erro grave": vai só para o log, porque a Yui reconecta sozinha | `true` |
 | `YUI_ALERTS_COOLDOWN_MINUTES` | Intervalo mínimo para repetir o mesmo aviso | `30` |
-| `YUI_REMINDERS_ENABLED` | Lembretes por conversa e a conferência a cada minuto (guardados em `database/lembretes.json`; só o dono). `false` desliga a conversa | `true` |
+| `YUI_SERVER_SETTINGS_FILE` | Arquivo das configurações por servidor (canal de avisos, último canal). Existe para os testes não gravarem no arquivo real; em produção não mexa | `src/data/server_settings.json` |
+| `YUI_REMINDERS_ENABLED` | Lembretes por conversa e a conferência a cada minuto (guardados em `database/lembretes.json`). `false` desliga a conversa | `true` |
+| `YUI_REMINDERS_ALL_USERS` | Qualquer pessoa cria e mexe nos PRÓPRIOS lembretes (o aviso vai por DM para ela; máximo de 20 por pessoa). O dono também pode criar para outra pessoa ("lembra o @fulano de ... daqui 5 minutos"). `false` volta a só o dono | `true` |
+| `YUI_VISION` | Visão: a Yui analisa imagens anexadas (png, jpg, webp, gif) por um modelo com visão (Gemini primeiro, Groq de reserva) e responde com base na descrição. `false` desliga | `true` |
+| `YUI_VISION_FIRST` | Qual provedor de visão tenta primeiro: `gemini` (padrão) ou `groq` | `gemini` |
+| `YUI_VISION_MAX_MB` | Tamanho máximo de cada imagem, em MB (1 a 15) | `4` |
+| `YUI_VISION_MAX_IMAGES` | Imagens analisadas por mensagem (1 a 5) | `3` |
+| `GROQ_VISION_MODEL` | Modelo do Groq para visão (o Llama 4 Scout saiu do Groq; o Qwen aceita imagem, mas errou contagem em teste) | `qwen/qwen3.8-27b` |
+| `GEMINI_VISION_MODEL` | Modelo do Gemini para visão | `gemini-flash-lite-latest` |
 | `YUI_MORNING_REPORT` / `YUI_MORNING_REPORT_HOUR` | Relatório matinal por DM ao dono (lembretes de hoje, pendências das listas e a saúde da Yui). `false` volta ao relatório só de saúde; hora de Brasília (0 a 23; se faltar, usa `YUI_HEALTH_REPORT_HOUR`) | `true` / `8` |
 | `YUI_HEALTH_REPORT` / `YUI_HEALTH_REPORT_HOUR` | Relatório diário de saúde por DM ao dono (uptime, RAM, disco, respostas da IA, reconexões, erros, última atualização). `false` desliga; hora de Brasília (0 a 23) | `true` / `8` |
 | `YUI_SUPERVISOR_LOG` | Log do watchdog (`YuiWatchdog`) lido pelo relatório diário | `C:\Tools\supervisor\supervisor.log` (Windows) |

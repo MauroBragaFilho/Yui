@@ -23,6 +23,8 @@ Object.assign(process.env, {
   DATABASE_DIR: tmp,
   YUI_AUDIT_FILE: path.join(tmp, 'audit.jsonl'),
   YUI_OWNER_ID: '111',
+  YUI_SERVER_SETTINGS_FILE: path.join(tmp, 'server_settings.json'), // sem isto os testes gravariam G1 e "undefined" em src/data/server_settings.json
+  REQUIRE_TOS: 'false', // as mensagens de teste vêm de um servidor (G1); sem isto a Yui responderia com os termos de uso e pararia
   YUI_PRIVATE_CHANNEL_IDS: 'priv1',
   YUI_MEMORY_ENABLED: 'true',
   YUI_ALERTS: 'false',
@@ -196,7 +198,7 @@ await test('startsWithCommandPrefix: mesma regra do client.js (sem diferenciar m
 });
 await test('a ajuda do prefixo lista só as plataformas aceitas como LINK (sem Deezer)', async () => {
   const sent = [];
-  await handlePrefixCommand({ content: '+yui ajuda', author: { id: 'u1' }, reply: async (t) => { sent.push(t); } });
+  await handlePrefixCommand({ content: '+yui ajuda', author: { id: 'u1' }, guildId: 'G1', guild: { name: 'srv' }, reply: async (t) => { sent.push(t); } });
   assert.equal(sent.length, 1);
   assert.ok(sent[0].includes('YouTube, Spotify, Instagram ou TikTok'));
   assert.ok(!/Deezer/i.test(sent[0]));
@@ -344,9 +346,9 @@ await test('askerKey: user.id do /yui ou authorId do adaptador do prefixo', () =
   assert.equal(askerKey(null), null);
 });
 
-function fakePrefixMessage(content, { authorId = 'p1' } = {}) {
+function fakePrefixMessage(content, { authorId = 'p1', dm = false } = {}) {
   const m = {
-    content, author: { id: authorId, username: 'bob', bot: false }, guildId: 'G1', guild: { name: 'srv' }, member: null, channelId: 'chan-prefix',
+    content, author: { id: authorId, username: 'bob', bot: false }, ...(dm ? { guild: null } : { guildId: 'G1', guild: { name: 'srv' } }), member: null, channelId: 'chan-prefix',
     mentions: { channels: { first: () => null } },
     sent: [], edits: [], replies: [],
     channel: {
@@ -969,7 +971,7 @@ await test('M1/M2/B3 o messageCreate marca o pedido com o trecho EXATO do anexo 
   const prompt = `--- MENSAGEM ATUAL ---\nalice: "oi"\n${block}\nINSTRUÇÃO: x`;
   assert.ok(prompt.includes(block), 'o bloco é um trecho exato do prompt (é por ele que o llmHandler o encontra)');
   const src = read('src/events/messageCreate.js');
-  assert.ok(src.includes("attachments.readCount > 0 ? { disableTools: true, attachmentBlock: attachmentPrompt } : {}"));
+  assert.ok(src.includes("(attachments.readCount > 0 || vision.ok) ? { disableTools: true, attachmentBlock: attachmentPrompt } : {}"));
   assert.ok(src.includes('...attachmentOptions'));
 });
 await test('B4 fila cheia: a menção com anexo é recusada ANTES de baixar o arquivo e de buscar o histórico do canal', async () => {
@@ -1035,7 +1037,7 @@ await test('B2 "+yui musica <link inválido>" funciona pelo prefixo (antes: Type
   assert.equal(localCalls.length, 0);
 });
 await test('B2 o adaptador do prefixo expõe user, guild e channelId: o dono em DM é conversa SENSÍVEL no "+yui perguntar", como no /yui', () => {
-  const adapter = buildPrefixAdapter(fakePrefixMessage('+yui perguntar oi', { authorId: '111' }), {});
+  const adapter = buildPrefixAdapter(fakePrefixMessage('+yui perguntar oi', { authorId: '111', dm: true }), {});
   assert.equal(adapter.user.id, '111');
   assert.equal(adapter.authorId, '111', 'o limite de uma resposta por vez continua usando authorId');
   assert.equal(typeof adapter.deferReply, 'function', 'continua sendo o adaptador de mensagem');

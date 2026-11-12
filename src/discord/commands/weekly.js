@@ -4,7 +4,7 @@ import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { gtaoEngine } from '../../engines/gtao/index.js';
 import { weeklyService } from '../../engines/gtao/systems/weekly/service.js';
 import { buildWeeklyCombinedEmbeds, buildWeeklyPaginationRow } from '../../engines/gtao/weeklyAnalysis.js';
-import { getCurrentWeekKey } from '../../utils/weekKey.js';
+import { getCurrentWeekKey, weeklyRowAgeHours, NEWSWIRE_CACHE_HOURS } from '../../utils/weekKey.js';
 import { logger } from '../../utils/logger.js';
 
 export const weeklyCommand = {
@@ -67,6 +67,18 @@ export const weeklyCommand = {
         weeklyData = await gtaoEngine.collectWeekly({ source });
       } catch (err) {
         logger.error(`[GTA-Semanal] Falha ao coletar da fonte "${source}": ${err.message}`);
+      }
+
+      // Reddit bloqueado (403 tratado) ou sem resposta: tenta o artigo semanal do Rockstar Newswire (oficial, escolhido por pontuação).
+      // Se o cache desta semana JÁ é do Newswire e recente, não repete a coleta (cada uma gasta chamadas de IA).
+      if (!weeklyData && source === 'reddit') {
+        const cacheNewswireFresco = latest?.event_week === currentWeekKey && latest?.data?.source === 'newswire'
+          && weeklyRowAgeHours(latest) <= NEWSWIRE_CACHE_HOURS;
+        if (!cacheNewswireFresco) {
+          try { weeklyData = await gtaoEngine.collectWeekly({ source: 'newswire' }); } catch (err) {
+            logger.warn(`[GTA-Semanal] Newswire também falhou: ${err.message}`);
+          }
+        }
       }
 
       // Fallback: se a coleta retornou null (ex: Reddit 403 tratado) ou lançou

@@ -27,7 +27,7 @@ export function embedsToText(embeds, { maxChars = GTA_CHAT_MAX_CHARS } = {}) {
 }
 
 async function realDeps() {
-    const [{ gtaoRepository }, { gtaoEngine }, { weeklyService }, weeklyAnalysis, { getCurrentWeekKey }, { createDailyEmbed }, { newsRepository }, { newswireEngine }, { createNewswireEmbed }] = await Promise.all([
+    const [{ gtaoRepository }, { gtaoEngine }, { weeklyService }, weeklyAnalysis, weekUtils, { createDailyEmbed }, { newsRepository }, { newswireEngine }, { createNewswireEmbed }] = await Promise.all([
         import('../database/repositories/gtaoRepo.js'),
         import('../engines/gtao/index.js'),
         import('../engines/gtao/systems/weekly/service.js'),
@@ -39,7 +39,8 @@ async function realDeps() {
         import('../discord/embeds/newswireEmbed.js'),
     ]);
     return {
-        gtaoRepository, gtaoEngine, weeklyService, getCurrentWeekKey, createDailyEmbed, newsRepository, newswireEngine, createNewswireEmbed,
+        gtaoRepository, gtaoEngine, weeklyService, getCurrentWeekKey: weekUtils.getCurrentWeekKey, createDailyEmbed, newsRepository, newswireEngine, createNewswireEmbed,
+        weeklyRowAgeHours: weekUtils.weeklyRowAgeHours, NEWSWIRE_CACHE_HOURS: weekUtils.NEWSWIRE_CACHE_HOURS,
         buildWeeklyCombinedEmbeds: weeklyAnalysis.buildWeeklyCombinedEmbeds,
     };
 }
@@ -66,7 +67,8 @@ export async function runGtaIntent(kind, { deps = null, logger = null } = {}) {
             const weekKey = d.getCurrentWeekKey();
             const latest = d.gtaoRepository.getLatestWeekly();
             let data = latest?.data;
-            let needsCollect = !latest || latest.event_week !== weekKey;
+            const cachedNewswireOld = data?.source === 'newswire' && (d.weeklyRowAgeHours ?? (() => Infinity))(latest) > (d.NEWSWIRE_CACHE_HOURS ?? 6);
+            let needsCollect = !latest || latest.event_week !== weekKey || cachedNewswireOld;
             if (!needsCollect && data?.source === 'reddit' && data?.id) {
                 try {
                     const post = await d.weeklyService.getLatest();
@@ -76,8 +78,13 @@ export async function runGtaIntent(kind, { deps = null, logger = null } = {}) {
             let stale = null;
             if (needsCollect) {
                 try { data = await d.gtaoEngine.collectWeekly({ source: 'reddit' }); } catch (err) { warn(`[GTA-Chat] Falha ao coletar o semanal: ${String(err?.message ?? err).slice(0, 80)}`); }
+                // Reddit bloqueado: o artigo semanal do Rockstar Newswire (oficial; escolhido por pontuação, nunca o brinde do GTA+).
+                if (!data) {
+                    try { data = await d.gtaoEngine.collectWeekly({ source: 'newswire' }); } catch (err) { warn(`[GTA-Chat] Newswire também falhou: ${String(err?.message ?? err).slice(0, 80)}`); }
+                }
+                // Nenhuma fonte respondeu agora, mas há cópia guardada desta semana: usa ela.
                 if (!data && latest?.data && latest.event_week === weekKey) data = latest.data;
-                // Sem a coleta desta semana: usa o último semanal VÁLIDO guardado (de outra semana) e avisa. NUNCA grava dado novo de outra fonte.
+                // Sem nada desta semana: usa o último semanal VÁLIDO guardado (de outra semana) e avisa.
                 if (!data) {
                     const old = d.gtaoRepository.getLatestValidWeekly?.();
                     if (old?.data) { data = old.data; stale = { week: old.event_week, period: old.data.periodo ?? null }; }
@@ -89,10 +96,12 @@ export async function runGtaIntent(kind, { deps = null, logger = null } = {}) {
             const note = stale
                 ? `⚠️ Estes são os dados da semana anterior (${stale.week}${stale.period ? `, período: ${typeof stale.period === 'string' ? stale.period : JSON.stringify(stale.period)}` : ''}). Não consegui buscar a desta semana agora (Reddit fora do ar); o evento pode já ter mudado.`
                 : '';
-            const withNote = (t) => (note ? `${note}
-
-${t}` : t);
-            return { ok: true, stale: Boolean(stale), text: withNote(embedsToText(pages)), data: withNote(embedsToText(pages, { maxChars: GTA_MODEL_MAX_CHARS })) };
+            // Dado do Newswire: o embed depende da análise da IA, então o TEXTO DO ARTIGO oficial vai junto (para a IA e para o texto direto).
+            const article = data.source === 'newswire' && data.fullText
+                ? `Artigo oficial da Rockstar (Newswire${data.publishedAt ? `, publicado em ${data.publishedAt}` : ''}): ${data.title}\n${data.fullText}${data.url ? `\nFonte: ${data.url}` : ''}`
+                : '';
+            const joinAll = (t) => [note, t, article].filter(Boolean).join('\n\n');
+            return { ok: true, stale: Boolean(stale), source: data.source ?? 'reddit', text: joinAll(embedsToText(pages)), data: joinAll(embedsToText(pages, { maxChars: GTA_MODEL_MAX_CHARS })) };
         }
         if (kind === 'news') {
             let list = d.newsRepository.getLatest(2);
