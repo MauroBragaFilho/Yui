@@ -11,6 +11,7 @@ import { safeFetchText } from '../search/safeFetch.js';
 import { clipHeadTail } from '../utils/promptBudget.js';
 import { logger } from '../utils/logger.js';
 import { isOwnerId } from '../core/permissions.js';
+import { describeImages } from '../services/vision.js';
 
 // ---------------------------------------------------------------------------------------------
 // Bloco CONTEXTO: teto de caracteres
@@ -316,6 +317,23 @@ export function buildAttachmentPrompt(result, { hasText = false } = {}) {
     return lines.join('\n');
 }
 
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
+
+/**
+ * Se a visão analisou imagens: marca esses anexos como lidos (a Yui não avisa "não li a foto") e devolve o bloco cercado com a
+ * descrição. Sem sucesso, devolve '' e nada muda. Função pura além de mexer em `attachments.items`.
+ */
+export function applyVisionToAttachments(attachments, vision) {
+    if (!vision?.ok || !vision.text) return '';
+    const fenced = fenceUntrustedWeb(vision.text);
+    if (!fenced) return '';
+    let left = vision.count ?? 0;
+    for (const item of attachments?.items ?? []) {
+        if (left > 0 && IMAGE_EXTS.has(item.ext) && item.status !== 'read') { item.status = 'read'; left--; }
+    }
+    return `Descrição da(s) ${vision.count} imagem(ns) anexada(s), feita por um modelo de visão (você não vê a imagem, só esta descrição):\n${fenced}`;
+}
+
 /** Resposta fixa (sem IA, sem nome de arquivo) quando a mensagem só tem anexo e nada pôde ser lido. */
 export function attachmentOnlyReply(result) {
     const reasons = new Set((result?.items ?? []).map((i) => i.reason));
@@ -419,6 +437,8 @@ export default {
                 currentUserPrompt = resolveMentions(currentUserPrompt, client);
                 // Anexos .txt/.md/.log: a leitura (rede, com prazo) corre junto com a busca do histórico; nunca lança.
                 const attachmentsPromise = readTextAttachments(message.attachments);
+                // Imagens: um modelo com visão (Groq/Gemini) descreve; a descrição entra no prompt como dado não confiável. Nunca lança.
+                const visionPromise = describeImages(message.attachments, currentUserPrompt).catch(() => ({ ok: false, reason: 'failed' }));
                 const history = [];
                 let repliedMessage = null;
                 if (message.reference && message.reference.messageId) {
@@ -454,8 +474,10 @@ export default {
                 }
                 const contextLines = capContextLines(history);
                 const attachments = await attachmentsPromise;
+                const vision = await visionPromise;
                 const hasText = currentUserPrompt.trim().length > 0;
-                const attachmentPrompt = buildAttachmentPrompt(attachments, { hasText });
+                const visionBlock = applyVisionToAttachments(attachments, vision);
+                const attachmentPrompt = [buildAttachmentPrompt(attachments, { hasText }), visionBlock].filter(Boolean).join('\n');
                 const currentDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 let envInfo = '';
                 if (config.sendEnvironmentInfo) {
@@ -464,7 +486,7 @@ export default {
                 const finalPrompt = `--- CONTEXTO ---\nData: ${currentDate}\n${envInfo}${contextLines.join('\n')}\n--- MENSAGEM ATUAL ---\n${message.author.username}: "${hasText ? currentUserPrompt : NO_TEXT_LINE}"\n${attachmentPrompt ? `${attachmentPrompt}\n` : ''}INSTRUÇÃO: Responda diretamente à mensagem atual. Não repita o que o usuário disse nem o que você disse antes.`;
                 if (!hasText && attachments.total === 0) {
                     if (allowFixedReply(message.author.id)) replyQuietly(message, 'Oi! Vi que me marcou, mas não entendi o que você precisa.');
-                } else if (!hasText && attachments.readCount === 0) {
+                } else if (!hasText && attachments.readCount === 0 && !vision.ok) {
                     // Só anexo e nada pôde ser lido: resposta fixa, sem gastar a IA (e sem repetir o nome do arquivo na resposta).
                     if (allowFixedReply(message.author.id)) replyQuietly(message, attachmentOnlyReply(attachments));
                 } else {
@@ -472,7 +494,7 @@ export default {
                     // Com texto de anexo LIDO o arquivo é dado de terceiros (M1/M2/B3): sem ferramentas (um .log não pode acionar ban, download,
                     // entrada em call...), fora do historico.txt e do alerta de conteúdo suspeito, e sem provedor anônimo. `attachmentBlock` é o
                     // trecho exato do prompt que carrega o arquivo.
-                    const attachmentOptions = attachments.readCount > 0 ? { disableTools: true, attachmentBlock: attachmentPrompt } : {};
+                    const attachmentOptions = (attachments.readCount > 0 || vision.ok) ? { disableTools: true, attachmentBlock: attachmentPrompt } : {};
                     addToQueue(finalPrompt, message, 'mention', { allowSearch: true, searchPrompt: hasText ? currentUserPrompt : ATTACH_ONLY_SEARCH_PROMPT, guildId: message.guildId, ...attachmentOptions });
                 }
             } catch (error) {

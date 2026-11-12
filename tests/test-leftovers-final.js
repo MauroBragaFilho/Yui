@@ -553,7 +553,7 @@ function makeMsg({ content, authorId, attachments = [] }) {
   return {
     id: `m${seq++}`, content, replies,
     author: { id: authorId ?? `U${seq}`, username: 'alice', bot: false, tag: 'alice#0001' },
-    createdTimestamp: Date.now(), guildId: null, guild: null, channelId: channel.id, channel,
+    createdTimestamp: Date.now(), guildId: 'G1', guild: { name: 'srv' }, channelId: channel.id, channel,
     mentions: { has: () => true, everyone: false, repliedUser: null },
     reference: null, attachments, client,
     reply: async (p) => { replies.push(typeof p === 'string' ? p : p?.content); return {}; },
@@ -630,7 +630,7 @@ await test('no código-fonte: a nota do anexo nunca entra em searchPrompt; a cha
   assert.ok(src.includes('buildAttachmentPrompt(attachments, { hasText })'));
   assert.equal(src.split('searchPrompt: hasText ? currentUserPrompt : ATTACH_ONLY_SEARCH_PROMPT').length - 1, 1);
   assert.ok(!/searchPrompt:[^,}]*attachment/i.test(src.replace('ATTACH_ONLY_SEARCH_PROMPT', 'x')));
-  assert.ok(src.includes('attachments.readCount > 0 ? { disableTools: true, attachmentBlock: attachmentPrompt } : {}'));
+  assert.ok(src.includes('(attachments.readCount > 0 || vision.ok) ? { disableTools: true, attachmentBlock: attachmentPrompt } : {}'));
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════

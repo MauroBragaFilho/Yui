@@ -140,7 +140,7 @@ function makeMsg({ content, authorId = 'U222', username = 'alice', channel, repl
     id, content, ops, payloads,
     author: { id: authorId, username, bot: false, tag: `${username}#0001` },
     createdTimestamp: Date.now(),
-    guildId: null, guild: null, channelId: channel.id, channel,
+    guildId: 'G1', guild: { name: 'srv' }, channelId: channel.id, channel,
     mentions: { has: () => mentionsBot, everyone: false, repliedUser: null },
     reference: replyTo ? { messageId: replyTo } : null,
     attachments: attachments ?? new Collection(),
@@ -346,7 +346,7 @@ await test('askerKey: user.id do /yui ou authorId do adaptador do prefixo', () =
 
 function fakePrefixMessage(content, { authorId = 'p1' } = {}) {
   const m = {
-    content, author: { id: authorId, username: 'bob', bot: false }, guild: null, member: null, channelId: 'chan-prefix',
+    content, author: { id: authorId, username: 'bob', bot: false }, guildId: 'G1', guild: { name: 'srv' }, member: null, channelId: 'chan-prefix',
     mentions: { channels: { first: () => null } },
     sent: [], edits: [], replies: [],
     channel: {

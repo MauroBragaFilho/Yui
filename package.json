@@ -20,6 +20,7 @@
     "test:alerts": "node tests/test-alerts.js",
     "test:gateway": "node tests/test-gateway.js",
     "test:config": "node tests/test-config.js",
+    "test:vision": "node tests/test-vision.js",
     "panel:password": "node scripts/panel-password.mjs",
     "tts:testar": "node scripts/tts-testar.mjs",
     "tts:amostra": "node scripts/tts-amostra.mjs",
