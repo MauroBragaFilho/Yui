@@ -128,7 +128,7 @@ apps/yui-app/           App Android e web
 
 Canais privados são listados em `YUI_PRIVATE_CHANNEL_IDS`. Quem decide é o dono, não a IA.
 
-**Mensagem privada só do dono:** no Discord a Yui responde DM **só ao dono** (no privado ele nem precisa citar o nome dela). A mensagem privada de qualquer outra pessoa é ignorada em silêncio, sem aviso (`src/events/messageCreate.js`, teste `npm run test:dmowner`); os comandos de barra continuam funcionando no privado.
+**Mensagem privada (DM):** no Discord a Yui responde DM de **qualquer pessoa** (no privado ninguém precisa citar o nome dela), com as mesmas regras de ban, fila e limites por pessoa. A memória é por pessoa (a do dono continua separada e pessoal), e a pesquisa na web em DM segue o `YUI_PRIVATE_SEARCH`. `YUI_DM_EVERYONE=false` volta à regra antiga: só o dono conversa no privado e as DMs dos demais são ignoradas em silêncio (`src/events/messageCreate.js`, teste `npm run test:dmowner`). Os comandos por prefixo (`+yui ...`) continuam respondendo só ao dono no privado; os de barra funcionam no privado para todos.
 
 ---
 

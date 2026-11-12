@@ -31,7 +31,7 @@ O comando principal para interagir com o cérebro da Yui.
 
 - **Mensagem (`mensagem`):** Sua pergunta ou pedido.
 - **Visibilidade:** Escolha entre `Público` (todos veem, o padrão) ou `Privado` (apenas você vê).
-- **No privado:** o `/yui` funciona na DM com a Yui para qualquer pessoa. Já a conversa por **mensagem** no privado é só com o dono: DM de outras pessoas é ignorada em silêncio.
+- **No privado:** o `/yui` funciona na DM com a Yui para qualquer pessoa. A conversa por **mensagem** no privado também é com qualquer pessoa (`YUI_DM_EVERYONE=false` limita ao dono; os comandos `+yui ...` no privado seguem só para o dono).
 - **Imagens:** o `/yui` não lê anexos; para a Yui analisar uma imagem, mande uma mensagem normal mencionando-a com a imagem anexada (vídeo não é suportado).
 - **Advanced:** Se você mencionar outras pessoas no prompt, a Yui pode tentar entender o contexto da conversa.
 - **Tamanho:** a pergunta pode ter até 4000 caracteres (`YUI_ASK_MAX_CHARS`; o mesmo vale para `+yui perguntar`) e cada pessoa tem uma resposta por vez. Para um texto maior, mande uma **mensagem normal mencionando a Yui** com um anexo `.txt`, `.md` ou `.log`: ela lê o arquivo (até 100 KB e 12000 caracteres), tratando o conteúdo como dado, nunca como ordem. Comandos de barra não leem anexo.

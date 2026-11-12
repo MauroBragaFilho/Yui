@@ -346,9 +346,14 @@ export function attachmentOnlyReply(result) {
     return `Recebi o anexo, mas só leio arquivos .txt, .md e .log (até ${maxKb} KB). Cole o texto aqui na conversa ou mande em um desses formatos.`;
 }
 
-/** Mensagem privada (DM) de quem NÃO é o dono: a Yui não responde nada (nem aviso) no privado a mais ninguém. */
-export function isForeignDirectMessage(message, isOwner = isOwnerId) {
-    return !message?.guildId && !isOwner(message?.author?.id);
+/** A Yui conversa no privado com QUALQUER pessoa? Padrão: sim. YUI_DM_EVERYONE=false volta à regra antiga (só o dono; os demais são ignorados em silêncio). */
+export function dmEveryoneEnabled(env = process.env) {
+    return String(env.YUI_DM_EVERYONE ?? 'true').trim().toLowerCase() !== 'false';
+}
+
+/** Mensagem privada (DM) que a Yui deve IGNORAR em silêncio: só existe com YUI_DM_EVERYONE=false e quando a pessoa não é o dono. */
+export function isForeignDirectMessage(message, isOwner = isOwnerId, everyone = dmEveryoneEnabled()) {
+    return !everyone && !message?.guildId && !isOwner(message?.author?.id);
 }
 
 export default {
@@ -357,7 +362,7 @@ export default {
     async execute(message, client) {
         if (message.author.bot) return;
         if (isForeignDirectMessage(message)) return;
-        const isDirectMessage = !message.guildId; // só chega aqui se for o dono: no privado ele não precisa citar "Yui"
+        const isDirectMessage = !message.guildId; // no privado ninguém precisa citar "Yui" (com YUI_DM_EVERYONE=false só o dono chega aqui)
         // Comando por prefixo ("+yui diario", "+yui perguntar ..."): quem trata é o prefixRouter (client.js). Sem este retorno a mesma
         // mensagem virava também uma conversa (o nome "Yui" casa com "+yui"): custo dobrado e até ferramenta acionada pela menção.
         if (startsWithCommandPrefix(message.content, config.discord?.prefix ?? config.prefix)) return;
