@@ -722,6 +722,7 @@ function safeIsPermanent() {
 
 function safeRetentionDays() {
   try {
+    if (memory.isPermanent()) return null; // permanente: não existe prazo (retentionDays() cairia no 30 padrão)
     const n = Number(memory.retentionDays());
     return Number.isFinite(n) && n > 0 ? n : null;
   } catch {

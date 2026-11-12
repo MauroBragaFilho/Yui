@@ -69,7 +69,14 @@ export function createWebServer({ root, upstream = '' } = {}) {
       return res.end();
     }
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(base, 'index.html');
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff' });
+    // index.html (e o fallback do SPA) NUNCA fica em cache: sem isto o navegador reaproveitava o index antigo, que cita o bundle antigo, e o painel novo
+    // só aparecia depois de limpar o cache. Os arquivos de /_expo/ têm o hash no nome, então podem ficar guardados para sempre.
+    const isHashedAsset = file.startsWith(path.join(base, '_expo') + path.sep);
+    res.writeHead(200, {
+      'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': isHashedAsset ? 'public, max-age=31536000, immutable' : 'no-cache',
+    });
     fs.createReadStream(file).pipe(res);
   });
 }

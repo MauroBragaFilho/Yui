@@ -44,6 +44,10 @@ test('serve o painel, os arquivos e o fallback de SPA; bloqueia sair da pasta', 
     assert.equal(await (await fetch(base + '/fonts/a.woff2')).text(), 'fonte');
     assert.equal((await fetch(base + '/fonts/a.woff2')).headers.get('content-type'), 'font/woff2');
     assert.match(await (await fetch(base + '/rota/qualquer')).text(), /PAINEL DA YUI/, 'SPA: rota desconhecida volta ao index');
+    // cache: o index (e o fallback) nunca ficam guardados, senão o navegador mostra o painel antigo depois de uma atualização; arquivos com hash em /_expo/ podem
+    assert.equal((await fetch(base + '/')).headers.get('cache-control'), 'no-cache', 'index.html sempre revalida');
+    assert.equal((await fetch(base + '/rota/qualquer')).headers.get('cache-control'), 'no-cache', 'o fallback do SPA também');
+    assert.match((await fetch(base + '/fonts/a.woff2')).headers.get('cache-control') || '', /no-cache/, 'fora de /_expo/ não vira cache longo');
     // sem BDS configurado, /api não é repassado: cai no painel (comportamento antigo)
     assert.match(await (await fetch(base + '/api/health')).text(), /PAINEL DA YUI/);
     const traversal = await new Promise((resolve) => {
