@@ -1,6 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import { withDeadline } from './redditGuard.js';
+import { createChromeProfile, removeChromeProfile, sweepStaleChromeProfiles } from '../../../../utils/chromeProfile.js';
 import * as cheerio from 'cheerio';
 import { logger } from '../../../../utils/logger.js';
 
@@ -193,11 +194,14 @@ export async function fetchWeeklyFeedViaBrowser() {
 
   let browser;
   let cancelled = false; // prazo vencido: um Chrome que ainda estava abrindo é fechado assim que aparece (não vaza)
+  sweepStaleChromeProfiles(); // perfis que sobraram de execuções anteriores
+  const profile = createChromeProfile();
   try {
     const work = (async () => {
       browser = await puppeteer.launch({
         headless: true,
         timeout: LAUNCH_TIMEOUT_MS,
+        userDataDir: profile.dir,
         ...(executablePath ? { executablePath } : {}),
         args: [
           '--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-blink-features=AutomationControlled',
@@ -239,5 +243,9 @@ export async function fetchWeeklyFeedViaBrowser() {
       // Chrome que não fechou sozinho: encerra o processo que NÓS abrimos (guardado pelo Puppeteer; nunca um PID achado por varredura).
       try { const proc = browser.process(); if (proc && !proc.killed) proc.kill('SIGKILL'); } catch { /* já saiu */ }
     }
+    // Remove o perfil só depois do Chrome sair; sem bloquear a resposta do Weekly.
+    removeChromeProfile(profile.dir).then((ok) => {
+      if (!ok) logger.warn('[Weekly][Browser] Perfil temporário do Chrome ainda em uso; será removido numa próxima varredura.');
+    });
   }
 }

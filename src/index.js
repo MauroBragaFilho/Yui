@@ -18,6 +18,7 @@ import { initInteractionStats } from './core/interactionStats.js';
 import path from 'node:path';
 import { startGatewayServer } from './gateway/index.js';
 import { applyAiSettings } from './core/aiSettings.js';
+import { isChromeProfileCleanupError } from './utils/chromeProfile.js';
 import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail, isHarmlessNetworkCrash } from './core/alerts.js';
 import { ownerUserId } from './core/api/auth.js';
 
@@ -190,6 +191,9 @@ function logHarmlessNetworkCrash(reason) {
 process.on('unhandledRejection', (reason) => {
   try {
     if (isHarmlessNetworkCrash(reason)) return logHarmlessNetworkCrash(reason);
+    if (isChromeProfileCleanupError(reason)) {
+      return logger.warn('[Chrome] Não deu para apagar o perfil temporário (arquivo em uso). Sem efeito: a Yui limpa numa próxima varredura.');
+    }
     logger.error(`Unhandled Rejection: ${describeReason(reason)}`);
     alertOwner(crashAlertKey(reason), 'Erro inesperado (promessa rejeitada)', formatCrashDetail(reason, { maxLines: 3 }), { level: 'error' });
   } catch (err) {
@@ -200,6 +204,7 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (error) => {
   try {
     if (isHarmlessNetworkCrash(error)) return logHarmlessNetworkCrash(error);
+    if (isChromeProfileCleanupError(error)) return logger.warn('[Chrome] Perfil temporário em uso na limpeza. Sem efeito.');
     logger.error(`Uncaught Exception: ${describeReason(error)}`);
     alertOwner(crashAlertKey(error), 'Erro grave na Yui', formatCrashDetail(error, { maxLines: 4 }), { level: 'error' });
   } catch (err) {
