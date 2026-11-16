@@ -14,6 +14,8 @@
     "test:core-agent": "node tests/test-core-agent.js",
     "test:mentions": "node tests/test-mentions.js",
     "test:persona": "node tests/test-persona.js",
+    "test:approvals": "node tests/test-approvals.js",
+    "aprovar": "node scripts/yui-aprovar.mjs",
     "test:security": "node tests/test-security-policy.js",
     "test:ci": "node scripts/run-ci.mjs",
     "test:search": "node tests/test-search-skills.js",

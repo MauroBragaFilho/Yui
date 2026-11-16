@@ -432,6 +432,9 @@ O módulo Código (a Yui lendo e editando os seus projetos; a aba saiu do painel
 |----------|-----------|--------|
 | `YUI_DEV_ENABLED` | Liga o módulo e as rotas `/v1/dev/*` (sem tela no painel desde 11/11/2026) | `false` |
 | `YUI_DEV_APPROVAL` | `ask`: pergunta antes de gravar e de rodar comando. `auto`: grava sem perguntar (com backup); comandos ainda perguntam. Pelo celular ou com `YUI_READ_ONLY=true`, vale sempre "somente leitura" | `ask` |
+| `YUI_APPROVAL_CHANNEL` | `false` desliga o canal local de aprovação crítica (e, sem ele, a Yui não consegue gravar nem rodar comando pela aba Código) | `true` (só abre com `YUI_DEV_ENABLED=true`) |
+| `YUI_APPROVAL_PORT` | Porta do canal local (só em 127.0.0.1) | `3940` |
+| `YUI_APPROVAL_NONCE_FILE` | Onde a Yui grava o segredo do canal (apagado ao fechar); a CLI `scripts/yui-aprovar.mjs` lê o mesmo arquivo | `secrets/approval-channel.json` |
 | `YUI_DEV_ALLOWED_EXECUTABLES` | Executáveis que o terminal da aba Código aceita (lista separada por vírgula). Interpretadores de comando (`cmd`, `powershell`, `bash`...) nunca entram, e programa fora de git/node/npm/npx/pytest/python/tsc/eslint não tem regras de segurança e é recusado | `git,node,npm,npx,pytest,python,tsc,eslint` |
 | `YUI_DEV_MAX_STEPS` | Máximo de passos (ferramentas) por pergunta | `12` |
 | `YUI_DEV_PROJECTS_FILE` | Onde ficam os projetos cadastrados pelo app | `secrets/dev-projects.json` |

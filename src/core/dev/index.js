@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import path from 'path';
 import { isReadOnlyMode } from '../permissions.js';
 import { getPolicyEngine } from '../security/policyEngine.js';
-import { ORIGINS } from '../security/permissionMatrix.js';
+import { ApprovalError, getApprovalManager, LEVELS, STATUS } from '../security/approvalManager.js';
+import { canonicalAction, ORIGINS } from '../security/permissionMatrix.js';
 import { audit } from '../audit.js';
 import { createAgent } from './agent.js';
 import { buildContext, summarizeWorkspace } from './context.js';
@@ -36,7 +37,6 @@ export class DevError extends Error {
   }
 }
 
-const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 const RUN_TTL_MS = 30 * 60 * 1000;
 const MAX_EVENTS = 600;
 const MAX_MESSAGE = 8000;
@@ -50,6 +50,7 @@ export function createDev({
   historyDir = path.join(process.env.DATABASE_DIR || path.join(process.cwd(), 'database'), 'dev-history'),
   indexDir = path.join(process.env.DATABASE_DIR || path.join(process.cwd(), 'database'), 'dev-index'),
   now = () => Date.now(),
+  approvals = getApprovalManager(),
 } = {}) {
   const history = createHistoryStore({ dir: historyDir });
   const persona = loadPersona(env.YUI_ROOT_DIR || process.cwd());
@@ -142,7 +143,6 @@ export function createDev({
       status: 'running',
       seq: 0,
       events: [],
-      pending: new Map(),
       controller: new AbortController(),
       startedAt: now(),
       finishedAt: 0,
@@ -153,33 +153,48 @@ export function createDev({
     activeRun = run;
     audit('dev.run.start', ctx, { project: project.id, mode: modeId, chars: text.length, approval: approvalMode });
 
-    const requestApproval = (request) => new Promise((resolve) => {
-      const id = crypto.randomUUID();
-      const timer = setTimeout(() => {
-        if (run.pending.delete(id)) {
-          pushEvent(run, { type: 'approval_done', id, approved: false, reason: 'expirou' });
-          resolve(false);
-        }
-      }, APPROVAL_TIMEOUT_MS);
-      run.pending.set(id, (approved, approverCtx = null) => {
-        clearTimeout(timer);
-        run.pending.delete(id);
-        pushEvent(run, { type: 'approval_done', id, approved: Boolean(approved) });
-        const finalCtx = approverCtx || ctx;
-        audit('dev.approval', finalCtx, {
-          project: project.id,
-          action: request.action,
-          command: request.params?.command ?? null,
-          path: request.params?.path ?? null,
-          cwd: workspace.fs?.root ?? null,
-          approved: Boolean(approved),
-          approverId: finalCtx?.userId ?? null,
-          approverRole: finalCtx?.role ?? null,
+    const origin = local ? ORIGINS.LOCAL_PC : ORIGINS.REMOTE;
+    /** Parâmetros que a aprovação "amarra": a ação, o projeto, a pasta e tudo que será executado. */
+    const bound = (action, params) => ({ tool: action, project: project.id, cwd: workspace.fs?.root ?? null, ...params });
+    const canonical = (action) => canonicalAction(`dev:${action}`) ?? `dev.${action}`;
+
+    // Aprovação por TICKET (src/core/security/approvalManager.js): nível decidido pelo motor de políticas
+    // (gravar e rodar comando são CRITICAL: só vale no computador da Yui, pelo canal local / comando yui-aprovar).
+    const approvalGate = {
+      async request(req) {
+        const verdict = policyEngine.evaluate({ action: canonical(req.action), role: ctx?.role, origin });
+        const level = verdict.decision === 'ASK' ? LEVELS.ASK : LEVELS.CRITICAL;
+        const ticket = approvals.request({
+          action: canonical(req.action),
+          params: bound(req.action, req.params),
+          level,
+          requester: ctx,
+          origin,
+          sessionId: run.id,
+          canonicalTarget: req.params?.path ?? req.params?.command ?? '',
+          summary: req.summary,
+          preview: req.preview,
         });
-        resolve(Boolean(approved));
-      });
-      pushEvent(run, { type: 'approval', id, action: request.action, summary: request.summary, preview: request.preview });
-    });
+        pushEvent(run, { type: 'approval', id: ticket.id, action: req.action, summary: req.summary, preview: req.preview, level, expiresAt: ticket.expiresAt, via: level === LEVELS.CRITICAL ? 'local' : 'any' });
+        const done = await approvals.waitFor(ticket.id);
+        const approved = done.status === STATUS.APPROVED;
+        pushEvent(run, { type: 'approval_done', id: ticket.id, approved, ...(done.status === STATUS.EXPIRED ? { reason: 'expirou' } : {}) });
+        audit('dev.approval', ctx, {
+          project: project.id,
+          action: req.action,
+          command: req.params?.command ?? null,
+          path: req.params?.path ?? null,
+          cwd: workspace.fs?.root ?? null,
+          approved,
+          approverId: done.approverId,
+          approverOrigin: done.approverOrigin,
+          approvalId: ticket.id,
+        });
+        return { approved, ticketId: ticket.id };
+      },
+      consume: (ticketId, req) => approvals.consume(ticketId, { action: canonical(req.action), params: bound(req.action, req.params) }),
+      enacted: (ticketId, info) => approvals.enacted(ticketId, info),
+    };
 
     const emit = (event) => {
       pushEvent(run, event);
@@ -208,7 +223,7 @@ export function createDev({
           approvalMode,
           webSearchEnabled: false,
           emit,
-          requestApproval,
+          approvalGate,
           observePolicy: (req) => policyEngine.observe({ ...req, ctx, origin: local ? ORIGINS.LOCAL_PC : ORIGINS.REMOTE }),
           signal: run.controller.signal,
           settings: { maxIterations: Number(env.YUI_DEV_MAX_STEPS) || 12, temperature: 0.3, maxTokens: 4096, historyChars: 24000 },
@@ -226,7 +241,7 @@ export function createDev({
         run.status = run.controller.signal.aborted ? 'cancelled' : 'error';
         pushEvent(run, { type: 'done', ok: false, error: String(err?.message ?? err).slice(0, 600), cancelled: run.controller.signal.aborted });
       } finally {
-        for (const resolve of [...run.pending.values()]) resolve(false);
+        approvals.cancelPending(run.id);
         run.finishedAt = now();
         if (activeRun === run) activeRun = null;
       }
@@ -248,12 +263,21 @@ export function createDev({
     return { status: run.status, last: run.seq, approval: run.approvalMode, events: run.events.filter((e) => e.seq > from) };
   }
 
-  function answerApproval(runId, approvalId, approve, { local = false, ctx = null } = {}) {
-    if (!local) throw new DevError(403, 'Aprovações só podem ser dadas no computador da Yui.');
+  /**
+   * Resposta vinda da API principal. A API NÃO consegue provar que o pedido veio do computador (proxy, Tailscale,
+   * celular), então aqui a origem é sempre REMOTE: ações críticas só se aprovam pelo canal local (yui-aprovar);
+   * recusar sempre é permitido ao dono.
+   */
+  function answerApproval(runId, approvalId, approve, { ctx = null } = {}) {
     const run = getRun(runId);
-    const resolve = run.pending.get(String(approvalId));
-    if (!resolve) throw new DevError(404, 'Esse pedido de aprovação não existe mais.');
-    resolve(Boolean(approve), ctx);
+    const ticket = approvals.get(approvalId);
+    if (!ticket || ticket.sessionId !== run.id) throw new DevError(404, 'Esse pedido de aprovação não existe mais.');
+    try {
+      approvals.decide(approvalId, { approve: Boolean(approve), approverId: ctx?.userId ?? null, approverRole: ctx?.role ?? null, approverOrigin: ORIGINS.REMOTE });
+    } catch (err) {
+      if (err instanceof ApprovalError) throw new DevError(err.status, err.message);
+      throw err;
+    }
     return { ok: true };
   }
 
@@ -261,7 +285,7 @@ export function createDev({
     const run = getRun(runId);
     if (run.status !== 'running') return { ok: true, already: true };
     run.controller.abort(new Error('cancelado'));
-    for (const resolve of [...run.pending.values()]) resolve(false);
+    approvals.cancelPending(run.id);
     return { ok: true };
   }
 
@@ -278,6 +302,7 @@ export function createDev({
     startRun,
     getEvents,
     answerApproval,
+    approvals,
     cancel,
     modes: listModes,
     getMode,

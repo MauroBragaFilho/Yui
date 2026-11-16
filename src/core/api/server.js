@@ -13,6 +13,8 @@ import { loadPanelCredentials, createSessionStore, createLoginLimiter, createPai
 import { createAdmin } from './admin.js';
 import { createDev } from '../dev/index.js';
 import { createDevRoutes, isLocalRequest } from '../dev/routes.js';
+import { startLocalApprovalChannel } from '../security/localChannel.js';
+import { getApprovalManager } from '../security/approvalManager.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
 
 // Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
@@ -676,5 +678,16 @@ export function startApi(client = null, overrides = {}) {
     logger.info(`[API] Yui API ouvindo em http://${host}:${port} (${tokens.length} token(s); login por senha ${panel.enabled ? 'ATIVO' : 'desativado'})`)
   );
   server.on('error', (err) => logger.error(`[API] Falha ao iniciar: ${err.message}`));
+
+  // Canal LOCAL de aprovação crítica (127.0.0.1:3940 + segredo em secrets/approval-channel.json): só com a aba Código ligada.
+  // Gravar código e rodar comandos só se aprovam por aqui (node scripts/yui-aprovar.mjs), nunca pela API principal.
+  if (String(process.env.YUI_DEV_ENABLED || 'false').toLowerCase() === 'true' && String(process.env.YUI_APPROVAL_CHANNEL || 'true').toLowerCase() !== 'false' && overrides.approvalChannel !== false) {
+    startLocalApprovalChannel({ manager: overrides.dev?.approvals ?? getApprovalManager() })
+      .then((channel) => {
+        server.on('close', () => { channel.close(); });
+        logger.info(`[Aprovação] Canal local em 127.0.0.1:${channel.port} (segredo em ${channel.file}${channel.restricted ? '' : '; NÃO consegui restringir a permissão do arquivo'}).`);
+      })
+      .catch((err) => logger.warn(`[Aprovação] Canal local indisponível (${err.message}): ações críticas da aba Código não poderão ser aprovadas.`));
+  }
   return server;
 }

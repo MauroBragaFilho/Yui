@@ -125,7 +125,7 @@ function createAgent({ llm, webSearch, runCommand, persona }) {
    * @param {object} input.settings       { maxIterations, temperature, maxTokens, historyChars }
    */
   async function run(input) {
-    const { message, history = [], workspace, context = '', modeId = 'yui', approvalMode = 'ask', webSearchEnabled = false, imageBase64 = null, emit = () => {}, requestApproval, observePolicy = null, signal, settings = {} } = input;
+    const { message, history = [], workspace, context = '', modeId = 'yui', approvalMode = 'ask', webSearchEnabled = false, imageBase64 = null, emit = () => {}, requestApproval, approvalGate = null, observePolicy = null, signal, settings = {} } = input;
     const mode = getMode(modeId);
     const allowed = new Set(mode.actions);
     if (!webSearchEnabled) allowed.delete('web_search');
@@ -193,17 +193,35 @@ function createAgent({ llm, webSearch, runCommand, persona }) {
         outcome = `NEGADO: ${verdict.reason}`;
       } else {
         let approved = true;
+        let ticketId = null;
+        let blockedReason = null;
         if (verdict.decision === 'ask') {
           emit({ type: 'tool', action, params, status: 'waiting', summary: describe(action, params) });
-          approved = requestApproval ? await requestApproval({ action, params, summary: describe(action, params), preview: previewFor(action, params) }) : false;
+          const request = { action, params, summary: describe(action, params), preview: previewFor(action, params) };
+          if (approvalGate) {
+            // Ticket de uso único (src/core/security): a aprovação vale para ESTA ação com ESTES parâmetros.
+            const answer = await approvalGate.request(request);
+            approved = answer.approved;
+            ticketId = answer.ticketId;
+            if (approved) {
+              const used = approvalGate.consume(ticketId, { action, params });
+              if (!used.ok) { approved = false; blockedReason = used.reason; }
+            }
+          } else {
+            approved = requestApproval ? await requestApproval(request) : false;
+          }
         }
         if (!approved) {
           status = 'denied';
-          outcome = 'O usuário NÃO aprovou esta ação. Não tente de novo; explique o que faria ou peça outra direção.';
+          outcome = blockedReason
+            ? `NEGADO: ${blockedReason}. Não tente de novo.`
+            : 'O usuário NÃO aprovou esta ação. Não tente de novo; explique o que faria ou peça outra direção.';
         } else {
           emit({ type: 'tool', action, params, status: 'running', summary: describe(action, params) });
+          const startedAt = Date.now();
           try {
             outcome = await toolbox[action](params);
+            if (ticketId) approvalGate.enacted?.(ticketId, { executionTimeMs: Date.now() - startedAt });
             if (['write_file', 'apply_diff'].includes(action)) changed.add(params.path);
           } catch (err) {
             status = 'error';

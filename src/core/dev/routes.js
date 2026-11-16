@@ -15,7 +15,7 @@ import { WorkspaceError } from './workspace-fs.js';
  *   DELETE /v1/dev/projects/:id/history                apaga a conversa
  *   POST   /v1/dev/projects/:id/runs { message, mode, activeFile }   inicia (devolve runId)
  *   GET    /v1/dev/runs/:runId/events?after=N          eventos novos
- *   POST   /v1/dev/runs/:runId/approvals/:aid { approve }   aprova/nega (só no computador)
+ *   POST   /v1/dev/runs/:runId/approvals/:aid { approve }   nega; ações críticas só se aprovam pelo canal local (yui-aprovar)
  *   POST   /v1/dev/runs/:runId/cancel
  */
 
@@ -98,7 +98,7 @@ export function createDevRoutes(dev) {
       }
       if ((r = p.match(/^\/v1\/dev\/runs\/([\w-]+)\/approvals\/([\w-]+)$/)) && m === 'POST') {
         const body = await readJson(req);
-        return dev.answerApproval(r[1], r[2], body.approve === true, { local, ctx });
+        return dev.answerApproval(r[1], r[2], body.approve === true, { ctx });
       }
       if ((r = p.match(/^\/v1\/dev\/runs\/([\w-]+)\/cancel$/)) && m === 'POST') return dev.cancel(r[1]);
     } catch (err) {

@@ -51,9 +51,15 @@ e use o app **no próprio computador** (veja [a seção 3](#-3-o-que-protege-voc
 1. Abra o app (`http://localhost:8081` no computador onde a Yui roda, hoje o notebook servidor, ou a **Yui Desktop**, que é a janela dele) e entre como dono.
 2. Vá em **Código**. À esquerda: **Projetos**, **Adicionar projeto** (só no computador) e a **árvore de arquivos**. Clique num arquivo para vê-lo e deixá-lo **em foco**: a Yui recebe esse arquivo como contexto da próxima pergunta.
 3. Escolha o **modo** (Yui, Desenvolvedora, Revisora...) e escreva: "o que faz a função `soma`?", "revise `src/api.js`", "crie um teste para isso".
-4. Enquanto trabalha, a tela mostra o que ela faz: `✔ Lendo src/soma.js`, `… Gravando notas.txt`. Quando precisar gravar ou rodar algo, aparece um **cartão de aprovação** com exatamente o que será feito:
-   - **Aprovar**: ela executa e continua.
-   - **Negar** (ou não responder em 5 minutos): nada é feito e ela segue sem isso.
+4. Enquanto trabalha, a execução mostra o que ela faz (`✔ Lendo src/soma.js`, `… Gravando notas.txt`). Quando precisar gravar ou rodar algo, abre um **pedido de aprovação crítica** com exatamente o que será feito (evento `approval`, com `level: CRITICAL` e `via: local`). Ele **só se aprova no computador da Yui**, pelo comando:
+
+   ```bash
+   node scripts/yui-aprovar.mjs          # lista o pedido (ação, alvo, hash, prévia) e pergunta: Aprovar? [s/N]
+   node scripts/yui-aprovar.mjs aprovar <id>   # ou direto, pelo começo do id
+   node scripts/yui-aprovar.mjs negar <id>
+   ```
+
+   (no notebook, por SSH ou na tela dele; `npm run aprovar` também serve). **Negar** funciona de qualquer origem do dono, inclusive pela API. O pedido **expira em 60 s**: sem resposta, nada é feito e a Yui segue sem isso.
 5. **Parar** cancela a execução. **Limpar conversa** apaga o histórico guardado daquele projeto.
 
 No celular (pelo Tailscale) a aba funciona para **ler e conversar**; os botões de aprovação ficam desativados com o aviso para aprovar no computador, e a Yui nem tenta gravar.
@@ -68,7 +74,8 @@ No celular (pelo Tailscale) a aba funciona para **ler e conversar**; os botões 
 |----------|---------------|
 | **Só o dono** | Todas as rotas `/v1/dev/*` exigem o papel OWNER no backend; membros recebem `403` |
 | **Somente leitura por padrão** | Com `YUI_READ_ONLY=true` as ferramentas de gravar e de rodar comandos são negadas, e a tela avisa |
-| **Aprovação no computador** | Aprovar uma ação e cadastrar/remover projetos só vale se o pedido vier **do próprio computador onde a Yui roda** (hoje, o notebook servidor): conexão local (loopback) sem cabeçalhos de proxy. Pedido que passa por proxy (Tailscale Serve, cabeçalhos `X-Forwarded-*`/`Tailscale-User-*`) conta como remoto: lê e conversa, **não aprova nada** |
+| **Aprovação crítica só no computador** | Gravar e rodar comando são aprovados por um **canal separado**: `127.0.0.1:3940`, só loopback, protegido por um **segredo efêmero** que a Yui grava em `secrets/approval-channel.json` (permissão restrita: SYSTEM, Administradores e o usuário que roda a Yui). Quem lê esse arquivo está no computador, com acesso ao disco; um cliente remoto, não. O canal recusa cabeçalhos de proxy, `Host` estranho e navegadores, e trava 60 s depois de 5 segredos errados. **A API principal (`:3939`) não aprova ação crítica**, nem por loopback e sem cabeçalhos (resposta `403`, registrada na auditoria). Cadastrar/remover projetos continua exigindo pedido local |
+| **Ticket de uso único** | Cada pedido vira um ticket: vale **60 s**, **uma vez**, e guarda o hash SHA-256 de tudo que será executado (ação, projeto, pasta e parâmetros) com assinatura HMAC. Se o que vai rodar difere do que foi aprovado (um caractere!), o ticket é cancelado. Ticket usado, recusado ou expirado não volta a valer. Etapas e violações vão para a auditoria (`policy.*`) |
 | **Projetos da lista** | A Yui só abre pastas de `YUI_PROJECTS` ou cadastradas pelo dono. O cadastro recusa a raiz do disco, a sua pasta pessoal, pastas do Windows e `.ssh`, `.aws`, `.gnupg`, `.kube` |
 | **Não sai do projeto** | Os caminhos são resolvidos com `path.relative` + `realpath`: `..`, pasta irmã com nome parecido e links simbólicos não escapam |
 | **Arquivos sensíveis** | `.env`, `*.pem`, `*.key`, `id_rsa`, `credentials`, `secrets*`, `.npmrc`... **nunca** são lidos nem gravados, e nem aparecem na árvore |
@@ -137,7 +144,9 @@ As três primeiras estão no `.gitignore` da Yui. **Limpar conversa** apaga o hi
 |---------|-------------|
 | A aba **Código** não aparece | Confira `YUI_DEV_ENABLED=true`, reinicie a Yui e entre como **dono** (membros não veem a aba) |
 | "Somente leitura" no topo | É o padrão. Para gravar: `YUI_READ_ONLY=false` e reinicie |
-| Botões de aprovação desativados | Você abriu pelo celular/Tailscale. Aprove no app do computador |
+| "Aprovação crítica só vale no computador da Yui" (403) | É de propósito: aprove com `node scripts/yui-aprovar.mjs` no computador da Yui (no notebook, por SSH) |
+| `yui-aprovar` diz "Não consegui ler secrets/approval-channel.json" | A Yui não está no ar com `YUI_DEV_ENABLED=true`, ou você está num usuário sem acesso a esse arquivo (use um Administrador no notebook) |
+| O pedido some antes de eu aprovar | Expirou (60 s). Peça de novo e aprove rápido |
 | "(sem pasta)" ao lado do projeto, ou "A pasta deste projeto não existe mais." | O caminho não existe mais; corrija em `YUI_PROJECTS` ou remova e cadastre de novo |
 | "A Yui ainda está trabalhando em outro pedido." | Espere terminar ou clique em **Parar** |
 | Resposta estranha ou JSON na tela | O modelo não seguiu o formato de ferramentas; tente o modo **Yui**, uma pergunta mais direta ou um modelo maior |

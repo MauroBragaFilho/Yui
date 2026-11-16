@@ -20,6 +20,10 @@ for (const k of ['YUI_PANEL_USER', 'YUI_PANEL_PASSWORD', 'YUI_PANEL_PASSWORD_HAS
 const { createProjects, checkProjectPath, ProjectError } = await import('../../src/core/dev/projects.js');
 const { createDevLlm } = await import('../../src/core/dev/llm.js');
 const { createDev, DevError } = await import('../../src/core/dev/index.js');
+const { createApprovalManager } = await import('../../src/core/security/approvalManager.js');
+const { buildContext } = await import('../../src/core/permissions.js');
+const OWNER_CTX = buildContext({ platform: 'api', userId: '111', isDM: true });
+const LOCAL = { approverId: '111', approverRole: 'OWNER', approverOrigin: 'LOCAL_PC' }; // o que o canal local entrega
 const { createDevRoutes, isLocalRequest } = await import('../../src/core/dev/routes.js');
 const { trimToBudget, createHistoryStore } = await import('../../src/core/dev/history.js');
 const { createApiServer, parseTokens } = await import('../../src/core/api/server.js');
@@ -55,8 +59,9 @@ function devWith({ replies, enabled = true, readOnly = true, extraEnv = {} } = {
   const env = { YUI_DEV_ENABLED: enabled ? 'true' : 'false', YUI_PROJECTS: `Demo=${root}`, YUI_DEV_PROJECTS_FILE: path.join(mk(), 'p.json'), ...extraEnv };
   process.env.YUI_READ_ONLY = readOnly ? 'true' : 'false';
   const llm = scriptedLlm(replies ?? ['ok']);
-  const dev = createDev({ env, llm, historyDir: path.join(mk(), 'h'), indexDir: path.join(mk(), 'i'), runCommandImpl: async (c) => ({ code: 0, stdout: `ran:${c}`, stderr: '' }) });
-  return { dev, root, llm, env };
+  const approvals = createApprovalManager({ auditFn: () => {} });
+  const dev = createDev({ env, llm, historyDir: path.join(mk(), 'h'), indexDir: path.join(mk(), 'i'), approvals, runCommandImpl: async (c) => ({ code: 0, stdout: `ran:${c}`, stderr: '' }) });
+  return { dev, root, llm, env, approvals };
 }
 
 async function waitDone(dev, runId, ms = 5000) {
@@ -186,30 +191,36 @@ test('execução: com YUI_READ_ONLY ligado (padrão) gravar e rodar comando são
   assert.equal(dev.status({ local: true }).canWrite, false);
 });
 
-test('execução: sem somente leitura, no computador, grava SÓ depois de aprovar (e só do computador)', async () => {
-  const { dev, root } = devWith({ readOnly: false, replies: [json('write_file', { path: 'novo.js', content: 'ok\n' }), 'Criei.'] });
-  const { runId, approval } = await dev.startRun({ projectId: 'demo', message: 'crie novo.js', local: true });
+test('execução: sem somente leitura, no computador, grava SÓ depois de aprovar pelo canal local (a API não aprova)', async () => {
+  const { dev, root, approvals } = devWith({ readOnly: false, replies: [json('write_file', { path: 'novo.js', content: 'ok\n' }), 'Criei.'] });
+  const { runId, approval } = await dev.startRun({ projectId: 'demo', message: 'crie novo.js', local: true, ctx: OWNER_CTX });
   assert.equal(approval, 'ask');
   let approvalEvent;
   for (let i = 0; i < 100 && !approvalEvent; i++) { approvalEvent = dev.getEvents(runId, 0).events.find((e) => e.type === 'approval'); await sleep(20); }
   assert.ok(approvalEvent, 'pedido de aprovação aparece');
   assert.match(approvalEvent.preview, /novo\.js/);
+  assert.equal(approvalEvent.level, 'CRITICAL');
+  assert.equal(approvalEvent.via, 'local');
+  assert.ok(approvalEvent.expiresAt - Date.now() <= 60_000, 'ação crítica expira em 60 s');
   assert.equal(fs.existsSync(path.join(root, 'novo.js')), false, 'nada gravado antes de aprovar');
-  assert.throws(() => dev.answerApproval(runId, approvalEvent.id, true, { local: false }), (e) => e.status === 403);
-  assert.equal(dev.answerApproval(runId, approvalEvent.id, true, { local: true }).ok, true);
+  assert.throws(() => dev.answerApproval(runId, approvalEvent.id, true, { ctx: OWNER_CTX }), (e) => e.status === 403, 'pela API principal não se aprova ação crítica');
+  assert.equal(fs.existsSync(path.join(root, 'novo.js')), false);
+  assert.equal(approvals.get(approvalEvent.id).status, 'PENDING');
+  assert.equal(approvals.decide(approvalEvent.id, { approve: true, ...LOCAL }).status, 'APPROVED');
   const { events } = await waitDone(dev, runId);
   assert.equal(fs.readFileSync(path.join(root, 'novo.js'), 'utf8'), 'ok\n');
   assert.deepEqual(events.find((e) => e.type === 'done').changed, ['novo.js']);
   assert.ok(events.some((e) => e.type === 'approval_done' && e.approved === true));
-  assert.throws(() => dev.answerApproval(runId, approvalEvent.id, true, { local: true }), (e) => e.status === 404, 'só vale uma vez');
+  assert.throws(() => approvals.decide(approvalEvent.id, { approve: true, ...LOCAL }), (e) => e.status === 409, 'só vale uma vez');
+  assert.equal(approvals.get(approvalEvent.id).status, 'CONSUMED');
 });
 
-test('execução: negar a aprovação não grava', async () => {
+test('execução: negar a aprovação não grava (negar vale de qualquer origem do dono)', async () => {
   const { dev, root } = devWith({ readOnly: false, replies: [json('write_file', { path: 'x.js', content: 'x' }), 'Ok, não gravei.'] });
-  const { runId } = await dev.startRun({ projectId: 'demo', message: 'x', local: true });
+  const { runId } = await dev.startRun({ projectId: 'demo', message: 'x', local: true, ctx: OWNER_CTX });
   let a;
   for (let i = 0; i < 100 && !a; i++) { a = dev.getEvents(runId, 0).events.find((e) => e.type === 'approval'); await sleep(20); }
-  dev.answerApproval(runId, a.id, false, { local: true });
+  assert.equal(dev.answerApproval(runId, a.id, false, { ctx: OWNER_CTX }).ok, true);
   await waitDone(dev, runId);
   assert.equal(fs.existsSync(path.join(root, 'x.js')), false);
 });
@@ -353,7 +364,7 @@ test('API: pelo celular (Tailscale) não cadastra projeto, não aprova e a execu
   assert.equal(start.json.approval, 'readonly');
   await waitDone(dev, start.json.runId);
   assert.equal(fs.existsSync(path.join(root, 'x.js')), false);
-  assert.equal((await api.call('POST', `/v1/dev/runs/${start.json.runId}/approvals/qualquer`, { headers: REMOTE, body: { approve: true } })).status, 403);
+  assert.equal((await api.call('POST', `/v1/dev/runs/${start.json.runId}/approvals/qualquer`, { headers: REMOTE, body: { approve: true } })).status, 404, "nada pendente: não há o que aprovar");
   api.close();
 });
 

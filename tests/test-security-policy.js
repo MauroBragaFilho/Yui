@@ -215,7 +215,7 @@ await test('módulo Código: leitura concorda; gravar continua pedindo aprovaç�
   before = policyEvents().length;
   const run = await dev.startRun({ projectId: 'p', message: 'grave n.txt', local: true, ctx: ownerCtx });
   let asked = false;
-  await finish(run.runId, (e) => { asked = true; assert.equal(fs.existsSync(path.join(project, 'n.txt')), false); dev.answerApproval(run.runId, e.id, false, { local: true }); });
+  await finish(run.runId, (e) => { asked = true; assert.equal(fs.existsSync(path.join(project, 'n.txt')), false); dev.answerApproval(run.runId, e.id, false, { ctx: ownerCtx }); });
   assert.ok(asked, 'o comportamento antigo (pedir aprovação) foi mantido');
   ev = policyEvents().slice(before).filter((e) => e.action === 'dev.write_apply_diff');
   assert.equal(ev.length, 1);
