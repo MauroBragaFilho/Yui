@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import path from 'path';
 import { isReadOnlyMode } from '../permissions.js';
+import { getPolicyEngine } from '../security/policyEngine.js';
+import { ORIGINS } from '../security/permissionMatrix.js';
 import { audit } from '../audit.js';
 import { createAgent } from './agent.js';
 import { buildContext, summarizeWorkspace } from './context.js';
@@ -51,6 +53,7 @@ export function createDev({
 } = {}) {
   const history = createHistoryStore({ dir: historyDir });
   const persona = loadPersona(env.YUI_ROOT_DIR || process.cwd());
+  const policyEngine = getPolicyEngine();
   const agent = createAgent({ llm, webSearch, runCommand: runCommandImpl, persona });
   const workspaces = new Map(); // projectId -> { fs, indexer, summary }
   const runs = new Map();
@@ -206,6 +209,7 @@ export function createDev({
           webSearchEnabled: false,
           emit,
           requestApproval,
+          observePolicy: (req) => policyEngine.observe({ ...req, ctx, origin: local ? ORIGINS.LOCAL_PC : ORIGINS.REMOTE }),
           signal: run.controller.signal,
           settings: { maxIterations: Number(env.YUI_DEV_MAX_STEPS) || 12, temperature: 0.3, maxTokens: 4096, historyChars: 24000 },
         });

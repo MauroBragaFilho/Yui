@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { prepareCommand } from './terminalSanitizer.js';
 
 /**
  * Executa um comando dentro da pasta do projeto.
@@ -8,6 +9,10 @@ import { spawn } from 'child_process';
  * e o comando herdava TODAS as variáveis de ambiente (chaves de API incluídas).
  * Aqui: spawn com limite de saída, encerramento da árvore de processos no timeout
  * e ambiente sem variáveis sensíveis.
+ *
+ * Fase 1 (R03): NUNCA usa shell. O texto passa pelo terminalSanitizer (lista fechada de executáveis, opções
+ * perigosas e caminhos fora do projeto recusados) e só então vira spawn(arquivo, argumentos, { shell: false }).
+ * A aprovação do usuário não contorna isso: é conferido de novo aqui, na hora de executar.
  */
 
 const SENSITIVE_ENV = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|COOKIE|ARL|AUTH)/i;
@@ -36,12 +41,17 @@ function killTree(child) {
 /**
  * @param {string} command
  * @param {{ cwd: string, timeoutMs?: number, maxOutput?: number, env?: object, signal?: AbortSignal }} options
- * @returns {Promise<{ success: boolean, code: number|null, stdout: string, stderr: string, timedOut: boolean, truncated: boolean, aborted: boolean }>}
+ * @returns {Promise<{ success: boolean, code: number|null, stdout: string, stderr: string, timedOut: boolean, truncated: boolean, aborted: boolean, blocked?: boolean }>}
  */
 function runCommand(command, { cwd, timeoutMs = 60_000, maxOutput = 20_000, env = process.env, signal = null } = {}) {
   return new Promise((resolve) => {
     if (!cwd) {
       resolve({ success: false, code: null, stdout: '', stderr: 'Nenhum projeto aberto.', timedOut: false, truncated: false, aborted: false });
+      return;
+    }
+    const prepared = prepareCommand(command, { cwd, env });
+    if (!prepared.ok) {
+      resolve({ success: false, code: null, stdout: '', stderr: `Comando bloqueado: ${prepared.reason}.`, timedOut: false, truncated: false, aborted: false, blocked: true });
       return;
     }
     let stdout = '';
@@ -51,10 +61,10 @@ function runCommand(command, { cwd, timeoutMs = 60_000, maxOutput = 20_000, env 
     let aborted = false;
     let finished = false;
 
-    const child = spawn(String(command), {
+    const child = spawn(prepared.file, prepared.args, {
       cwd,
       env: safeEnv(env),
-      shell: true,
+      shell: false,
       windowsHide: true,
       detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],

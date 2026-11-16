@@ -116,6 +116,9 @@ const toolPolicies = new Map();
  * Quem NÃO declara é tratado como "write" (o mais restritivo): ferramenta
  * nova nunca escapa do modo somente leitura por esquecimento.
  */
+/** Estados de decisão do motor de políticas (src/core/security): AUTO < ASK < CRITICAL < DENY. */
+export const POLICY_STATES = Object.freeze({ AUTO: 'AUTO', ASK: 'ASK', CRITICAL: 'CRITICAL', DENY: 'DENY' });
+
 export const TOOL_ACCESS = Object.freeze({ READ: 'read', OPEN: 'open', EXECUTE: 'execute', WRITE: 'write' });
 const VALID_ACCESS = new Set(Object.values(TOOL_ACCESS));
 

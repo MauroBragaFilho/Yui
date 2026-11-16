@@ -12,7 +12,7 @@ import { logger } from '../../utils/logger.js';
 import { loadPanelCredentials, createSessionStore, createLoginLimiter, createPairing, ownerUserId } from './auth.js';
 import { createAdmin } from './admin.js';
 import { createDev } from '../dev/index.js';
-import { createDevRoutes } from '../dev/routes.js';
+import { createDevRoutes, isLocalRequest } from '../dev/routes.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
 
 // Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
@@ -571,7 +571,7 @@ export function createApiServer({
           out = { type: 'reply', reply: routed.text };
           historyLine = routed.historyLine;
         } else {
-          out = await runAgent(ctx, message, { history: [...history], memoryBlock });
+          out = await runAgent(ctx, message, { history: [...history], memoryBlock, origin: isLocalRequest(req) ? 'LOCAL_PC' : 'REMOTE' });
           if (out?.type === 'reply') {
             const reviewed = await ai.appReviewReply({ ctx, text: message, reply: out.reply, history: [...history], memoryBlock });
             out = { ...out, reply: reviewed.text };

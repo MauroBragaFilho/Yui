@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import * as ai from '../ai/manager.js';
 import { checkToolAccess, listAllowedTools, ROLES, CHANNEL_KINDS } from '../permissions.js';
 import { describeSkills, getSkill, loadSkills } from '../skills.js';
+import { getPolicyEngine } from '../security/policyEngine.js';
 import { audit } from '../audit.js';
 import { describeTools, getTool, validateArgs } from './tools.js';
 
@@ -64,7 +65,7 @@ function skillsFor(ctx) {
 
 function buildAgentPrompt(message, toolNames, skills = []) {
   return [
-    'Você é a Yui, assistente pessoal. Decida como atender a mensagem do usuário.',
+    'Você é a Yui. Decida como atender a mensagem do usuário.',
     'Você pode usar UMA das ferramentas abaixo, mas só se o usuário pediu claramente uma AÇÃO que ela realiza.',
     '',
     'FERRAMENTAS DISPONÍVEIS:',
@@ -98,7 +99,7 @@ async function execute(tool, args, ctx) {
 /**
  * @returns {Promise<{ type: 'reply'|'tool_result'|'needs_confirmation'|'denied', reply: string, tool?: string, pendingId?: string }>}
  */
-export async function runAgent(ctx, message, { history = [], memoryBlock = '' } = {}) {
+export async function runAgent(ctx, message, { history = [], memoryBlock = '', origin = undefined } = {}) {
   purgePending();
   // Só ferramentas realmente registradas (uma política órfã nunca pode derrubar o agent).
   const allowed = listAllowedTools(ctx).filter((n) => getTool(n));
@@ -132,6 +133,8 @@ export async function runAgent(ctx, message, { history = [], memoryBlock = '' } 
   const name = String(decision.tool || '');
   const tool = getTool(name);
   const access = tool ? checkToolAccess(ctx, name) : { allowed: false, reason: 'ferramenta inexistente' };
+  // Motor de políticas em OBSERVAÇÃO: compara com a decisão abaixo e registra; não altera nada.
+  if (tool) getPolicyEngine().observe({ action: name, ctx, origin, legacy: !access.allowed ? 'deny' : access.confirm ? 'ask' : 'allow' });
   if (!tool || !access.allowed) {
     audit('agent.tool.denied', ctx, { tool: name.slice(0, 60), reason: access.reason });
     return { type: 'denied', reply: `Não posso fazer isso aqui (${access.reason}).`, tool: name };

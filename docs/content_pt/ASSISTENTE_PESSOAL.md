@@ -243,6 +243,8 @@ O **AI Manager** (`src/core/ai/manager.js`) expõe `chat()` e delega a um backen
 
 Uma Yui, com tom diferente conforme **quem fala e onde** (`src/core/persona.js`, decidido pelo backend):
 
+Antes das regras de cada contexto vem a **personalidade comum** (`persona/yui-personalidade.md`, escolhida por `YUI_PERSONA_FILE` no `.env`): doce, curiosa e afetuosa, acolhe primeiro quando há sinal emocional e vira objetiva quando é tarefa. Vale no Discord público, na DM e no app do dono, para outros usuários da API, na voz e na aba Código; `off` desliga. Cada contexto continua com as suas regras de segurança e de formato.
+
 | Contexto | Perfil |
 |----------|--------|
 | Dono em **DM, canal privado ou no app** | **Pessoal:** assistente calorosa, direta, concisa e honesta. Chama você pelo nome (`YUI_OWNER_NAME`), admite que é uma IA, sabe a data e a hora de Brasília, dá **uma** recomendação clara, não termina com perguntas genéricas e não usa gírias |

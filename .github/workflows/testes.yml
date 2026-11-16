@@ -1,0 +1,33 @@
+name: Testes
+
+# Roda as suítes OFFLINE da Yui (sem Discord, sem chaves, sem rede). A produção instala o `main` sozinha
+# (YuiAtualizar), então um teste vermelho aqui é o aviso para NÃO deixar o main assim.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    runs-on: windows-latest   # a Yui roda em Windows 10
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Suítes offline
+        run: npm run test:ci
+        env:
+          NO_COLOR: '1'
+      - name: App (lógica contra a API real, IA falsa)
+        working-directory: apps/yui-app
+        run: |
+          npm ci
+          npm test
+          npx tsc --noEmit

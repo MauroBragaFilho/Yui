@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ACTIONS } from './actions.js';
+import { withCorePersona } from '../persona.js';
 
 /**
  * Modos de trabalho da Yui (os "agentes" do Jarvis, reescritos mais curtos).
@@ -76,9 +77,9 @@ const FALLBACK_PERSONA = 'Você é a Yui, parceira de programação. Fale portug
 function loadPersona(rootDir = process.cwd()) {
   try {
     const text = fs.readFileSync(path.join(rootDir, 'persona', 'yui-dev.md'), 'utf8').replace(/\r\n/g, '\n').trim();
-    return text || FALLBACK_PERSONA;
+    return withCorePersona(text || FALLBACK_PERSONA);
   } catch {
-    return FALLBACK_PERSONA;
+    return withCorePersona(FALLBACK_PERSONA);
   }
 }
 

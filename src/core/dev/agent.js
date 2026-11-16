@@ -28,7 +28,7 @@ const TOOL_HELP = {
   search_code: 'search_code {"query": "termos"}: acha trechos relevantes no projeto',
   write_file: 'write_file {"path": "arquivo", "content": "texto completo"}: cria ou substitui um arquivo',
   apply_diff: 'apply_diff {"path": "arquivo", "diff": "blocos SEARCH/REPLACE"}: edita trechos de um arquivo',
-  run_terminal: 'run_terminal {"command": "comando"}: roda um comando na pasta do projeto',
+  run_terminal: 'run_terminal {"command": "comando"}: roda UM comando na pasta do projeto, sem shell. Só git, node, npm, npx, pytest, python, tsc, eslint; sem &&, |, ;, >, node -e, python -c nem caminhos fora do projeto',
   web_search: 'web_search {"query": "busca"}: pesquisa na web',
 };
 
@@ -125,7 +125,7 @@ function createAgent({ llm, webSearch, runCommand, persona }) {
    * @param {object} input.settings       { maxIterations, temperature, maxTokens, historyChars }
    */
   async function run(input) {
-    const { message, history = [], workspace, context = '', modeId = 'yui', approvalMode = 'ask', webSearchEnabled = false, imageBase64 = null, emit = () => {}, requestApproval, signal, settings = {} } = input;
+    const { message, history = [], workspace, context = '', modeId = 'yui', approvalMode = 'ask', webSearchEnabled = false, imageBase64 = null, emit = () => {}, requestApproval, observePolicy = null, signal, settings = {} } = input;
     const mode = getMode(modeId);
     const allowed = new Set(mode.actions);
     if (!webSearchEnabled) allowed.delete('web_search');
@@ -184,6 +184,7 @@ function createAgent({ llm, webSearch, runCommand, persona }) {
       let outcome;
       let status = 'ok';
       const verdict = policy.check(action, params);
+      if (observePolicy) observePolicy({ action: `dev:${action}`, legacy: verdict.decision, target: params.path ?? params.command ?? null });
       if (times > 2) {
         status = 'error';
         outcome = 'Você já fez exatamente essa ação duas vezes. Tente outra abordagem ou responda ao usuário em texto.';

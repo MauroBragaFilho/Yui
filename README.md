@@ -15,7 +15,7 @@
 - 📺 **Avisos de YouTube e Twitch** por servidor.
 - 🛡️ **Moderação:** termos de uso por servidor, AutoMod em três níveis e banimento global. [Moderação](docs/content_pt/MODERATION.md)
 - 💾 **Memória por usuário:** lembra preferências e fatos (30 dias sem interação); cada um vê e apaga a sua com `/yui-memoria` ou pedindo na conversa.
-- 💬 **Conversa no privado (DM) só com o dono:** mensagens privadas de outras pessoas são ignoradas em silêncio (os comandos de barra continuam valendo para todos).
+- 💬 **Conversa no privado (DM):** a Yui responde mensagens privadas de qualquer pessoa (memória e ferramentas pessoais continuam só do dono). `YUI_DM_EVERYONE=false` volta a regra antiga: só o dono conversa no privado e as DMs dos demais são ignoradas em silêncio.
 
 **Assistente pessoal (só para o dono)**
 - 🔐 **Memória permanente**, usada só em DM e canais privados, com personalidade própria.

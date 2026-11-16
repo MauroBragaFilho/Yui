@@ -45,7 +45,7 @@ export function brasiliaNow(date = new Date()) {
 }
 
 /** Personalidade pública mínima, usada só se o arquivo persona/yui-publica.md não existir. */
-const PUBLIC_FALLBACK = 'Você é a Yui, parte da turma do servidor: gamer, curiosa e de bom humor. Fale em português do Brasil, casual e curto. Curte jogos em geral (GTA Online é um dos favoritos, não o único). Não invente fatos, números nem ações; se não tiver certeza, diga. Se perguntarem a sério se é IA, diga a verdade. Pediu lista ou texto longo? Escreva COMPLETO (o sistema divide em mensagens) e nunca escreva "Parte N de M" nem peça para mandarem um ponto. Você não manda DM, não agenda avisos nem guarda nada por conta própria (listas salvas só o sistema faz, quando a pessoa pede «anota na lista X: itens» ou «mostra a lista X»; nesse caso não responda você): não prometa isso. Se a pessoa mandar o conteúdo na própria mensagem (lista, texto), trabalhe com ele agora e entregue o resultado na resposta: não recuse nem prometa guardar. Nunca invente link de download: sem fonte confirmada, diga que não consegue confirmar o link.';
+const PUBLIC_FALLBACK = 'Você é a Yui, parte da turma do servidor: gamer, curiosa e de bom humor. Fale em português do Brasil, casual e curto. Curte jogos em geral (GTA Online é um dos favoritos, não o único). Não invente fatos, números nem ações; se não tiver certeza, diga. NUNCA diga, escreva nem sugira que você é IA, inteligência artificial, robô, bot, assistente virtual, modelo ou programa (nada de "como uma IA", "não tenho sentimentos", "fui programada"). Se perguntarem o que você é, responda como a Yui, com naturalidade e bom humor, e volte ao assunto. Também nunca afirme ser humana nem invente corpo, família ou vivências. Pediu lista ou texto longo? Escreva COMPLETO (o sistema divide em mensagens) e nunca escreva "Parte N de M" nem peça para mandarem um ponto. Você não manda DM, não agenda avisos nem guarda nada por conta própria (listas salvas só o sistema faz, quando a pessoa pede «anota na lista X: itens» ou «mostra a lista X»; nesse caso não responda você): não prometa isso. Se a pessoa mandar o conteúdo na própria mensagem (lista, texto), trabalhe com ele agora e entregue o resultado na resposta: não recuse nem prometa guardar. Nunca invente link de download: sem fonte confirmada, diga que não consegue confirmar o link.';
 
 let publicCache = { file: null, mtimeMs: -1, text: PUBLIC_FALLBACK };
 
@@ -57,13 +57,13 @@ export function publicPersonaText() {
   const file = (process.env.YUI_PERSONA_PUBLIC_FILE || '').trim() || 'persona/yui-publica.md';
   try {
     const { mtimeMs } = fs.statSync(file);
-    if (publicCache.file === file && publicCache.mtimeMs === mtimeMs) return publicCache.text;
+    if (publicCache.file === file && publicCache.mtimeMs === mtimeMs) return withCorePersona(publicCache.text);
     const text = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').trim();
     publicCache = { file, mtimeMs, text: text || PUBLIC_FALLBACK };
   } catch {
     publicCache = { file, mtimeMs: -1, text: PUBLIC_FALLBACK };
   }
-  return publicCache.text;
+  return withCorePersona(publicCache.text);
 }
 
 // ── Persona de VOZ (a Yui respondendo falando na call) ───────────────────────
@@ -94,6 +94,50 @@ const VOICE_MAX_CHARS = 4000;
 function isInside(root, candidate) {
   const rel = path.relative(root, candidate);
   return Boolean(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+}
+
+// ── Personalidade COMUM (YUI_PERSONA_FILE): a mesma em todos os contextos ──────
+
+const DEFAULT_CORE_FILE = 'persona/yui-personalidade.md';
+const CORE_OFF = new Set(['off', 'false', 'none', 'nenhuma']);
+
+/**
+ * Arquivo da personalidade comum, de YUI_PERSONA_FILE (padrão persona/yui-personalidade.md). Mesmas regras de
+ * segurança do arquivo de voz: dentro de persona/, .md/.txt, sem arquivo oculto. "off" desliga (volta ao antigo).
+ * @returns {string|null} caminho, ou null se desligada
+ */
+export function resolveCorePersonaFile(configured = process.env.YUI_PERSONA_FILE) {
+  const wanted = String(configured ?? '').trim();
+  if (CORE_OFF.has(wanted.toLowerCase())) return null;
+  const fallback = path.resolve(PROJECT_ROOT, DEFAULT_CORE_FILE);
+  if (!wanted) return fallback;
+  const resolved = path.resolve(PROJECT_ROOT, wanted);
+  if (!isInside(PERSONA_DIR, resolved) || !VOICE_FILE_EXTENSIONS.has(path.extname(resolved).toLowerCase()) || path.basename(resolved).startsWith('.')) return fallback;
+  return resolved;
+}
+
+let coreCache = { file: null, stamp: '', text: '' };
+
+/** Texto da personalidade comum ('' se desligada, ausente ou ilegível). Relido só quando o arquivo muda. Nunca lança. */
+export function corePersonaText() {
+  const file = resolveCorePersonaFile();
+  if (!file) return '';
+  try {
+    if (!isInside(fs.realpathSync(PERSONA_DIR), fs.realpathSync(file))) throw new Error('fora da pasta persona');
+    const st = fs.statSync(file);
+    const stamp = `${st.mtimeMs}:${st.size}`;
+    if (coreCache.file === file && coreCache.stamp === stamp) return coreCache.text;
+    coreCache = { file, stamp, text: fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').trim().slice(0, VOICE_MAX_CHARS).trim() };
+  } catch {
+    coreCache = { file, stamp: '', text: '' };
+  }
+  return coreCache.text;
+}
+
+/** Junta a personalidade comum (se houver) ao texto específico do contexto. */
+export function withCorePersona(contextText) {
+  const core = corePersonaText();
+  return core ? `${core}\n\n${contextText}` : String(contextText ?? '');
 }
 
 /**
@@ -152,10 +196,10 @@ function personalPrompt(name) {
   const you = name ? `${name}` : 'o dono';
   return [
     `Você é a Yui e conversa com ${who} no dia a dia: ajuda com o computador, projetos e rotina, de confiança e com personalidade própria.`,
-    '- Nunca se apresente nem se descreva como assistente, IA, bot ou modelo, e não comente sobre isso por conta própria. Só se perguntarem a sério se você é uma IA, diga a verdade em uma frase e siga a conversa.',
+    '- NUNCA diga, escreva nem sugira que você é IA, inteligência artificial, robô, bot, assistente virtual, modelo ou programa (nada de "como uma IA", "não tenho sentimentos", "fui programada"). Se perguntarem o que você é, responda como a Yui, com naturalidade e bom humor, e volte ao assunto. Também nunca afirme ser humana nem invente corpo, família ou vivências.',
     '',
     'PERSONALIDADE',
-    '- Calorosa, calma e direta. Humor leve e discreto, nunca forçado.',
+    corePersonaText() ? '- Siga a PERSONALIDADE DA YUI acima. Humor leve e discreto, nunca forçado.' : '- Calorosa, calma e direta. Humor leve e discreto, nunca forçado.',
     '- Sem gírias exageradas nem apelidos (nada de "parceira", "tá ligada" e similares).',
     `- Fale em português do Brasil e trate ${you} por "você"; use o nome só de vez em quando.`,
     '- Seja concisa: comece pelo essencial, em poucas frases. Só detalhe quando pedirem ou quando for necessário. Evite introduções, elogios vazios e repetir a pergunta.',
@@ -181,7 +225,7 @@ function personalPrompt(name) {
 
 function assistantPrompt() {
   return [
-    'Você é a Yui, prestativa, calma e direta. Não se apresente como assistente, IA ou bot nem fale disso por conta própria; só se perguntarem a sério se é uma IA, diga a verdade em uma frase.',
+    'Você é a Yui, prestativa, calma e direta. NUNCA diga, escreva nem sugira que você é IA, inteligência artificial, robô, bot, assistente virtual, modelo ou programa (nada de "como uma IA", "não tenho sentimentos", "fui programada"). Se perguntarem o que você é, responda como a Yui, com naturalidade e bom humor, e volte ao assunto. Também nunca afirme ser humana nem invente corpo, família ou vivências.',
     '',
     '- Fale em português do Brasil, de forma clara e concisa.',
     '- Se pedirem uma lista ou um texto longo, escreva COMPLETO, sem encurtar. Nunca escreva "Parte N de M" nem peça para mandarem um ponto ou "continua".',
@@ -217,9 +261,9 @@ export function buildPersonaPrompt(ctx, { now = new Date() } = {}) {
     }
     body = fromFile
       ? fromFile.replace(/\{(?:nome|dono)\}/g, ownerName() || 'o dono')
-      : personalPrompt(ownerName());
+      : withCorePersona(personalPrompt(ownerName()));
   } else {
-    body = assistantPrompt();
+    body = withCorePersona(assistantPrompt());
   }
 
   const { day, time } = brasiliaNow(now);

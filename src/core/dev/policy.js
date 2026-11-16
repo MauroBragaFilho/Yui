@@ -1,4 +1,5 @@
 import { READ_ONLY_ACTIONS } from './actions.js';
+import { analyzeCommand } from './terminalSanitizer.js';
 
 /**
  * Política de aprovação das ações da Yui.
@@ -44,7 +45,6 @@ const SAFE = [
   /^(npx\s+)?(eslint|prettier\s+--check|tsc\s+--noEmit)(\s+[\w./\\-]+)*$/i,
   /^(python|python3|py)\s+(--version|-V)$/i,
   /^(pytest|cargo\s+(test|check)|go\s+(test|vet)(\s+\.\/\.\.\.)?|dotnet\s+(test|build))(\s+--?[\w-]+)*$/i,
-  /^(dir|ls|pwd|cd|whoami|echo\s+[\w .-]*)$/i,
 ];
 
 const SHELL_META = /[;&|`$<>\n\r]|\$\(/;
@@ -80,6 +80,9 @@ function createPolicy({ approvalMode = 'ask', allowedActions = null } = {}) {
       const kind = classifyCommand(params.command);
       if (kind === 'invalid') return { decision: 'deny', reason: 'Comando vazio.' };
       if (kind === 'dangerous') return { decision: 'deny', reason: 'Comando bloqueado por segurança (pode apagar dados ou alterar o sistema).', danger: true };
+      // Terminal sem shell: só executáveis da lista e sem opções que rodam código arbitrário (terminalSanitizer).
+      const shape = analyzeCommand(params.command);
+      if (!shape.ok) return { decision: 'deny', reason: `Comando não permitido: ${shape.reason}.`, danger: true };
       if (kind === 'safe') return { decision: 'allow' };
       return { decision: 'ask' };
     }

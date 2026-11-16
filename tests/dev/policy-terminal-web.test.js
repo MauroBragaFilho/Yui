@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'fs';
 import os from 'os';
+import path from 'path';
 import { createPolicy, classifyCommand } from '../../src/core/dev/policy.js';
 import { runCommand, safeEnv } from '../../src/core/dev/terminal.js';
 import { parseResults, formatResults, decodeLink, createWebSearch } from '../../src/core/dev/web-search.js';
@@ -41,26 +43,35 @@ test('política: comandos perigosos são negados sempre; consultas seguras rodam
   assert.equal(createPolicy({ approvalMode: 'auto' }).check('run_terminal', { command: 'rm -rf /' }).decision, 'deny');
 });
 
+// Projeto de teste: o terminal não aceita mais "node -e" (código em linha); roda arquivos do projeto.
+const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-term-'));
+fs.writeFileSync(path.join(proj, 'dois.js'), 'console.log(1+1)');
+fs.writeFileSync(path.join(proj, 'sai3.js'), 'process.exit(3)');
+fs.writeFileSync(path.join(proj, 'lento.js'), 'setTimeout(()=>{}, 20000)');
+fs.writeFileSync(path.join(proj, 'grande.js'), "console.log('x'.repeat(100000))");
+fs.writeFileSync(path.join(proj, 'env.js'), "console.log(process.env.MINHA_API_KEY || 'vazio', process.env.PATH ? 'path' : 'sem')");
+test.after(() => fs.rmSync(proj, { recursive: true, force: true }));
+
 test('terminal: roda, captura saída e código de saída', async () => {
-  const r = await runCommand('node -e "console.log(1+1)"', { cwd: os.tmpdir() });
+  const r = await runCommand('node dois.js', { cwd: proj });
   assert.equal(r.success, true);
   assert.equal(r.stdout.trim(), '2');
-  const bad = await runCommand('node -e "process.exit(3)"', { cwd: os.tmpdir() });
+  const bad = await runCommand('node sai3.js', { cwd: proj });
   assert.equal(bad.success, false);
   assert.equal(bad.code, 3);
 });
 
 test('terminal: timeout encerra o processo; saída enorme é cortada', async () => {
-  const slow = await runCommand('node -e "setTimeout(()=>{}, 20000)"', { cwd: os.tmpdir(), timeoutMs: 700 });
+  const slow = await runCommand('node lento.js', { cwd: proj, timeoutMs: 700 });
   assert.equal(slow.timedOut, true);
   assert.equal(slow.success, false);
-  const big = await runCommand('node -e "console.log(\'x\'.repeat(100000))"', { cwd: os.tmpdir(), maxOutput: 1000 });
+  const big = await runCommand('node grande.js', { cwd: proj, maxOutput: 1000 });
   assert.equal(big.truncated, true);
   assert.ok(big.stdout.length <= 1000);
 });
 
 test('terminal: não vaza variáveis sensíveis do ambiente para o comando', async () => {
-  const r = await runCommand('node -e "console.log(process.env.MINHA_API_KEY || \'vazio\', process.env.PATH ? \'path\' : \'sem\')"', { cwd: os.tmpdir(), env: { ...process.env, MINHA_API_KEY: 'segredo' } });
+  const r = await runCommand('node env.js', { cwd: proj, env: { ...process.env, MINHA_API_KEY: 'segredo' } });
   assert.equal(r.stdout.trim(), 'vazio path');
   assert.equal(safeEnv({ A_TOKEN: '1', OK: '2' }).A_TOKEN, undefined);
 });
@@ -68,7 +79,7 @@ test('terminal: não vaza variáveis sensíveis do ambiente para o comando', asy
 test('terminal: cancelar pelo AbortSignal encerra o comando', async () => {
   const c = new AbortController();
   setTimeout(() => c.abort(), 300);
-  const r = await runCommand('node -e "setTimeout(()=>{}, 20000)"', { cwd: os.tmpdir(), signal: c.signal });
+  const r = await runCommand('node lento.js', { cwd: proj, signal: c.signal });
   assert.equal(r.aborted, true);
 });
 

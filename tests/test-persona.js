@@ -49,8 +49,9 @@ console.log('Conteúdo');
 await test('perfil pessoal: assistente do dono pelo nome, honesta e concisa, sem tom de "parceira de jogo"', () => {
   const p = buildPersonaPrompt(ownerApi, { now: NOON });
   assert.match(p, /conversa com Mauro no dia a dia/);
-  assert.match(p, /Nunca se apresente nem se descreva como assistente, IA, bot ou modelo/, 'não se define como IA/assistente por conta própria');
-  assert.match(p, /diga a verdade/, 'mas não nega se perguntarem a sério');
+  assert.match(p, /NUNCA diga, escreva nem sugira que você é IA, inteligência artificial/, 'nunca se diz IA');
+  assert.ok(!/diga a verdade/.test(p), 'sem a antiga exceção "diga a verdade"');
+  assert.match(p, /nunca afirme ser humana/, 'também não afirma ser humana');
   assert.match(p, /Nunca invente/);
   assert.match(p, /Só afirme que fez algo no computador se uma ferramenta confirmou/);
   assert.match(p, /concisa/);
@@ -156,6 +157,63 @@ await test('um "system" explícito do chamador prevalece sobre a persona automá
   ai.registerBackend({ name: 'espiao2', local: false, async chat(a) { seen.push(a.system); return 'ok'; } }, { activate: true });
   await ai.chat({ prompt: 'oi', system: 'SISTEMA-CUSTOM', ctx: ownerApi });
   assert.equal(seen[0], 'SISTEMA-CUSTOM');
+});
+
+console.log('Personalidade comum (YUI_PERSONA_FILE)');
+const { corePersonaText, resolveCorePersonaFile, publicPersonaText } = await import('../src/core/persona.js');
+const { loadPersona } = await import('../src/core/dev/modes.js');
+const CORE_MARK = 'PERSONALIDADE DA YUI';
+await test('o arquivo padrão (persona/yui-personalidade.md) vem em TODOS os contextos que respondem', () => {
+  delete process.env.YUI_PERSONA_FILE;
+  assert.ok(corePersonaText().includes(CORE_MARK));
+  assert.ok(buildPersonaPrompt(ownerDm).includes(CORE_MARK), 'dono (DM/privado/app)');
+  assert.ok(buildPersonaPrompt(memberApi).includes(CORE_MARK), 'outros usuários da API');
+  assert.ok(publicPersonaText().includes(CORE_MARK), 'Discord público');
+  assert.ok(loadPersona(path.resolve(here, '..')).includes(CORE_MARK), 'módulo Código');
+  assert.ok(buildPersonaPrompt(ownerDm).indexOf(CORE_MARK) < buildPersonaPrompt(ownerDm).indexOf('HONESTIDADE E LIMITES'), 'a personalidade vem antes das regras');
+});
+await test('as regras de segurança continuam junto da personalidade (DM, links, texto é dado)', () => {
+  for (const p of [buildPersonaPrompt(ownerDm), buildPersonaPrompt(memberApi), publicPersonaText()]) {
+    assert.match(p, /não (envia|manda) DM/);
+    assert.match(p, /link de download/);
+  }
+  assert.match(corePersonaText(), /NUNCA diga, escreva nem sugira que você é IA/);
+});
+await test('o .env manda: outro arquivo em persona/ vale em todos os contextos; "off" volta ao comportamento antigo', () => {
+  const alt = path.resolve(here, '..', 'persona', 'zz-teste-personalidade.md');
+  fs.writeFileSync(alt, 'PERSONALIDADE-DE-TESTE doce e curiosa.');
+  try {
+    process.env.YUI_PERSONA_FILE = 'persona/zz-teste-personalidade.md';
+    assert.ok(buildPersonaPrompt(ownerDm).includes('PERSONALIDADE-DE-TESTE'));
+    assert.ok(buildPersonaPrompt(memberApi).includes('PERSONALIDADE-DE-TESTE'));
+    assert.ok(publicPersonaText().includes('PERSONALIDADE-DE-TESTE'));
+    fs.writeFileSync(alt, 'EDITADA-AGORA');
+    const future = new Date(Date.now() + 5000);
+    fs.utimesSync(alt, future, future);
+    assert.ok(corePersonaText().includes('EDITADA-AGORA'), 'relê quando o arquivo muda');
+    process.env.YUI_PERSONA_FILE = 'off';
+    assert.equal(resolveCorePersonaFile(), null);
+    assert.equal(corePersonaText(), '');
+    assert.ok(!buildPersonaPrompt(ownerDm).includes(CORE_MARK) && buildPersonaPrompt(ownerDm).includes('conversa com Mauro no dia a dia'));
+  } finally {
+    fs.rmSync(alt, { force: true });
+    delete process.env.YUI_PERSONA_FILE;
+  }
+});
+await test('caminho fora de persona/ (.env, .., absoluto, extensão estranha, oculto) é recusado e volta ao padrão', () => {
+  const std = resolveCorePersonaFile('');
+  for (const bad of ['.env', '../.env', 'knowledge/00_regras_ia.md', 'C:\Windows\win.ini', '/etc/passwd', 'persona/../.env', 'persona/yui-personalidade.json', 'persona/.segredo.md']) {
+    assert.equal(resolveCorePersonaFile(bad), std, bad);
+  }
+});
+await test('um arquivo pessoal próprio (YUI_PERSONA_PERSONAL_FILE) continua substituindo o perfil do dono por inteiro', () => {
+  const f = path.join(process.env.DATABASE_DIR, 'meu-perfil.txt');
+  fs.writeFileSync(f, 'Você é a Yui de {nome}. Só isto.');
+  process.env.YUI_PERSONA_PERSONAL_FILE = f;
+  try {
+    const p = buildPersonaPrompt(ownerDm);
+    assert.ok(p.startsWith('Você é a Yui de Mauro. Só isto.') && !p.includes(CORE_MARK));
+  } finally { delete process.env.YUI_PERSONA_PERSONAL_FILE; }
 });
 
 fs.rmSync(process.env.DATABASE_DIR, { recursive: true, force: true });
