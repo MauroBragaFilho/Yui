@@ -16,6 +16,7 @@ npm run test:ci           # TODAS as suítes offline de uma vez (é o que o GitH
 npm run test:approvals   # aprovação crítica: tickets, canal local, CLI yui-aprovar e fluxo completo
 npm run test:discordguard # motor de políticas nas interações do Discord (ban, painéis, config, downloads)
 npm run test:jobguard      # motor de políticas nas tarefas automáticas (agendador, lembretes, limpezas, manutenção)
+npm run test:aibaseurl      # endereço de provedor de IA próprio: fora da rede só com host liberado no .env
 npm run test:binverify     # integridade dos binários baixados (yt-dlp, ffmpeg): hash publicado tem que bater
 npm run test:lockverify    # package-lock: só registro oficial do npm, com hash forte (usado pelo atualizador)
 npm run test:routes      # motor de políticas nas rotas da API (admin, BDS, memória): observe não muda nada; enforce nega
@@ -138,6 +139,7 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:search` | 56 | Cadeia Brave/Tavily/SearXNG/DuckDuckGo/Bing, cota esgotada, bloqueio leve e descanso, limite por pessoa, conversa sensível sem busca, gate de palavras, `system.info` tolerante, `commands.run` sem shell e com confirmação, skills (só dono, sem ferramentas), otimizador da consulta (sem ferramentas nem histórico, dado pessoal e palavras proibidas barrados antes do buscador), contexto da web reaproveitado entre provedores, teto global por hora e motivo distinto para cada tipo de falha |
 | `test:discordguard` | 14 | Interações do Discord ligadas à matriz: observe não bloqueia; enforce nega por somente leitura, papel e origem |
 | `test:jobguard` | 9 | Tarefas automáticas ligadas à matriz: observe só registra (1 vez por hora); enforce para a manutenção em somente leitura; vigias dos pontos de entrada |
+| `test:aibaseurl` | 8 | Lista YUI_AI_BASEURL_HOSTS (exato, coringa, lookalikes), rede local livre, host público não liberado recusado com 403 e nada gravado, regras antigas mantidas |
 | `test:binverify` | 10 | Download com hash conferido: instala se bate; recusa hash diferente, lista sem o arquivo e lista inacessível, sem mexer no binário anterior |
 | `test:lockverify` | 8 | Regras do package-lock (git/http/arquivo/outro registro/sem hash/sha1 recusados), código de saída do comando e vigia do atualizador |
 | `test:routes` | 7 | Rotas da API ligadas à matriz: observe não bloqueia; enforce nega por somente leitura, papel e origem (crítico só no PC) |

@@ -15,7 +15,7 @@ import { MIN_KEY_LENGTH } from '../gateway/providers.js';
  *  - As chaves só ENTRAM pela API: nenhuma resposta devolve uma chave, só os 4
  *    últimos caracteres para você reconhecer qual é.
  *  - Chaves do .env aparecem só como quantidade e não podem ser removidas pelo painel.
- *  - URL de provedor próprio: https em qualquer lugar, http só para a sua máquina/rede.
+ *  - URL de provedor próprio: máquina/rede local livre (http ou https); fora dela só https e só host liberado em YUI_AI_BASEURL_HOSTS (.env).
  *  - YUI_PANEL_AI_EDIT=false trava toda edição por aqui.
  */
 
@@ -161,7 +161,25 @@ function isPrivateHost(host) {
   return a === 127 || a === 10 || (a === 192 && b2 === 168) || (a === 172 && b2 >= 16 && b2 <= 31) || (a === 100 && b2 >= 64 && b2 <= 127);
 }
 
-export function checkBaseUrl(value) {
+/**
+ * Provedor de IA FORA da sua rede só entra se o host estiver em YUI_AI_BASEURL_HOSTS (no .env, editado no computador da Yui).
+ * Sem isso, qualquer pessoa com o token do dono poderia mandar todas as conversas para um servidor dela pelo painel.
+ * Aceita host exato ("api.exemplo.com") ou todos os subdomínios ("*.exemplo.com"). Máquina/rede local nunca precisa de liberação.
+ * A regra vale ao CADASTRAR: provedores já salvos continuam funcionando.
+ */
+export function isHostAllowed(hostname, env = process.env) {
+  const host = String(hostname ?? '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host) return false;
+  for (const raw of String(env.YUI_AI_BASEURL_HOSTS ?? '').split(',')) {
+    const rule = raw.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[:/].*$/, '');
+    if (!rule) continue;
+    if (rule === host) return true;
+    if (rule.startsWith('*.') && host.endsWith(rule.slice(1)) && host.length > rule.length - 1) return true;
+  }
+  return false;
+}
+
+export function checkBaseUrl(value, env = process.env) {
   let url;
   try {
     url = new URL(String(value ?? '').trim());
@@ -173,6 +191,9 @@ export function checkBaseUrl(value) {
   if (url.search || url.hash) throw new AiSettingsError(400, 'O endereço não pode ter parâmetros (?...) nem #.');
   if (url.protocol === 'http:' && !isPrivateHost(url.hostname)) {
     throw new AiSettingsError(400, 'Fora da sua máquina/rede, use https:// (senão a chave e as conversas viajariam sem proteção).');
+  }
+  if (!isPrivateHost(url.hostname) && !isHostAllowed(url.hostname, env)) {
+    throw new AiSettingsError(403, `O provedor ${url.hostname} está fora da sua rede e não está liberado. Para liberar, o dono acrescenta esse endereço em YUI_AI_BASEURL_HOSTS no .env, no computador da Yui (não dá para fazer por aqui).`);
   }
   return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
 }

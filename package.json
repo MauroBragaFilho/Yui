@@ -22,6 +22,7 @@
     "validar:enforce": "node scripts/validar-enforce.mjs",
     "test:jobguard": "node tests/test-job-guard.js",
     "test:binverify": "node tests/test-binaries-verify.js",
+    "test:aibaseurl": "node tests/test-ai-baseurl.js",
     "test:lockverify": "node tests/test-lock-verify.js",
     "test:ci": "node scripts/run-ci.mjs",
     "test:search": "node tests/test-search-skills.js",

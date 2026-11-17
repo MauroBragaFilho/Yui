@@ -20,7 +20,7 @@ export const SUITES = [
   'test:audit', 'test:backup', 'test:dmowner', 'test:chatintents', 'test:imageintent', 'test:library',
   'test:reminders', 'test:remindersapi', 'test:llmsafety', 'test:context', 'test:safefetch', 'test:netdefaults',
   'test:healthreport', 'test:guilddelete', 'test:redditguard', 'test:chromeprofile', 'test:interactionstats',
-  'test:dev', 'test:security', 'test:approvals', 'test:routes', 'test:discordguard', 'test:jobguard', 'test:binverify', 'test:lockverify',
+  'test:dev', 'test:security', 'test:approvals', 'test:routes', 'test:discordguard', 'test:jobguard', 'test:binverify', 'test:aibaseurl', 'test:lockverify',
 ];
 
 function argvOf(command) {

@@ -28,6 +28,8 @@ process.env.YUI_AUDIT_FILE = path.join(tmp, 'audit.jsonl');
 process.env.YUI_AI_SETTINGS_FILE = path.join(tmp, 'secrets', 'ai-providers.json');
 for (const k of ['GROQ_API_KEY', 'GROQ_API_KEYS', 'YUI_GATEWAY_DISABLE', 'YUI_GATEWAY_CUSTOM', 'CLOUDFLARE_ACCOUNT_ID']) delete process.env[k];
 process.env.YUI_OWNER_ID = OWNER;
+// Provedor de IA fora da rede só entra se o host estiver liberado no .env (YUI_AI_BASEURL_HOSTS): aqui só o endereço de teste.
+process.env.YUI_AI_BASEURL_HOSTS = 'api.exemplo.com';
 process.env.YUI_MEMORY_ENABLED = 'true';
 process.env.YUI_READ_ONLY = 'true';
 delete process.env.OWNER_ID;
@@ -619,6 +621,10 @@ console.log('Painel de administração');
     assert.equal((await adm('POST', '/ai/custom', { ...body, id: 'semmodelo', models: [] })).status, 400);
     assert.equal((await adm('POST', '/ai/custom', { ...body, id: 'nuvem', baseUrl: 'https://api.exemplo.com/v1', key: '' })).status, 400, 'nuvem exige chave');
     assert.equal((await adm('POST', '/ai/custom', { ...body, id: 'nuvem', baseUrl: 'https://api.exemplo.com/v1' })).status, 200, 'https com chave');
+    // NEGATIVO: com o token do dono, apontar o tráfego de IA para um servidor que não está liberado no .env é recusado e nada é salvo
+    const sequestro = await adm('POST', '/ai/custom', { ...body, id: 'sequestro', baseUrl: 'https://servidor-do-atacante.example/v1', key: 'sk-chave-falsa-1234567890', first: true });
+    assert.equal(sequestro.status, 403, 'host fora da lista liberada');
+    assert.match(JSON.stringify(sequestro.json ?? {}), /YUI_AI_BASEURL_HOSTS/);
 
     assert.equal((await adm('POST', '/ai/providers/omniroute', { enabled: false })).status, 200);
     assert.ok(!loadProviders(process.env).providers.some((x) => x.id === 'omniroute'), 'desligado sai do Gateway');
