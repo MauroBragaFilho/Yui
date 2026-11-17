@@ -2,7 +2,9 @@ import crypto from 'crypto';
 import * as ai from '../ai/manager.js';
 import { checkToolAccess, listAllowedTools, ROLES, CHANNEL_KINDS } from '../permissions.js';
 import { describeSkills, getSkill, loadSkills } from '../skills.js';
-import { getPolicyEngine } from '../security/policyEngine.js';
+import { getPolicyEngine, originFor } from '../security/policyEngine.js';
+import { getApprovalManager, LEVELS, STATUS } from '../security/approvalManager.js';
+import { POLICY_STATES } from '../permissions.js';
 import { audit } from '../audit.js';
 import { describeTools, getTool, validateArgs } from './tools.js';
 
@@ -24,6 +26,7 @@ import { describeTools, getTool, validateArgs } from './tools.js';
  */
 
 const CONFIRM_TTL_MS = 2 * 60 * 1000;
+const TTL_CRITICAL_MS = 60 * 1000;
 const TOOL_TIMEOUT_MS = 30_000;
 const pending = new Map(); // id -> { userId, tool, args, expires }
 
@@ -133,11 +136,12 @@ export async function runAgent(ctx, message, { history = [], memoryBlock = '', o
   const name = String(decision.tool || '');
   const tool = getTool(name);
   const access = tool ? checkToolAccess(ctx, name) : { allowed: false, reason: 'ferramenta inexistente' };
-  // Motor de políticas em OBSERVAÇÃO: compara com a decisão abaixo e registra; não altera nada.
-  if (tool) getPolicyEngine().observe({ action: name, ctx, origin, legacy: !access.allowed ? 'deny' : access.confirm ? 'ask' : 'allow' });
-  if (!tool || !access.allowed) {
-    audit('agent.tool.denied', ctx, { tool: name.slice(0, 60), reason: access.reason });
-    return { type: 'denied', reply: `Não posso fazer isso aqui (${access.reason}).`, tool: name };
+  // Motor de políticas: em 'observe' só registra (decisão antiga vale); em 'enforce' vale a mais restritiva.
+  const gated = tool ? getPolicyEngine().gate({ action: name, ctx, origin, legacy: !access.allowed ? 'deny' : access.confirm ? 'ask' : 'allow' }) : null;
+  if (!tool || !access.allowed || gated.decision === POLICY_STATES.DENY) {
+    const reason = access.reason ?? gated?.verdict?.reason ?? 'política de segurança';
+    audit('agent.tool.denied', ctx, { tool: name.slice(0, 60), reason });
+    return { type: 'denied', reply: `Não posso fazer isso aqui (${reason}).`, tool: name };
   }
 
   let args;
@@ -148,9 +152,21 @@ export async function runAgent(ctx, message, { history = [], memoryBlock = '', o
     return { type: 'denied', reply: `Pedido inválido para ${name}: ${err.message}.`, tool: name };
   }
 
-  if (access.confirm) {
+  if (gated.decision === POLICY_STATES.CRITICAL) {
+    // Ação crítica: ticket de uso único, aprovado SÓ no computador da Yui (yui-aprovar). Depois o usuário confirma aqui.
     const id = crypto.randomBytes(6).toString('hex');
-    pending.set(id, { userId: ctx.userId, tool: name, args, expires: Date.now() + CONFIRM_TTL_MS });
+    const ticket = getApprovalManager().request({
+      action: name, params: args, level: LEVELS.CRITICAL, requester: ctx, origin: origin ?? originFor(ctx), sessionId: `agent:${id}`,
+      canonicalTarget: JSON.stringify(args), summary: `${name} ${JSON.stringify(args)}`, preview: `${name} ${JSON.stringify(args)}`,
+    });
+    pending.set(id, { userId: ctx.userId, tool: name, args, expires: Date.now() + TTL_CRITICAL_MS, ticketId: ticket.id, origin });
+    audit('agent.tool.pending', ctx, { tool: name, critical: true });
+    return { type: 'needs_confirmation', reply: `Ação crítica: ${name} ${JSON.stringify(args)}. Aprove no computador da Yui (node scripts/yui-aprovar.mjs, vale 60 s) e depois confirme aqui.`, tool: name, pendingId: id };
+  }
+
+  if (access.confirm || gated.decision === POLICY_STATES.ASK) {
+    const id = crypto.randomBytes(6).toString('hex');
+    pending.set(id, { userId: ctx.userId, tool: name, args, expires: Date.now() + CONFIRM_TTL_MS, origin });
     audit('agent.tool.pending', ctx, { tool: name });
     const shown = Object.keys(args).length ? ` ${JSON.stringify(args)}` : '';
     return { type: 'needs_confirmation', reply: `Confirma executar ${name}${shown}?`, tool: name, pendingId: id };
@@ -165,15 +181,28 @@ export async function resolvePending(ctx, id, approve = true) {
   purgePending();
   const p = pending.get(String(id));
   if (!p || p.userId !== ctx.userId) return { type: 'denied', reply: 'Confirmação inválida ou expirada.' };
+  const approvals = getApprovalManager();
+  if (p.ticketId && approve) {
+    const t = approvals.get(p.ticketId);
+    if (t?.status === STATUS.PENDING) return { type: 'needs_confirmation', reply: 'Ainda não foi aprovado no computador da Yui (node scripts/yui-aprovar.mjs).', tool: p.tool, pendingId: String(id) };
+  }
   pending.delete(String(id)); // uso único, mesmo se negada
   if (!approve) {
+    if (p.ticketId) { try { approvals.decide(p.ticketId, { approve: false, approverId: ctx.userId, approverRole: ctx.role, approverOrigin: p.origin ?? originFor(ctx) }); } catch { /* já resolvido */ } }
     audit('agent.tool.cancelled', ctx, { tool: p.tool });
     return { type: 'reply', reply: 'Ação cancelada.' };
   }
   const tool = getTool(p.tool);
   const access = tool ? checkToolAccess(ctx, p.tool) : { allowed: false };
   if (!tool || !access.allowed) return { type: 'denied', reply: 'Não tenho mais permissão para essa ação.' };
+  const engine = getPolicyEngine();
+  if (engine.mode() === 'enforce' && engine.evaluate({ action: p.tool, role: ctx.role, origin: p.origin ?? originFor(ctx) }).decision === POLICY_STATES.DENY) return { type: 'denied', reply: 'Não tenho mais permissão para essa ação.' };
+  if (p.ticketId) {
+    const used = approvals.consume(p.ticketId, { action: p.tool, params: p.args });
+    if (!used.ok) return { type: 'denied', reply: `Não executei: ${used.reason}.`, tool: p.tool };
+  }
   const out = await execute(tool, p.args, ctx);
+  if (p.ticketId) approvals.enacted(p.ticketId, {});
   return { type: 'tool_result', reply: out.text, tool: p.tool };
 }
 

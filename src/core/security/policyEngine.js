@@ -14,7 +14,8 @@ import { canonicalAction, COLUMNS, MATRIX, ORIGINS, STRICTNESS, stricter } from 
  * MODO ATUAL: OBSERVAÇÃO (YUI_POLICY_MODE=observe, padrão). `observe()` decide, compara com o que o
  * código antigo decidiu e REGISTRA na auditoria (`policy.evaluate`), mas NÃO muda nada do que acontece.
  * Serve para ver onde o motor discorda do comportamento atual ANTES de passar a impor as regras.
- * `YUI_POLICY_MODE=off` desliga o registro.
+ * `YUI_POLICY_MODE=off` desliga o registro. `YUI_POLICY_MODE=enforce` IMPÕE (ver `gate()`): vale a mais restritiva
+ * entre o código antigo e a matriz; ações CRITICAL do Agent exigem ticket aprovado no canal local.
  */
 
 const LEGACY = { allow: POLICY_STATES.AUTO, ask: POLICY_STATES.ASK, deny: POLICY_STATES.DENY };
@@ -98,7 +99,41 @@ export function createPolicyEngine({ env = process.env, auditFn = audit, readOnl
     }
   }
 
-  return { evaluate, observe, stats: () => JSON.parse(JSON.stringify(counters)) };
+  /** 'observe' (padrão: só registra), 'enforce' (impõe) ou 'off'. */
+  const mode = () => {
+    const m = String(env.YUI_POLICY_MODE ?? 'observe').trim().toLowerCase();
+    return m === 'enforce' || m === 'off' ? m : 'observe';
+  };
+
+  /**
+   * Decisão EFETIVA de uma ação. Em 'observe'/'off' devolve a decisão do código antigo (comportamento intacto);
+   * em 'enforce' vale a MAIS RESTRITIVA entre o código antigo e a matriz (o motor só aperta, nunca afrouxa,
+   * então a migração não abre nada que antes estava fechado). Ação fora da matriz mantém a decisão antiga.
+   * @returns {{ decision: string, enforced: boolean, verdict: object|null }}
+   */
+  function gate({ action, ctx, origin, guildAdmin = false, legacy, target = null }) {
+    const old = LEGACY[legacy] ?? POLICY_STATES.DENY;
+    const m = mode();
+    if (m !== 'enforce' || !canonicalAction(action)) {
+      const verdict = observe({ action, ctx, origin, guildAdmin, legacy, target });
+      return { decision: old, enforced: false, verdict };
+    }
+    const resolvedOrigin = origin ?? originFor({ platform: ctx?.platform, channelKind: ctx?.channelKind });
+    const verdict = evaluate({ action, role: ctx?.role, origin: resolvedOrigin, guildAdmin });
+    const decision = stricter(old, verdict.decision);
+    try {
+      counters.total += 1;
+      counters.byAction[verdict.action] = (counters.byAction[verdict.action] ?? 0) + 1;
+      auditFn('policy.evaluate', ctx, {
+        action: verdict.action, decision: verdict.decision, legacy: old, effective: decision,
+        diverges: old !== verdict.decision ? (STRICTNESS[verdict.decision] > STRICTNESS[old] ? 'motor mais restritivo' : 'motor mais permissivo (ignorado)') : null,
+        origin: resolvedOrigin, column: verdict.column ?? null, reason: verdict.reason, targetHash: hashTarget(target), mode: 'enforce',
+      });
+    } catch { /* auditoria nunca derruba a decisão */ }
+    return { decision, enforced: true, verdict };
+  }
+
+  return { evaluate, observe, gate, mode, stats: () => JSON.parse(JSON.stringify(counters)) };
 }
 
 let shared = null;

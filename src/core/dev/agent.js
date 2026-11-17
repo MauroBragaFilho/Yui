@@ -183,8 +183,15 @@ function createAgent({ llm, webSearch, runCommand, persona }) {
 
       let outcome;
       let status = 'ok';
-      const verdict = policy.check(action, params);
-      if (observePolicy) observePolicy({ action: `dev:${action}`, legacy: verdict.decision, target: params.path ?? params.command ?? null });
+      const verdict = { ...policy.check(action, params) };
+      if (observePolicy) {
+        // Em 'enforce' o motor só aperta: DENY nega; ASK/CRITICAL pedem aprovação (o nível sai do approvalGate).
+        const gated = observePolicy({ action: `dev:${action}`, legacy: verdict.decision, target: params.path ?? params.command ?? null });
+        if (gated?.enforced) {
+          if (gated.decision === 'DENY' && verdict.decision !== 'deny') { verdict.decision = 'deny'; verdict.reason = gated.verdict?.reason ?? 'política de segurança'; }
+          else if ((gated.decision === 'ASK' || gated.decision === 'CRITICAL') && verdict.decision === 'allow') verdict.decision = 'ask';
+        }
+      }
       if (times > 2) {
         status = 'error';
         outcome = 'Você já fez exatamente essa ação duas vezes. Tente outra abordagem ou responda ao usuário em texto.';

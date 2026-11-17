@@ -338,7 +338,7 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 | `YUI_TRUSTED_IDS` | IDs de confiança, separados por vírgula | — |
 | `YUI_PRIVATE_CHANNEL_IDS` | Canais tratados como privados (memória pessoal liberada para o dono) | — |
 | `YUI_OWNER_NAME` | Nome pelo qual a Yui trata o dono no perfil pessoal | — |
-| `YUI_POLICY_MODE` | Motor de políticas (Fase 1): `observe` (padrão) só **registra** na auditoria (`policy.evaluate`) a decisão do motor e onde ela difere do comportamento atual, sem mudar nada; `off` desliga o registro | `observe` |
+| `YUI_POLICY_MODE` | Motor de políticas (Fase 1): `observe` (padrão) só **registra** na auditoria (`policy.evaluate`) a decisão do motor e onde ela difere do comportamento atual, sem mudar nada; `enforce` **impõe**: vale a decisão mais restritiva entre o código antigo e a matriz (nunca afrouxa); ação crítica do chat (ex.: `commands.run`) vira ticket aprovado só no computador da Yui (`yui-aprovar`) e depois confirmado no chat; `off` desliga o registro | `observe` |
 | `POLICY_<CATEGORIA>_AUTONOMY` | O dono pode **apertar** uma categoria (`DEV`, `ADMIN`, `MEMORY`, `RADIO`, `CHAT`, `COMMANDS`...) para `ASK`, `CRITICAL` ou `DENY`; nunca afrouxa | — |
 | `YUI_PERSONA_FILE` | **Personalidade comum** a todos os lugares onde a Yui responde (Discord público, DM/app do dono, outros usuários da API, voz e aba Código). Arquivo dentro de `persona/` (`.md`/`.txt`); `off` desliga. Os arquivos abaixo acrescentam as regras de cada contexto | `persona/yui-personalidade.md` |
 | `YUI_PERSONA_PUBLIC_FILE` | Arquivo da personalidade do Discord público (padrão `persona/yui-publica.md`, relido ao ser alterado) | `persona/yui-publica.md` |

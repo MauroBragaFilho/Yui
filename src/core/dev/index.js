@@ -224,7 +224,7 @@ export function createDev({
           webSearchEnabled: false,
           emit,
           approvalGate,
-          observePolicy: (req) => policyEngine.observe({ ...req, ctx, origin: local ? ORIGINS.LOCAL_PC : ORIGINS.REMOTE }),
+          observePolicy: (req) => policyEngine.gate({ ...req, ctx, origin: local ? ORIGINS.LOCAL_PC : ORIGINS.REMOTE }),
           signal: run.controller.signal,
           settings: { maxIterations: Number(env.YUI_DEV_MAX_STEPS) || 12, temperature: 0.3, maxTokens: 4096, historyChars: 24000 },
         });

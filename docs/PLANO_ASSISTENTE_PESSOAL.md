@@ -25,7 +25,7 @@ Junta o relatório da Liz (16/11), a `ESPECIFICACAO_MOTOR_POLITICAS_FASE1.md`, o
 | 2 ✅ | `src/core/security/permissionMatrix.js` e `policyEngine.js` em **modo observação** (só registra decisão na auditoria) + `tests/test-security-policy.js` | Fase 1, passo 1 | Não |
 | 3 ✅ | `terminalSanitizer.js`: sem shell, lista de executáveis, bloqueio de `cmd /c`, `-enc`, `python -c`, `node -e`, `&&`, `\|`; remover `shell: true` de `dev/terminal.js` (npm via `node npm-cli.js`) | R03 | Sim (mais restrito) |
 | 4 ✅ | Canal de aprovação crítica separado (loopback dedicado `127.0.0.1:3940` + segredo efêmero, 0600) e `ApprovalManager` (ticket de uso único, `paramsHash`, expiração) no lugar do `isLocalRequest` | R02 | Sim |
-| 5 | Migrar Código, `commands.run`, `apps.open` e ações de admin para o motor; depois ligar o modo que **impõe** | Fase 1, passo 4 | Sim |
+| 5 ✅ (código pronto; `enforce` desligado) | Migrar Código, `commands.run`, `apps.open` e ações de admin para o motor; depois ligar o modo que **impõe** | Fase 1, passo 4 | Sim |
 | 6 | Fase 0 restante: `git rm --cached` dos dados de runtime (R07); `verifyAudit` periódico com alerta; `tailscale serve` + regra de firewall para o app fora de casa; backup: confirmar restauração | R04/R07/R08 | Não / infra |
 | 7 | Depois: migração gradual do `llmHandler.js` para o Agent único; Yui Desktop em `apps/desktop`; memória v2; aprovações nativas | Fases 2–4 | — |
 

@@ -210,6 +210,57 @@ await test('MCP: só entram ferramentas explicitamente permitidas, sempre com co
   assert.equal(tools.getTool('whisper.delete_all'), null);
 });
 
+console.log('Motor de políticas imposto (YUI_POLICY_MODE=enforce)');
+await test('enforce: ação crítica vira ticket, só executa depois de aprovada no PC e uma única vez', async () => {
+  const { getApprovalManager, resetApprovalManagerForTests } = await import('../src/core/security/approvalManager.js');
+  resetApprovalManagerForTests();
+  process.env.YUI_READ_ONLY = 'false';
+  process.env.YUI_POLICY_MODE = 'enforce';
+  tools.registerTool({ name: 'commands.run', description: 'Roda.', params: { name: { type: 'string', required: true, max: 20 } }, minRole: ROLES.OWNER, access: 'execute', confirm: true, async run({ name }) { ran.push(['cmd', name]); return 'rodou'; } });
+  const approvals = getApprovalManager();
+  try {
+    // A matriz exige o PC para commands.run: pelo Discord/API remota é negado, mesmo o dono.
+    script = ['{"tool":"commands.run","args":{"name":"x"}}'];
+    assert.equal((await runAgent(ownerDm, 'roda', { origin: 'REMOTE' })).type, 'denied');
+    const before = ran.length;
+    script = ['{"tool":"commands.run","args":{"name":"x"}}'];
+    const out = await runAgent(ownerDm, 'roda', { origin: 'LOCAL_PC' });
+    assert.equal(out.type, 'needs_confirmation');
+    assert.match(out.reply, /yui-aprovar/);
+    // Confirmar no chat SEM aprovar no PC: continua pendente e não executa.
+    assert.equal((await resolvePending(ownerDm, out.pendingId)).type, 'needs_confirmation');
+    assert.equal(ran.length, before);
+    // Aprovação por origem remota é recusada; só LOCAL_PC vale.
+    const [t1] = approvals.list();
+    assert.throws(() => approvals.decide(t1.id, { approve: true, approverId: '111', approverRole: ROLES.OWNER, approverOrigin: 'REMOTE' }), /computador/);
+    approvals.decide(t1.id, { approve: true, approverId: '111', approverRole: ROLES.OWNER, approverOrigin: 'LOCAL_PC' });
+    const done = await resolvePending(ownerDm, out.pendingId);
+    assert.deepEqual([done.type, done.reply], ['tool_result', 'rodou']);
+    assert.deepEqual(ran.at(-1), ['cmd', 'x']);
+    assert.equal((await resolvePending(ownerDm, out.pendingId)).type, 'denied', 'ticket de uso único');
+    // Recusar pelo chat cancela o ticket.
+    script = ['{"tool":"commands.run","args":{"name":"y"}}'];
+    const o2 = await runAgent(ownerDm, 'roda', { origin: 'LOCAL_PC' });
+    assert.equal((await resolvePending(ownerDm, o2.pendingId, false)).reply, 'Ação cancelada.');
+    assert.equal(approvals.list().length, 0);
+  } finally {
+    delete process.env.YUI_POLICY_MODE;
+    delete process.env.YUI_READ_ONLY;
+    tools.clearTools();
+  }
+});
+await test('observe (padrão): o comportamento antigo continua igual (confirmação simples, sem ticket)', async () => {
+  process.env.YUI_READ_ONLY = 'false';
+  tools.registerTool({ name: 'commands.run', description: 'Roda.', params: { name: { type: 'string', required: true, max: 20 } }, minRole: ROLES.OWNER, access: 'execute', confirm: true, async run() { return 'rodou'; } });
+  try {
+    script = ['{"tool":"commands.run","args":{"name":"x"}}'];
+    const out = await runAgent(ownerDm, 'roda', { origin: 'REMOTE' });
+    assert.equal(out.type, 'needs_confirmation');
+    assert.doesNotMatch(out.reply, /yui-aprovar/);
+    assert.equal((await resolvePending(ownerDm, out.pendingId)).reply, 'rodou');
+  } finally { delete process.env.YUI_READ_ONLY; tools.clearTools(); }
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
 process.exit(0);

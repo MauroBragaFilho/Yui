@@ -224,6 +224,25 @@ await test('módulo Código: leitura concorda; gravar continua pedindo aprovaç�
   fs.rmSync(project, { recursive: true, force: true });
 });
 
+await test('gate(): observe mantém a decisão antiga; enforce usa a mais restritiva; ação fora da matriz não muda', () => {
+  const events = [];
+  const mk = (mode) => createPolicyEngine({ readOnly: () => false, auditFn: (ev, c, d) => events.push(d), env: { YUI_POLICY_MODE: mode } });
+  const ctx = { role: ROLES.OWNER, platform: 'api', channelKind: 'private' };
+  const obs = mk('observe').gate({ action: 'commands.run', ctx, origin: 'REMOTE', legacy: 'ask' });
+  assert.deepEqual([obs.decision, obs.enforced], [ASK, false]);
+  const enf = mk('enforce');
+  assert.equal(enf.mode(), 'enforce');
+  const a = enf.gate({ action: 'commands.run', ctx, origin: 'REMOTE', legacy: 'ask' });
+  assert.deepEqual([a.decision, a.enforced], [DENY, true]);
+  assert.equal(enf.gate({ action: 'commands.run', ctx, origin: 'LOCAL_PC', legacy: 'ask' }).decision, CRITICAL);
+  assert.equal(enf.gate({ action: 'system.info', ctx, origin: 'LOCAL_PC', legacy: 'allow' }).decision, AUTO);
+  // O motor nunca afrouxa: o código antigo negou, continua negado.
+  assert.equal(enf.gate({ action: 'system.info', ctx, origin: 'LOCAL_PC', legacy: 'deny' }).decision, DENY);
+  assert.deepEqual([enf.gate({ action: 'tool.inventada', ctx, legacy: 'ask' }).decision, enf.gate({ action: 'tool.inventada', ctx, legacy: 'ask' }).enforced], [ASK, false]);
+  assert.ok(events.some((d) => d.mode === 'enforce' && d.effective === DENY));
+  assert.equal(mk('qualquer-coisa').mode(), 'observe');
+});
+
 console.log(`\n${passed} testes OK`);
 fs.rmSync(tmp, { recursive: true, force: true });
 process.exitCode = 0;
