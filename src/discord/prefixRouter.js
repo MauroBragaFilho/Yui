@@ -10,6 +10,8 @@ import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { checkBan } from '../handlers/banHandler.js';
 import { isOwnerId } from '../core/permissions.js';
+import legacyConfig from '../config.js';
+import { guardInteraction } from '../core/security/discordGuard.js';
 
 // Mapeia o subcomando digitado (ex: "+yui diario") para o mesmo objeto
 // de comando usado pelos slash commands (/gta-diario). Aceita também
@@ -114,6 +116,33 @@ export async function handlePrefixCommand(message) {
     await message.reply(
       `❓ Comando \`${subcommand}\` não reconhecido. Digite \`${config.discord.prefix} ajuda\` para ver a lista de comandos.`
     );
+    return;
+  }
+
+  // Termos de Uso: o prefixo seguia sem o gate que o comando de barra e a menção já têm (servidor sem aceite não usa a Yui).
+  if (message.guildId ?? message.guild?.id) {
+    const guildId = message.guildId ?? message.guild.id;
+    const whitelisted = legacyConfig.isAutomodWhitelisted?.(message.author?.id) || legacyConfig.isOwner?.(message.author?.id);
+    if (!whitelisted) {
+      const { isServerAccepted, sendTermsOfService } = await import('../handlers/tosHandler.js');
+      if (!isServerAccepted(guildId)) {
+        await sendTermsOfService(message).catch(() => null);
+        return;
+      }
+    }
+  }
+
+  // Motor de políticas: em observe só registra; em enforce nega (somente leitura, papel) antes de executar.
+  const blocked = guardInteraction({
+    data: { kind: 'prefix', name: subcommand },
+    userId: message.author?.id,
+    channelId: message.channelId ?? null,
+    guildId: message.guildId ?? message.guild?.id ?? null,
+    isDM: !(message.guildId ?? message.guild?.id),
+    guildAdmin: Boolean(message.member?.permissions?.has?.('Administrator') || message.member?.permissions?.has?.('ManageGuild')),
+  });
+  if (blocked) {
+    await message.reply(blocked.message).catch(() => null);
     return;
   }
 

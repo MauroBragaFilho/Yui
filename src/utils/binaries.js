@@ -6,6 +6,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.js';
+import { jobAllowed } from '../core/security/jobGuard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -296,6 +297,7 @@ export function startYtdlpAutoUpdate({
 
   const run = async (motivo) => {
     if (running) return;
+    if (!jobAllowed('maintenance.ytdlp_update')) return; // motor de políticas: manutenção altera o computador
     running = true;
     try {
       logger.info(`[MediaTools] Atualização do yt-dlp em segundo plano (${motivo}).`);

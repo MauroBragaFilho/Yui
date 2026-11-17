@@ -28,6 +28,15 @@ const SLASH = {
 };
 const CRIADOR_SUB = { banir: 'admin.ban_user', desbanir: 'admin.ban_user', memorias: 'memory.admin_inspect', bot_config: 'admin.bot_config' };
 
+// Subcomandos do prefixo ("+yui configurar ...") -> ação. Os de consulta (diario, semanal, noticias, status, perguntar) não são avaliados.
+const PREFIX = {
+  configurar: 'admin.guild_configure',
+  config: 'admin.guild_configure',
+  musica: 'media.download',
+  'baixar-musica': 'media.download',
+  baixar_musica: 'media.download',
+};
+
 // customId (prefixo) -> ação, só para o que muda algo (a navegação de painéis não é avaliada).
 const CUSTOM_ID = [
   ['adm_remoteban_', 'admin.ban_user'],
@@ -45,8 +54,9 @@ const CUSTOM_ID = [
   ['compress_video_', 'media.download'],
 ];
 
-/** @param {{ kind: 'slash'|'component', name?: string, sub?: string|null, customId?: string }} data */
+/** @param {{ kind: 'slash'|'component'|'prefix', name?: string, sub?: string|null, customId?: string }} data */
 export function actionForInteraction({ kind, name = '', sub = null, customId = '' } = {}) {
+  if (kind === 'prefix') return Object.hasOwn(PREFIX, name) ? PREFIX[name] : null;
   if (kind === 'slash') {
     if (name === 'yui-criador') return (sub && CRIADOR_SUB[sub]) || 'admin.guild_configure';
     return Object.hasOwn(SLASH, name) ? SLASH[name] : null;

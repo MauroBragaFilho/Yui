@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getAllSessions } from './radioDatabase.js';
+import { jobAllowed } from '../core/security/jobGuard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const TEMP_RADIO_DIR = path.join(__dirname, 'data', 'temp_radio_audio');
@@ -45,6 +46,7 @@ export function cleanTempRadioAudio(maxAgeMs = 15 * 60 * 1000) {
 function startAutoCleaner(intervalMs = 10 * 60 * 1000) {
     cleanTempRadioAudio(15 * 60 * 1000);
     const timer = setInterval(() => {
+        if (!jobAllowed('cleanup.radio_temp')) return;
         cleanTempRadioAudio(15 * 60 * 1000);
     }, intervalMs);
     timer.unref?.(); // limpeza de fundo: nunca segura o processo vivo (testes e scripts terminam sozinhos)

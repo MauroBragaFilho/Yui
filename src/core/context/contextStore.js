@@ -27,6 +27,7 @@ import path from 'node:path';
 import { config } from '../../config/index.js';
 import { isOwnerId } from '../permissions.js';
 import { logger as defaultLogger } from '../../utils/logger.js';
+import { jobAllowed } from '../security/jobGuard.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -647,6 +648,7 @@ export function getContextStore() {
 function startPurgeTimer(store) {
   if (purgeTimer) return;
   purgeTimer = setInterval(() => {
+    if (!jobAllowed('cleanup.context')) return;
     try {
       const r = store.purgeExpired();
       if (r.turns > 0) defaultLogger.info(`[Context] limpeza horária: ${r.turns} fala(s) vencida(s) removida(s).`);

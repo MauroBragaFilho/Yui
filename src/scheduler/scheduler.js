@@ -11,6 +11,10 @@ import { getCurrentWeekKey } from '../utils/weekKey.js';
 import { weeklyService } from '../engines/gtao/systems/weekly/service.js';
 import { memory } from '../core/index.js';
 import { startReminderService } from '../reminders/service.js';
+import { guardedJob } from '../core/security/jobGuard.js';
+
+// Toda tarefa agendada passa pelo motor de políticas (jobGuard): em observe só registra, em enforce só roda se permitido.
+const schedule = (name, expr, fn, options) => cron.schedule(expr, guardedJob(name, fn), options);
 
 /** Converte "a cada N minutos" em cron válido (o passo de minutos só vai até 59). */
 export function minutesToCron(minutes) {
@@ -43,7 +47,7 @@ export function startScheduler(client) {
 
     // 2. Verificação periódica do Rockstar Newswire (Default: a cada 30 minutos)
     const newswireCronExpr = minutesToCron(config.newswire.intervalMinutes);
-    cron.schedule(newswireCronExpr, async () => {
+    schedule('scheduler.newswire', newswireCronExpr, async () => {
       try {
         logger.info('[Scheduler] Disparando checagem agendada do Newswire...');
         const newArticles = await newswireEngine.checkLatestNews();
@@ -60,7 +64,7 @@ export function startScheduler(client) {
   }
 
   // 2.5 Limpeza diária da memória temporária expirada (Yui Core)
-  cron.schedule('30 5 * * *', () => {
+  schedule('scheduler.memory_purge', '30 5 * * *', () => {
     try {
       const removed = memory.purgeExpired();
       logger.info(`[Scheduler] Memória temporária: ${removed} lembrança(s) expirada(s) removida(s).`);
@@ -71,7 +75,7 @@ export function startScheduler(client) {
   }, { timezone: 'UTC' });
 
   // 3. Reset Diário do GTA Online às 06:00 UTC pontualmente
-  cron.schedule('0 6 * * *', async () => {
+  schedule('scheduler.daily', '0 6 * * *', async () => {
     try {
       logger.info('[Scheduler] ⏰ Disparando tarefa do Reset Diário do GTA Online (06:00 UTC)...');
       const dailyData = await gtaoEngine.collectDaily();
@@ -90,7 +94,7 @@ export function startScheduler(client) {
   //    DESATIVADO por padrão. O Reddit (task 4.5) é a fonte primária agora.
   //    Ative com NEWSWIRE_ENABLED=true se quiser manter o Newswire como fallback automático.
   if (config.newswire.enabled) {
-    cron.schedule('0 9-20 * * 3,4', async () => {
+    schedule('scheduler.weekly_newswire', '0 9-20 * * 3,4', async () => {
       try {
         logger.info('[Scheduler] Disparando checagem semanal via Newswire (quarta/quinta)...');
         const weeklyData = await gtaoEngine.collectWeekly({ source: 'newswire' });
@@ -153,7 +157,7 @@ export function startScheduler(client) {
     }, 3 * 60 * 1000);
 
     const weeklyCronExpr = minutesToCron(config.weekly.intervalMinutes);
-    cron.schedule(weeklyCronExpr, runWeeklyCheck);
+    schedule('scheduler.weekly', weeklyCronExpr, runWeeklyCheck);
     logger.info(
       `[Scheduler] Weekly Reddit configurado para rodar a cada ${config.weekly.intervalMinutes} minutos.`
     );
@@ -168,7 +172,7 @@ export function startScheduler(client) {
   // 5. Verificação periódica do YouTube (Default: a cada 5 minutos)
   if (config.youtube.intervalMinutes > 0) {
     const youtubeCronExpr = `*/${config.youtube.intervalMinutes} * * * *`;
-    cron.schedule(youtubeCronExpr, async () => {
+    schedule('scheduler.youtube', youtubeCronExpr, async () => {
       try {
         logger.info('[Scheduler] Disparando checagem agendada do YouTube...');
         const events = await youtubeEngine.checkYoutubeChannels();
@@ -191,7 +195,7 @@ export function startScheduler(client) {
   // 6. Verificação periódica da Twitch (Default: a cada 2 minutos)
   if (config.twitch.intervalMinutes > 0) {
     const twitchCronExpr = `*/${config.twitch.intervalMinutes} * * * *`;
-    cron.schedule(twitchCronExpr, async () => {
+    schedule('scheduler.twitch', twitchCronExpr, async () => {
       try {
         logger.info('[Scheduler] Disparando checagem agendada da Twitch...');
         const events = await twitchEngine.checkTwitchStreamers();

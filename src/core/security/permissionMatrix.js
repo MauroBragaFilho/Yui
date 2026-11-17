@@ -62,6 +62,12 @@ const ROWS = [
   ['admin.gateway_reset', false, 'AADDD', true],
   ['media.download', false, 'AAAAA', true],   // baixar música/vídeo/torrent (temporários); hoje qualquer não banido
   ['admin.bot_config', true, 'SDSDD', true],    // painel global do bot (config.json): só o dono, no PC ou em DM
+  // Tarefas automáticas do processo (jobGuard.js): origem LOCAL_PC, papel dono. Só a manutenção altera o computador.
+  ['job.publish', false, 'ADDDD', true],
+  ['job.notify', false, 'ADDDD', true],
+  ['job.data_cleanup', false, 'ADDDD', true],
+  ['job.cleanup_files', false, 'ADDDD', true],
+  ['job.maintenance', true, 'ADDDD', true],
   ['bds.read', false, 'AAADD', true],
   ['bds.write', true, 'SSDDD', true],
   ['bds.delete', true, 'SSDDD', true],

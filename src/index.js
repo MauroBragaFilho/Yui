@@ -21,6 +21,7 @@ import { applyAiSettings } from './core/aiSettings.js';
 import { isChromeProfileCleanupError } from './utils/chromeProfile.js';
 import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail, isHarmlessNetworkCrash } from './core/alerts.js';
 import { ownerUserId } from './core/api/auth.js';
+import { jobAllowed } from './core/security/jobGuard.js';
 
 async function registerHikariEvents(client) {
   const eventFiles = [
@@ -63,19 +64,19 @@ async function bootstrap() {
 
   // 1.1 Baixar/atualizar os tunables (RDO.GG) para a Van de Armas
   try {
-    await downloadTunables();
+    if (jobAllowed('maintenance.data_refresh')) await downloadTunables();
   } catch (err) {
     logger.warn(`[Bootstrap] Não foi possível baixar tunables e não há cache local: ${err.message}`);
   }
 
   // 1.2 Baixar/atualizar os dumps de veículos e armas
   try {
-    await downloadVehicleData();
+    if (jobAllowed('maintenance.data_refresh')) await downloadVehicleData();
   } catch (err) {
     logger.warn(`[Bootstrap] Vehicle data indisponível, seguindo sem: ${err.message}`);
   }
   try {
-    await downloadWeaponData();
+    if (jobAllowed('maintenance.data_refresh')) await downloadWeaponData();
   } catch (err) {
     logger.warn(`[Bootstrap] Weapon data indisponível, seguindo sem: ${err.message}`);
   }

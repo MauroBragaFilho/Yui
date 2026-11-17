@@ -1236,8 +1236,12 @@ await T('/yui com a lista: o ask.js entrega a lista (Porta M) sem consultar o mo
 
 await T('+yui perguntar com a lista em várias linhas (prefixo): mesma Porta M do /yui', async () => {
   const api = modrinthFor();
+  // O prefixo agora passa pelo gate de Termos de Uso (como o comando de barra): aqui o servidor de teste é tratado como já aceito.
+  const legacyCfg = (await import(pathToFileURL(path.join(repoRoot, 'src/config.js')))).default;
+  const requireTosBefore = legacyCfg.requireTos;
+  legacyCfg.requireTos = false;
   const m = fakePrefix(`+yui perguntar ${SMALL()}`, { authorId: 'p1', channelId: 'chan-p1', guildId: 'g1' });
-  await handlePrefixCommand(m);
+  try { await handlePrefixCommand(m); } finally { legacyCfg.requireTos = requireTosBefore; }
   await sleep(150);
   const delivered = [...m.outputs.flatMap((p) => [typeof p?.content === 'string' ? p.content : '', ...(p?.files ?? []).map(fileTextOf)])].join('\n');
   assert.match(delivered, /Lista de mods: 13 nomes/);

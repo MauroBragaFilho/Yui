@@ -109,6 +109,26 @@ await test('bans.json corrompido: a cópia fica guardada e a gravação é atôm
   assert.ok(!fs.existsSync(`${file}.tmp`), 'sem sobra do arquivo temporário');
 });
 
+console.log('Prefixo +yui');
+await test('subcomandos do prefixo que gravam/baixam mapeiam para ações; os de consulta não; enforce nega pelo mesmo motor', () => {
+  const p = (name) => ({ kind: 'prefix', name });
+  assert.equal(actionForInteraction(p('configurar')), 'admin.guild_configure');
+  assert.equal(actionForInteraction(p('config')), 'admin.guild_configure');
+  assert.equal(actionForInteraction(p('musica')), 'media.download');
+  for (const n of ['diario', 'semanal', 'noticias', 'status', 'perguntar', 'ajuda', 'constructor', '__proto__']) assert.equal(actionForInteraction(p(n)), null, n);
+  const e = engine('enforce', false);
+  assert.ok(guardInteraction({ data: p('configurar'), userId: MEMBER, guildId: '9', engine: e })?.message, 'membro comum não configura canais');
+  assert.equal(guardInteraction({ data: p('configurar'), userId: MEMBER, guildId: '9', guildAdmin: true, engine: e }), null);
+  assert.equal(guardInteraction({ data: p('configurar'), userId: MEMBER, guildId: '9', engine: engine('observe', true) }), null);
+});
+await test('vigia: o prefixo passa pelo gate de Termos de Uso e pelo guarda antes de executar o comando', () => {
+  const src = fs.readFileSync(new URL('../src/discord/prefixRouter.js', import.meta.url), 'utf8');
+  const tos = src.indexOf('isServerAccepted(guildId)');
+  const guard = src.indexOf('guardInteraction({');
+  const run = src.indexOf('await command.execute(adapter)');
+  assert.ok(tos > 0 && guard > tos && run > guard, 'ordem: ToS, guarda, execução');
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
 process.exit(0);
