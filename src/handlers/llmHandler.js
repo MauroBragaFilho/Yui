@@ -1027,6 +1027,7 @@ function stripThinking(text) {
     return clean;
 }
 
+import { guardToolCall } from '../core/security/discordGuard.js';
 import { checkBan, addBan, removeBan, getBans, checkAutoBan, getAutoBlock, getAutoBlockMode, forbiddenKeywords } from './banHandler.js';
 async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interaction) {
     const webhookUrl = config.avisosWebhookUrl;
@@ -1073,6 +1074,41 @@ async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interacti
         } catch (error) {
             console.error('[SECURITY] Erro ao enviar para o Webhook de Avisos:', error.message);
         }
+    }
+}
+/** O ban decidido pela IA (ia_automod) é automático só com YUI_AUTOMOD_AI_BAN=auto; o padrão é propor ao dono. */
+function aiBanIsAutomatic() {
+    return String(process.env.YUI_AUTOMOD_AI_BAN ?? 'review').trim().toLowerCase() === 'auto';
+}
+async function reportAiBanProposal({ interaction, prompt, userTag, userId, reason, severity }) {
+    const webhookUrl = config.avisosWebhookUrl;
+    if (!webhookUrl) return;
+    const guildName = interaction?.guild?.name || "DM";
+    const guildId = interaction?.guild?.id || interaction?.guildId || "N/A";
+    const embed = {
+        title: '🤖 A IA propõe um banimento (nada foi aplicado)',
+        color: 0xF59E0B,
+        description: 'A IA considerou a conduta abaixo uma violação. O banimento só acontece se você aprovar pelo botão.',
+        fields: [
+            { name: '👤 Usuário', value: `${userTag} (ID: ${userId})`, inline: true },
+            { name: '🏘️ Servidor', value: `${guildName} (ID: ${guildId})`, inline: true },
+            { name: '⚠️ Severidade', value: clampText(String(severity ?? 'n/d'), 40), inline: true },
+            { name: '📝 Motivo da IA', value: clampText(String(reason ?? 'sem motivo'), 300) },
+            { name: '💬 Prompt do Usuário', value: '```' + clampText(prompt || "N/A", 800) + '```' }
+        ],
+        footer: { text: 'Yui Monitoring System' }
+    };
+    const components = [{
+        type: 1,
+        components: [
+            { type: 2, style: 4, custom_id: `adm_remoteban_user_${userId}`, label: 'Banir Usuário' },
+            { type: 2, style: 2, custom_id: `adm_remoteban_ignore_${userId}`, label: 'Ignorar' }
+        ]
+    }];
+    try {
+        await axios.post(webhookUrl, { embeds: [embed], components });
+    } catch (error) {
+        console.error('[SECURITY] Erro ao enviar a proposta de ban ao Webhook de Avisos:', error.message);
     }
 }
 async function reportAutoBanViolation(violation, interaction, prompt, userTag, userId) {
@@ -2931,6 +2967,11 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 if (!toolData.tool && toolData.action) toolData.tool = toolData.action;
                 if (!toolData.args && toolData.arguments) toolData.args = toolData.arguments;
                 if (!toolData.args && toolData.action_input) toolData.args = toolData.action_input;
+                if (typeof toolData.tool === 'string') {
+                    // Motor de políticas: em observe só registra a chamada de ferramenta da IA; em enforce pode negar.
+                    const blockedTool = guardToolCall({ tool: toolData.tool, userId, guildId, channelId: interaction?.channelId ?? null, isDM: !guildId });
+                    if (blockedTool) return await unifiedReply(blockedTool.message);
+                }
                 // Nome inventado (web_search, google_search, pesquisar, default_api.web_search...) vira search_web. Em search_web, `args` vira SEMPRE um objeto com a
                 // consulta: de args.query (ou q, search, consulta, term, lista, JSON em texto), de `query` fora de args ou, no fim, da fala do próprio autor.
                 // Nunca "undefined" (C9, M1, M6, M8). Na pesquisa PRIVADA a consulta é só a do texto literal do usuário: o que o modelo escreveu é ignorado.
@@ -3969,7 +4010,11 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
                         } else {
                             const { reason, severity } = toolData.args;
                             const alreadyBanned = checkBan(userId, null, null);
-                            if (!alreadyBanned) {
+                            if (!alreadyBanned && !aiBanIsAutomatic()) {
+                                // Padrão (YUI_AUTOMOD_AI_BAN=review): a IA só PROPÕE. Quem decide é o dono, pelo botão do aviso.
+                                logger.warn(`[IA_AUTOMOD] Proposta de ban para o usuário (${userId}) enviada ao dono; nada foi aplicado. Severidade: ${scrubLogText(String(severity ?? 'n/d'), 20)}.`);
+                                await reportAiBanProposal({ interaction, prompt, userTag, userId, reason, severity });
+                            } else if (!alreadyBanned) {
                                 addBan('user', userId, clampText(String(reason || 'Violação dos Termos detectada pela IA Yui.'), 300));
                                 logger.warn(`[IA_AUTOMOD] Usuário (${userId}) banido pela IA. Severidade: ${scrubLogText(String(severity ?? 'n/d'), 20)}. Motivo com ${String(reason ?? '').length} caracteres.`);
                                 const banEmbed = new EmbedBuilder()

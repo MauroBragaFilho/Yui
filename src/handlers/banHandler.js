@@ -16,6 +16,8 @@ function loadBans() {
             if (!bans.autoblock) bans.autoblock = {};
         } catch (e) {
             console.error('Erro ao ler bans.json:', e);
+            // Não perde a lista: guarda a cópia corrompida para recuperação antes de qualquer nova gravação sobrescrevê-la.
+            try { fs.copyFileSync(BANS_FILE, `${BANS_FILE}.corrompido-${Date.now()}`); } catch { /* sem permissão: segue */ }
             bans = { users: {}, guilds: {}, channels: {}, autoblock: {} };
         }
     }
@@ -50,7 +52,10 @@ function clampBanReason(reason) {
     return clampText(String(reason ?? ''), BAN_REASON_MAX);
 }
 function saveBans() {
-    fs.writeFileSync(BANS_FILE, JSON.stringify(bans, null, 2));
+    // Gravação atômica (arquivo temporário + rename): queda no meio da escrita não deixa o bans.json pela metade.
+    const tmp = `${BANS_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(bans, null, 2));
+    fs.renameSync(tmp, BANS_FILE);
 }
 function checkBan(userId, guildId, channelId) {
     const sanitize = (r) => {
@@ -116,7 +121,9 @@ function checkAutoBan(prompt, guildName, guildId, channelName, channelId, userId
         if (!text) return null;
         return forbiddenKeywords.find(k => {
             if (checkType !== 'prompt') {
-                return text.includes(k);
+                // Nome de servidor/canal: palavra inteira (com acentos). "pintor" não casa com "pinto"; "r34-chat" casa com "r34".
+                const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                return new RegExp(`(?<![\\p{L}\\p{N}])${esc}(?![\\p{L}\\p{N}])`, 'iu').test(text);
             }
             if (k.length <= 3 || k.includes('+') || k.includes('-')) {
                 return text.includes(k);

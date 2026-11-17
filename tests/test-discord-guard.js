@@ -72,6 +72,43 @@ await test('vigia: o interactionCreate chama o guarda antes dos handlers', () =>
   assert.ok(g > 0 && g < src.indexOf("interaction.customId.startsWith('srvcfg_')"), 'guarda antes do despacho');
 });
 
+console.log('Conversa e auto-ban');
+await test('ferramentas da IA (download/imagem) passam pelo guarda; o resto não é avaliado', async () => {
+  const { guardToolCall } = await import('../src/core/security/discordGuard.js');
+  assert.equal(guardToolCall({ tool: 'download_video', userId: MEMBER, guildId: '9', engine: engine('observe', true) }), null);
+  assert.equal(guardToolCall({ tool: 'download_audio', userId: MEMBER, guildId: '9', engine: engine('enforce', false) }), null, 'liberado para todos na matriz');
+  assert.equal(guardToolCall({ tool: 'search_web', userId: MEMBER, engine: engine('enforce', true) }), null);
+  assert.equal(guardToolCall({}), null);
+});
+await test('auto-ban por nome de servidor/canal exige palavra inteira (sem falso positivo em "pintores" ou "sexologia")', async () => {
+  process.env.YUI_BANS_FILE = path.join(tmp, 'bans-a.json');
+  const { checkAutoBan } = await import('../src/handlers/banHandler.js');
+  const hit = (g, c) => checkAutoBan('oi', g, '1', c, '2', '3');
+  assert.equal(hit('Pintores Unidos', 'geral'), null);
+  assert.equal(hit('Clube', 'sexologia'), null);
+  assert.equal(hit('Clube', 'r34-chat')?.type, 'channel');
+  assert.equal(hit('Loja 18+', 'x')?.type, 'guild');
+  assert.equal(hit('Mercado', 'cuzão')?.type, 'channel');
+});
+await test('ia_automod: padrão é propor ao dono (review); só YUI_AUTOMOD_AI_BAN=auto bane sozinho (vigia do código)', () => {
+  const src = fs.readFileSync(new URL('../src/handlers/llmHandler.js', import.meta.url), 'utf8');
+  assert.match(src, /YUI_AUTOMOD_AI_BAN \?\? 'review'/);
+  const i = src.indexOf('!alreadyBanned && !aiBanIsAutomatic()');
+  assert.ok(i > 0, 'ramo de revisão');
+  assert.ok(src.indexOf("addBan('user', userId, clampText(String(reason", i) > i, 'addBan só no ramo automático, depois da revisão');
+});
+await test('bans.json corrompido: a cópia fica guardada e a gravação é atômica', async () => {
+  const file = path.join(tmp, 'bans-b.json');
+  fs.writeFileSync(file, '{ quebrado');
+  const { spawnSync } = await import('node:child_process');
+  const code = "import('./src/handlers/banHandler.js').then((m) => { m.addBan('user', '9999', 't'); })";
+  const r = spawnSync(process.execPath, ['-e', code], { cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, YUI_BANS_FILE: file }, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.readdirSync(tmp).some((n) => n.startsWith('bans-b.json.corrompido-')), 'cópia da lista corrompida preservada');
+  assert.ok(JSON.parse(fs.readFileSync(file, 'utf8')).users['9999'], 'novo ban gravado em JSON válido');
+  assert.ok(!fs.existsSync(`${file}.tmp`), 'sem sobra do arquivo temporário');
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
 process.exit(0);

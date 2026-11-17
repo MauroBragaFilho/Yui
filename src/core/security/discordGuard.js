@@ -80,3 +80,27 @@ export function guardInteraction({ data, userId, channelId = null, guildId = nul
     return null; // o guarda nunca derruba uma interação
   }
 }
+
+// Ferramentas que a IA pode chamar por conversa -> ação da matriz (ia_automod tem o próprio modo review: propõe, o dono decide).
+const LLM_TOOLS = {
+  download_audio: 'media.download',
+  download_video: 'media.download',
+  search_and_download_music: 'media.download',
+  generate_image: 'chat.generate_image',
+};
+
+/** Guarda das ferramentas chamadas pela IA na conversa. Mesmo contrato de guardInteraction (null = segue). */
+export function guardToolCall({ tool, userId, channelId = null, guildId = null, isDM = false, guildAdmin = false, engine = getPolicyEngine(), auditFn = audit } = {}) {
+  try {
+    const action = Object.hasOwn(LLM_TOOLS, tool) ? LLM_TOOLS[tool] : null;
+    if (!action) return null;
+    const ctx = buildContext({ platform: 'discord', userId, channelId, guildId, isDM });
+    const origin = isDM ? ORIGINS.DISCORD_DM : ORIGINS.DISCORD_GUILD;
+    const { decision, enforced, verdict } = engine.gate({ action, ctx, origin, guildAdmin, legacy: 'allow', target: tool });
+    if (!enforced || decision === POLICY_STATES.AUTO || decision === POLICY_STATES.ASK) return null;
+    try { auditFn('policy.interaction_blocked', ctx, { action, origin, decision, reason: verdict?.reason ?? null, tool }); } catch { /* */ }
+    return { message: decision === POLICY_STATES.CRITICAL ? '🔐 Ação crítica: só pode ser feita no computador da Yui.' : '🛑 Isso não é permitido pela política de segurança da Yui neste momento.' };
+  } catch {
+    return null;
+  }
+}

@@ -107,6 +107,8 @@ Lacunas de teste identificadas: negação de permissão nos handlers Discord (`a
 
 **Correções de risco feitas (2026-11-17):** `isLocalRequest` usa a mesma lista de cabeçalhos de proxy do canal local (item 10); o segredo do canal local é criado vazio, restringido por ACL e só então gravado, e o canal fica desligado se a ACL falhar, além de corrigido o `'C:\Windows'` (item 11); Bearer inválido repetido trava a origem por 10 min (item 13, parte). Testes: `test:dev` (cabeçalhos), `test:approvals` (ACL), `test:routes` (freio).
 
+**Frente 3 feita: conversa e auto-ban no Discord.** (a) `ia_automod` deixou de banir sozinho: por padrão (`YUI_AUTOMOD_AI_BAN=review`) a IA só PROPÕE e o dono recebe o aviso com o botão "Banir Usuário"; `YUI_AUTOMOD_AI_BAN=auto` devolve o comportamento antigo. (b) Auto-ban por nome de servidor/canal exige palavra inteira (com acentos): "Pintores Unidos" e "sexologia" não banem mais. (c) `bans.json` corrompido é copiado para `bans.json.corrompido-<hora>` antes de qualquer gravação e a gravação passou a ser atômica (arquivo temporário + rename). (d) As ferramentas chamadas pela IA na conversa (`download_audio`, `download_video`, `search_and_download_music`, `generate_image`) passam por `guardToolCall` (observe registra; enforce pode negar). Ainda sem guarda: o prefixo `+yui` e os jobs automáticos.
+
 ## 8. Pendências para fechar a Fase 1
 
 1. Decidir a retenção de memória em produção (seção 4).
