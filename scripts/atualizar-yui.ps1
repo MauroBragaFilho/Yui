@@ -156,6 +156,21 @@ try {
     $novo = (Get-ChildItem "$tmp\x" -Directory | Select-Object -First 1).FullName
     if (-not (Test-Path "$novo\package.json")) { throw 'zip baixado nao parece ser a Yui (sem package.json)' }
 
+    # Supply chain: o package-lock novo so pode apontar para o registro oficial do npm, com hash de integridade forte (sem git, http, arquivo local nem hash fraco).
+    # O verificador usado e o JA INSTALADO (da versao anterior, que e confiavel); so na primeira vez, quando ele ainda nao existe, usa o do codigo novo.
+    $nodeLock = 'C:\Program Files\nodejs\node.exe'
+    if ((Test-Path $nodeLock) -and (Test-Path "$novo\package-lock.json")) {
+        $verificador = if (Test-Path "$Destino\scripts\verificar-lock.mjs") { "$Destino\scripts\verificar-lock.mjs" } else { "$novo\scripts\verificar-lock.mjs" }
+        $saidaLock = & $nodeLock $verificador "$novo\package-lock.json" "$Destino\package-lock.json"
+        $codigoLock = $LASTEXITCODE
+        $global:LASTEXITCODE = 0
+        foreach ($l in $saidaLock) { Log "package-lock: $l" }
+        if ($codigoLock -ne 0) {
+            Log "ERRO: o package-lock novo foi recusado (codigo $codigoLock). Nada foi alterado em $Destino; tenta de novo amanha."
+            return
+        }
+    }
+
     # Teste de subida do codigo novo antes de tocar na Yui. Se o package-lock mudou, as dependencias novas ainda nao estao em node_modules
     # (o npm install roda depois), entao nesse caso o teste e pulado e a conferencia fica por conta do rollback.
     $lockNovo = if (Test-Path "$novo\package-lock.json") { (Get-FileHash "$novo\package-lock.json").Hash } else { '' }

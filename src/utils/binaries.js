@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { exec, execFile, spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import https from 'node:https';
 import http from 'node:http';
 import { createRequire } from 'node:module';
@@ -24,7 +25,7 @@ function ensureDirExists(dirPath) {
 /**
  * Faz download de uma URL seguindo redirecionamentos (HTTP 301/302)
  */
-function downloadFile(url, destPath) {
+export function downloadFile(url, destPath, { expected = null } = {}) {
   return new Promise((resolve, reject) => {
     ensureDirExists(path.dirname(destPath));
     const tempPath = `${destPath}.tmp_${Date.now()}`;
@@ -46,8 +47,16 @@ function downloadFile(url, destPath) {
         response.pipe(file);
 
         file.on('finish', () => {
-          file.close(() => {
+          file.close(async () => {
             try {
+              // Integridade: o hash do arquivo baixado tem que ser o publicado. Se não for, o arquivo anterior fica intocado.
+              if (expected) {
+                const got = await hashFile(tempPath, expected.algo);
+                if (got !== String(expected.hex).toLowerCase()) {
+                  try { fs.unlinkSync(tempPath); } catch (_) {}
+                  return reject(new Error(`hash do arquivo baixado não confere (esperado ${expected.algo} ${String(expected.hex).slice(0, 12)}..., veio ${got.slice(0, 12)}...)`));
+                }
+              }
               if (fs.existsSync(destPath)) {
                 fs.unlinkSync(destPath);
               }
@@ -70,6 +79,54 @@ function downloadFile(url, destPath) {
 
     makeRequest(url);
   });
+}
+
+/** Linhas "<hash>  <arquivo>" (ou "<hash> *<arquivo>") do SHA2-256SUMS publicado nas releases. Devolve o hash do arquivo pedido ou null. */
+export function parseSha256Sums(text, fileName) {
+  for (const line of String(text ?? '').split(/\r?\n/)) {
+    const m = line.trim().match(/^([0-9a-fA-F]{32,128})\s+\*?(.+)$/);
+    if (m && m[2].trim() === fileName) return m[1].toLowerCase();
+  }
+  return null;
+}
+
+/** Hash de um arquivo, lendo em pedaços (não carrega tudo na memória). */
+export function hashFile(file, algo = 'sha256') {
+  return new Promise((resolve, reject) => {
+    const h = crypto.createHash(algo);
+    fs.createReadStream(file).on('data', (c) => h.update(c)).on('end', () => resolve(h.digest('hex'))).on('error', reject);
+  });
+}
+
+/** A verificação de integridade dos binários baixados está ligada? (YUI_BINARIES_VERIFY=false é só uma saída de emergência.) */
+function verifyEnabled(env = process.env) {
+  return String(env.YUI_BINARIES_VERIFY ?? 'true').trim().toLowerCase() !== 'false';
+}
+
+/** Baixa um texto pequeno (lista de hashes) pelo mesmo caminho do download de arquivos. */
+async function downloadText(url) {
+  const tmp = path.join(BIN_DIR, `.tmp-text-${process.pid}-${Date.now()}`);
+  try {
+    await downloadFile(url, tmp);
+    return fs.readFileSync(tmp, 'utf8').slice(0, 1_000_000);
+  } finally {
+    try { fs.unlinkSync(tmp); } catch (_) {}
+  }
+}
+
+/**
+ * Baixa um binário e só o instala se o hash bater com o publicado pelo mesmo projeto (lista de hashes baixada à parte).
+ * Falha FECHADA: sem hash publicado, ou com hash diferente, nada é instalado e o arquivo anterior continua como estava.
+ */
+export async function downloadVerified({ url, sumsUrl, fileName, destPath, algo = 'sha256', env = process.env }) {
+  if (!verifyEnabled(env)) {
+    logger.warn('[MediaTools] YUI_BINARIES_VERIFY=false: instalando SEM conferir o hash.');
+    return downloadFile(url, destPath);
+  }
+  const sums = await downloadText(sumsUrl);
+  const hex = parseSha256Sums(sums, fileName);
+  if (!hex) throw new Error(`hash de ${fileName} não encontrado na lista publicada (${sumsUrl})`);
+  return downloadFile(url, destPath, { expected: { algo, hex } });
 }
 
 function checkExecutable(cmd) {
@@ -167,8 +224,8 @@ export async function ensureYtdlp() {
     : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
 
   try {
-    await downloadFile(downloadUrl, destPath);
-    logger.info(`[MediaTools] ✅ yt-dlp instalado com sucesso em: ${destPath}`);
+    await downloadVerified({ url: downloadUrl, sumsUrl: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS', fileName: binaryName, destPath });
+    logger.info(`[MediaTools] ✅ yt-dlp instalado com sucesso (hash conferido) em: ${destPath}`);
     return destPath;
   } catch (err) {
     logger.error(`[MediaTools] ❌ Falha ao baixar yt-dlp automaticamente: ${err.message}`);
@@ -196,7 +253,8 @@ export async function ensureFfmpeg() {
     const downloadUrl = 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz';
 
     try {
-      await downloadFile(downloadUrl, tarGzPath);
+      // O projeto só publica MD5 (mais fraco que SHA-256, mas pega arquivo corrompido ou trocado no caminho).
+      await downloadVerified({ url: downloadUrl, sumsUrl: `${downloadUrl}.md5`, fileName: path.basename(downloadUrl), destPath: tarGzPath, algo: 'md5' });
       logger.info('[MediaTools] 📦 Extraindo binários do FFmpeg/FFprobe...');
 
       // Extrai os binários ffmpeg e ffprobe do tar.xz usando tar nativo do Linux

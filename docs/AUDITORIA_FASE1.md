@@ -125,6 +125,8 @@ Evidências e plano: `docs/EVIDENCIA_ENFORCE.md` (gerado por `npm run validar:en
 
 Com `YUI_POLICY_MODE=observe` (padrão) a CI dá 37/37.
 
+**Frente 5 feita: supply chain (2026-11-17).** (a) Binários: `yt-dlp` (e `ffmpeg` no Linux) só são instalados com o hash conferido (`downloadVerified`: SHA2-256SUMS do yt-dlp, MD5 do ffmpeg); falha fechada, o binário anterior fica intocado; `yt-dlp -U` já confere o próprio hash. `YUI_BINARIES_VERIFY=false` é saída de emergência. (b) Atualizador: já baixava o zip do **commit exato** (SHA, não do ramo); agora, antes do teste de subida e de copiar qualquer coisa, roda `scripts/verificar-lock.mjs` (da versão **já instalada**, confiável) e **recusa** o update se o `package-lock.json` novo trouxer dependência fora do registro oficial do npm, sem hash de integridade ou com hash fraco; novos pacotes com script de instalação só geram aviso no log. Testes: `test:binverify` (10), `test:lockverify` (8). **Limite assumido:** o código do próprio `main` continua sendo confiável por definição (push = deploy): quem controla a conta do GitHub controla o notebook. Proteger a conta (2FA/chave de acesso, commits assinados exigidos no ramo) é a mitigação que falta e não depende deste código. O teste de subida também executa o código novo antes de aplicar. **Ação pendente em produção (precisa da autorização do dono):** a tarefa `YuiAtualizar` roda a cópia `C:\Tools\atualizar-yui.ps1`, que não se atualiza; a conferência do package-lock só vale no notebook depois de copiar o script novo para lá.
+
 ## 8. Pendências para fechar a Fase 1
 
 1. Decidir a retenção de memória em produção (seção 4).
