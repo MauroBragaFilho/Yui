@@ -196,7 +196,11 @@ export async function resolvePending(ctx, id, approve = true) {
   const access = tool ? checkToolAccess(ctx, p.tool) : { allowed: false };
   if (!tool || !access.allowed) return { type: 'denied', reply: 'Não tenho mais permissão para essa ação.' };
   const engine = getPolicyEngine();
-  if (engine.mode() === 'enforce' && engine.evaluate({ action: p.tool, role: ctx.role, origin: p.origin ?? originFor(ctx) }).decision === POLICY_STATES.DENY) return { type: 'denied', reply: 'Não tenho mais permissão para essa ação.' };
+  if (engine.mode() === 'enforce') {
+    // Só vale para ferramentas que a matriz conhece (as demais seguem a regra antiga, como no pedido original: runAgent usa gate()).
+    const verdict = engine.evaluate({ action: p.tool, role: ctx.role, origin: p.origin ?? originFor(ctx) });
+    if (verdict.known && verdict.decision === POLICY_STATES.DENY) return { type: 'denied', reply: 'Não tenho mais permissão para essa ação.' };
+  }
   if (p.ticketId) {
     const used = approvals.consume(p.ticketId, { action: p.tool, params: p.args });
     if (!used.ok) return { type: 'denied', reply: `Não executei: ${used.reason}.`, tool: p.tool };

@@ -249,6 +249,17 @@ await test('enforce: ação crítica vira ticket, só executa depois de aprovada
     tools.clearTools();
   }
 });
+await test('enforce: ferramenta fora da matriz segue a regra antiga também na confirmação (regressão: era negada)', async () => {
+  process.env.YUI_POLICY_MODE = 'enforce';
+  tools.registerTool({ name: 'test.danger', description: 'Ação sensível.', params: { mode: { type: 'string', enum: ['a', 'b'] } }, minRole: ROLES.OWNER, access: 'open', confirm: true, async run() { return 'feito'; } });
+  try {
+    script = ['{"tool":"test.danger","args":{"mode":"a"}}'];
+    const out = await runAgent(ownerDm, 'faz a coisa');
+    assert.equal(out.type, 'needs_confirmation');
+    const done = await resolvePending(ownerDm, out.pendingId);
+    assert.deepEqual([done.type, done.reply], ['tool_result', 'feito']);
+  } finally { delete process.env.YUI_POLICY_MODE; tools.clearTools(); }
+});
 await test('observe (padrão): o comportamento antigo continua igual (confirmação simples, sem ticket)', async () => {
   process.env.YUI_READ_ONLY = 'false';
   tools.registerTool({ name: 'commands.run', description: 'Roda.', params: { name: { type: 'string', required: true, max: 20 } }, minRole: ROLES.OWNER, access: 'execute', confirm: true, async run() { return 'rodou'; } });

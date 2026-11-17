@@ -19,6 +19,7 @@
     "test:security": "node tests/test-security-policy.js",
     "test:routes": "node tests/test-route-guard.js",
     "test:discordguard": "node tests/test-discord-guard.js",
+    "validar:enforce": "node scripts/validar-enforce.mjs",
     "test:jobguard": "node tests/test-job-guard.js",
     "test:ci": "node scripts/run-ci.mjs",
     "test:search": "node tests/test-search-skills.js",

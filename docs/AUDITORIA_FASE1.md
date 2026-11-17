@@ -111,6 +111,20 @@ Lacunas de teste identificadas: negação de permissão nos handlers Discord (`a
 
 **Frente 4 feita: prefixo +yui e tarefas automáticas.** (a) O prefixo `+yui` agora passa pelo gate de Termos de Uso (servidor sem aceite recebe o aviso dos termos, como no comando de barra) e pelo guarda do motor (`configurar` e `musica` mapeiam para ações). (b) `src/core/security/jobGuard.js` liga as tarefas automáticas à matriz (`job.publish`, `job.notify`, `job.data_cleanup`, `job.cleanup_files`, `job.maintenance`): agendador (7 tarefas), lembretes (3), limpezas (2) e manutenção (atualização do yt-dlp e download de tunables/veículos/armas). Em `observe` só registra (1 vez por hora por tarefa); em `enforce` a manutenção, que altera o computador, é pulada com `YUI_READ_ONLY=true` (**decisão sua ao ativar: yt-dlp deixa de se atualizar sozinho enquanto o modo for somente leitura**). Testes: `test:jobguard` (9), `test:discordguard` (14). Fora do Node e ainda sem guarda: as tarefas do Windows (YuiAtualizar, YuiBackup, watchdog), o download inicial de binários em `validateMediaTools`, `updateGtaCarsVehicles` e os alertas/DMs.
 
+## 7c. Validação do enforce (2026-11-17)
+
+Evidências e plano: `docs/EVIDENCIA_ENFORCE.md` (gerado por `npm run validar:enforce`, **39/39**, ambiente isolado com API e canal local reais), `docs/PLANO_ATIVACAO_ENFORCE.md` (ativação e rollback). Nada foi ligado em produção.
+
+**CI inteira com `YUI_POLICY_MODE=enforce`:** a primeira rodada deu 33/37; a final deu **34/37**. Uma falha era **bug real meu, já corrigido** (`resolvePending` negava, em enforce, ferramentas que a matriz não conhece, como `bds.*` e as MCP, embora o pedido original fosse aceito; teste de regressão em `test-core-agent`). As 3 restantes são testes que assumem o modo observe, sem defeito no código:
+
+| Suíte | Por que falha em enforce | Veredito |
+|---|---|---|
+| `test:panel` | O teste faz POST /bans como dono com `YUI_READ_ONLY` no padrão (true): em enforce a matriz nega ação que bane em somente leitura | Esperado (decisão do dono, ver plano, seção 1) |
+| `test:search` | `runAgent(owner, ...)` sem origem: conta como REMOTE e a matriz nega `commands.run` fora do PC | Esperado; no servidor a origem sempre é informada |
+| `test:dev` | `startRun` sem `ctx`: sem papel o motor nega por padrão (falha fechada) | Esperado; as rotas sempre passam o contexto do dono |
+
+Com `YUI_POLICY_MODE=observe` (padrão) a CI dá 37/37.
+
 ## 8. Pendências para fechar a Fase 1
 
 1. Decidir a retenção de memória em produção (seção 4).
