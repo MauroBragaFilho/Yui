@@ -101,6 +101,10 @@ Lacunas de teste identificadas: negação de permissão nos handlers Discord (`a
 8. `scripts/atualizar-yui.ps1` e `src/utils/binaries.js`: fixar commit/hash e checksums.
 9. Runtime fora do Git (`git rm --cached`, só índice) e mover estado do Weekly para fora de `src/`.
 
+## 7b. Andamento (2026-11-17)
+
+**Frente 1 feita: rotas da API.** `src/core/security/routeGuard.js` liga cada rota que muda estado (memória, admin, BDS) a uma ação da matriz e é chamado em `server.js` logo após a autenticação. Em `observe` só registra; em `enforce` nega por somente leitura/papel e bloqueia ação crítica vinda do app remoto (403 "só no computador"). Linhas novas na matriz: `memory.write_own`, `admin.ai_configure`, `admin.restart`, `admin.reminders_edit`, `admin.discord_dm`, `admin.gateway_reset`, `bds.read|write|delete|purge`. Testes: `npm run test:routes` (6). Limite conhecido: ação ASK nas rotas segue (o painel confirma no cliente) e ainda não há ticket de aprovação para rotas do painel; o `baseUrl` custom de IA no PC pede só confirmação. Faltam: Discord (handlers e comandos) e jobs automáticos.
+
 ## 8. Pendências para fechar a Fase 1
 
 1. Decidir a retenção de memória em produção (seção 4).

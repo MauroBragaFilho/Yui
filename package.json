@@ -17,6 +17,7 @@
     "test:approvals": "node tests/test-approvals.js",
     "aprovar": "node scripts/yui-aprovar.mjs",
     "test:security": "node tests/test-security-policy.js",
+    "test:routes": "node tests/test-route-guard.js",
     "test:ci": "node scripts/run-ci.mjs",
     "test:search": "node tests/test-search-skills.js",
     "test:readonly": "node tests/test-readonly.js",

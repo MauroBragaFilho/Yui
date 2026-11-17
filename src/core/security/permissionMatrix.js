@@ -53,6 +53,17 @@ const ROWS = [
   ['commands.run', true, 'CDDDD', true],
   ['apps.open', true, 'SSSDD', true],
   ['skills.use', false, 'AAADD', true],
+  // Rotas da API (Fase 1, frente "API admin, BDS e memória"). Colunas OWNER_*: o painel é só do dono.
+  ['memory.write_own', false, 'AAAAA', true],
+  ['admin.ai_configure', true, 'SCDDD', true],     // chaves, provedores e baseUrl de IA: no PC pede confirmação; remoto (app) é crítico = negado
+  ['admin.restart', true, 'SSDDD', true],
+  ['admin.reminders_edit', false, 'AAADD', true],
+  ['admin.discord_dm', false, 'AADDD', true],
+  ['admin.gateway_reset', false, 'AADDD', true],
+  ['bds.read', false, 'AAADD', true],
+  ['bds.write', true, 'SSDDD', true],
+  ['bds.delete', true, 'SSDDD', true],
+  ['bds.purge', true, 'SCDDD', true],              // apagar de vez: no PC pede confirmação; remoto (app) é crítico = negado
 ];
 
 export const MATRIX = Object.freeze(new Map(ROWS.map(([action, modifies, codes, proposed = false]) => {

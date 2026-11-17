@@ -13,6 +13,7 @@ import { loadPanelCredentials, createSessionStore, createLoginLimiter, createPai
 import { createAdmin } from './admin.js';
 import { createDev } from '../dev/index.js';
 import { createDevRoutes, isLocalRequest } from '../dev/routes.js';
+import { guardRoute } from '../security/routeGuard.js';
 import { startLocalApprovalChannel } from '../security/localChannel.js';
 import { getApprovalManager } from '../security/approvalManager.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
@@ -506,6 +507,10 @@ export function createApiServer({
 
       const ctx = buildContext({ platform: 'api', userId: session.userId, isDM: true });
       if (ctx.role === 'BLOCKED') return send(res, 403, { error: 'acesso negado' });
+
+      // Motor de políticas nas rotas que mudam estado: em observe só registra; em enforce nega/exige aprovação local.
+      const blocked = guardRoute({ ctx, method: req.method, pathname: url.pathname, local: isLocalRequest(req) });
+      if (blocked) return send(res, blocked.status, blocked.body);
 
       if (route === 'POST /v1/auth/logout') {
         const revoked = session.via === 'session' ? sessions.revoke(bearerOf(req)) : false;
