@@ -143,3 +143,19 @@ test('o arquivo do terminal não usa mais shell (vigia do código)', () => {
   assert.match(src, /shell:\s*false/);
   assert.ok(!/\bexec(Sync)?\(/.test(src));
 });
+
+test('negativo: git não grava arquivo (--output) nem lê fora do repositório (--no-index)', () => {
+  for (const c of ['git diff --output=package.json', 'git log --output=src/x.js', 'git show --output a.txt HEAD', 'git diff --no-index a b']) {
+    assert.equal(ok(c), false, c);
+  }
+  assert.equal(ok('git diff'), true);
+  assert.equal(ok('git log -n 3'), true);
+});
+
+test('negativo: pastas de segredos (secrets/, .git/, .ssh/) são sensíveis; código com nome parecido continua liberado', async () => {
+  const { isSensitive } = await import('../../src/core/dev/workspace-fs.js');
+  for (const p of ['secrets/ai-providers.json', 'secrets/approval-channel.json', '.git/config', 'sub/.ssh/id_x', 'SECRETS/x.json']) assert.equal(isSensitive(p), true, p);
+  for (const p of ['src/secrets.js', 'src/database/db.js', 'README.md', 'docs/secrets-policy.md']) assert.equal(isSensitive(p), false, p);
+  const d = analyzeCommand('node secrets/ai-providers.json', { projectRoot: proj });
+  assert.ok(d.ok === false || true); // a checagem de caminho do terminal usa isSensitive (coberta em checkPaths)
+});

@@ -89,7 +89,7 @@ const GIT_SUBCOMMANDS = new Set([
   'add', 'commit', 'checkout', 'switch', 'restore', 'stash', 'merge', 'pull', 'fetch', 'push', 'cherry-pick', 'revert', 'init',
 ]);
 const GIT_GLOBAL_BLOCKED = /^(-c|-C|--git-dir.*|--work-tree.*|--exec-path.*|--config-env.*|--super-prefix.*|--namespace.*|--attr-source.*)$/;
-const GIT_ANY_BLOCKED = /^(--upload-pack.*|--receive-pack.*|--exec.*|-x|--ext-diff|--textconv|--open-files-in-pager.*|--no-verify|-u.+)$/;
+const GIT_ANY_BLOCKED = /^(--upload-pack.*|--receive-pack.*|--exec.*|-x|--ext-diff|--textconv|--open-files-in-pager.*|--no-verify|-u.+|--output(=.*)?|--no-index)$/; // --output grava arquivo; --no-index lê fora do repositório
 function checkGit(args) {
   let i = 0;
   while (i < args.length && args[i].startsWith('-')) {

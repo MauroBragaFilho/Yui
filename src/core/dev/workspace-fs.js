@@ -18,6 +18,8 @@ import { applyDiff } from './diff.js';
 
 const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'dist-electron', 'build', '.next', '.nuxt', '__pycache__', '.venv', 'venv', 'coverage', '.yui', '.idea', '.vscode', 'target', 'out']);
 const SENSITIVE_RE = /(^|[\\/])(\.env(\..*)?|.*\.pem|.*\.key|.*\.pfx|.*\.p12|id_rsa(\.pub)?|id_ed25519|\.npmrc|\.netrc|credentials(\.json)?|secrets?(\.json|\.ya?ml)?)$/i;
+// Pastas inteiras que nunca são lidas nem gravadas: chaves de IA, segredo do canal local, config do git, chaves ssh/gpg.
+const SENSITIVE_DIR_RE = /(^|\/)(secrets|\.ssh|\.gnupg|\.git)(\/|$)/i;
 const MAX_READ_BYTES = 2 * 1024 * 1024;
 const MAX_WRITE_BYTES = 5 * 1024 * 1024;
 
@@ -36,7 +38,8 @@ class WorkspaceError extends Error {
 }
 
 function isSensitive(relPath) {
-  return SENSITIVE_RE.test(String(relPath).replace(/\\/g, '/'));
+  const p = String(relPath).replace(/\\/g, '/');
+  return SENSITIVE_RE.test(p) || SENSITIVE_DIR_RE.test(p);
 }
 
 async function createWorkspaceFs(rootInput) {
