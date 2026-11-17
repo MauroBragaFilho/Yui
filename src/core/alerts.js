@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { redact } from './api/panelLogs.js';
 import { audit } from './audit.js';
+import { jobAllowed } from './security/jobGuard.js';
 
 /**
  * Avisos automáticos para o dono, por mensagem privada no Discord, quando algo
@@ -124,6 +125,7 @@ export function createAlerter({ notify = null, ownerId = null, env = process.env
    */
   async function alert(key, title, detail = '', { level = 'warn', cooldownMinutes = null } = {}) {
     if (!enabled()) return false;
+    if (!jobAllowed('alerts.send')) return false; // motor de políticas (jobGuard)
     const t = now();
     const wait = cooldownMinutes ? cooldownMinutes * 60 * 1000 : defaultCooldown;
     if (t - (last.get(key) ?? -Infinity) < wait) return false;

@@ -46,6 +46,10 @@ O rollback também está provado no ambiente isolado (`validar:enforce`, verific
 
 Rollback de código (se o problema for no código e não na configuração): `git revert <commit>` e push no `main` (o atualizador aplica às 04:00, ou `Start-ScheduledTask YuiAtualizar` para aplicar na hora).
 
+## 4b. Pausar as tarefas automáticas sem desligar a Yui
+
+Em `enforce`, `POLICY_JOB_AUTONOMY=DENY` no `.env` (e reiniciar o `YuiBot`) pausa publicações, lembretes, relatórios, alertas, limpezas e manutenção. Apague a linha para voltar. Serve para uma emergência ou para investigar algo sem derrubar a conversa.
+
 ## 5. O que este plano NÃO cobre (pendências da Fase 1)
 
-Tarefas do Windows (`YuiAtualizar`, `YuiBackup`, watchdog), download inicial de binários, `updateGtaCarsVehicles`, alertas/DMs automáticos, restrição do `baseUrl` de IA personalizado, checksum dos binários e commit fixo no atualizador. Ver `docs/AUDITORIA_FASE1.md`, seções 7b e 8.
+Tarefas do Windows (`YuiAtualizar`, `YuiBackup`, watchdog), que rodam fora do processo da Yui e não passam pelo motor (ver `docs/AUDITORIA_FASE1.md`, frente 7), e a cópia do `atualizar-yui.ps1` novo para `C:Tools` no notebook (precisa de autorização). Alertas, downloads de binários, GTACars, `baseUrl` de IA e checksum já estão cobertos.

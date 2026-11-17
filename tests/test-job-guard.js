@@ -87,6 +87,40 @@ await test('o serviço de lembretes registra as tarefas pelo agendador injetado 
   assert.ok(registered.some((r) => r.expr === '* * * * *' && typeof r.fn === 'function'), 'tick a cada minuto');
 });
 
+console.log('Alertas e downloads');
+await test('alertas por DM: em enforce + somente leitura continuam saindo; POLICY_JOB_AUTONOMY=DENY (dono) os pausa', async () => {
+  const { createAlerter } = await import('../src/core/alerts.js');
+  const mk = () => { const sent = []; return { sent, alerter: createAlerter({ notify: async (id, text) => { sent.push(text); }, ownerId: '111', env: {} }) }; };
+  process.env.YUI_POLICY_MODE = 'enforce'; process.env.YUI_READ_ONLY = 'true';
+  try {
+    const a = mk(); assert.equal(await a.alerter.alert('k1', 'teste'), true); assert.equal(a.sent.length, 1, 'alerta sai em somente leitura');
+    process.env.POLICY_JOB_AUTONOMY = 'DENY';
+    const b = mk(); assert.equal(await b.alerter.alert('k2', 'teste'), false); assert.equal(b.sent.length, 0, 'pausado pelo dono');
+    delete process.env.POLICY_JOB_AUTONOMY;
+    process.env.YUI_POLICY_MODE = 'observe';
+    const c = mk(); assert.equal(await c.alerter.alert('k3', 'teste'), true, 'em observe nunca bloqueia');
+  } finally { delete process.env.YUI_POLICY_MODE; delete process.env.YUI_READ_ONLY; delete process.env.POLICY_JOB_AUTONOMY; resetJobGuardForTests(); }
+});
+await test('download inicial de binários e atualização do GTACars: negados em enforce + somente leitura, liberados sem ela', () => {
+  for (const j of ['maintenance.binaries_download', 'maintenance.gtacars_update']) {
+    assert.equal(jobAllowed(j, { engine: engine('enforce', true) }), false, j);
+    resetJobGuardForTests();
+    assert.equal(jobAllowed(j, { engine: engine('enforce', false) }), true, j);
+    assert.equal(jobAllowed(j, { engine: engine('observe', true) }), true, j);
+  }
+});
+await test('vigias: alertas, instalação de yt-dlp/ffmpeg e GTACars consultam o guarda antes de agir', () => {
+  assert.match(read('src/core/alerts.js'), /jobAllowed\('alerts\.send'\)/);
+  const bin = read('src/utils/binaries.js');
+  const y = bin.slice(bin.indexOf('export async function ensureYtdlp'), bin.indexOf('export async function ensureFfmpeg'));
+  const f = bin.slice(bin.indexOf('export async function ensureFfmpeg'), bin.indexOf('const YTDLP_UPDATE_TIMEOUT_MS'));
+  for (const [n, s] of [['ensureYtdlp', y], ['ensureFfmpeg', f]]) {
+    const g = s.indexOf("jobAllowed('maintenance.binaries_download')");
+    assert.ok(g > 0 && g < s.indexOf('downloadVerified('), `${n}: guarda antes de baixar`);
+  }
+  assert.match(read('src/index.js'), /jobAllowed\('maintenance\.gtacars_update'\)/);
+});
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
 process.exit(0);

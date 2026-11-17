@@ -84,7 +84,7 @@ async function bootstrap() {
   // 1.2.1 Atualizar base de veículos do GTACars (fonte independente). O cache
   // já é carregado no import do service; este update garante frescor (24h).
   try {
-    const report = await updateGtaCarsVehicles();
+    const report = jobAllowed('maintenance.gtacars_update') ? await updateGtaCarsVehicles() : { ok: true };
     if (!report?.ok) {
       logger.warn(`[Bootstrap] GTACars sem atualização: ${report?.reason || 'desconhecido'} (${report?.error || ''})`);
     }

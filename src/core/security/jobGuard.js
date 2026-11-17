@@ -23,10 +23,13 @@ export const JOBS = Object.freeze({
   'reminders.tick': 'job.notify',
   'reminders.morning': 'job.notify',
   'reminders.health': 'job.notify',
+  'alerts.send': 'job.notify',
   'cleanup.context': 'job.cleanup_files',
   'cleanup.radio_temp': 'job.cleanup_files',
   'maintenance.ytdlp_update': 'job.maintenance',
   'maintenance.data_refresh': 'job.maintenance',
+  'maintenance.binaries_download': 'job.maintenance',
+  'maintenance.gtacars_update': 'job.maintenance',
 });
 
 const SYSTEM_CTX = Object.freeze({ platform: 'system', userId: 'system', role: ROLES.OWNER, channelKind: 'private', guildId: null, channelId: null });

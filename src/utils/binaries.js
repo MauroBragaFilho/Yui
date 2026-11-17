@@ -214,6 +214,10 @@ export async function ensureYtdlp() {
   const globalPath = await checkExecutable('yt-dlp');
   if (globalPath) return globalPath;
 
+  if (!jobAllowed('maintenance.binaries_download')) {
+    logger.warn('[MediaTools] yt-dlp não encontrado e o download automático está bloqueado pela política de segurança (somente leitura).');
+    return null;
+  }
   logger.info('[MediaTools] 📥 yt-dlp não encontrado. Iniciando download automático da release oficial...');
   ensureDirExists(PLATFORM_DIR);
 
@@ -248,6 +252,10 @@ export async function ensureFfmpeg() {
   ensureDirExists(PLATFORM_DIR);
 
   if (!IS_WIN) {
+    if (!jobAllowed('maintenance.binaries_download')) {
+      logger.warn('[MediaTools] FFmpeg não encontrado e o download automático está bloqueado pela política de segurança (somente leitura).');
+      return null;
+    }
     logger.info('[MediaTools] 📥 FFmpeg não encontrado no Linux. Baixando build estática John Van Sickle...');
     const tarGzPath = path.join(PLATFORM_DIR, 'ffmpeg-release-amd64-static.tar.xz');
     const downloadUrl = 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz';
