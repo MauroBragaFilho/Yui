@@ -19,7 +19,8 @@ import { WorkspaceError } from './workspace-fs.js';
  *   POST   /v1/dev/runs/:runId/cancel
  */
 
-const FORWARD_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'forwarded', 'tailscale-user-login', 'tailscale-user-name'];
+// Mesma lista do canal local de aprovação (security/localChannel.js): qualquer sinal de proxy conta como remoto.
+const FORWARD_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip', 'forwarded', 'via', 'tailscale-user-login', 'tailscale-user-name', 'tailscale-user-profile-pic'];
 
 /**
  * O pedido veio do próprio computador? Conexão de loopback SEM cabeçalhos de proxy.

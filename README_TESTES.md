@@ -14,6 +14,7 @@ npm run test:persona      # personalidade por contexto
 npm run test:panel        # login por senha, chave por DM, sessões, painel admin
 npm run test:ci           # TODAS as suítes offline de uma vez (é o que o GitHub Actions roda)
 npm run test:approvals   # aprovação crítica: tickets, canal local, CLI yui-aprovar e fluxo completo
+npm run test:discordguard # motor de políticas nas interações do Discord (ban, painéis, config, downloads)
 npm run test:routes      # motor de políticas nas rotas da API (admin, BDS, memória): observe não muda nada; enforce nega
 npm run test:security     # motor de políticas (Fase 1) em modo observação
 npm run test:search       # busca na web (cadeia de provedores, otimizador da consulta, teto global), system.info, comandos e skills
@@ -132,7 +133,8 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:persona` | 17 | Personalidade pessoal × pública, regras de resposta longa |
 | `test:panel` | 58 | Senha scrypt, bloqueio, chave por DM, sessões, rotas `/v1/admin/*` (integrações, edição de canais/seguidos, chaves e provedores de IA sem vazar chaves, rádio e logs com segredos mascarados) |
 | `test:search` | 56 | Cadeia Brave/Tavily/SearXNG/DuckDuckGo/Bing, cota esgotada, bloqueio leve e descanso, limite por pessoa, conversa sensível sem busca, gate de palavras, `system.info` tolerante, `commands.run` sem shell e com confirmação, skills (só dono, sem ferramentas), otimizador da consulta (sem ferramentas nem histórico, dado pessoal e palavras proibidas barrados antes do buscador), contexto da web reaproveitado entre provedores, teto global por hora e motivo distinto para cada tipo de falha |
-| `test:routes` | 6 | Rotas da API ligadas à matriz: observe não bloqueia; enforce nega por somente leitura, papel e origem (crítico só no PC) |
+| `test:discordguard` | 8 | Interações do Discord ligadas à matriz: observe não bloqueia; enforce nega por somente leitura, papel e origem |
+| `test:routes` | 7 | Rotas da API ligadas à matriz: observe não bloqueia; enforce nega por somente leitura, papel e origem (crítico só no PC) |
 | `test:approvals` | 19 | Tickets de uso único (validade, hash, HMAC, replay, concorrência, adulteração), canal local (segredo, proxy, Host, trava), CLI e fluxo API + módulo Código |
 | `test:dev` | 70 | Código: workspace sem escapar da pasta, `SEARCH/REPLACE`, política de comandos, laço do agente, projetos, histórico, execução com aprovação (somente leitura, negar, expirar, cancelar, remoto), rotas `/v1/dev/*` e `403` para membros |
 | `test:alerts` | 24 | Avisos ao dono: intervalo, teto por hora, máscara de segredos, desligar, chave pela causa-raiz, origem no código da Yui |

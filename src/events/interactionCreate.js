@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import config from '../config.js';
+import { guardInteraction } from '../core/security/discordGuard.js';
 import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
 import { handleTosInteraction } from '../handlers/tosHandler.js';
 import { handleBanInteraction, checkBan, addBan, removeBan, getBans, setAutoBlock } from '../handlers/banHandler.js';
@@ -418,6 +419,24 @@ export default {
                         return;
                     }
                 }
+            }
+        }
+        // Motor de políticas (Fase 1): em observe só registra; em enforce nega/exige o PC antes de qualquer handler.
+        if (!interaction.isAutocomplete()) {
+            const isSlash = interaction.isChatInputCommand?.() || (interaction.isCommand() && !interaction.customId);
+            let sub = null;
+            if (isSlash) { try { sub = interaction.options?.getSubcommand(false) ?? null; } catch { /* sem subcomando */ } }
+            const blocked = guardInteraction({
+                data: { kind: isSlash ? 'slash' : 'component', name: interaction.commandName, sub, customId: interaction.customId },
+                userId: interaction.user?.id,
+                channelId: interaction.channelId,
+                guildId: interaction.guildId,
+                isDM: !interaction.guildId,
+                guildAdmin: Boolean(interaction.memberPermissions?.has?.(PermissionFlagsBits.ManageGuild) || interaction.memberPermissions?.has?.(PermissionFlagsBits.Administrator)),
+            });
+            if (blocked) {
+                if (interaction.replied || interaction.deferred) return interaction.followUp({ content: blocked.message, ephemeral: true }).catch(() => {});
+                return interaction.reply({ content: blocked.message, ephemeral: true }).catch(() => {});
             }
         }
         if (interaction.customId) {

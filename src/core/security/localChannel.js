@@ -44,7 +44,7 @@ function restrictFile(file) {
   try {
     if (process.platform === 'win32') {
       // Caminho completo do System32: um "whoami"/"icacls" de outro lugar do PATH não pode ser usado aqui.
-      const sys32 = path.join(process.env.SystemRoot || 'C:\Windows', 'System32');
+      const sys32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
       const me = execFileSync(path.join(sys32, 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { windowsHide: true, encoding: 'utf8' }).trim().split('","')[1]?.replace(/"/g, '').trim();
       const grants = ['*S-1-5-18:F', '*S-1-5-32-544:F', ...(me && /^S-1-5-[\d-]+$/.test(me) ? [`*${me}:F`] : [])];
       execFileSync(path.join(sys32, 'icacls.exe'), [file, '/inheritance:r', '/grant:r', ...grants], { windowsHide: true, stdio: 'ignore' });
@@ -134,8 +134,11 @@ export function startLocalApprovalChannel({ manager, env = process.env, auditFn 
       let restricted = false;
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ port: actual, nonce, pid: process.pid, startedAt: new Date().toISOString() }), { mode: 0o600 });
+        // Cria VAZIO, restringe a permissão e só então grava o segredo: não existe janela com o segredo legível.
+        fs.writeFileSync(file, '', { mode: 0o600 });
         restricted = restrictFile(file);
+        if (!restricted) { fs.rmSync(file, { force: true }); throw new Error('não consegui restringir a permissão do arquivo do segredo (canal de aprovação desligado)'); }
+        fs.writeFileSync(file, JSON.stringify({ port: actual, nonce, pid: process.pid, startedAt: new Date().toISOString() }), { mode: 0o600 });
       } catch (err) {
         server.close();
         return reject(err);

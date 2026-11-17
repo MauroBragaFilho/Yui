@@ -99,6 +99,18 @@ await test('auditoria registra as rotas bloqueadas e o modo', () => {
   assert.ok(lines.some((e) => e.event === 'policy.evaluate' && e.mode === 'enforce'), 'policy.evaluate enforce');
 });
 
+console.log('Freio de adivinhação de token');
+await test('muitos Bearer inválidos travam a origem; um token certo não passa durante o bloqueio', async () => {
+  const s2 = createApiServer({ tokens: parseTokens(`${OWNER}=111`) });
+  await new Promise((r) => s2.listen(0, '127.0.0.1', r));
+  const b2 = `http://127.0.0.1:${s2.address().port}`;
+  const hit = (token, extra = {}) => fetch(b2 + '/v1/me', { headers: { Authorization: `Bearer ${token}`, ...extra } }).then((r) => r.status);
+  for (let i = 0; i < 20; i++) assert.equal(await hit(`errado-${i}-0123456789abcdef`), 401);
+  assert.equal(await hit(OWNER), 429, 'travado, mesmo com o token certo');
+  assert.equal(await hit(OWNER, { 'X-Forwarded-For': '100.64.0.77' }), 200, 'outra origem (atrás do proxy) não é afetada');
+  s2.close();
+});
+
 delete process.env.YUI_POLICY_MODE;
 delete process.env.YUI_READ_ONLY;
 server.close();

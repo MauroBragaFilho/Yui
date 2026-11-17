@@ -60,6 +60,8 @@ const ROWS = [
   ['admin.reminders_edit', false, 'AAADD', true],
   ['admin.discord_dm', false, 'AADDD', true],
   ['admin.gateway_reset', false, 'AADDD', true],
+  ['media.download', false, 'AAAAA', true],   // baixar música/vídeo/torrent (temporários); hoje qualquer não banido
+  ['admin.bot_config', true, 'SDSDD', true],    // painel global do bot (config.json): só o dono, no PC ou em DM
   ['bds.read', false, 'AAADD', true],
   ['bds.write', true, 'SSDDD', true],
   ['bds.delete', true, 'SSDDD', true],

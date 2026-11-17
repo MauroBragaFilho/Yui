@@ -392,5 +392,7 @@ test('isLocalRequest: loopback sem cabeçalhos de proxy', () => {
   assert.equal(isLocalRequest(req('192.168.0.5')), false);
   assert.equal(isLocalRequest(req('127.0.0.1', { 'x-forwarded-for': '1.2.3.4' })), false);
   assert.equal(isLocalRequest(req('127.0.0.1', { 'tailscale-user-login': 'a@b' })), false);
+  // negativo: qualquer sinal de proxy (nginx, túnel, Tailscale) conta como remoto, igual ao canal local
+  for (const h of ['x-real-ip', 'x-forwarded-proto', 'via', 'tailscale-user-profile-pic', 'forwarded', 'x-forwarded-host']) assert.equal(isLocalRequest(req('127.0.0.1', { [h]: '1' })), false, h);
   assert.ok(createDevRoutes);
 });

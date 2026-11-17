@@ -19,6 +19,8 @@ import { getApprovalManager } from '../security/approvalManager.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
 
 // Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
+// Tentativas de Bearer inválido por origem antes de travar (adivinhação de token).
+const AUTH_FAIL = { max: 20, windowMs: 10 * 60 * 1000 };
 const DM_LIMIT = { max: 5, windowMs: 10 * 60 * 1000 };
 
 /**
@@ -382,6 +384,16 @@ export function createApiServer({
     return { __notFound: true };
   }
 
+  const authFails = new Map(); // origem -> horários das tentativas inválidas
+  const authFailKey = (req) => {
+    const addr = String(req.socket?.remoteAddress ?? '?');
+    const fwd = String(req.headers?.['x-forwarded-for'] ?? '').split(',')[0].trim();
+    return (addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1') && fwd ? `fwd:${fwd}` : addr; // atrás do tailscale serve a origem real vem no cabeçalho
+  };
+  const recentFails = (key) => { const now = Date.now(); const l = (authFails.get(key) || []).filter((x) => now - x < AUTH_FAIL.windowMs); authFails.set(key, l); return l; };
+  const authBlocked = (key) => recentFails(key).length >= AUTH_FAIL.max;
+  const recordAuthFail = (key) => { recentFails(key).push(Date.now()); if (authFails.size > 2000) for (const [k, l] of authFails) if (!l.length) authFails.delete(k); };
+
   function rateLimited(userId, bucket) {
     const now = Date.now();
     const key = `${userId}:${bucket}`;
@@ -501,8 +513,11 @@ export function createApiServer({
         return send(res, 200, { token: s.token, expiresAt: s.expiresAt, userId: panel.userId });
       }
 
+      // Freio contra adivinhação de token: muitas tentativas inválidas da mesma origem travam a origem por um tempo.
+      const failKey = authFailKey(req);
+      if (authBlocked(failKey)) return send(res, 429, { error: 'muitas tentativas inválidas; aguarde alguns minutos' });
       const session = authenticate(req, tokens, sessions);
-      if (!session) return send(res, 401, { error: 'não autorizado' });
+      if (!session) { recordAuthFail(failKey); return send(res, 401, { error: 'não autorizado' }); }
       if (rateLimited(session.userId, AI_ROUTES.has(route) || isDevRunStart(route) ? 'ai' : 'other')) return send(res, 429, { error: 'muitas requisições' });
 
       const ctx = buildContext({ platform: 'api', userId: session.userId, isDM: true });
