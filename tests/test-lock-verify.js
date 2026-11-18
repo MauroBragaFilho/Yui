@@ -4,15 +4,19 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import { criarBloqueioTemporario } from './helpers/bloqueioExternoTeste.js';
 
 const { checkLock, REGISTRY } = await import('../scripts/verificar-lock.mjs');
 const root = path.resolve(import.meta.dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-lock-'));
+// Etapa 8 (revisão da Liz): os processos auxiliares deste teste rodam sob o bloqueio de integração externa (rede, DNS, UDP, programas e workers
+// falham e ficam registrados; nenhuma exceção: o script só lê arquivos de lock). O registro guarda qual teste abriu cada exceção.
+const BLOQUEIO = criarBloqueioTemporario({ teste: 'test:lockverify', liberar: {} });
 let passed = 0;
 const test = async (name, fn) => { await fn(); passed++; console.log(`  ✔ ${name}`); };
 const good = (n, extra = {}) => ({ version: '1.0.0', resolved: `${REGISTRY}${n}/-/${n}-1.0.0.tgz`, integrity: `sha512-${'A'.repeat(86)}==`, ...extra });
 const lock = (pk) => ({ lockfileVersion: 3, packages: { '': { name: 'yui' }, ...pk } });
-const cli = (novo, atual) => spawnSync(process.execPath, [path.join(root, 'scripts', 'verificar-lock.mjs'), novo, ...(atual ? [atual] : [])], { encoding: 'utf8' });
+const cli = (novo, atual) => spawnSync(process.execPath, [...BLOQUEIO.argv, path.join(root, 'scripts', 'verificar-lock.mjs'), novo, ...(atual ? [atual] : [])], { encoding: 'utf8', env: { ...process.env, NODE_ENV: 'test', ...BLOQUEIO.env('verificar-lock') } });
 const write = (name, obj) => { const f = path.join(tmp, name); fs.writeFileSync(f, typeof obj === 'string' ? obj : JSON.stringify(obj)); return f; };
 
 console.log('Regras');
@@ -77,6 +81,7 @@ await test('o atualizador confere o package-lock ANTES do teste de subida e de c
   assert.doesNotMatch(ps, /[^\x00-\x7F]/, 'só ASCII (o PowerShell 5.1 do notebook lê o arquivo sem BOM)');
 });
 
+BLOQUEIO.fechar('test:lockverify'); // falha alto se o script tentou rede, DNS, UDP, programa ou worker
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
 process.exit(0);

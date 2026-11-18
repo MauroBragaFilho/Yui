@@ -24,7 +24,7 @@ const comp = (customId) => ({ kind: 'component', customId });
 console.log('Tabela');
 await test('comandos e botões que mudam algo mapeiam para ações; navegação e comandos de consulta não', () => {
   const cases = [
-    [slash('yui-criador', 'banir'), 'admin.ban_user'], [slash('yui-criador', 'desbanir'), 'admin.ban_user'], [slash('yui-criador', 'memorias'), 'memory.admin_inspect'],
+    [slash('yui-criador', 'banir'), 'admin.ban_user'], [slash('yui-criador', 'desbanir'), 'admin.ban_user'], [{ ...slash('yui-criador', 'memorias'), acao: 'listar' }, 'memory.admin_inspect'],
     [slash('yui-criador', 'bot_config'), 'admin.bot_config'], [slash('yui-criador', 'automod'), 'admin.guild_configure'], [slash('yui-servidor'), 'admin.guild_configure'],
     [slash('yui-seguir-youtube'), 'admin.follow_social'], [slash('yui-config_ia'), 'admin.ai_configure'], [slash('baixar_video'), 'media.download'],
     [comp('adm_remoteban_user_1'), 'admin.ban_user'], [comp('banlist_unban_user_1'), 'admin.ban_user'], [comp('unban_user_1_2'), 'admin.ban_user'],
@@ -32,6 +32,25 @@ await test('comandos e botões que mudam algo mapeiam para ações; navegação 
   ];
   for (const [d, a] of cases) assert.equal(actionForInteraction(d), a, JSON.stringify(d));
   for (const d of [slash('ajuda'), slash('yui-status'), slash('yui-memoria'), comp('cfgpanel_next_1'), comp('banlist_home'), comp('radio_stop'), comp('qualquer')]) assert.equal(actionForInteraction(d), null, JSON.stringify(d));
+});
+
+await test('/yui-criador memorias: listar e ver são inspeção; apagar e o botão de confirmar são memory.admin_wipe_user (como no canal)', () => {
+  const mem = (acao) => ({ ...slash('yui-criador', 'memorias'), acao });
+  assert.equal(actionForInteraction(mem('ver')), 'memory.admin_inspect');
+  assert.equal(actionForInteraction(mem('apagar')), 'memory.admin_wipe_user');
+  assert.equal(actionForInteraction(mem('apagar_usuario')), 'memory.admin_wipe_user');
+  assert.equal(actionForInteraction(mem(null)), 'memory.admin_wipe_user', 'sem saber a ação, vale a mais restritiva');
+  assert.equal(actionForInteraction(comp('memadm_ok_111111_222222_0_1790000000')), 'memory.admin_wipe_user');
+  assert.equal(actionForInteraction(comp('memadm_no_111111')), null, 'cancelar não muda nada');
+  // enforce, sem somente leitura: o dono em DM segue (ASK: o próprio fluxo pede a confirmação do alvo); membro e canal público não.
+  const e = engine('enforce', false);
+  assert.equal(guardInteraction({ data: mem('apagar_usuario'), userId: OWNER, isDM: true, engine: e }), null, 'dono em DM: segue para a confirmação');
+  assert.equal(guardInteraction({ data: comp('memadm_ok_111_222_0_1'), userId: OWNER, isDM: true, engine: e }), null);
+  assert.match(guardInteraction({ data: mem('apagar_usuario'), userId: OWNER, guildId: '9', channelId: '8', engine: e })?.message ?? '', /não é permitido/, 'dono num canal público: negado');
+  assert.match(guardInteraction({ data: mem('apagar'), userId: MEMBER, isDM: true, engine: e })?.message ?? '', /não é permitido/, 'nunca a pedido de outro usuário');
+  assert.match(guardInteraction({ data: comp('memadm_ok_222_333_0_1'), userId: MEMBER, guildId: '9', guildAdmin: true, engine: e })?.message ?? '', /não é permitido/);
+  assert.match(guardInteraction({ data: mem('apagar_usuario'), userId: OWNER, isDM: true, engine: engine('enforce', true) })?.message ?? '', /não é permitido/, 'somente leitura vence sempre');
+  assert.equal(guardInteraction({ data: mem('apagar_usuario'), userId: MEMBER, isDM: true, engine: engine('observe', false) }), null, 'observe: só registra');
 });
 
 console.log('observe e enforce');
@@ -101,8 +120,12 @@ await test('bans.json corrompido: a cópia fica guardada e a gravação é atôm
   const file = path.join(tmp, 'bans-b.json');
   fs.writeFileSync(file, '{ quebrado');
   const { spawnSync } = await import('node:child_process');
+  // Etapa 8 (revisão da Liz): o filho roda sob o bloqueio de integração externa (nenhuma exceção: ele só grava o arquivo de banimentos).
+  const { criarBloqueioTemporario } = await import('./helpers/bloqueioExternoTeste.js');
+  const bloqueio = criarBloqueioTemporario({ teste: 'test:discordguard', liberar: {} });
   const code = "import('./src/handlers/banHandler.js').then((m) => { m.addBan('user', '9999', 't'); })";
-  const r = spawnSync(process.execPath, ['-e', code], { cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, YUI_BANS_FILE: file }, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [...bloqueio.argv, '-e', code], { cwd: path.resolve(import.meta.dirname, '..'), env: { ...process.env, NODE_ENV: 'test', YUI_BANS_FILE: file, ...bloqueio.env('banHandler') }, encoding: 'utf8' });
+  bloqueio.fechar('test:discordguard');
   assert.equal(r.status, 0, r.stderr);
   assert.ok(fs.readdirSync(tmp).some((n) => n.startsWith('bans-b.json.corrompido-')), 'cópia da lista corrompida preservada');
   assert.ok(JSON.parse(fs.readFileSync(file, 'utf8')).users['9999'], 'novo ban gravado em JSON válido');

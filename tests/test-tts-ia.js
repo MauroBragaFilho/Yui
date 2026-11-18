@@ -61,10 +61,18 @@ const realAppendFile = fs.appendFile;
 const interceptedToolWrites = [];
 const interceptedBanWrites = [];
 const historyAppends = [];
+// O bans.json é gravado de forma atômica (bans.json.tmp + rename, banHandler.saveBans): o temporário e o rename para o
+// arquivo real também são interceptados, senão o teste gravaria no src/data/bans.json de verdade.
+const BANS_REAL = path.join('data', 'bans.json');
+const realRenameSync = fs.renameSync;
 fs.writeFileSync = function guardedWrite(file, ...rest) {
   if (String(file).endsWith(path.join('data', 'server_tools.json'))) { interceptedToolWrites.push(String(file)); return undefined; }
-  if (String(file).endsWith(path.join('data', 'bans.json'))) { interceptedBanWrites.push(String(file)); return undefined; }
+  if (String(file).endsWith(BANS_REAL) || String(file).endsWith(`${BANS_REAL}.tmp`)) { interceptedBanWrites.push(String(file)); return undefined; }
   return realWriteFileSync.call(this, file, ...rest);
+};
+fs.renameSync = function guardedRename(from, to, ...rest) {
+  if (String(to).endsWith(BANS_REAL)) { interceptedBanWrites.push(String(to)); return undefined; }
+  return realRenameSync.call(this, from, to, ...rest);
 };
 fs.appendFile = function guardedAppend(file, data, cb) {
   if (String(file).endsWith(path.join('data', 'historico.txt'))) {
@@ -977,7 +985,9 @@ await test('fontes: o despacho de ferramenta passa pelo guarda de voz ANTES de e
   assert.ok(/isVoiceItem\(options, interaction\)/.test(src));
   assert.ok(/isStaleVoiceItem\(processingQueue\[0\]\?\.options/.test(src));
   assert.ok(/clipForChat\(processedResponse, 1900\)/.test(src));
-  assert.ok(/applyVoicePersona\(baseSystemPrompt\)/.test(src));
+  // Etapa 6: o bloco de voz é aplicado pelo módulo único do prompt (core/ai/promptConversa.js), chamado pelo generateResponse.
+  assert.ok(/applyVoicePersona\(baseSystemPrompt\)/.test(read('src/core/ai/promptConversa.js')));
+  assert.ok(/buildConversationSystemPrompt\(\{/.test(src), 'o generateResponse monta o prompt pelo módulo único');
   // Voz: só a moderação (nada no historico.txt). O wrapper da rodada final (texto de anexo fora do disco) chama sempre a função base.
   assert.ok(/const savePromptToHistoryBase = isVoice \? moderateVoiceExchange : savePromptToHistoryOnDisk;/.test(src));
   assert.ok(/const savePromptToHistory = \(promptToSave, \.\.\.rest\) => savePromptToHistoryBase\(/.test(src));
@@ -1150,7 +1160,9 @@ await test('downloads por ferramenta (áudio de status, música, vídeo): o erro
 await test('fontes: AutoMod em voz só alerta (condição !isVoice no ban) e a persona de voz só entra quando a resposta é falada', () => {
   const src = read('src/handlers/llmHandler.js');
   assert.ok(/if \(isAutoBlockOn && guildId && !isVoice\) \{/.test(src), 'o ban automático precisa excluir a voz');
-  assert.ok(/options\.voice === true && options\.voiceSpeak !== false\) \{\s+baseSystemPrompt = applyVoicePersona/.test(src), 'persona de voz só com voiceSpeak');
+  // Etapa 6: o generateResponse pede o bloco de voz só com voiceSpeak; o módulo único do prompt o aplica nos dois prompts (com e sem memória).
+  assert.ok(/voice: options\.voice === true && options\.voiceSpeak !== false,/.test(src), 'persona de voz só com voiceSpeak');
+  assert.ok(/if \(voice === true\) \{\s+baseSystemPrompt = applyVoicePersona\(baseSystemPrompt\);\s+withoutMemory = applyVoicePersona\(withoutMemory\);/.test(read('src/core/ai/promptConversa.js')), 'o módulo do prompt aplica a voz só quando pedido');
   assert.equal((src.match(/voice: voiceSpeak/g) || []).length, 3, 'as chamadas extras à IA seguem o mesmo critério');
   assert.ok(!/voice: isVoice \}/.test(src), 'sobrou chamada extra que força a persona de voz');
   assert.ok(/isToolDisabled\(interaction\.guildId, 'leave_voice_call'\) && !voiceToolBlocked\('leave_voice_call', options\)/.test(src), 'sair da call pelo generate_reply precisa respeitar o interruptor');

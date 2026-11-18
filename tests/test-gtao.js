@@ -1,7 +1,15 @@
-import { initDatabase } from '../src/database/db.js';
-import { GTA_DAILY_SCHEMA, GTA_WEEKLY_SCHEMA } from '../src/database/schemas.js';
-import { gtaoEngine } from '../src/engines/gtao/index.js';
-import { logger } from '../src/utils/logger.js';
+// Bancos numa pasta temporária (DATABASE_DIR), nunca nos .db reais de database/. A variável é definida ANTES de
+// importar src/ (o config a lê na importação), por isso os módulos do projeto entram por import() dinâmico.
+import path from 'path';
+import { useIsolatedDatabaseDir, assertNotRealDatabaseDir } from './helpers/isolatedDatabaseDir.js';
+
+const isolated = useIsolatedDatabaseDir('yui-test-gtao-');
+const { config } = await import('../src/config/index.js');
+assertNotRealDatabaseDir(path.resolve(config.database.dir)); // confere o diretório efetivo antes de abrir qualquer banco
+const { initDatabase } = await import('../src/database/db.js');
+const { GTA_DAILY_SCHEMA, GTA_WEEKLY_SCHEMA } = await import('../src/database/schemas.js');
+const { gtaoEngine } = await import('../src/engines/gtao/index.js');
+const { logger } = await import('../src/utils/logger.js');
 
 async function runGTAOTest() {
   logger.info('=== [TESTE ISOLADO] GTAO ENGINE (DIÁRIO & SEMANAL) ===');
@@ -26,4 +34,4 @@ async function runGTAOTest() {
   logger.info('=== TESTE CONCLUÍDO ===');
 }
 
-runGTAOTest();
+runGTAOTest().finally(() => isolated.cleanup());

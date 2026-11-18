@@ -4,6 +4,7 @@
 import assert from 'assert';
 import { EventEmitter } from 'events';
 import http from 'http';
+import netMod from 'net';
 import { Readable } from 'stream';
 import zlib from 'zlib';
 
@@ -398,7 +399,9 @@ try {
     assert.equal(r.ok, false);
     assert.equal(r.status, 404);
     assert.equal(r.error, 'HTTP 404');
-    const refused = await safeFetchText('http://127.0.0.1:1/', { allowPrivate: true, timeoutMs: 1000 });
+    // uma porta FECHADA do loopback (abre um servidor, anota a porta e fecha): a conexão é recusada de verdade, e a porta é "do teste" (vale também sob o bloqueio)
+    const portaFechada = await new Promise((resolve) => { const s = netMod.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
+    const refused = await safeFetchText(`http://127.0.0.1:${portaFechada}/`, { allowPrivate: true, timeoutMs: 1000 });
     assert.equal(refused.ok, false);
     assert.ok(refused.error);
   });

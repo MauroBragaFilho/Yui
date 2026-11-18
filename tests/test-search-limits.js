@@ -6,6 +6,7 @@
 // SEM rede externa: só um servidor em 127.0.0.1 (porta 0) e dublês. Execução: npm run test:searchlimits
 import assert from 'assert';
 import { execFile } from 'child_process';
+import { criarBloqueioTemporario } from './helpers/bloqueioExternoTeste.js';
 import fs from 'fs';
 import http from 'http';
 import os from 'os';
@@ -283,12 +284,15 @@ await test('a worker (unref) não segura o processo: um script que só lê uma p
   const code = `import { extractPageTextIsolated, parseWorkerState } from ${JSON.stringify(url)};
 const t = await extractPageTextIsolated('<body><article><h1>Título grande</h1><p>' + 'texto útil '.repeat(30) + '</p></article></body>');
 console.log('len=' + t.length + ' alive=' + parseWorkerState().alive);`;
+  // Etapa 8 (revisão da Liz): o filho roda sob o bloqueio de integração externa; a ÚNICA exceção declarada é o worker de leitura do HTML.
+  const bloqueio = criarBloqueioTemporario({ teste: 'test:searchlimits', liberar: { 'worker:parseWorker': 'o worker de leitura do HTML da busca (src/search/parseWorker.js): só analisa um texto já baixado, sem rede' } });
   const started = Date.now();
   const out = await new Promise((resolve, reject) => {
-    execFile(process.execPath, ['--input-type=module', '-e', code], { timeout: 20000, windowsHide: true }, (err, stdout) => (err ? reject(err) : resolve(stdout)));
+    execFile(process.execPath, [...bloqueio.argv, '--input-type=module', '-e', code], { timeout: 20000, windowsHide: true, env: { ...process.env, NODE_ENV: 'test', ...bloqueio.env('leitura-de-pagina') } }, (err, stdout) => (err ? reject(err) : resolve(stdout)));
   });
   assert.match(out, /len=\d+ alive=true/);
   assert.ok(Date.now() - started < 15000);
+  bloqueio.fechar('test:searchlimits');
 });
 
 // ---------------------------------------------------------------------------------------------

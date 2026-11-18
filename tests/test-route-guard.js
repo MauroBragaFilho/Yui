@@ -114,6 +114,7 @@ await test('muitos Bearer inválidos travam a origem; um token certo não passa 
 delete process.env.YUI_POLICY_MODE;
 delete process.env.YUI_READ_ONLY;
 server.close();
+(await import('../src/database/db.js')).closeAllDatabases(); // motor nativo: no Windows o arquivo aberto não pode ser apagado
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
 process.exit(0);

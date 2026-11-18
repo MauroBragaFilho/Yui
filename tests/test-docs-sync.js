@@ -56,8 +56,8 @@ const NEW_VARS = [
 ];
 
 // Scripts novos desta rodada e o arquivo de teste de cada um.
+// (o test:spotdl é um teste EXTERNO: o script passa pelo executor opt-in, scripts/run-externos.mjs, e o comando verdadeiro está em tests/externos.json)
 const NEW_SCRIPTS = {
-  'test:spotdl': 'tests/test-spotdl.js',
   'test:embedlimits': 'tests/test-embed-limits.js',
   'test:uploadlimit': 'tests/test-upload-limit.js',
   'test:inputlimits': 'tests/test-input-limits.js',
@@ -110,6 +110,11 @@ await test('package.json é JSON válido, sem BOM, e os scripts de teste desta r
   for (const [name, file] of Object.entries(NEW_SCRIPTS)) {
     assert.strictEqual(scripts[name], `node ${file}`, `script ${name}`);
   }
+  // os testes externos (etapa 8): o script aponta para o executor opt-in e o comando verdadeiro está no registro único
+  const externos = JSON.parse(read('tests/externos.json')).externos;
+  const spotdl = externos.find((e) => e.teste === 'test:spotdl');
+  assert.strictEqual(scripts['test:spotdl'], 'node scripts/run-externos.mjs test:spotdl');
+  assert.strictEqual(spotdl?.comando, 'node tests/test-spotdl.js');
 });
 
 await test('todo comando "node <arquivo>" de um script aponta para um arquivo que existe', () => {
@@ -127,6 +132,8 @@ await test('todo tests/test-*.js tem script no package.json (ou está na lista d
   for (const command of Object.values(scripts)) {
     for (const m of String(command).matchAll(/tests\/[A-Za-z0-9._-]+\.(?:js|mjs)/g)) referenced.add(m[0]);
   }
+  // os testes externos rodam pelo executor opt-in: o arquivo de cada um está no registro único (tests/externos.json), não no package.json
+  for (const e of JSON.parse(read('tests/externos.json')).externos) for (const m of String(e.comando).matchAll(/tests\/[A-Za-z0-9._-]+\.(?:js|mjs)/g)) referenced.add(m[0]);
   const missing = fs.readdirSync(path.join(root, 'tests'))
     .filter((f) => /^test-.*\.js$/.test(f))
     .map((f) => `tests/${f}`)

@@ -1,7 +1,10 @@
 // Testes do contexto da conversa por horas (S3): src/core/context/contextStore.js + a fila do llmHandler + /yui-memoria apagar-tudo.
 // Rodam SEM Discord, SEM rede e SEM os bancos reais: bancos, logs e auditoria ficam numa pasta temporária (DATABASE_DIR);
 // axios/fetch/DNS/sockets são dublês. "Sobrevive a reinício" usa processos filhos de verdade (o db.js guarda as instâncias no módulo).
-// Execução: npm run test:context   (node tests/test-context.js)
+// Execução: npm run test:context   (node tests/test-context.js)          -> bancos de contexto no sql.js (o padrão)
+//           node tests/test-context-native.js                            -> os mesmos testes no motor nativo (node:sqlite, WAL)
+// O motor sai de YUI_DB_NATIVE, como na Yui. No nativo o texto recente fica no -wal: as conferências de bytes olham .db, -wal
+// e -shm, e são feitas DENTRO do processo filho, com o banco ainda aberto (ao sair, o SQLite passa o -wal para o .db e o apaga).
 import assert from 'assert';
 import fs from 'fs';
 import os from 'os';
@@ -10,6 +13,7 @@ import net from 'node:net';
 import dns from 'node:dns';
 import { Readable } from 'node:stream';
 import { execFileSync } from 'node:child_process';
+import { criarBloqueioTemporario } from './helpers/bloqueioExternoTeste.js';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,6 +39,12 @@ for (const k of ['GEMINI_API_KEY', 'GEMINI_API_KEYS', 'GROQ_API_KEY', 'GROQ_API_
   'LM_STUDIO_API_KEY', 'AI_API_KEY', 'AI_BASE_URL', 'LOCAL_LLM_URL', 'BRAVE_API_KEY', 'TAVILY_API_KEY', 'YUI_REPLY_MAX_TOKENS', 'YUI_REPLY_MAX_PARTS',
   'YUI_CONTEXT_ENABLED', 'YUI_CONTEXT_SCOPE', 'YUI_CONTEXT_TTL_HOURS', 'YUI_CONTEXT_MAX_CHARS', 'YUI_CONTEXT_MAX_TURNS']) delete process.env[k];
 process.chdir(tmp); // logs/, secrets/ e .env (nenhum) ficam no temporário
+
+// Motor de cada banco de contexto, pela mesma regra do db.js (YUI_DB_NATIVE: lista de nomes ou "*").
+const NATIVE_NAMES = new Set(String(process.env.YUI_DB_NATIVE || '').split(',').map((s) => s.trim()).filter(Boolean));
+const expectedEngine = (name) => (NATIVE_NAMES.has('*') || NATIVE_NAMES.has(name) ? 'native' : 'sqljs');
+const NATIVE_CONTEXT = ['memory-context', 'memory-context-personal'].some((n) => expectedEngine(n) === 'native');
+say(`Motor dos bancos de contexto: memory-context = ${expectedEngine('memory-context')}, memory-context-personal = ${expectedEngine('memory-context-personal')}`);
 
 // Nada sai da máquina: axios, fetch, DNS e sockets viram dublês que falham.
 const { default: axios } = await import('axios');
@@ -437,38 +447,97 @@ section('C. Disco de verdade (processos filhos): reinício, arquivos separados, 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════
 const initSqlJs = (await import('sql.js')).default;
 const SQL = await initSqlJs();
+const dbApi = await import('../src/database/db.js');
+const DatabaseSync = NATIVE_CONTEXT ? (await import('node:sqlite')).DatabaseSync : null;
 const dbKeys = (file) => {
-  const db = new SQL.Database(fs.readFileSync(file));
-  const r = db.exec('SELECT scope_key FROM context_scopes ORDER BY scope_key');
-  db.close();
-  return r.length ? r[0].values.map((v) => v[0]) : [];
+  if (!dbApi.isWalFile(file)) {
+    const db = new SQL.Database(fs.readFileSync(file));
+    const r = db.exec('SELECT scope_key FROM context_scopes ORDER BY scope_key');
+    db.close();
+    return r.length ? r[0].values.map((v) => v[0]) : [];
+  }
+  // Motor nativo: o que é recente pode estar só no -wal. Lê uma CÓPIA (.db + -wal), sem abrir o arquivo do teste: o SQLite,
+  // ao fechar a última conexão, passaria o -wal para o .db e o apagaria, e isso mexeria no que os outros testes conferem.
+  assert.ok(DatabaseSync, `${path.basename(file)} está no formato WAL, mas YUI_DB_NATIVE não liga o motor nativo para o contexto`);
+  const copyDir = fs.mkdtempSync(path.join(tmp, 'leitura-'));
+  const copy = path.join(copyDir, 'copia.db');
+  fs.copyFileSync(file, copy);
+  if (fs.existsSync(`${file}-wal`)) fs.copyFileSync(`${file}-wal`, `${copy}-wal`);
+  const db = new DatabaseSync(copy);
+  try {
+    return db.prepare('SELECT scope_key FROM context_scopes ORDER BY scope_key').all().map((r) => r.scope_key);
+  } finally {
+    db.close();
+    fs.rmSync(copyDir, { recursive: true, force: true });
+  }
 };
+// Arquivos de um banco: o .db e, no motor nativo, o -wal e o -shm.
+const dbFiles = (file) => [file, `${file}-wal`, `${file}-shm`].filter((f) => fs.existsSync(f));
+const DB_FILE_RE = /\.db(?:-wal|-shm)?$/;
+// Trecho para os processos filhos: o texto aparece em ALGUM arquivo do banco (.db, -wal, -shm)? Conferido DENTRO do filho, com
+// o banco ainda aberto, como na Yui rodando: ao sair, o node:sqlite fecha o banco e o SQLite passa o -wal para o .db e o apaga,
+// então conferir só depois esconderia um -wal com texto apagado.
+const NO_DISCO = `
+  const { default: fsx } = await import('node:fs');
+  const { default: pathx } = await import('node:path');
+  const noDisco = (nome, texto) => ['', '-wal', '-shm'].some((s) => {
+    const f = pathx.join(process.env.DATABASE_DIR, nome + '.db' + s);
+    return fsx.existsSync(f) && fsx.readFileSync(f).includes(Buffer.from(texto, 'utf8'));
+  });
+`;
 const ctxUrl = pathToFileURL(path.join(repoRoot, 'src/core/context/contextStore.js')).href;
+const dbUrl = pathToFileURL(path.join(repoRoot, 'src/database/db.js')).href;
+// Etapa 8 (revisão da Liz): os processos auxiliares deste teste rodam sob o bloqueio de integração externa (rede, DNS, UDP, programas e workers
+// falham e ficam registrados; nenhuma exceção: os filhos só abrem bancos locais do contexto). O registro guarda qual teste abriu cada exceção.
+const BLOQUEIO = criarBloqueioTemporario({ teste: 'test:context', liberar: {} });
 function runChild(name, body, dir, extraEnv = {}) {
   const file = path.join(tmp, `child-${name}.mjs`);
   fs.writeFileSync(file, `const mod = await import(${JSON.stringify(ctxUrl)});\n${body}\n`);
   const env = { ...process.env, DATABASE_DIR: dir, YUI_OWNER_ID: '111', LOG_LEVEL: 'error', YUI_AUDIT_FILE: path.join(dir, 'audit.jsonl'), ...extraEnv };
   delete env.YUI_CONTEXT_ENABLED; delete env.YUI_CONTEXT_SCOPE;
   Object.assign(env, extraEnv);
-  const out = execFileSync(process.execPath, [file], { cwd: dir, env, encoding: 'utf8', timeout: 60000, windowsHide: true });
+  Object.assign(env, { NODE_ENV: 'test', ...BLOQUEIO.env('filho') });
+  const out = execFileSync(process.execPath, [...BLOQUEIO.argv, file], { cwd: dir, env, encoding: 'utf8', timeout: 60000, windowsHide: true });
   const last = out.trim().split(/\r?\n/).filter(Boolean).pop() ?? '';
   return last ? JSON.parse(last) : null;
 }
 const mkdir = (n) => fs.mkdtempSync(path.join(tmp, `${n}-`));
 
+await test('motor de cada banco de contexto = o pedido em YUI_DB_NATIVE, e o arquivo está no formato dele', () => {
+  const dir = mkdir('engine');
+  const env = { YUI_CONTEXT_ENABLED: 'true', YUI_CONTEXT_SCOPE: 'all' };
+  const r = runChild('engine', `${NO_DISCO}
+    const dbm = await import(${JSON.stringify(dbUrl)});
+    await mod.initContextStore();
+    const header = (nome) => [...fsx.readFileSync(pathx.join(process.env.DATABASE_DIR, nome + '.db')).subarray(18, 20)];
+    console.log(JSON.stringify({
+      engines: [dbm.getDatabaseEngine('memory-context'), dbm.getDatabaseEngine('memory-context-personal')],
+      headers: [header('memory-context'), header('memory-context-personal')],
+    }));
+  `, dir, env);
+  const names = ['memory-context', 'memory-context-personal'];
+  assert.deepEqual(r.engines, names.map(expectedEngine));
+  assert.deepEqual(r.headers, names.map((n) => (expectedEngine(n) === 'native' ? [2, 2] : [1, 1])), 'bytes 18 e 19 do cabeçalho: 1 = diário clássico (sql.js), 2 = WAL (nativo)');
+});
 await test('SOBREVIVE A REINÍCIO: a 2ª execução (processo novo) lê do disco o que a 1ª gravou; pessoal e público em ARQUIVOS SEPARADOS', () => {
   const dir = mkdir('restart');
   const env = { YUI_CONTEXT_ENABLED: 'true', YUI_CONTEXT_SCOPE: 'all' };
-  const written = runChild('write', `
+  const written = runChild('write', `${NO_DISCO}
     await mod.initContextStore();
     const pub = mod.resolveContextTarget({ userId: '222', channelId: 'c1', guildId: 'g1', personal: false, userText: 'x' });
     const per = mod.resolveContextTarget({ userId: '111', channelId: 'dmchan', guildId: null, personal: true, userText: 'x' });
     mod.recordContextExchange(pub, { userText: 'pergunta pública', assistantText: 'resposta pública' });
     mod.recordContextExchange(per, { userText: 'pergunta pessoal', assistantText: 'resposta pessoal' });
-    console.log(JSON.stringify(mod.contextCounts()));
+    const disco = {
+      publicaNoPublico: noDisco('memory-context', 'pergunta pública'), pessoalNoPessoal: noDisco('memory-context-personal', 'pergunta pessoal'),
+      pessoalNoPublico: noDisco('memory-context', 'pergunta pessoal'), publicaNoPessoal: noDisco('memory-context-personal', 'pergunta pública'),
+    };
+    console.log(JSON.stringify({ ...mod.contextCounts(), disco }));
   `, dir, env);
   assert.equal(written.scopes, 2);
   assert.deepEqual(written.persisted, { public: true, personal: true });
+  assert.deepEqual(written.disco, { publicaNoPublico: true, pessoalNoPessoal: true, pessoalNoPublico: false, publicaNoPessoal: false },
+    'com o banco aberto, cada texto só aparece nos arquivos (.db, -wal, -shm) do próprio banco');
   assert.deepEqual(dbKeys(path.join(dir, 'memory-context.db')), ['ch:c1:u:222'], 'o arquivo público não pode ter o fio pessoal');
   assert.deepEqual(dbKeys(path.join(dir, 'memory-context-personal.db')), ['dm:111'], 'o arquivo pessoal só tem o fio pessoal');
   const back = runChild('read', `
@@ -497,13 +566,19 @@ await test('o prazo vale também depois do reinício: fala velha é descartada n
     console.log(JSON.stringify({ ok: true }));
   `, dir, env);
   assert.deepEqual(dbKeys(path.join(dir, 'memory-context.db')), ['ch:c1:u:novo', 'ch:c1:u:velho']);
-  const back = runChild('ttl-read', `
+  const back = runChild('ttl-read', `${NO_DISCO}
+    const antes = noDisco('memory-context', 'conversa de 7 horas atrás');
     await mod.initContextStore();
     const rd = (u) => mod.readContextTurns({ active: true, key: 'ch:c1:u:' + u, personal: false }, { sensitive: true }).length;
-    console.log(JSON.stringify({ velho: rd('velho'), novo: rd('novo'), counts: mod.contextCounts() }));
+    console.log(JSON.stringify({ velho: rd('velho'), novo: rd('novo'), counts: mod.contextCounts(), antes,
+      vencidaNoDisco: noDisco('memory-context', 'conversa de 7 horas atrás') || noDisco('memory-context', 'resposta antiga'),
+      recenteNoDisco: noDisco('memory-context', 'conversa recente') }));
   `, dir, env);
   assert.equal(back.velho, 0, 'a fala de 7 h não pode voltar');
   assert.equal(back.novo, 2);
+  assert.equal(back.antes, true, 'controle: antes da carga, a fala vencida está no arquivo');
+  assert.equal(back.vencidaNoDisco, false, 'a fala vencida descartada na carga ainda está legível nos arquivos do banco (com o banco aberto)');
+  assert.equal(back.recenteNoDisco, true);
   assert.deepEqual(dbKeys(path.join(dir, 'memory-context.db')), ['ch:c1:u:novo'], 'o fio vencido saiu do arquivo');
 });
 await test('apagar-tudo (forgetUserContext) apaga também do disco, nos DOIS arquivos', () => {
@@ -529,7 +604,7 @@ await test('desligado e sem arquivo: forgetUserContext não cria nenhum arquivo 
     console.log(JSON.stringify({ out, enabled: mod.contextEnabled() }));
   `, dir);
   assert.deepEqual(r, { out: { scopes: 0, turns: 0 }, enabled: false });
-  assert.deepEqual(fs.readdirSync(dir).filter((f) => f.endsWith('.db')), [], 'não pode criar banco com o recurso desligado');
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => DB_FILE_RE.test(f)), [], 'não pode criar banco (.db, -wal, -shm) com o recurso desligado');
 });
 await test('ARQUIVO CORROMPIDO: cai para RAM, a conversa segue, o arquivo ruim é guardado de lado e o outro arquivo continua em disco', () => {
   const dir = mkdir('corrupt');
@@ -548,6 +623,7 @@ await test('ARQUIVO CORROMPIDO: cai para RAM, a conversa segue, o arquivo ruim �
   const quarantined = fs.readdirSync(dir).filter((f) => /^memory-context\.corrupt-\d+\.db$/.test(f));
   assert.equal(quarantined.length, 1, 'o arquivo corrompido deveria ficar de lado, com nome memory-*.db (coberto pelo .gitignore)');
   assert.ok(!fs.readdirSync(dir).some((f) => /\.db\.corrupt-/.test(f)), 'nome antigo (.db.corrupt-ts) não é mais usado');
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => /^memory-context\.db/.test(f)), [], 'nada fica com o nome do banco ruim (nem -wal/-shm)');
   assert.deepEqual(dbKeys(path.join(dir, 'memory-context-personal.db')), ['dm:111']);
   // o .gitignore do projeto realmente cobre esse nome (um `git add` não pode versionar falas pessoais)
   const ignoredNames = [quarantined[0], 'memory-context-personal.corrupt-1760000000000.db', 'memory-context.db', 'memory-context-personal.db'];
@@ -555,6 +631,91 @@ await test('ARQUIVO CORROMPIDO: cai para RAM, a conversa segue, o arquivo ruim �
   try { execFileSync('git', ['--version'], { stdio: 'ignore', windowsHide: true }); } catch { gitOk = false; }
   if (gitOk) {
     for (const name of ignoredNames) {
+      try {
+        execFileSync('git', ['check-ignore', '-q', `database/${name}`], { cwd: repoRoot, stdio: 'ignore', windowsHide: true });
+      } catch (err) {
+        assert.fail(`o .gitignore não cobre database/${name} (git check-ignore saiu com ${err.status})`);
+      }
+    }
+  }
+});
+await test('ARQUIVO CORROMPIDO com o banco JÁ ABERTO (o erro só aparece na 1ª leitura): mesmo assim vai para a quarentena e o próximo início recria o banco', () => {
+  // Cabeçalho e esquema (página 1) intactos, o resto estragado: a abertura passa e a 1ª leitura falha ("malformed"). No motor
+  // nativo o arquivo está aberto nessa hora, e o Windows não deixa renomear arquivo aberto (EBUSY): o banco é fechado antes.
+  const dir = mkdir('broken-pages');
+  const env = { YUI_CONTEXT_ENABLED: 'true', YUI_CONTEXT_SCOPE: 'all' };
+  const prep = runChild('broken-prep', `
+    const dbm = await import(${JSON.stringify(dbUrl)});
+    await mod.initContextStore();
+    mod.recordContextExchange({ active: true, key: 'ch:c1:u:ana', personal: false, userId: 'ana', channelId: 'c1', guildId: 'g1', record: true },
+      { userText: 'fala que vai estragar PG31', assistantText: 'ok' });
+    const pageSize = Number(dbm.getDbWrapper('memory-context').prepare('PRAGMA page_size').get().page_size);
+    const engine = dbm.getDatabaseEngine('memory-context');
+    for (const n of ['memory-context', 'memory-context-personal']) dbm.closeDatabase(n);
+    console.log(JSON.stringify({ pageSize, engine }));
+  `, dir, env);
+  assert.equal(prep.engine, expectedEngine('memory-context'));
+  const file = path.join(dir, 'memory-context.db');
+  assert.deepEqual(dbFiles(file), [file], 'controle: depois de fechar, tudo está no .db (sem -wal)');
+  const buf = fs.readFileSync(file);
+  assert.ok(buf.length > prep.pageSize, 'controle: o banco tem mais de uma página');
+  buf.fill(0xff, prep.pageSize);
+  fs.writeFileSync(file, buf);
+  const r = runChild('broken-open', `
+    const dbm = await import(${JSON.stringify(dbUrl)});
+    await mod.initContextStore();
+    const pub = { active: true, key: 'ch:c1:u:ana', personal: false, userId: 'ana', channelId: 'c1', guildId: 'g1', record: true };
+    const a = mod.recordContextExchange(pub, { userText: 'pergunta', assistantText: 'resposta' });
+    console.log(JSON.stringify({ a, lido: mod.readContextTurns(pub, { sensitive: true }).length, counts: mod.contextCounts(), aberto: dbm.getDatabaseEngine('memory-context') }));
+  `, dir, env);
+  assert.deepEqual([r.a, r.lido], [true, 2], 'a conversa segue em RAM');
+  assert.deepEqual(r.counts.persisted, { public: false, personal: true });
+  const quarantined = fs.readdirSync(dir).filter((f) => /^memory-context\.corrupt-\d+\.db$/.test(f));
+  assert.equal(quarantined.length, 1, `o arquivo corrompido deveria ir para a quarentena (arquivos: ${fs.readdirSync(dir).join(', ')})`);
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => /^memory-context\.db/.test(f)), [], 'nada fica com o nome do banco ruim (nem -wal/-shm)');
+  if (expectedEngine('memory-context') === 'native') assert.equal(r.aberto, null, 'nativo: o banco ruim foi fechado antes do rename');
+  const again = runChild('broken-again', `
+    await mod.initContextStore();
+    const pub = { active: true, key: 'ch:c1:u:bia', personal: false, userId: 'bia', channelId: 'c1', guildId: 'g1', record: true };
+    mod.recordContextExchange(pub, { userText: 'banco novo', assistantText: 'ok' });
+    console.log(JSON.stringify({ counts: mod.contextCounts() }));
+  `, dir, env);
+  assert.deepEqual(again.counts.persisted, { public: true, personal: true }, 'o próximo início recria o banco');
+  assert.deepEqual(dbKeys(file), ['ch:c1:u:bia']);
+});
+await test('QUARENTENA no motor nativo: fecha o banco ANTES do rename e leva o -wal e o -shm junto; no sql.js só o .db, como sempre', () => {
+  for (const native of [true, false]) {
+    const dir = mkdir(native ? 'quarantine-native' : 'quarantine-sqljs');
+    const file = path.join(dir, 'memory-context.db');
+    fs.writeFileSync(file, 'banco estragado');
+    fs.writeFileSync(`${file}-wal`, 'WAL-VELHO-COM-FALA-QW41');
+    fs.writeFileSync(`${file}-shm`, 'indice velho');
+    const closed = [];
+    const dest = ctxMod.quarantineCorruptContextFile('memory-context', {
+      native, dir, nowMs: 1760000000123, logger: silentLogger,
+      closeDatabase: (name) => { closed.push([name, fs.existsSync(file)]); return true; },
+    });
+    assert.equal(dest, path.join(dir, 'memory-context.corrupt-1760000000123.db'));
+    assert.equal(fs.readFileSync(dest, 'utf8'), 'banco estragado');
+    const left = fs.readdirSync(dir).sort();
+    if (native) {
+      assert.deepEqual(closed, [['memory-context', true]], 'nativo: fecha o banco, e ANTES do rename');
+      assert.deepEqual(left, ['memory-context.corrupt-1760000000123.db', 'memory-context.corrupt-1760000000123.db-shm', 'memory-context.corrupt-1760000000123.db-wal']);
+      assert.equal(fs.readFileSync(`${dest}-wal`, 'utf8'), 'WAL-VELHO-COM-FALA-QW41', 'o -wal vai junto (não fica ao lado de um banco novo)');
+      // a limpeza da quarentena reconhece os três (o -wal pode ter fala pessoal)
+      assert.equal(ctxMod.purgeCorruptContextFiles({ dir, nowMs: Date.now(), maxAgeMs: 0, logger: silentLogger }), 3);
+      assert.deepEqual(fs.readdirSync(dir), []);
+    } else {
+      assert.deepEqual(closed, [], 'sql.js: não fecha nada (o arquivo não fica aberto)');
+      assert.deepEqual(left, ['memory-context.corrupt-1760000000123.db', 'memory-context.db-shm', 'memory-context.db-wal'], 'sql.js: só o .db muda de nome');
+    }
+  }
+  assert.equal(ctxMod.quarantineCorruptContextFile('memory-context', { native: true, dir: mkdir('quarantine-empty'), logger: silentLogger }), null, 'sem arquivo: nada a fazer');
+  // o .gitignore cobre o -wal e o -shm da quarentena (texto pessoal)
+  let gitOk = true;
+  try { execFileSync('git', ['--version'], { stdio: 'ignore', windowsHide: true }); } catch { gitOk = false; }
+  if (gitOk) {
+    for (const name of ['memory-context.corrupt-1760000000123.db-wal', 'memory-context-personal.corrupt-1760000000123.db-shm']) {
       try {
         execFileSync('git', ['check-ignore', '-q', `database/${name}`], { cwd: repoRoot, stdio: 'ignore', windowsHide: true });
       } catch (err) {
@@ -597,35 +758,44 @@ await test('apagar-tudo apaga a quarentena mesmo com o recurso DESLIGADO e sem c
     console.log(JSON.stringify({ out }));
   `, dir);
   assert.deepEqual(r.out, { scopes: 0, turns: 0 });
-  assert.deepEqual(fs.readdirSync(dir).filter((f) => f.endsWith('.db') || /corrupt/.test(f)), [], 'nada de quarentena e nenhum banco novo');
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => DB_FILE_RE.test(f) || /corrupt/.test(f)), [], 'nada de quarentena e nenhum banco novo');
 });
 
-// APAGAR DE VERDADE: um DELETE comum do SQLite deixa o texto legível nas páginas livres do arquivo.
-const hasBytes = (file, text) => fs.readFileSync(file).includes(Buffer.from(text, 'utf8'));
-await test('APAGAR DE VERDADE: depois de apagar-tudo o texto NÃO está mais nos bytes dos arquivos (público e pessoal)', () => {
+// APAGAR DE VERDADE: um DELETE comum do SQLite deixa o texto legível nas páginas livres do arquivo. No motor nativo a versão
+// antiga da página (com o texto) também fica no -wal até o checkpoint: por isso se olha .db, -wal e -shm.
+const hasBytes = (file, text) => dbFiles(file).some((f) => fs.readFileSync(f).includes(Buffer.from(text, 'utf8')));
+await test('APAGAR DE VERDADE: depois de apagar-tudo o texto NÃO está mais nos bytes dos arquivos (público e pessoal; .db, -wal e -shm)', () => {
   const dir = mkdir('secure-forget');
   const env = { YUI_CONTEXT_ENABLED: 'true', YUI_CONTEXT_SCOPE: 'all' };
   const U1 = 'FRASE-UNICA-PUBLICA-ZX81-da-ana';
   const A1 = 'RESPOSTA-UNICA-PUBLICA-ZX82';
   const U2 = 'FRASE-UNICA-PESSOAL-ZX83-da-ana';
   const KEEP = 'FRASE-DA-BIA-QUE-FICA-ZX84';
-  runChild('secure-write', `
+  const w = runChild('secure-write', `${NO_DISCO}
     await mod.initContextStore();
     const mk = (key, userId, personal, guildId) => ({ active: true, key, personal, userId, channelId: 'c1', guildId, record: true });
     mod.recordContextExchange(mk('ch:c1:u:ana', 'ana', false, 'g1'), { userText: ${JSON.stringify(U1)}, assistantText: ${JSON.stringify(A1)} });
     mod.recordContextExchange(mk('ch:c1:u:ana', 'ana', false, 'g1'), { userText: 'segunda troca da ana', assistantText: 'ok' });
     mod.recordContextExchange(mk('dm:ana', 'ana', true, null), { userText: ${JSON.stringify(U2)}, assistantText: 'ok pessoal' });
     mod.recordContextExchange(mk('ch:c1:u:bia', 'bia', false, 'g1'), { userText: ${JSON.stringify(KEEP)}, assistantText: 'ok bia' });
-    console.log(JSON.stringify({ ok: true }));
+    console.log(JSON.stringify({ controle: noDisco('memory-context', ${JSON.stringify(U1)}) && noDisco('memory-context', ${JSON.stringify(A1)}) && noDisco('memory-context-personal', ${JSON.stringify(U2)}) }));
   `, dir, env);
+  assert.equal(w.controle, true, 'controle: com o banco aberto, antes de apagar, o texto está nos arquivos');
   const pub = path.join(dir, 'memory-context.db');
   const per = path.join(dir, 'memory-context-personal.db');
   assert.ok(hasBytes(pub, U1) && hasBytes(pub, A1) && hasBytes(per, U2), 'controle: antes de apagar, o texto está no arquivo');
-  runChild('secure-forget', `
+  const f = runChild('secure-forget', `${NO_DISCO}
     await mod.initContextStore();
     const r = await mod.forgetUserContext('ana');
-    console.log(JSON.stringify(r));
+    // com o banco ainda ABERTO (como na Yui rodando): nada da Ana em .db, -wal ou -shm
+    const restos = [[${JSON.stringify(U1)}, 'memory-context'], [${JSON.stringify(A1)}, 'memory-context'], ['segunda troca da ana', 'memory-context'],
+      [${JSON.stringify(U2)}, 'memory-context-personal']].filter(([t, n]) => noDisco(n, t)).map(([t]) => t);
+    console.log(JSON.stringify({ r, restos, fica: noDisco('memory-context', ${JSON.stringify(KEEP)}) }));
   `, dir, env);
+  assert.deepEqual(f.r, { scopes: 2, turns: 6 });
+  assert.deepEqual(f.restos, [], `texto apagado ainda legível nos arquivos do banco aberto: ${f.restos.join(', ')}`);
+  assert.equal(f.fica, true, 'o fio de outra pessoa não pode ser apagado');
+  // e depois que o processo saiu
   for (const t of [U1, A1]) assert.equal(hasBytes(pub, t), false, `"${t}" ainda legível no arquivo público depois de apagar`);
   assert.equal(hasBytes(per, U2), false, 'o texto pessoal ainda está legível no arquivo pessoal');
   assert.equal(hasBytes(pub, 'segunda troca da ana'), false);
@@ -635,7 +805,7 @@ await test('APAGAR DE VERDADE: depois de apagar-tudo o texto NÃO está mais nos
 await test('APAGAR DE VERDADE: falas vencidas (limpeza) e fio trocado de público para pessoal também somem dos bytes', () => {
   const dir = mkdir('secure-purge');
   const env = { YUI_CONTEXT_ENABLED: 'true', YUI_CONTEXT_SCOPE: 'all' };
-  runChild('secure-purge', `
+  const r = runChild('secure-purge', `${NO_DISCO}
     const backends = await mod.createDbBackends();
     const antigo = mod.createContextStore({ now: () => Date.now() - 7 * 3600e3, backends });
     const t = (key, personal) => ({ active: true, key, personal, userId: 'u', channelId: 'c1', guildId: 'g1', record: true });
@@ -643,16 +813,46 @@ await test('APAGAR DE VERDADE: falas vencidas (limpeza) e fio trocado de públic
     const novo = mod.createContextStore({ now: () => Date.now() - 60e3, backends });
     novo.record(t('ch:c1:u:novo', false), { userText: 'MARCA-RECENTE-QK13', assistantText: 'resp nova QK14' });
     novo.record(t('ch:c1:u:troca', false), { userText: 'MARCA-TROCADA-QK15', assistantText: 'resp troca QK16' });
+    const controle = noDisco('memory-context', 'MARCA-VENCIDA-QK11') && noDisco('memory-context', 'MARCA-TROCADA-QK15');
     novo.record(t('ch:c1:u:troca', true), { userText: 'MARCA-AGORA-PESSOAL-QK17', assistantText: 'resp pessoal QK18' });
+    const trocadaDepoisDaTroca = noDisco('memory-context', 'MARCA-TROCADA-QK15') || noDisco('memory-context', 'resp troca QK16');
+    const vencidaAntesDaLimpeza = noDisco('memory-context', 'MARCA-VENCIDA-QK11');
     // a limpeza horária (relógio de agora): a fala de 7 h atrás passa do corte de 6 h e sai do ARQUIVO
     novo.purgeExpired();
-    console.log(JSON.stringify({ ok: true }));
+    console.log(JSON.stringify({ controle, trocadaDepoisDaTroca, vencidaAntesDaLimpeza,
+      vencidaDepois: noDisco('memory-context', 'MARCA-VENCIDA-QK11') || noDisco('memory-context', 'resp velha QK12'),
+      recente: noDisco('memory-context', 'MARCA-RECENTE-QK13'), pessoal: noDisco('memory-context-personal', 'MARCA-AGORA-PESSOAL-QK17') }));
   `, dir, env);
+  assert.equal(r.controle, true, 'controle: antes de apagar, o texto está nos arquivos');
+  assert.equal(r.vencidaAntesDaLimpeza, true, 'controle: a fala vencida só sai na limpeza');
+  assert.equal(r.trocadaDepoisDaTroca, false, 'fio que passou a ser pessoal ainda legível nos arquivos do banco público (aberto)');
+  assert.equal(r.vencidaDepois, false, 'fala vencida ainda legível nos arquivos do banco (aberto) depois da limpeza');
+  assert.equal(r.recente, true);
+  assert.equal(r.pessoal, true);
   const pub = path.join(dir, 'memory-context.db');
   assert.equal(hasBytes(pub, 'MARCA-VENCIDA-QK11'), false, 'fala vencida ainda legível no arquivo');
   assert.equal(hasBytes(pub, 'MARCA-TROCADA-QK15'), false, 'fio que passou a ser pessoal ainda legível no arquivo público');
   assert.ok(hasBytes(pub, 'MARCA-RECENTE-QK13'), 'a fala recente fica');
   assert.ok(hasBytes(path.join(dir, 'memory-context-personal.db'), 'MARCA-AGORA-PESSOAL-QK17'));
+});
+await test('APAGAR DE VERDADE: a troca que sai do fio pelo LIMITE de falas também some dos arquivos (com o banco aberto)', () => {
+  const dir = mkdir('secure-trim');
+  const env = { YUI_CONTEXT_ENABLED: 'true', YUI_CONTEXT_SCOPE: 'all', YUI_CONTEXT_MAX_TURNS: '2' }; // só a última troca fica
+  const r = runChild('secure-trim', `${NO_DISCO}
+    await mod.initContextStore();
+    const t = { active: true, key: 'ch:c1:u:ana', personal: false, userId: 'ana', channelId: 'c1', guildId: 'g1', record: true };
+    mod.recordContextExchange(t, { userText: 'MARCA-APARADA-TR21', assistantText: 'resposta aparada TR22' });
+    const controle = noDisco('memory-context', 'MARCA-APARADA-TR21');
+    mod.recordContextExchange(t, { userText: 'MARCA-QUE-FICA-TR23', assistantText: 'resposta que fica TR24' });
+    console.log(JSON.stringify({ controle, lido: mod.readContextTurns(t, { sensitive: true }).map((x) => x.content),
+      aparada: noDisco('memory-context', 'MARCA-APARADA-TR21') || noDisco('memory-context', 'resposta aparada TR22'),
+      fica: noDisco('memory-context', 'MARCA-QUE-FICA-TR23') }));
+  `, dir, env);
+  assert.equal(r.controle, true, 'controle: a primeira troca chegou aos arquivos');
+  assert.deepEqual(r.lido, ['MARCA-QUE-FICA-TR23', 'resposta que fica TR24']);
+  assert.equal(r.aparada, false, 'a troca que saiu pelo limite ainda está legível nos arquivos do banco (aberto)');
+  assert.equal(r.fica, true);
+  assert.equal(hasBytes(path.join(dir, 'memory-context.db'), 'MARCA-APARADA-TR21'), false);
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════
@@ -1098,6 +1298,11 @@ await test('contextStore: sem timer sem unref, sem efeito no import e variáveis
 // ── Resultado ───────────────────────────────────────────────────────────────────────────────────
 say(`\n${passed} teste(s) ok, ${failures.length} falha(s).`);
 if (failures.length) say(`Falharam: ${failures.join(' | ')}`);
+console.log = say; // este teste silencia o console: o resumo do bloqueio usa o console.log
+BLOQUEIO.fechar('test:context'); // falha alto se algum filho tentou rede, DNS, UDP, programa ou worker
 process.chdir(repoRoot);
+// Motor nativo: os bancos de contexto deste processo ficam abertos, e o Windows não apaga arquivo aberto. Fecha antes.
+// Fecha TODOS os bancos abertos (com YUI_DB_NATIVE=* a memória também abre no nativo): no Windows um banco aberto não pode ser apagado.
+try { dbApi.closeAllDatabases(); } catch { /* nenhum aberto */ }
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* pode estar em uso (logs) */ }
 process.exit(failures.length ? 1 : 0);

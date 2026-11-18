@@ -74,6 +74,13 @@ const onlyForInteraction = {
       'setChannelPersona', 'setChannelChatter', 'setServerEveryoneMention', 'setServerUpdateChannel', 'setServerLastChannel']
       .map((n) => `export const ${n} = () => {};`),
   ].join('\n'),
+  // Etapa 7: o comentário embaixo do embed passa pelo discord/comentarioCerebro.js; no processo único ele chama o generateResponse com o MESMO
+  // pedido (core/ai/promptComentario.js) e as mesmas opções de antes: o dublê faz exatamente isso com o generateResponse falso deste teste.
+  '../discord/comentarioCerebro.js': [
+    `import { promptDoComentario } from '${new URL('../src/core/ai/promptComentario.js', import.meta.url).href}';`,
+    'const s = () => globalThis.__ic;',
+    'export const comentarioDaYui = (interaction, tipo, dados) => { const a = [promptDoComentario(tipo, dados), interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true }]; s().generateCalls.push(a); return s().generate(...a); };',
+  ].join('\n'),
   '../handlers/steamHandler.js': 'export const getSteamGameInfo = (...a) => globalThis.__ic.steam(...a);',
   '../handlers/currencyHandler.js': 'export const convertCurrency = (...a) => globalThis.__ic.currency(...a);',
   '../handlers/banHandler.js': [

@@ -4,13 +4,21 @@
  * - Classificador de item do YouTube (vídeo/Short/live/vod)
  *
  * Uso: node tests/test-social.js
+ *
+ * Bancos numa pasta temporária (DATABASE_DIR), nunca nos .db reais de database/. A variável é definida ANTES de
+ * importar src/ (o config a lê na importação), por isso os módulos do projeto entram por import() dinâmico.
  */
-import { initDatabase, getDbWrapper } from '../src/database/db.js';
-import { YOUTUBE_SCHEMA, TWITCH_SCHEMA } from '../src/database/schemas.js';
-import { youtubeRepository, ensureYoutubeSchema } from '../src/database/repositories/youtubeRepo.js';
-import { twitchRepository } from '../src/database/repositories/twitchRepo.js';
-import { classifyYoutubeItem, resolveChannel } from '../src/handlers/youtubeApiHandler.js';
-import { config } from '../src/config/index.js';
+import path from 'path';
+import { useIsolatedDatabaseDir, assertNotRealDatabaseDir } from './helpers/isolatedDatabaseDir.js';
+
+const isolated = useIsolatedDatabaseDir('yui-test-social-');
+const { config } = await import('../src/config/index.js');
+assertNotRealDatabaseDir(path.resolve(config.database.dir)); // confere o diretório efetivo antes de abrir qualquer banco
+const { initDatabase } = await import('../src/database/db.js');
+const { YOUTUBE_SCHEMA, TWITCH_SCHEMA } = await import('../src/database/schemas.js');
+const { youtubeRepository, ensureYoutubeSchema } = await import('../src/database/repositories/youtubeRepo.js');
+const { twitchRepository } = await import('../src/database/repositories/twitchRepo.js');
+const { classifyYoutubeItem, resolveChannel } = await import('../src/handlers/youtubeApiHandler.js');
 
 let passed = 0;
 let failed = 0;
@@ -29,13 +37,9 @@ async function run() {
   console.log('\n=== INICIALIZANDO BANCOS ===');
   await initDatabase('social-youtube', YOUTUBE_SCHEMA);
   ensureYoutubeSchema(); // como no boot: acrescenta live_mode em bancos criados antes do modo de live
-  // Sobras de execuções interrompidas (o teste usa os .db reais): limpa as chaves de teste antes de começar
-  getDbWrapper('social-youtube').prepare("DELETE FROM youtube_seen_items WHERE video_id = '__test_video_1__'").run();
-  getDbWrapper('social-youtube').prepare("DELETE FROM youtube_subscriptions WHERE guild_id = '__TEST_GUILD_1__'").run();
   await initDatabase('social-twitch', TWITCH_SCHEMA);
-  getDbWrapper('social-twitch').prepare("DELETE FROM twitch_stream_state WHERE twitch_login = 'streamexemplo'").run();
-  getDbWrapper('social-twitch').prepare("DELETE FROM twitch_subscriptions WHERE guild_id = '__TEST_GUILD_2__'").run();
-  console.log('  ✅ Bancos social-youtube.db e social-twitch.db prontos');
+  // Pasta temporária nova a cada execução: não há sobras de execuções anteriores para limpar.
+  console.log(`  ✅ Bancos social-youtube.db e social-twitch.db prontos (pasta temporária: ${isolated.dir})`);
 
   console.log('\n=== YOUTUBE REPOSITÓRIO ===');
   const testGuild = '__TEST_GUILD_1__';
@@ -185,10 +189,12 @@ async function run() {
   global.fetch = undefined;
 
   console.log(`\n=== RESULTADO: ${passed} ✅ / ${failed} ❌ ===\n`);
+  isolated.cleanup();
   process.exit(failed > 0 ? 1 : 0);
 }
 
 run().catch((err) => {
   console.error('❌ Falha no teste:', err);
+  isolated.cleanup();
   process.exit(1);
 });

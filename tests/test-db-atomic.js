@@ -6,6 +6,9 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
+import { criarBloqueioTemporario } from './helpers/bloqueioExternoTeste.js';
+// Este teste é do mecanismo de gravação do sql.js (temporário + rename): fixa esse motor mesmo com YUI_DB_NATIVE definido.
+process.env.YUI_DB_NATIVE = '';
 import { once } from 'events';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
@@ -32,6 +35,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-dbatomic-'));
 process.env.DATABASE_DIR = tmp;
 process.env.LOG_LEVEL = 'error';
 process.chdir(tmp); // o logger grava em ./logs (relativo ao cwd): os erros simulados abaixo não vão para os logs reais da Yui
+// Etapa 8 (revisão da Liz): os processos auxiliares deste teste rodam sob o bloqueio de integração externa (rede, DNS, UDP, programas e workers
+// falham e ficam registrados; nenhuma exceção: o filho só grava um banco local). O registro guarda qual teste abriu cada exceção.
+const BLOQUEIO = criarBloqueioTemporario({ teste: 'test:dbatomic', liberar: {} });
 
 // Sobras de uma gravação interrompida, ANTES do primeiro initDatabase: a subida deve limpar só a antiga.
 const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -287,8 +293,8 @@ await test('estresse: processo MORTO no meio de várias gravações nunca deixa 
   const children = [];
   try {
     for (let round = 0; round < 6; round++) {
-      const child = spawn(process.execPath, [THIS_FILE, '--child'], {
-        env: { ...process.env, DATABASE_DIR: dir, LOG_LEVEL: 'error' },
+      const child = spawn(process.execPath, [...BLOQUEIO.argv, THIS_FILE, '--child'], {
+        env: { ...process.env, NODE_ENV: 'test', DATABASE_DIR: dir, LOG_LEVEL: 'error', ...BLOQUEIO.env('filho-que-grava') },
         stdio: ['ignore', 'pipe', 'ignore'],
         windowsHide: true,
       });
@@ -317,6 +323,7 @@ await test('estresse: processo MORTO no meio de várias gravações nunca deixa 
 });
 
 console.log(`\n${passed} ok, ${failed} falha(s)`);
+BLOQUEIO.fechar('test:dbatomic'); // falha alto se algum filho tentou rede, DNS, UDP, programa ou worker
 process.chdir(os.tmpdir()); // não dá para apagar a pasta onde o processo está
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* sobra em %TEMP%: inofensiva */ }
 process.exit(failed ? 1 : 0);

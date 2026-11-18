@@ -155,6 +155,8 @@ const { getDefaultBudget } = await import('../src/search/budget.js');
 const { readContextTurns, resolveContextTarget } = await import('../src/core/context/contextStore.js');
 const intent = await import('../src/handlers/searchIntent.js');
 const llmNames = await import('../src/handlers/llmHandler.js');
+// Como o bot faz na subida (src/index.js): o Core não importa o bot, recebe a ponte para a cadeia legada (app e pesquisa).
+manager.setLegacyBridge(() => import('../src/handlers/llmHandler.js'));
 await initMemory();
 // O /yui monta o contexto do GTA com os repositórios do jogo (como no bootstrap): bancos VAZIOS, só na pasta temporária.
 const { initDatabase } = await import('../src/database/db.js');

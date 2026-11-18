@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
+import { criarBloqueioTemporario } from './helpers/bloqueioExternoTeste.js';
 
 test('Verificação de inicialização a partir do zero (diretório limpo)', async (t) => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-clean-db-test-'));
@@ -35,12 +36,17 @@ test('Verificação de inicialização a partir do zero (diretório limpo)', asy
     });
   `;
 
-  const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+  // Etapa 8 (revisão da Liz): o filho roda sob o bloqueio de integração externa (rede, DNS, UDP, programas e workers falham e ficam registrados);
+  // nenhuma exceção: ele só cria os bancos numa pasta vazia.
+  const bloqueio = criarBloqueioTemporario({ teste: 'test:cleanbootstrap', liberar: {} });
+  const child = spawn(process.execPath, [...bloqueio.argv, '--input-type=module', '-e', script], {
     cwd: process.cwd(),
     env: {
       ...process.env,
+      NODE_ENV: 'test',
       DATABASE_DIR: tmpRoot,
       LOG_LEVEL: 'error',
+      ...bloqueio.env('bootstrap-limpo'),
     },
   });
 
@@ -50,6 +56,7 @@ test('Verificação de inicialização a partir do zero (diretório limpo)', asy
   child.stderr.on('data', (d) => { stderr += d.toString(); });
 
   const exitCode = await new Promise((resolve) => child.on('close', resolve));
+  bloqueio.fechar('test:cleanbootstrap'); // falha alto se o filho tentou rede, DNS, UDP, programa ou worker
 
   assert.equal(exitCode, 0, `Processo filho falhou: ${stderr}`);
   assert(stdout.includes('CREATED:core.db,gta-diario.db,gta-semanal.db,newswire.db,social-twitch.db,social-youtube.db'));

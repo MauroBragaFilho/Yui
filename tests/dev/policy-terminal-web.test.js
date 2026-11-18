@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
@@ -6,6 +6,8 @@ import path from 'path';
 import { createPolicy, classifyCommand } from '../../src/core/dev/policy.js';
 import { runCommand, safeEnv } from '../../src/core/dev/terminal.js';
 import { parseResults, formatResults, decodeLink, createWebSearch } from '../../src/core/dev/web-search.js';
+import { createBudget } from '../../src/search/budget.js';
+import { TEXTO_PESQUISA_INDISPONIVEL } from '../../src/search/indisponivel.js';
 
 test('política: leitura é livre; gravar e rodar comando pedem aprovação (no Jarvis nada pedia)', () => {
   const p = createPolicy({ approvalMode: 'ask' });
@@ -99,9 +101,42 @@ test('web: o texto devolvido marca o conteúdo como dado externo não confiável
   assert.match(formatResults('node', parseResults(HTML)), /DADOS EXTERNOS NÃO CONFIÁVEIS/);
 });
 
-test('web: erro de rede vira mensagem, não exceção', async () => {
-  const ws = createWebSearch({ fetchImpl: async () => { throw new Error('offline'); } });
+// A busca do app passa pela MESMA cota central (revisão da Liz, §14 do relatório da etapa 8): o orçamento e o ambiente são injetados numa pasta temporária (nunca o
+// arquivo de cota real). A prova completa (cota, teto, porta de saída, cache e compartilhamento) está no `npm run test:buscaapp`.
+const pastasTemporarias = [];
+after(() => { for (const d of pastasTemporarias) fs.rmSync(d, { recursive: true, force: true }); });
+const orcamentoTemporario = () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-web-cota-'));
+  pastasTemporarias.push(dir);
+  return createBudget({ filePath: path.join(dir, 'search-budget.json') });
+};
+
+test('web: erro de rede vira o texto único de indisponível (sem o detalhe do erro), não exceção', async () => {
+  const ws = createWebSearch({ fetchImpl: async () => { throw new Error('offline secreto'); }, searchOptions: { budget: orcamentoTemporario(), env: { YUI_SEARCH_PROVIDERS: 'duckduckgo' }, logger: { info() {}, warn() {}, error() {}, debug() {} } } });
   const r = await ws.search('node');
   assert.deepEqual(r.results, []);
-  assert.match(r.text, /Não foi possível pesquisar/);
+  assert.equal(r.text, TEXTO_PESQUISA_INDISPONIVEL);
+  assert.ok(!/offline|secreto/.test(r.text));
+});
+
+test('web: a busca do app delega ao searchWeb como consulta PRIVADA, com o id do dono, e mantém o contrato { results, text }', async () => {
+  const vistos = [];
+  const ws = createWebSearch({
+    userId: 'dono-1',
+    searchImpl: async (q, o) => { vistos.push({ q, ...o }); return { provider: 'x', results: [{ title: 'Node.js Docs', url: 'https://nodejs.org/docs', snippet: 'Documentação oficial.' }], errors: [] }; },
+  });
+  const r = await ws.search('node docs', { maxResults: 2 });
+  assert.equal(vistos.length, 1);
+  assert.equal(vistos[0].privado, true);
+  assert.equal(vistos[0].userId, 'dono-1');
+  assert.equal(vistos[0].max, 2);
+  assert.deepEqual(r.results, [{ title: 'Node.js Docs', snippet: 'Documentação oficial.', url: 'https://nodejs.org/docs' }]);
+  assert.match(r.text, /DADOS EXTERNOS NÃO CONFIÁVEIS/);
+  assert.match(r.text, /Fonte: https:\/\/nodejs\.org\/docs/);
+  // pesquisa indisponível (sem o dono da cota) ou recusada pelo teto: só o texto único
+  for (const recusa of [{ provider: null, results: [], errors: ['pesquisa indisponível'], indisponivel: true, motivo: 'trava-de-outro-processo' }, { provider: null, results: [], errors: ['limite de buscas por usuário atingido'], limited: 'user' }]) {
+    const sem = await createWebSearch({ searchImpl: async () => recusa }).search('qualquer');
+    assert.equal(sem.text, TEXTO_PESQUISA_INDISPONIVEL);
+    assert.deepEqual(sem.results, []);
+  }
 });

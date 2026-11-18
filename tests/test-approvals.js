@@ -270,19 +270,21 @@ await test('listar e decidir pelo canal: a decisão sai como LOCAL_PC e do dono;
   assert.equal((await call('GET', '/v1/local/outra-rota')).status, 404);
 });
 
+// Etapa 8 (revisão da Liz, §12): quando o teste roda sob o bloqueio de integração externa (scripts/run-ci.mjs), a CLI de verdade herda o MESMO bloqueio pelo
+// `--import` do pai (process.execArgv): ela só alcança a porta do canal que este teste abre no loopback. Fora do CI (npm run test:approvals) o execArgv é vazio.
 await test('CLI yui-aprovar: lista, aprova e nega pelo canal (id inteiro ou prefixo) e falha com mensagem clara sem segredo', async () => {
   const env = { ...process.env, YUI_APPROVAL_NONCE_FILE: nonceFile };
   const a = clock.manager.request(plan({ summary: 'Rodar npm test', canonicalTarget: 'npm test' }));
   const b = clock.manager.request(plan({ summary: 'Gravar x.js' }));
-  const list = await run(process.execPath, ['scripts/yui-aprovar.mjs', 'lista'], { env, cwd: path.resolve(import.meta.dirname, '..') });
+  const list = await run(process.execPath, [...process.execArgv, 'scripts/yui-aprovar.mjs', 'lista'], { env, cwd: path.resolve(import.meta.dirname, '..') });
   assert.match(list.stdout, /Rodar npm test/);
   assert.match(list.stdout, /hash dos parâmetros/);
-  await run(process.execPath, ['scripts/yui-aprovar.mjs', 'aprovar', a.id.slice(0, 8)], { env, cwd: path.resolve(import.meta.dirname, '..') });
-  await run(process.execPath, ['scripts/yui-aprovar.mjs', 'negar', b.id], { env, cwd: path.resolve(import.meta.dirname, '..') });
+  await run(process.execPath, [...process.execArgv, 'scripts/yui-aprovar.mjs', 'aprovar', a.id.slice(0, 8)], { env, cwd: path.resolve(import.meta.dirname, '..') });
+  await run(process.execPath, [...process.execArgv, 'scripts/yui-aprovar.mjs', 'negar', b.id], { env, cwd: path.resolve(import.meta.dirname, '..') });
   assert.equal(clock.manager.get(a.id).status, STATUS.APPROVED);
   assert.equal(clock.manager.get(b.id).status, STATUS.REJECTED);
-  await assert.rejects(run(process.execPath, ['scripts/yui-aprovar.mjs', 'aprovar', 'zzzz'], { env, cwd: path.resolve(import.meta.dirname, '..') }), (e) => e.code === 1 && /Nenhum pedido pendente/.test(e.stderr));
-  await assert.rejects(run(process.execPath, ['scripts/yui-aprovar.mjs', 'lista'], { env: { ...process.env, YUI_APPROVAL_NONCE_FILE: path.join(tmp, 'nao-existe.json') }, cwd: path.resolve(import.meta.dirname, '..') }), (e) => e.code === 2 && /Não consegui ler/.test(e.stderr));
+  await assert.rejects(run(process.execPath, [...process.execArgv, 'scripts/yui-aprovar.mjs', 'aprovar', 'zzzz'], { env, cwd: path.resolve(import.meta.dirname, '..') }), (e) => e.code === 1 && /Nenhum pedido pendente/.test(e.stderr));
+  await assert.rejects(run(process.execPath, [...process.execArgv, 'scripts/yui-aprovar.mjs', 'lista'], { env: { ...process.env, YUI_APPROVAL_NONCE_FILE: path.join(tmp, 'nao-existe.json') }, cwd: path.resolve(import.meta.dirname, '..') }), (e) => e.code === 2 && /Não consegui ler/.test(e.stderr));
 });
 
 console.log('Fluxo completo (API + módulo Código + canal local)');
@@ -360,5 +362,6 @@ await test('fechar o canal apaga o arquivo do segredo e a porta deixa de respond
 });
 
 console.log(`\n${passed} testes OK`);
+(await import('../src/database/db.js')).closeAllDatabases(); // motor nativo: no Windows o arquivo aberto não pode ser apagado
 fs.rmSync(tmp, { recursive: true, force: true });
 process.exitCode = 0;

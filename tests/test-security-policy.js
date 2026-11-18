@@ -57,8 +57,15 @@ await test('exemplos da especificação §1.2', () => {
   assert.equal(d('admin.ban_user', O, ORIGINS.DISCORD_DM), CRITICAL);
   assert.equal(d('admin.ban_user', O, ORIGINS.LOCAL_PC), AUTO);
   assert.equal(d('memory.wipe_own', ROLES.MEMBER, ORIGINS.DISCORD_DM), ASK);
-  assert.equal(d('memory.admin_wipe_user', O, ORIGINS.LOCAL_PC), CRITICAL);
-  assert.equal(d('memory.admin_wipe_user', O, ORIGINS.REMOTE), DENY);
+  // memory.admin_wipe_user (decisão da Liz, 18/11/2026): o dono pede COM confirmação (ASK) em qualquer origem dele; os
+  // outros papéis e o canal público são negados. Somente leitura continua negando (é `modifies`).
+  for (const origin of [ORIGINS.LOCAL_PC, ORIGINS.REMOTE, ORIGINS.DISCORD_DM]) assert.equal(d('memory.admin_wipe_user', O, origin), ASK, `dono em ${origin}`);
+  assert.equal(d('memory.admin_wipe_user', O, ORIGINS.DISCORD_GUILD), DENY, 'dono num canal público sem ManageGuild');
+  assert.equal(d('memory.admin_wipe_user', O, ORIGINS.DISCORD_GUILD, true), DENY, 'nem como administrador do servidor');
+  for (const role of [ROLES.TRUSTED, ROLES.MEMBER, ROLES.GUEST]) {
+    for (const origin of [ORIGINS.DISCORD_DM, ORIGINS.DISCORD_GUILD, ORIGINS.REMOTE]) assert.equal(d('memory.admin_wipe_user', role, origin), DENY, `${role} em ${origin}`);
+  }
+  assert.equal(createPolicyEngine({ env: {}, auditFn: () => {}, readOnly: () => true }).evaluate({ action: 'memory.admin_wipe_user', role: O, origin: ORIGINS.DISCORD_DM }).decision, DENY, 'somente leitura vence sempre');
   assert.equal(d('radio.download_track', ROLES.MEMBER, ORIGINS.DISCORD_GUILD), DENY);
   assert.equal(d('radio.download_track', ROLES.TRUSTED, ORIGINS.DISCORD_GUILD, true), AUTO);
   assert.equal(d('admin.follow_social', ROLES.MEMBER, ORIGINS.DISCORD_GUILD, true), ASK);

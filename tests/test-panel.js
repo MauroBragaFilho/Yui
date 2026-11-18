@@ -842,6 +842,7 @@ console.log('Quem NÃO é o dono');
   s.close();
 }
 
+(await import('../src/database/db.js')).closeAllDatabases(); // motor nativo: no Windows o arquivo aberto não pode ser apagado
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
 process.exit(0);

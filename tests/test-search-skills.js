@@ -426,14 +426,19 @@ await test('teto mensal por provedor: o provedor é pulado ao atingir o teto e o
   for (let i = 0; i < 4; i++) assert.equal((await search(`livre${i}`, { env: free, fetchImpl, budget, now })).provider, 'tavily');
 });
 
-await test('falha de disco ou arquivo corrompido não derruba a busca', async () => {
+await test('FALHAR FECHADO (revisão da Liz, etapa 8): se o registro da cota mensal NÃO grava (disco), a busca NÃO sai e a conta é desfeita; arquivo corrompido recomeça do zero', async () => {
   resetCooldowns();
   const notDir = path.join(tmp, 'arquivo-comum.txt');
   fs.writeFileSync(notDir, 'x');
   const broken = createBudget({ filePath: path.join(notDir, 'sub', 'b.json') }); // a "pasta" é um arquivo: gravar falha
   const env = { YUI_SEARCH_USER_PER_HOUR: '0' };
-  assert.equal((await search('d1', { env, fetchImpl: async () => json(DDG_OK), budget: broken })).provider, 'duckduckgo');
-  assert.equal(broken.used('duckduckgo'), 1, 'o contador continua valendo em memória');
+  let saiu = 0;
+  const semDisco = await search('d1', { env, fetchImpl: async () => { saiu += 1; return json(DDG_OK); }, budget: broken });
+  assert.equal(semDisco.provider, null);
+  assert.equal(semDisco.indisponivel, true, 'a pesquisa fica indisponível (não é "sem resultados")');
+  assert.ok(semDisco.errors.includes('pesquisa indisponível'), JSON.stringify(semDisco.errors));
+  assert.equal(saiu, 0, 'nada saiu: sem o registro em disco, a busca não sai');
+  assert.equal(broken.used('duckduckgo'), 0, 'a conta foi desfeita: nunca a cota só em memória');
   const corrupt = path.join(tmp, 'corrompido.json');
   fs.writeFileSync(corrupt, '{ isso não é json');
   const b = createBudget({ filePath: corrupt });

@@ -163,17 +163,27 @@ test('metadados por usuário não expõem o conteúdo', () => {
   assert.ok(rows.every((r) => !('content' in r) && r.chars > 0));
   assert.ok(!JSON.stringify(rows).includes('SEGREDO'));
 });
+// Apagar a memória de outra pessoa (memory.admin_wipe_user, etapa 4): só com a confirmação explícita do alvo.
+const conf = (alvo) => ({ confirmacao: { alvo, via: 'teste' } });
+test('apagar a memória de outra pessoa sem confirmar o alvo (ou confirmando outro) é recusado e nada sai', () => {
+  const [first] = memory.adminListMetadata(adminOwner, u1.userId);
+  assert.throws(() => memory.adminForget(adminOwner, u1.userId, first.id), (e) => e.code === 'CONFIRMACAO_NECESSARIA');
+  assert.throws(() => memory.adminForgetUser(adminOwner, u1.userId), (e) => e.code === 'CONFIRMACAO_NECESSARIA');
+  assert.throws(() => memory.adminForgetUser(adminOwner, u1.userId, conf(u2.userId)), (e) => e.code === 'CONFIRMACAO_NECESSARIA');
+  assert.throws(() => memory.adminForgetUser(member, u1.userId, conf(u1.userId)), /Apenas o dono/);
+  assert.equal(memory.adminListMetadata(adminOwner, u1.userId).length, 2, 'nada foi apagado');
+});
 test('apagar uma lembrança e apagar tudo de um usuário, sem afetar outros', () => {
   const [first] = memory.adminListMetadata(adminOwner, u1.userId);
-  assert.equal(memory.adminForget(adminOwner, u2.userId, first.id), false, 'id de outro usuário não pode ser apagado');
-  assert.equal(memory.adminForget(adminOwner, u1.userId, first.id), true);
-  assert.equal(memory.adminForgetUser(adminOwner, u1.userId), 1);
+  assert.equal(memory.adminForget(adminOwner, u2.userId, first.id, conf(u2.userId)), false, 'id de outro usuário não pode ser apagado');
+  assert.equal(memory.adminForget(adminOwner, u1.userId, first.id, conf(u1.userId)), true);
+  assert.equal(memory.adminForgetUser(adminOwner, u1.userId, conf(u1.userId)), 1);
   assert.equal(memory.adminListMetadata(adminOwner, u1.userId).length, 0);
   assert.equal(memory.adminListMetadata(adminOwner, u2.userId).length, 1);
 });
 test('a administração não alcança a memória pessoal do dono', () => {
   assert.equal(memory.adminListMetadata(adminOwner, '111').length, 0);
-  assert.equal(memory.adminForgetUser(adminOwner, '111'), 0);
+  assert.equal(memory.adminForgetUser(adminOwner, '111', conf('111')), 0);
   assert.ok(memory.recall(dm, 'projeto lac node').length >= 1, 'memória pessoal intacta');
 });
 
@@ -186,6 +196,7 @@ assert.equal(memory.recall(old, 'expirar').length, 0, 'expirada não deve ser re
 assert.ok(memory.purgeExpired() >= 1);
 passed++; console.log('  ✔ expiração real e purge');
 
+(await import('../src/database/db.js')).closeAllDatabases(); // motor nativo: no Windows o arquivo aberto não pode ser apagado
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} testes OK`);
 process.exit(0);

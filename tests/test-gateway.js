@@ -580,7 +580,8 @@ await test('AI Manager tem o backend "gateway" e marca contexto pessoal como sen
   const ai = await import('../src/core/ai/manager.js');
   assert.ok(ai.listBackends().some((b) => b.name === 'gateway'));
   const src = fs.readFileSync(path.join(here, '..', 'src', 'core', 'ai', 'manager.js'), 'utf8');
-  assert.ok(src.includes("sensitive: ctx?.memoryScope === 'personal'"));
+  // A chamada isolada (síntese da pesquisa do Core) também pode pedir sensitive:true; o contexto pessoal continua marcando.
+  assert.match(src, /sensitive: (?:sensitive === true \|\| )?ctx\?\.memoryScope === 'personal'/);
 });
 
 console.log(`\n${passed} testes OK`);

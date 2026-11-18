@@ -133,11 +133,15 @@ await test('applyPersona com símbolos especiais ($&, $1) não corrompe o texto'
 await test('sem o marcador, a persona vai para o início (nunca se perde)', () => {
   assert.equal(applyPersona('só isto', 'P'), 'P\n\nsó isto');
 });
-await test('os marcadores usados pelo applyPersona existem no llmHandler REAL', () => {
+await test('os marcadores usados pelo applyPersona existem no prompt REAL (core/ai/promptConversa.js, a fonte única do bot e do cérebro)', () => {
+  // Etapa 6: o texto do prompt saiu do llmHandler e mora só no promptConversa.js; o llmHandler monta o prompt por ele.
+  const prompt = fs.readFileSync(path.join(here, '..', 'src', 'core', 'ai', 'promptConversa.js'), 'utf8');
   const src = fs.readFileSync(path.join(here, '..', 'src', 'handlers', 'llmHandler.js'), 'utf8');
-  assert.ok(src.includes('[IDENTIDADE — REGRA DE PRIORIDADE MÁXIMA]'), 'bloco de identidade mudou: atualize persona.js');
-  assert.ok(src.includes('\\n[IMAGEM/VISÃO]'), 'bloco seguinte mudou: atualize persona.js');
-  assert.ok(src.includes('applyPersona(baseSystemPrompt, options.persona)'), 'llmHandler não aplica a persona');
+  assert.ok(prompt.includes('[IDENTIDADE — REGRA DE PRIORIDADE MÁXIMA]'), 'bloco de identidade mudou: atualize persona.js');
+  assert.ok(prompt.includes('\\n[IMAGEM/VISÃO]'), 'bloco seguinte mudou: atualize persona.js');
+  assert.ok(prompt.includes('applyPersona(baseSystemPrompt, persona)'), 'o prompt não aplica a persona');
+  assert.ok(!src.includes('[IDENTIDADE — REGRA DE PRIORIDADE MÁXIMA]'), 'o llmHandler voltou a ter uma cópia do texto do prompt (uma fonte só)');
+  assert.match(src, /buildConversationSystemPrompt\(\{[\s\S]{0,400}persona: options\.persona,/, 'o generateResponse não passa a persona ao módulo do prompt');
   assert.ok(src.includes('persona: buildPersonaPrompt(coreCtx)'), 'processQueue não passa a persona');
 });
 

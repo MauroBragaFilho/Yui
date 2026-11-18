@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseLogLine, readSupervisorStats, readLogStats, readLastUpdate, collectHealth, buildHealthReport, sendHealthReport, healthReportSchedule, formatUptime } from '../src/core/healthReport.js';
+
+// O relatório lê databaseStats() do src/database/db.js: pasta temporária ANTES de importar src/ (nunca toca nos bancos reais).
+const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-health-db-'));
+process.env.DATABASE_DIR = dbDir;
+process.env.YUI_DB_NATIVE = '';
+const { parseLogLine, readSupervisorStats, readLogStats, readLastUpdate, collectHealth, buildHealthReport, sendHealthReport, healthReportSchedule, formatUptime, formatBytes, summarizeDatabases } = await import('../src/core/healthReport.js');
 
 let ok = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); ok += 1; };
@@ -108,5 +113,86 @@ assert.match(rs.body, /Religadas pelo supervisor \(24 h\): 2/); ok += 1;
 eq(buildHealthReport({ ...withBk, supervisor: { count: 0, last: null } }).level, 'info', 'zero religadas não é problema');
 eq(buildHealthReport({ ...withBk, supervisor: null }).body.includes('supervisor'), false, 'sem supervisor a linha some');
 
+// bancos (critério E): dublê de databaseStats(), um item por banco aberto
+eq(base.databases, [], 'sem banco aberto no teste: lista vazia do db.js de verdade');
+eq(buildHealthReport(base).body.includes('Bancos'), false, 'sem banco aberto a linha some');
+eq([formatBytes(512), formatBytes(820 * 1024), formatBytes(2.3 * 1024 ** 2), formatBytes(2 * 1024 ** 2), formatBytes(1.2 * 1024 ** 3)], ['512 B', '820 KB', '2,3 MB', '2 MB', '1,2 GB']);
+const MB = 1024 ** 2;
+const bank = (name, extra = {}) => ({
+  name, engine: 'sqljs', sizes: { db: 0.22 * MB, wal: 0, shm: 0 }, walAutocheckpoint: null, reads: 100, writes: 10,
+  avgReadMs: 0.1, avgWriteMs: 3, maxWriteMs: 20, busy: 0, errors: 0, lastError: null, openFailures: 0, ...extra,
+});
+const normal = () => [...Array.from({ length: 9 }, (_, i) => bank(`banco${i}`)), bank('newswire', { engine: 'native', walAutocheckpoint: 1000, sizes: { db: 0.2 * MB, wal: 0.07 * MB, shm: 0.03 * MB } })];
+const withDb = (list) => collectHealth({ now, osImpl: fakeOs, fsImpl: fakeFs, logDir: dir, uptimeSeconds: 3 * 86400, rssBytes: 1, interactions: () => ({ total: 1 }), updateLog: '', backupLog: '', supervisorLog: '', dbStats: () => list });
+const lineOf = (rep) => rep.body.split('\n').find((x) => x.startsWith('Bancos:'));
+
+// tudo normal: linha curta, nível info
+const okDb = buildHealthReport(withDb(normal()));
+eq(lineOf(okDb), 'Bancos: 10 (9 sql.js, 1 nativo), 2,3 MB, sem alertas');
+eq(okDb.level, 'info', 'bancos normais não são problema');
+
+// -wal grande (acima de 64 MB) e checkpoint parado (-wal além de wal_autocheckpoint x 4096 x 4 = 16 MB)
+const walBig = buildHealthReport(withDb([...normal().slice(0, 9), bank('newswire', { engine: 'native', walAutocheckpoint: 1000, sizes: { db: 5 * MB, wal: 80 * MB, shm: 32768 } })]));
+eq(walBig.level, 'warn');
+assert.ok(walBig.issues.includes('alerta no banco newswire'), walBig.issues.join('|')); ok += 1;
+assert.match(lineOf(walBig), /^Bancos: 10 \(9 sql\.js, 1 nativo\), .*\. newswire: -wal 80 MB, checkpoint parado$/); ok += 1;
+const walStuck = summarizeDatabases([bank('core', { engine: 'native', walAutocheckpoint: 1000, sizes: { db: MB, wal: 20 * MB, shm: 32768 } })]);
+assert.match(walStuck.line, /core: -wal 20 MB, checkpoint parado$/, 'abaixo de 64 MB, mas o checkpoint não acompanha'); ok += 1;
+eq(summarizeDatabases([bank('core', { engine: 'native', walAutocheckpoint: 1000, sizes: { db: MB, wal: 4 * MB, shm: 32768 } })]).alertNames, [], '-wal pequeno não alerta');
+
+// bloqueios e erros, com código e mensagem curta do último erro, numa linha só
+const busy = buildHealthReport(withDb([bank('core', { busy: 3, errors: 4, lastError: { at: '2026-11-17T08:00:00.000Z', code: 'ERR_SQLITE_ERROR', message: 'database is locked\nlinha 2' } }), bank('memoria')]));
+eq(busy.level, 'warn');
+eq(lineOf(busy), 'Bancos: 2 (2 sql.js), 451 KB. core: 3 bloqueios, 4 erros (ERR_SQLITE_ERROR: database is locked linha 2)');
+assert.ok(!busy.body.split('\n').some((x) => x.startsWith('linha 2')), 'mensagem sem quebra de linha'); ok += 1;
+
+// falhas ao abrir ou recuperar
+const openFail = summarizeDatabases([bank('lembretes', { openFailures: 2, lastError: { at: 'x', code: 'open', message: 'file is not a database' } })]);
+eq(openFail.alertNames, ['lembretes']);
+assert.match(openFail.line, /lembretes: 2 falhas ao abrir ou recuperar \(open: file is not a database\)$/); ok += 1;
+
+// gravação lenta (média acima de 50 ms ou máxima acima de 1 s)
+assert.match(summarizeDatabases([bank('core', { avgWriteMs: 80.4, maxWriteMs: 300 })]).line, /core: gravação lenta \(média 80 ms, máx\. 300 ms\)$/); ok += 1;
+assert.match(summarizeDatabases([bank('core', { maxWriteMs: 1500 })]).line, /core: gravação lenta \(média 3 ms, máx\. 1500 ms\)$/); ok += 1;
+
+// mais de 3 bancos com alerta: mostra 3 e conta o resto
+const many = buildHealthReport(withDb(['a', 'b', 'c', 'd', 'e'].map((n) => bank(n, { busy: 1 }))));
+assert.ok(many.issues.includes('alerta nos bancos a, b, c e mais 2'), many.issues.join('|')); ok += 1;
+assert.match(lineOf(many), /c: 1 bloqueio; mais 2 com alerta$/); ok += 1;
+
+// texto suspeito no erro: sem SQL de valor, cortado em 120, sem quebra de linha
+const secret = summarizeDatabases([bank('core', { errors: 1, lastError: { at: 'x', code: 'ERR_SQLITE_ERROR', message: `SELECT * FROM notas WHERE texto = 'segredo do dono'\r\nAND id = 1 ${'x'.repeat(200)}` } })]);
+const shownMsg = /\(ERR_SQLITE_ERROR: (.*)\)$/.exec(secret.line)[1];
+assert.ok(!secret.line.includes('segredo'), 'valor entre aspas não aparece'); ok += 1;
+assert.ok(!/[\r\n]/.test(secret.line), 'sem quebra de linha'); ok += 1;
+assert.ok(shownMsg.length <= 120 && shownMsg.startsWith("SELECT * FROM notas WHERE texto = '…' AND id = 1 x"), shownMsg); ok += 1;
+const cut = summarizeDatabases([bank('core', { errors: 1, lastError: { at: 'x', code: null, message: "UPDATE notas SET texto = 'segredo cortado no meio" } })]);
+assert.match(cut.line, /core: 1 erro \(UPDATE notas SET texto = '…'\)$/, 'aspas sem fechar (mensagem já cortada) também somem'); ok += 1;
+
+// cabe no aviso: a linha dos bancos tem teto e o corpo leva só linhas inteiras (a dos bancos fica, as de "OK" do fim podem sair)
+const longMsg = { at: 'x', code: 'ERR_SQLITE_ERROR', message: 'y'.repeat(200) };
+const huge = summarizeDatabases(['a', 'b', 'c'].map((n) => bank(n, { busy: 9, errors: 9, openFailures: 2, avgWriteMs: 90, maxWriteMs: 2000, lastError: longMsg })));
+assert.ok(huge.line.length <= 300 && huge.line.endsWith('…'), String(huge.line.length)); ok += 1;
+const crowded = buildHealthReport({ ...withDb([...normal().slice(0, 9), bank('core', { busy: 3, errors: 4, lastError: { code: 'ERR_SQLITE_ERROR', message: 'database is locked' } }), bank('newswire', { engine: 'native', walAutocheckpoint: 1000, sizes: { db: 5 * MB, wal: 80 * MB, shm: 32768 }, avgWriteMs: 72, maxWriteMs: 1430 })]),
+  lastUpdate: { ok: true, text: 'OK: Yui rodando na versao 045674b. (11/11 12:22)' }, lastBackup: { ok: true, at: now, text: 'OK: backup cifrado enviado (7 arquivos, pasta backup-x). (17/11 03:00)' }, supervisor: { count: 0, last: null } });
+assert.ok(crowded.body.length <= 480); ok += 1;
+assert.match(lineOf(crowded), /newswire: -wal 80 MB, checkpoint parado, gravação lenta \(média 72 ms, máx\. 1430 ms\)$/); ok += 1;
+for (const x of crowded.body.split('\n').filter((y) => /^(Atualizador|Backup)/.test(y))) assert.match(x, /\(\d\d\/\d\d \d\d:\d\d\)$/, `linha cortada no meio: ${x}`);
+ok += 1;
+
+// databaseStats lançando ou ausente: relatório sai inteiro, sem a seção
+const notList = withDb(null);
+const boom = collectHealth({ now, osImpl: fakeOs, fsImpl: fakeFs, logDir: dir, uptimeSeconds: 3 * 86400, rssBytes: 1, interactions: () => ({ total: 1 }), updateLog: '', backupLog: '', supervisorLog: '', dbStats: () => { throw new Error('banco fechado'); } });
+eq(boom.databases, null, 'erro do databaseStats não derruba a coleta');
+eq(buildHealthReport(boom).body.includes('Bancos'), false, 'sem a seção');
+eq(buildHealthReport(boom).level, 'info');
+eq(collectHealth({ now, osImpl: fakeOs, fsImpl: fakeFs, logDir: dir, uptimeSeconds: 3 * 86400, rssBytes: 1, interactions: () => ({ total: 1 }), updateLog: '', dbStats: null }).databases, null, 'sem databaseStats (db.js antigo) a seção some');
+eq(notList.databases, null, 'retorno que não é lista é ignorado');
+eq(buildHealthReport({ ...boom, databases: [null, 42, { name: 'x', sizes: 'lixo', busy: 'NaN' }] }).body.includes('Bancos: 1 (1 não abriu), 0 B, sem alertas'), true, 'item estranho não quebra');
+const sentDb = [];
+await sendHealthReport({ alert: (...a) => sentDb.push(a), collect: () => boom });
+eq(sentDb.length, 1, 'o relatório sai mesmo sem a seção dos bancos');
+
 fs.rmSync(dir, { recursive: true, force: true });
+fs.rmSync(dbDir, { recursive: true, force: true });
 console.log(`OK: health-report (${ok} verificações)`);

@@ -303,8 +303,11 @@ await test('applyVoicePersona põe o bloco de voz no FIM (depois da memória) e 
   // Com o arquivo padrão existente o bloco continua sendo o de voz.
   assert.match(persona.voicePersonaText(), /\[MODO VOZ\]/);
   // No prompt de sistema real a voz entra depois do memoryBlock.
-  const llmSrc = source('src/handlers/llmHandler.js');
-  assert.ok(llmSrc.indexOf('baseSystemPrompt += options.memoryBlock') < llmSrc.indexOf('baseSystemPrompt = applyVoicePersona(baseSystemPrompt)'));
+  // (etapa 6: o texto do prompt mora só em core/ai/promptConversa.js, usado pelo generateResponse e pelo cérebro)
+  const promptSrc = source('src/core/ai/promptConversa.js');
+  const memAt = promptSrc.indexOf('baseSystemPrompt += memoryBlock');
+  assert.ok(memAt > 0 && memAt < promptSrc.indexOf('baseSystemPrompt = applyVoicePersona(baseSystemPrompt)'));
+  assert.ok(/memoryBlock: options\.memoryBlock,/.test(source('src/handlers/llmHandler.js')), 'o generateResponse passa a memória ao módulo do prompt');
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════
