@@ -18,6 +18,7 @@ import {
   type YuiClient,
 } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
+import { confirmacaoDeReinicio } from '../restartLogic.ts';
 import { AiProviders } from './AdminAi.tsx';
 import { GuildEditor } from './AdminGuild.tsx';
 import { Logs, Radio } from './AdminOps.tsx';
@@ -138,18 +139,21 @@ function Geral({ client }: Props) {
   const [msg, setMsg] = useState<string | null>(null);
 
   function restart() {
+    // O texto diz a verdade sobre o que reinicia: com o cérebro separado são os DOIS (cérebro e bot); no processo único, a Yui inteira.
+    const c = confirmacaoDeReinicio(data);
     confirmAction(
-      'Reiniciar a Yui?',
-      'A Yui fica offline por alguns segundos e volta sozinha. Conversas em andamento são interrompidas.',
+      c.titulo,
+      c.mensagem,
       async () => {
         try {
           const r = await client.admin.restart();
           setMsg(r.message);
         } catch (e) {
+          // 503/409/504: o servidor diz que NADA foi reiniciado e por quê; a mensagem dele é mostrada como veio.
           setMsg(errText(e));
         }
       },
-      'Reiniciar'
+      c.sim
     );
   }
 

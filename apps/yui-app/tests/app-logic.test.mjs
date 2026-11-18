@@ -54,7 +54,9 @@ const MEMBER = 'member-token-0123456789';
 const server = createApiServer({ tokens: parseTokens(`${OWNER}=111,${MEMBER}=222`), corsOrigins: parseCorsOrigins('') });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const url = `http://127.0.0.1:${server.address().port}`;
-test.after(() => { server.close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+// Motor nativo (YUI_DB_NATIVE): no Windows o banco aberto não pode ser apagado, então fecha antes de apagar a pasta.
+const { closeAllDatabases } = await import(`file://${root}/src/database/db.js`);
+test.after(() => { server.close(); closeAllDatabases(); fs.rmSync(tmp, { recursive: true, force: true }); });
 
 test('normalizeBaseUrl: esquema padrão, /v1 e barras finais', () => {
   assert.equal(normalizeBaseUrl('192.168.0.5:3939'), 'http://192.168.0.5:3939');

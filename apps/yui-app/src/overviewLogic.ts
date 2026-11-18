@@ -76,6 +76,7 @@ const EXACT: Record<string, EventView> = {
   'alert.sent': { label: 'Alerta enviado ao dono', icon: 'notifications', tone: 'normal' },
   'alert.fail': { label: 'Falha ao enviar alerta', icon: 'warning', tone: 'bad' },
   'admin.restart': { label: 'Yui reiniciada pelo painel', icon: 'refresh', tone: 'normal' },
+  'admin.restart.recusado': { label: 'Reinício pedido e recusado pelo supervisor (nada reiniciou)', icon: 'warning', tone: 'bad' },
   'admin.follow.youtube.liveMode': { label: 'Modo das lives alterado', icon: 'tune', tone: 'normal' },
   'admin.follow.youtube.add': { label: 'Canal do YouTube adicionado', icon: 'hub', tone: 'normal' },
   'admin.follow.youtube.remove': { label: 'Canal do YouTube removido', icon: 'hub', tone: 'normal' },

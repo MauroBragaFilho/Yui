@@ -45,7 +45,79 @@ export interface AdminOverview {
   limits?: { dmMax: number; dmWindowMinutes: number; fileLinkMinutes: number };
   interactions?: { series: { hour: string; count: number }[]; total: number; since: string };
   problems?: { loginFail: number; toolError: number; toolDenied: number; alertFail: number };
+  /** Só com o cérebro separado (dois processos): se o bot do Discord está ligado ao cérebro. Ausente no processo único. */
+  cerebro?: AdminOverviewCerebro;
 }
+/** Presente só quando a Yui roda em dois processos (cérebro + bot): diz se o bot está ligado ao cérebro. Ausente no processo único. */
+export interface AdminOverviewCerebro { botConectado: boolean }
+
+// ── Diagnóstico (GET /v1/admin/diagnostico; só o dono, só leitura) ──
+// O servidor entrega SÓ números, booleanos, identificadores curtos e palavras fixas (uma lista de permitidos): nunca texto de conversa, pesquisa privada, id de pessoa,
+// segredo, caminho nem o texto de um erro. Estes tipos descrevem exatamente isso; o app não pede, não guarda em disco e não mostra nada além destes campos.
+export type EstadoGeral = 'ok' | 'atencao' | 'problema';
+export type EstadoRotaPrivada = 'desligada' | 'incompleta' | 'nao-verificada' | 'validada' | 'nao-validada' | 'bloqueada';
+export interface DiagnosticoMotivo { codigo: string; texto: string }
+export interface DiagnosticoErro { tipo: string; status: number | null }
+export interface DiagnosticoAlvoIa {
+  modelo: string; disponivel: boolean | null; descansoSegundos: number; falhasSeguidas: number; acertos: number; falhas: number;
+  ultimoErro: DiagnosticoErro | null; ultimoOkHaSegundos: number | null;
+}
+export interface DiagnosticoProvedorIa {
+  id: string; rotulo: string; anonimo: boolean | null; prioridade: number | null; chaves: number; chavesEmDescanso: number; descansoSegundos: number; alvos: DiagnosticoAlvoIa[];
+}
+export interface DiagnosticoLimiteProvedor { provedor: string; limite: number; configurado: number; capacidade: number; origem: string }
+export interface DiagnosticoCerebro {
+  uptimeSegundos: number; backend: string | null; ponteDoBot: boolean | null; botConectado: boolean | null; discordOnline: boolean | null; travasPerdidas: number;
+  [k: string]: unknown;
+}
+export interface DiagnosticoContadoresPerfil { chamadas: number; ok: number; erros: number; fallbacks: number; fechadas: number; recusadasPorPrivacidade: number }
+export interface DiagnosticoPerfil extends DiagnosticoContadoresPerfil {
+  nome: string; habilitado: boolean | null; privacidade: 'privada' | 'geral' | null; combo: string | null; provedorDaYui: string | null; provedorCadastrado: boolean | null;
+  maxTokens: number | null; limiteEfetivo: number | null; capacidadeConhecida: number | null;
+}
+export interface DiagnosticoChamadaPerfil {
+  quando: string | null; ponto: string | null; perfil: string | null; combo: string | null; provedorQueRespondeu: string | null; estrategia: string | null;
+  fallbackUsado: boolean | null; limiteDeTokens: number | null; latenciaMs: number | null; resultado: string | null; decisao: string | null; motivo: string | null;
+}
+export interface DiagnosticoRotaPrivada {
+  estado: EstadoRotaPrivada; motivo: string | null; motivos: string[]; formatoDefinido: boolean; sondas: number; sondasValidas: number; violacoes: number;
+  ultimaSondaHaSegundos: number | null; falhasSeguidas: number; sondaSozinhaPausada: boolean; falhasRecentes: { haSegundos: number | null; motivo: string | null }[];
+}
+export interface DiagnosticoPerfisIa {
+  configurado: boolean; origem: string; errosDeConfiguracao: { perfil: string | null; codigo: string | null }[]; perfis: DiagnosticoPerfil[];
+  totais: DiagnosticoContadoresPerfil; ultimas: DiagnosticoChamadaPerfil[]; rotaPrivada: DiagnosticoRotaPrivada;
+}
+export interface Diagnostico {
+  versao: number;
+  geradoEm: string;
+  modo: 'unico' | 'cerebro-separado';
+  estado: EstadoGeral;
+  motivos: DiagnosticoMotivo[];
+  processo: { uptimeSegundos: number; memoriaMB: number };
+  cerebro: DiagnosticoCerebro | null;
+  ia: {
+    backendAtivo: string | null; backends: { nome: string; ativo: boolean | null; local: boolean | null }[]; gatewayConfigurado: boolean; algumDisponivel: boolean | null;
+    provedorAtual: string | null; totais: { requests?: number; ok?: number; failed?: number }; provedores: DiagnosticoProvedorIa[];
+  };
+  limitesDeTokens: {
+    teto: number | null; discord: { aplica: boolean; provedores: DiagnosticoLimiteProvedor[] }; app: { provedores: DiagnosticoLimiteProvedor[] }; erroDeConfiguracao: boolean;
+  };
+  cotasDeBusca: {
+    hora: {
+      global: { usadas: number; limite: number; cheia: boolean | null; liberaEmSegundos: number }; porPessoaLimite: number; reutilizadas: number;
+      persistencia: { gravando: boolean | null; pesquisaDisponivel: boolean | null; gravacaoComFalha: boolean | null; dono: string | null; aguardandoTrava: boolean | null; perdeuATrava: boolean | null; motivo: string | null };
+    };
+    mes: { provedor: string; usadas: number; teto: number }[];
+    reservaPercentual: number | null;
+  };
+  avisosDeConfiguracao: { variavel: string; problema: string; usando: string | number }[];
+  erros: { ultimas24h: number; reconexoesDoDiscord24h: number; porEtiqueta: { etiqueta: string; quantidade: number }[] };
+  bancos: { total: number; motores: Record<string, number>; tamanhoTotalMB: number; comAlerta: string[] };
+  /** Desde a etapa 9. Ausente em servidores mais antigos: a tela só mostra o que veio. */
+  perfisDeIa?: DiagnosticoPerfisIa;
+  motorAgente?: { pedido: string; ativo: string; recusado: boolean; motivo: string | null; implementados: { nativo: boolean; mastra: boolean } };
+}
+
 export type AutomodMode = 'off' | 'trigger' | 'mcp' | 'both';
 export interface AdminGuild { id: string; name: string; members: number | null; automod: AutomodMode; tosAccepted: boolean }
 export type BanType = 'user' | 'guild' | 'channel';
@@ -384,7 +456,10 @@ export function createClient(options: ClientOptions) {
       },
       gateway: () => request<GatewayStatus>('GET', '/v1/admin/gateway', undefined, 20_000),
       gatewayReset: () => request<{ ok: boolean }>('POST', '/v1/admin/gateway/reset', {}, 20_000),
-      restart: () => request<{ ok: boolean; message: string }>('POST', '/v1/admin/restart', { confirm: true }, 20_000),
+      /** Reinicia a Yui (só o dono, com a confirmação). `escopo`: 'cerebro-e-bot' (dois processos, pelo supervisor) ou 'processo-unico'. O `message` diz a verdade sobre o que reinicia. */
+      restart: () => request<{ ok: boolean; message: string; escopo?: 'cerebro-e-bot' | 'processo-unico' }>('POST', '/v1/admin/restart', { confirm: true }, 20_000),
+      /** Diagnóstico completo (só o dono, só leitura): o app só mostra, nunca guarda. Membro recebe 403. */
+      diagnostico: () => request<Diagnostico>('GET', '/v1/admin/diagnostico', undefined, 20_000),
     },
   };
 }
