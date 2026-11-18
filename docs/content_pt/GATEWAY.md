@@ -115,6 +115,10 @@ Na aba **Admin → IA** do app você vê cada provedor e modelo (disponível ou 
 
 A mesma aba também **configura** os provedores: colar chaves, ligar/desligar, testar e cadastrar provedores próprios, como o **OmniRoute** (modelo pronto: `http://127.0.0.1:20128/v1`, modelo `free-stack`; no notebook servidor da Yui o OmniRoute roda justamente nessa porta, como um gateway de IA externo, separado do Yui Gateway). As chaves ficam em `secrets/ai-providers.json` e valem na hora. Para o OmniRoute (ou qualquer roteador próprio) há duas opções importantes: **"Colocar logo após o LM Studio"** (vai para o começo da fila do Gateway) e **"Sem conversas pessoais"** (ligado por padrão no modelo do OmniRoute, porque ele repassa para serviços de terceiros e suas conversas privadas só devem ir a provedores com conta sua). Dica: se o combo `free-stack` estiver instável, use `auto/best-fast` e `auto/best-chat`, que costumam responder em segundos. Detalhes e proteções em [Yui API](YUI_API.md#provedores-de-ia-chaves-e-provedores-próprios).
 
+## 🎛️ Perfis de IA (etapa 9)
+
+Com o cérebro separado, o cérebro pode escolher um **perfil de IA** por tipo de tarefa (conversa, rápido, pesquisa, raciocínio, privado, visão) e cada perfil aponta para um **combo do OmniRoute**: quem escolhe o provedor é o OmniRoute, não o Yui Gateway. O perfil usa o provedor cadastrado na Yui (como o `omniroute` deste painel, anônimo) e faz UMA chamada com o modelo do perfil; se a rota de um perfil geral falha, a conversa cai na cadeia de hoje (este Gateway). O perfil **privado** exige um provedor **não anônimo** e uma verificação prévia, e **nunca** cai em outra rota. **Nada vem ligado** e nenhum combo do OmniRoute foi mexido: veja [as variáveis](ENVIRONMENT.md#perfis-de-ia-e-o-omniroute-etapa-9-só-local-só-com-provedores-falsos-nos-testes) e o [relatório da etapa 9](../RELATORIO_ETAPA9_PERFIS_IA.md).
+
 ## 🧪 Testes
 
 ```bash

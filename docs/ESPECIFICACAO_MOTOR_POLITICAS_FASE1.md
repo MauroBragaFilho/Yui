@@ -44,7 +44,7 @@ flowchart TD
 | **Memória** | `memory.forget_item` | `AUTO` | `AUTO` | `AUTO` | `AUTO` | `AUTO` |
 | **Memória** | `memory.wipe_own` | `ASK` *(confirmação 2FA texto)* | `ASK` | `ASK` | `ASK` | `ASK` *(confirmação "sim, apagar tudo")* |
 | **Memória** | `memory.admin_inspect` | `AUTO` | `AUTO` | `AUTO` | `DENY` | `DENY` |
-| **Memória** | `memory.admin_wipe_user`| `CRITICAL` | `DENY` | `DENY` | `DENY` | `DENY` |
+| **Memória** | `memory.admin_wipe_user`| `ASK` *(confirmação explícita do alvo)* | `ASK` *(confirmação do alvo no app)* | `ASK` *(botão de confirmação do alvo)* | `DENY` | `DENY` *(nunca a pedido de outro usuário)* |
 | **Conversa**| `chat.generate_image` | `AUTO` | `AUTO` | `AUTO` | `AUTO` *(sob cota 6/h)* | `AUTO` *(sob cota 6/h + NSFW filter)* |
 | **Conversa**| `chat.summarize` | `AUTO` | `AUTO` | `AUTO` | `AUTO` *(sob cota 1/min)*| `AUTO` *(sob cota 1/min + blindagem)* |
 | **Mídia** | `radio.play_control` | `AUTO` | `AUTO` | `AUTO` | `AUTO` *(se conectado)* | `AUTO` *(se conectado)* |
@@ -55,6 +55,8 @@ flowchart TD
 | **Código** | `dev.read_file_search` | `AUTO` | `AUTO` | `AUTO` | `DENY` | `DENY` |
 | **Código** | `dev.write_apply_diff` | `CRITICAL` | `DENY` | `DENY` | `DENY` | `DENY` |
 | **Código** | `dev.run_terminal` | `CRITICAL` | `DENY` | `DENY` | `DENY` | `DENY` |
+
+> **Mudança de 18/11/2026 (decisão da Liz, etapa 4):** `memory.admin_wipe_user` era `CRITICAL`/`DENY` para todos. Agora o dono pede **com a confirmação explícita do usuário-alvo** (`ASK`) e os demais papéis e o canal público continuam `DENY`; a ação segue marcada como alteração, então com `YUI_READ_ONLY=true` a regra 1 do §6 (somente leitura vence sempre) continua negando. Detalhes em [RELATORIO_ETAPA4_OPERACAO.md](RELATORIO_ETAPA4_OPERACAO.md) §5.
 
 ---
 

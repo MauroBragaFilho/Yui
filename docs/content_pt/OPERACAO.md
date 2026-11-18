@@ -71,6 +71,19 @@ O laço da tarefa `YuiBot` já religa o `node` quando o processo **morre**. O wa
 - **Testar sem religar:** `powershell -ExecutionPolicy Bypass -File scripts/supervisor-yui.ps1 -DryRun`.
 - **Diferença para o `yui-supervisor.ps1` abaixo:** aquele inicia o seu próprio `node` (por isso não pode rodar junto com a `YuiBot`); este só usa a tarefa existente.
 
+### 🧠 Modo dois processos: cérebro e bot (etapa 4, **ainda não ligado**)
+
+Com `YUI_CEREBRO_EXTERNO=true` no `.env`, a Yui roda em dois processos: o **cérebro** (`node src/cerebro.js`: memória, API, Gateway, lembretes) e o **bot** (`node src/index.js`: Discord). Quem cuida dos dois é o **supervisor** `node src/supervisor.js`, que a tarefa `YuiBot` passa a rodar no lugar de `node src/index.js` (`scripts/tarefa-dois-processos.ps1` troca a ação; só simula sem `-Aplicar`). Sem a chave, o supervisor roda o laço de hoje. Tudo em [RELATORIO_ETAPA4_OPERACAO.md](../RELATORIO_ETAPA4_OPERACAO.md).
+
+- **Subida:** o cérebro primeiro; o bot só depois de o cérebro avisar que está pronto (ou depois de 2 min, sem ele).
+- **Saúde e religar:** o supervisor pergunta a saúde de cada processo a cada 15 s; 3 respostas perdidas = travado. Quem cai ou trava é religado sozinho, com espera crescente (5 s, 10 s, 20 s... até 60 s). Um processo derrubado à força deixa as travas dos bancos no disco: o novo espera elas vencerem (~75 s), sem apagar nada.
+- **Parar de forma limpa:** criar o arquivo `logs\supervisor.parar` (ou Ctrl+C no console): o supervisor desliga o bot, depois o cérebro, e sai. O atualizador e o watchdog fazem assim antes do `Stop-ScheduledTask`.
+- **Reiniciar pelo app (etapa 10, só o dono):** "Reiniciar a Yui" (`POST /v1/admin/restart`, com a confirmação) faz o cérebro pedir ao supervisor, pelo mesmo canal IPC que já os liga, o reinício controlado dos DOIS: o bot para, o cérebro para (pedido limpo; só se não saírem no prazo, pelo handle), o cérebro sobe e, quando avisa "pronto", o bot. Só o cérebro pode pedir (o bot, não); um de cada vez; não conta como queda nem usa a espera crescente. Sem supervisor (cérebro aberto à mão) o pedido é recusado e nada reinicia. O `logs\supervisor.log` registra `REINÍCIO CONTROLADO dos dois processos` e o `supervisor-estado.json` traz `reinicioControlado` (em curso, total e o último).
+- **Onde olhar:** `logs\supervisor.log` (subidas, quedas, `RELIGANDO ...`) e `logs\supervisor-estado.json` (estado, PID só informativo, RAM e CPU de cada processo).
+- **Watchdog:** no modo dois, vigia o próprio supervisor (o `supervisor-estado.json` precisa ser renovado); o resto é do supervisor.
+- **Lembretes:** cada aviso tem um estado (pendente, enviando, enviado, incerto). Se o bot cair entre mandar e confirmar, o cérebro **reconcilia** antes de mandar de novo (a `nonce` do Discord e o histórico da DM, com um marcador discreto `-# ref ...` no fim do aviso). Se não der para saber, o aviso fica **incerto**: aparece em "meus lembretes", no relatório de saúde e no `/v1/health`, e nunca é reenviado sozinho. O dono decide por conversa: **"reenvia o lembrete N"** (manda uma vez; se o anterior chegou, aparece duas vezes) ou **"descarta o lembrete N"**.
+- No modo dois, em vez de encerrar processos soltos, use o arquivo de parada ou a tarefa: o supervisor encerra os filhos dele pelo handle, e um filho cujo supervisor sumiu se desliga sozinho.
+
 ### 🐕 Supervisor, Watchdog e Auto-Start no Windows (R08)
 
 > **Não está instalado no notebook.** A produção usa o laço das tarefas acima. O `YuiSupervisor` **inicia o seu próprio** `node src/index.js`: instalado junto com a `YuiBot`, haveria duas Yuis com o mesmo token. Se um dia for usá-lo, é **no lugar** da `YuiBot` (desativada), lembrando que o instalador dele registra a tarefa **no logon do usuário**, e não no boot.
