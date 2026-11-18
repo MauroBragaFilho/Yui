@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { activeProviders, providerConfigured } from '../../search/providers.js';
-import { describeTtsReason } from '../../services/tts/index.js';
+// Só os textos dos motivos (módulo puro): o serviço de voz NÃO sobe com a API; o estado vem sob demanda em loadIntegrationData.
+import { describeTtsReason } from '../../services/tts/reasons.js';
 
 /**
  * Estado das integrações da Yui para o painel (SOMENTE LEITURA).

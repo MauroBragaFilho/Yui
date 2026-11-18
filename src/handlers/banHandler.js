@@ -95,24 +95,8 @@ function removeBan(type, id) {
     saveBans();
     return true;
 }
-const forbiddenKeywords = [
-    'nsfw', 'porn', 'hentai', 'gore', 'sexo', 'puta', 'caralho', 'buceta', 'pinto', 'pênis', 'vagina', '18+', 'pornografia', 'pornô',
-    'estupro', 'pedofilia', 'bestialidade', 'necrofilia', 'zoofilia', "porno", "pornhub", "redtube", "rule34", "r34", "lolicon", "shotacon",
-    'suicídio', 'auto-mutilação', 'autoflagelação',
-    'terrorismo', 'nazismo', 'hitler', 'suástica', 'extremismo', '1488',
-    'xvideos', 'pornhub', 'redtube', 'rule34', 'r34', 'lolicon', 'shotacon',
-    'foder', 'fodendo', 'foda-se', 'fodase', 'boquete', 'viado', 'traveco', 'punheta', 'orgia', 'suruba', 'nude', 'nudes', 'clitóris', 'ânus', 'felação',
-    'masturbação', 'masturbar', 'ejaculação', 'sêmen',
-    'arrombado', 'filho da puta', 'fdp',
-    'cuzão', 'bicha',
-    'boob', 'boobs', 'tits', 'fuck', 'bitch',
-    'estuprar', 'estuprador',
-    'pedófilo',
-    'automutilação', 'suicidar',
-    'homicídio', 'assassinato', 'decapitação', 'desmembramento', 'tortura', 'esquartejamento', 'assassinar',
-    'fascismo', 'fascista', 'neonazista', 'neonazismo',
-    'ku klux klan', 'swastika', 'white power'
-];
+// A lista mora no Core (dado puro, sem Discord): o agente de pesquisa do cérebro usa a MESMA lista sem importar este arquivo.
+import { forbiddenKeywords } from '../core/forbiddenKeywords.js';
 function checkAutoBan(prompt, guildName, guildId, channelName, channelId, userId) {
     const lowerPrompt = (prompt || "").toLowerCase();
     const lowerGuild = (guildName || "").toLowerCase();

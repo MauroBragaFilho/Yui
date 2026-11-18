@@ -222,6 +222,7 @@ export function createDev({
           modeId,
           approvalMode,
           webSearchEnabled: false,
+          searchUserId: ctx?.userId ?? null,
           emit,
           approvalGate,
           observePolicy: (req) => policyEngine.gate({ ...req, ctx, origin: local ? ORIGINS.LOCAL_PC : ORIGINS.REMOTE }),

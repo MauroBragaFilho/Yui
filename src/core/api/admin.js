@@ -12,6 +12,7 @@ import { ReminderError } from '../../reminders/store.js';
 import { listRadio, RADIO_ACTIONS, defaultRadioDeps } from './radioAdmin.js';
 import { readLogs } from './panelLogs.js';
 import { buildIntegrations, loadGuildDetail, loadIntegrationData } from './integrations.js';
+import { montarDiagnostico } from '../diagnostico.js';
 import { addCustom, addCustomKey, setCustomOptions, addKey, AiSettingsError, describeAi, isEditEnabled, removeCustom, removeKey, setCloudflareAccount, setEnabled } from '../aiSettings.js';
 
 /**
@@ -42,6 +43,17 @@ const ID_RE = /^\d{15,25}$/;
 const AUTOMOD_MODES = ['off', 'trigger', 'mcp', 'both'];
 const BAN_TYPES = ['user', 'guild', 'channel'];
 const MAX_AUDIT = 500;
+
+// O reinício com o cérebro separado (etapa 10): o que o dono lê é a verdade sobre o que reinicia e, se o supervisor recusa, que NADA reiniciou.
+const RESTART_MESSAGE_BOTH = 'Reiniciando o cérebro e o bot do Discord, nesta ordem: o bot para, o cérebro para, o cérebro sobe e depois o bot. O app fica sem resposta até o cérebro voltar (de alguns segundos a cerca de um minuto) e o bot fica fora do Discord nesse intervalo.';
+const RESTART_REFUSALS = Object.freeze({
+  'sem-supervisor': { status: 503, texto: 'Nada foi reiniciado: este cérebro não está sob o supervisor, então ninguém o religaria. Reinicie à mão.' },
+  'ja-em-curso': { status: 409, texto: 'Já existe um reinício em andamento. Nada novo foi pedido; aguarde o cérebro voltar.' },
+  'sem-resposta': { status: 504, texto: 'O supervisor não respondeu ao pedido. Não sei se o reinício começou: espere um pouco e confira o estado antes de pedir de novo.' },
+  'supervisor-parando': { status: 409, texto: 'Nada foi reiniciado: o supervisor está parando a Yui.' },
+  'modo-unico': { status: 409, texto: 'Nada foi reiniciado: o supervisor está no modo de processo único.' },
+  padrao: { status: 502, texto: 'O supervisor recusou o pedido. Nada foi reiniciado.' },
+});
 
 function requireOwner(ctx) {
   if (ctx?.role !== ROLES.OWNER) throw new AdminError(403, 'Apenas o dono pode usar o painel de administração.');
@@ -237,7 +249,11 @@ async function defaultRemoveTwitch(guildId, login, discordChannelId) {
 
 /** Como o painel vê um lembrete: o próprio dado mais os textos prontos ("amanhã às 09:00", "todo dia às 08:00"). */
 function reminderView(r, now = new Date()) {
-  return { id: r.id, text: r.text, at: r.at, repeat: r.repeat, whenText: describeWhen(r.at, now), repeatText: r.repeat ? describeRepeat(r.repeat) : null, tries: r.tries || 0 };
+  return {
+    id: r.id, text: r.text, at: r.at, repeat: r.repeat, whenText: describeWhen(r.at, now), repeatText: r.repeat ? describeRepeat(r.repeat) : null, tries: r.tries || 0,
+    // Só com o cérebro separado: o estado da entrega do aviso ('enviando' a confirmar ou 'incerto', que o dono resolve).
+    ...(r.entrega?.estado ? { entrega: { estado: r.entrega.estado, desde: r.entrega.desde ?? null, motivo: r.entrega.motivo ?? null } } : {}),
+  };
 }
 
 export function createAdmin({
@@ -247,6 +263,9 @@ export function createAdmin({
 
   auditFile = null,
   exit = () => process.exit(0),
+  // Reinício CONTROLADO pelo supervisor (o cérebro separado passa esta função; ver src/operacao/filho.js e supervisor.js): `({ motivo }) => Promise<{ aceito, motivo }>`.
+  // Sem ela (processo único, testes) vale o `exit` de sempre: o processo sai e a tarefa/o supervisor o religa em ~15 s.
+  reinicio = null,
   startedAt = Date.now(),
 } = {}) {
   let cached = deps;
@@ -685,6 +704,16 @@ export function createAdmin({
       return res;
     },
 
+    /**
+     * DIAGNÓSTICO (etapa 8): estado, provedor de IA, limites de tokens, cotas de busca, avisos de configuração e erros (src/core/diagnostico.js).
+     * SÓ LEITURA e SÓ O DONO. Nada de conversa, pesquisa privada, id de pessoa ou servidor, segredo, caminho de arquivo ou texto de erro.
+     * `deps.diagnostico` (fontes) e `deps.modoDiagnostico` só existem para teste e para o cérebro separado.
+     */
+    async diagnostico(ctx) {
+      requireOwner(ctx);
+      return montarDiagnostico({ modo: deps?.modoDiagnostico ?? 'unico', fontes: deps?.diagnostico ?? {} });
+    },
+
     /** Saúde do Yui Gateway: provedores, modelos, descansos e contadores (sem chaves). */
     async gateway(ctx) {
       requireOwner(ctx);
@@ -701,13 +730,31 @@ export function createAdmin({
       return { ok: true };
     },
 
-    /** Reinicia a Yui (o supervisor da tarefa a religa em ~15 s). Exige confirmação explícita. */
+    /**
+     * Reinicia a Yui. Exige o dono e a confirmação explícita (`confirm: true`); a auditoria `admin.restart` vale nos dois modos.
+     *  - cérebro separado (`reinicio`): pede ao SUPERVISOR o reinício dos dois processos (bot e cérebro). Só o supervisor que abriu os processos os reinicia;
+     *    se ele não aceita (sem supervisor, já em curso, sem resposta), NADA reinicia e o dono recebe o motivo verdadeiro;
+     *  - processo único: o processo sai e a tarefa/o supervisor o religa em ~15 s (como sempre).
+     */
     async restart(ctx, confirm) {
       requireOwner(ctx);
       if (confirm !== true) throw new AdminError(400, 'Confirmação necessária para reiniciar.');
+      if (typeof reinicio === 'function') {
+        let r;
+        try { r = await reinicio({ motivo: 'pedido-do-dono' }); } catch { r = { aceito: false, motivo: 'erro' }; }
+        if (r?.aceito !== true) {
+          // O pedido do dono foi recusado: NADA reiniciou (a auditoria diz isso, sem se passar por um reinício).
+          audit('admin.restart.recusado', ctx, { motivo: typeof r?.motivo === 'string' ? r.motivo.slice(0, 40) : 'desconhecido' });
+          const recusa = RESTART_REFUSALS[r?.motivo] ?? RESTART_REFUSALS.padrao;
+          throw new AdminError(recusa.status, recusa.texto);
+        }
+        // O supervisor aceitou e só para os processos depois de `reinicioAtrasoMs` (700 ms): a auditoria sai antes de qualquer parada.
+        audit('admin.restart', ctx, { escopo: 'cerebro-e-bot' });
+        return { ok: true, escopo: 'cerebro-e-bot', message: RESTART_MESSAGE_BOTH };
+      }
       audit('admin.restart', ctx, {});
       setTimeout(exit, 700);
-      return { ok: true, message: 'Reiniciando… volto em alguns segundos.' };
+      return { ok: true, escopo: 'processo-unico', message: 'Reiniciando… volto em alguns segundos.' };
     },
   };
 }

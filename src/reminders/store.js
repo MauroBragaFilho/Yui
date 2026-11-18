@@ -3,6 +3,7 @@
  * (arquivo temporário + rename). Poucos lembretes por vez, então tudo cabe em memória e cada mudança regrava o arquivo.
  *
  * Um lembrete: { id, text, at (ISO, próxima vez), repeat (null | {kind, hour, minute, weekday?, day?}), createdAt, tries, lastFiredAt, userId }.
+ * Com o cérebro separado, também `entrega` ({ estado: 'enviando' | 'incerto' | 'pendente', desde, chave, ... }): veja setEntrega.
  * `userId`: null = do dono (os lembretes de antes); um id do Discord = dessa pessoa (o aviso vai por DM para ela).
  * O id é um número pequeno que nunca se repete ("cancela o lembrete 3"). Sem IA, sem rede, relógio injetável.
  */
@@ -107,6 +108,20 @@ export function createReminderStore({ file = defaultReminderFile(), now = () => 
       if (Number.isNaN(when.getTime())) throw new ReminderError('data', 'Data inválida.');
       r.at = toIso(when);
       r.tries = 0;
+      delete r.entrega; // horário novo, decidido por quem adiou: a entrega da ocorrência antiga deixa de valer
+      save();
+      return { ...r };
+    },
+
+    /**
+     * Estado da ENTREGA da ocorrência atual (cérebro separado, etapa 4): null/ausente = pendente; { estado: 'enviando' |
+     * 'incerto' | 'pendente', desde, chave, ... }. O processo único não usa (nada muda nele). `null` apaga.
+     */
+    setEntrega(id, entrega) {
+      const r = load().items.find((x) => x.id === Number(id));
+      if (!r) return null;
+      if (entrega && typeof entrega === 'object') r.entrega = { ...entrega };
+      else delete r.entrega;
       save();
       return { ...r };
     },
@@ -123,6 +138,7 @@ export function createReminderStore({ file = defaultReminderFile(), now = () => 
       if (!r) return { removed: false, next: null };
       r.lastFiredAt = toIso(at);
       r.tries = 0;
+      delete r.entrega; // a ocorrência foi resolvida: a próxima começa do zero
       if (r.repeat) {
         const next = nextOccurrence(r.repeat, new Date(Math.max(at, Date.parse(r.at))));
         if (next) { r.at = toIso(next); save(); return { removed: false, next: r.at }; }

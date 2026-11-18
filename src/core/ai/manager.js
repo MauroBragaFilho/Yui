@@ -2,13 +2,19 @@ import axios from 'axios';
 import { logger } from '../../utils/logger.js';
 import { recordInteraction } from '../interactionStats.js';
 import { buildPersonaPrompt } from '../persona.js';
-// Agente de pesquisa (módulos PUROS, sem rede nem Discord): a pesquisa fora da fila usa o MESMO agente da fila (ver "Pesquisa na web" abaixo).
-import { readResearchConfig, privateSearchAllowed, failureMessage } from '../../handlers/researchAgent.js';
+// Agente de pesquisa (módulos PUROS, sem rede nem Discord, agora no Core): a pesquisa fora da fila usa o MESMO agente da fila (ver "Pesquisa na web" abaixo).
+import { readResearchConfig, privateSearchAllowed, failureMessage } from './researchAgent.js';
 import {
   preRouteDecision, recoveryPlan, finalGuard, finalGuardDetailed, inspectFinalGuard, userNeedsAnswer, detectSearchRequest, detectUnfulfilledPromise, isRawToolLeak,
   buildNoPromiseRetryPrompt, clipInput, norm, SEARCH_DISABLED_REPLY, SENSITIVE_SEARCH_REFUSAL, PROMISE_ONLY_FALLBACK,
-} from '../../handlers/searchIntent.js';
-import { webSearchGate, scrubLogText } from '../../handlers/llmSafety.js';
+} from './searchIntent.js';
+import { webSearchGate, scrubLogText } from './llmSafety.js';
+import {
+  tetoGlobal, limitePorProvedor, limiteOpenAiCompativel, limitesDoCanal, aiMaxTokens, limitePorProvedorNoApp, limiteAppOpenAiCompativel, limiteDaCadeiaNoApp,
+} from './limitesTokens.js';
+// Perfis de IA (etapa 9): a rota por perfil (UMA chamada ao OmniRoute com o modelo do perfil). Só entra em ação quando quem chama passa `perfil`.
+import { tentarPerfil } from './rotaPerfil.js';
+export { verificarRotaPrivada, estadoDosPerfis, estadoDaRotaPrivada, ErroDePerfil } from './rotaPerfil.js';
 
 /**
  * AI Manager — interface única de IA do Yui Core.
@@ -21,13 +27,21 @@ import { webSearchGate, scrubLogText } from '../../handlers/llmSafety.js';
  *   {
  *     name: string,
  *     local: boolean,                       // o modelo roda na máquina do dono?
- *     chat({ prompt, system, history, ctx, memoryBlock }) => Promise<string>
+ *     chat({ prompt, system, history, ctx, memoryBlock, deadlineAt?, sensitive?, isolated? }) => Promise<string>
  *   }
+ * `sensitive: true` (opcional) = nunca provedor anônimo, mesmo sem memória pessoal no ctx; `isolated: true` (opcional) = chamada
+ * sem histórico nem memória (a síntese da pesquisa do Core, ver isolatedChat). Backend que não os conhece os ignora.
+ *
+ * Perfis de IA (etapa 9, perfis.js e rotaPerfil.js): `chat()` e `isolatedChat()` aceitam `perfil` (o nome de um perfil ou { nome, ponto }), escolhido pelo
+ * CÉREBRO. Com o perfil configurado a chamada vai ao OmniRoute com o `modelo` do perfil (a Yui não tem um segundo roteador). Perfil não privado que falha
+ * cai no fluxo de hoje (o backend ativo), registrando o fallback; perfil privado NUNCA cai em outra rota: falha fechada (ErroDePerfil). Sem `perfil`, ou sem
+ * nenhum perfil configurado, nada muda: o backend recebe exatamente o que recebia.
  *
  * Backends embutidos:
  *  - "legacy-chain" (padrão): a cadeia de provedores que já existe no
  *    llmHandler.js (LM Studio → HF → Groq → Gemini → Cloudflare → ...).
- *    Carregada sob demanda, para o Core não depender do Discord na importação.
+ *    O Core NÃO importa o bot: a cadeia chega pela ponte que o bot instala na subida
+ *    (setLegacyBridge, em src/index.js). Sem a ponte (o cérebro sozinho), use o "gateway".
  *    Extrair esses provedores para backends independentes é evolução futura.
  *  - "openai-compatible": qualquer endpoint /chat/completions (ver abaixo).
  *
@@ -50,6 +64,24 @@ export function setActiveBackend(name) {
   activeName = name;
 }
 
+/**
+ * Ponte para a cadeia legada do bot (handlers/llmHandler.js: generateResponse, runResearchFor, isToolDisabled).
+ * Quem roda o bot instala a ponte na subida (src/index.js); o Core nunca cita o llmHandler. Sem a ponte (o cérebro
+ * sozinho, testes), o backend "legacy-chain" avisa que está indisponível (o cérebro conversa pelo backend "gateway")
+ * e a pesquisa do app usa o adaptador do próprio Core (core/ai/research.js, ver loadLlm).
+ */
+let legacyLoader = null;
+export function setLegacyBridge(loader) {
+  legacyLoader = typeof loader === 'function' ? loader : null;
+}
+export function hasLegacyBridge() {
+  return legacyLoader !== null;
+}
+async function loadLegacy() {
+  if (!legacyLoader) throw new Error('Cadeia legada indisponível: este processo não instalou a ponte do bot (use o backend "gateway").');
+  return legacyLoader();
+}
+
 export function listBackends() {
   return [...backends.values()].map((b) => ({ name: b.name, local: b.local, active: b.name === activeName }));
 }
@@ -63,11 +95,55 @@ export function listBackends() {
  *
  * `deadlineAt` (opcional, instante em ms): a cadeia de provedores não abre outro depois dele (usado na nova resposta que a
  * pesquisa pede ao modelo). Backend que não o conhece o ignora.
+ *
+ * `sensitive: true` (opcional) = nunca provedor anônimo, mesmo sem memória pessoal no ctx (a conversa do Discord pelo cérebro, etapa 5: texto
+ * de anexo ou memória no prompt). Sem ele, nada muda.
+ *
+ * `tokensPorProvedor` (opcional, etapa 6: o cérebro) = o tamanho da resposta segue o limite de CADA provedor (configuração do canal do
+ * Discord, capacidade e teto global; core/ai/limitesTokens.js). `true` ou `{ canal }`, com os ajustes do painel do Discord que o bot mandou
+ * como fato do canal. Sem ele (o app), vale o limite do app: o AI_MAX_TOKENS, cortado pela capacidade do provedor e pelo teto global
+ * (ajustes da Liz, §11 do relatório da etapa 6).
  */
-export async function chat({ prompt, system = '', history = [], ctx, memoryBlock = '', deadlineAt = null }) {
+export async function chat({ prompt, system = '', history = [], ctx, memoryBlock = '', deadlineAt = null, sensitive = false, tokensPorProvedor = false, perfil = null }) {
+  const backend = activeBackendFor(ctx);
+
+  // Personalidade decidida pelo backend a partir do contexto (papel + canal).
+  const persona = system || buildPersonaPrompt(ctx);
+
+  const started = Date.now();
+  if (perfil) {
+    const via = await viaPerfil({ perfil, persona, history, memoryBlock, prompt, ctx, sensitive, deadlineAt });
+    if (via) {
+      logger.info(`[AI] perfil=${via.nome} combo=${via.combo} ${Date.now() - started}ms`);
+      recordInteraction();
+      return via.texto;
+    }
+  }
+  const text = await backend.chat({ prompt, system: persona, history, ctx, memoryBlock, ...(deadlineAt ? { deadlineAt } : {}), ...(sensitive === true ? { sensitive: true } : {}), ...pedidoDeLimite(tokensPorProvedor) });
+  logger.info(`[AI] backend=${backend.name} ${Date.now() - started}ms`);
+  recordInteraction();
+  return text;
+}
+
+/** O pedido de limite por provedor (o cérebro) que segue ao backend: `true` ou `{ canal }` (os ajustes do painel, conferidos). Sem pedido: nada. */
+function pedidoDeLimite(tokensPorProvedor) {
+  if (tokensPorProvedor === true) return { tokensPorProvedor: true };
+  if (tokensPorProvedor && typeof tokensPorProvedor === 'object' && !Array.isArray(tokensPorProvedor)) {
+    return { tokensPorProvedor: { canal: limitesDoCanal(tokensPorProvedor.canal) } };
+  }
+  return {};
+}
+/** O backend recebeu o pedido de limite por provedor (o cérebro)? E os ajustes do painel do Discord, se vieram. */
+function lerPedidoDeLimite(tokensPorProvedor) {
+  if (tokensPorProvedor === true) return { porProvedor: true, canal: null };
+  if (tokensPorProvedor && typeof tokensPorProvedor === 'object') return { porProvedor: true, canal: tokensPorProvedor.canal ?? null };
+  return { porProvedor: false, canal: null };
+}
+
+/** O backend ativo, se ele pode receber este contexto (AI_PRIVATE_LOCAL_ONLY: memória pessoal só vai a backend local). Lança se não. */
+function activeBackendFor(ctx) {
   const backend = backends.get(activeName);
   if (!backend) throw new Error('Nenhum backend de IA registrado.');
-
   if (
     String(process.env.AI_PRIVATE_LOCAL_ONLY || 'false').toLowerCase() === 'true' &&
     ctx?.memoryScope === 'personal' &&
@@ -75,21 +151,55 @@ export async function chat({ prompt, system = '', history = [], ctx, memoryBlock
   ) {
     throw new Error('Contexto pessoal bloqueado: AI_PRIVATE_LOCAL_ONLY exige backend local.');
   }
+  return backend;
+}
 
-  // Personalidade decidida pelo backend a partir do contexto (papel + canal).
-  const persona = system || buildPersonaPrompt(ctx);
-
+/**
+ * UMA chamada ao backend ativo SEM histórico e SEM memória: a síntese da pesquisa do Core (core/ai/research.js) recebe só o prompt
+ * (pergunta + evidência cercada como dado não confiável) e o `system`. `sensitive: true` = nunca provedor anônimo. Não conta no gráfico
+ * de interações (quem conta é a resposta entregue do turno, como na síntese do bot). AI_PRIVATE_LOCAL_ONLY vale como no chat().
+ */
+export async function isolatedChat({ prompt, system = '', ctx = null, sensitive = false, deadlineAt = null, tokensPorProvedor = false, perfil = null } = {}) {
+  const backend = activeBackendFor(ctx);
   const started = Date.now();
-  const text = await backend.chat({ prompt, system: persona, history, ctx, memoryBlock, ...(deadlineAt ? { deadlineAt } : {}) });
-  logger.info(`[AI] backend=${backend.name} ${Date.now() - started}ms`);
-  recordInteraction();
+  if (perfil) {
+    const via = await viaPerfil({ perfil, persona: system || buildPersonaPrompt(ctx), history: [], memoryBlock: '', prompt, ctx, sensitive, deadlineAt });
+    if (via) {
+      logger.info(`[AI] perfil=${via.nome} combo=${via.combo} ${Date.now() - started}ms (sem histórico nem memória)`);
+      return via.texto;
+    }
+  }
+  const text = await backend.chat({
+    prompt, system: system || buildPersonaPrompt(ctx), history: [], ctx, memoryBlock: '',
+    sensitive: sensitive === true, isolated: true, ...(deadlineAt ? { deadlineAt } : {}), ...pedidoDeLimite(tokensPorProvedor),
+  });
+  logger.info(`[AI] backend=${backend.name} ${Date.now() - started}ms (sem histórico nem memória)`);
   return text;
+}
+
+/**
+ * A chamada por PERFIL (etapa 9). Devolve { texto, nome, combo } quando o perfil atendeu, ou null (o backend ativo atende, o fluxo de hoje: sem perfil
+ * configurado, perfil que não vale, ou rota geral que falhou e já foi registrada como fallback). Lança ErroDePerfil (falha fechada) só no perfil privado.
+ * A privacidade é decidida AQUI, pela própria chamada (sensitive ou memória pessoal): um perfil geral nunca atende uma chamada privada, e nada é herdado
+ * de outra pessoa (não há estado por conversa). AI_PRIVATE_LOCAL_ONLY com memória pessoal: a rota do perfil é nuvem, então o backend (local) atende.
+ */
+async function viaPerfil({ perfil, persona, history, memoryBlock, prompt, ctx, sensitive, deadlineAt }) {
+  const privada = sensitive === true || ctx?.memoryScope === 'personal';
+  const somenteLocal = String(process.env.AI_PRIVATE_LOCAL_ONLY || 'false').toLowerCase() === 'true' && ctx?.memoryScope === 'personal';
+  const messages = [
+    { role: 'system', content: persona + (memoryBlock || '') },
+    ...history.map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user', content: prompt },
+  ];
+  const r = await tentarPerfil({ perfil, privada, messages, deadlineAt, somenteLocal });
+  return r.via === 'perfil' ? { texto: r.texto, nome: r.nome, combo: r.combo } : null;
 }
 
 // ───────────────────────── Pesquisa na web (entradas FORA da fila: app/API, /yui e +yui) ─────────────────────────
 //
-// O agente de pesquisa (handlers/researchAgent.js, via llmHandler.runResearchFor) é o MESMO da fila do Discord: toda pesquisa termina em resposta
-// sintetizada, resumo com links ou mensagem com o motivo, nunca em "vou pesquisar" parado. Quem não passa pela fila usa as PORTAS daqui:
+// O agente de pesquisa (core/ai/researchAgent.js) é o MESMO da fila do Discord: toda pesquisa termina em resposta sintetizada, resumo com links ou
+// mensagem com o motivo, nunca em "vou pesquisar" parado. Ele chega ligado aos buscadores e à síntese pela ponte do bot (llmHandler.runResearchFor) ou,
+// sem a ponte (o cérebro sozinho), pelo adaptador do Core (core/ai/research.js, mesma assinatura). Quem não passa pela fila usa as PORTAS daqui:
 //  - Porta A, routeExplicitResearch: pedido de pesquisa EXPLÍCITO e ESTRITO pesquisa por código, sem a primeira chamada ao modelo
 //    (só com YUI_RESEARCH_PRE_ROUTE=true; YUI_RESEARCH_ENABLED=false desliga);
 //  - Portas C e D, reviewResearchReply: a resposta do modelo só PROMETE pesquisar ("Vou pesquisar isso!")? Vira pesquisa de verdade, recusa honesta,
@@ -98,7 +208,7 @@ export async function chat({ prompt, system = '', history = [], ctx, memoryBlock
 // pesquisado pelo código mesmo que o modelo tenha respondido "de cabeça" (searchIfExplicit), como a fila faz com provedor sem ferramentas.
 // CONVERSA PRIVADA (o app é sempre privado; o /yui do dono em DM ou em canal privado): só pesquisa se o YUI_PRIVATE_SEARCH liberar este usuário e SÓ em
 // pedido explícito; a consulta sai SÓ do texto literal da mensagem (nunca histórico, memória ou contexto pessoal), passa por scrubQuery e pelas
-// palavras proibidas do banHandler, a síntese roda com sensitive:true (nunca provedor anônimo) e nada da consulta vai ao log nem ao histórico.
+// palavras proibidas (core/forbiddenKeywords.js, a mesma lista do banHandler), a síntese roda com sensitive:true (nunca provedor anônimo) e nada da consulta vai ao log nem ao histórico.
 // Nenhuma destas funções lança: qualquer falha aqui deixa a resposta do modelo seguir como estava.
 
 /** Pesquisas simultâneas FORA da fila (/yui, +yui e app somados): dentro da fila a pesquisa já é serial. */
@@ -126,7 +236,7 @@ export const RESEARCH_BUSY_REPLY = 'Tem pesquisa demais rodando agora. Tenta de 
 export const RAW_TOOL_REPLY = 'Desculpe, tive um erro ao montar essa resposta. Pode perguntar de novo?';
 // Motivo da busca automática (smartSearchDetailed.reason) -> código de failureMessage: o usuário vê POR QUE não deu certo, em vez de uma 2ª busca com a mesma cota.
 const SEARCH_FAILURE_CODES = Object.freeze({
-  user_limited: 'user_limited', global_limited: 'global_limited', deadline: 'deadline', no_providers: 'no_providers', providers_rest: 'providers_rest',
+  user_limited: 'user_limited', global_limited: 'global_limited', unavailable: 'unavailable', deadline: 'deadline', no_providers: 'no_providers', providers_rest: 'providers_rest',
   providers_error: 'providers_error', error: 'providers_error', no_results: 'no_results', filtered: 'no_results', no_content: 'no_results',
   sensitive_data: 'sensitive_data', forbidden: 'forbidden',
 });
@@ -138,11 +248,21 @@ const FALLBACK_RESEARCH_CONFIG = Object.freeze({ enabled: false, guard: 'off', p
 function readCfg(deps) {
   try { return (typeof deps?.config === 'function' ? deps.config : readResearchConfig)(); } catch (_) { return FALLBACK_RESEARCH_CONFIG; }
 }
-/** { runResearchFor, isToolDisabled } do llmHandler, carregado SÓ quando uma pesquisa vai de fato acontecer (o Core não puxa o Discord na importação). */
+/**
+ * { runResearchFor, isToolDisabled }, carregado SÓ quando uma pesquisa vai de fato acontecer (o Core não cita o bot):
+ *  - COM a ponte do bot (o bot hoje): os da cadeia legada (llmHandler), exatamente como antes;
+ *  - SEM a ponte (o cérebro sozinho): os do adaptador do Core (core/ai/research.js): os mesmos buscadores, leitor de páginas e palavras
+ *    proibidas, e a síntese pelo backend ativo daqui (isolatedChat: sem ferramentas, sem histórico e sem memória). O `deps.config` (se veio)
+ *    vale também lá dentro; `deps.research` injeta dublês no adaptador (testes).
+ */
 async function loadLlm(deps) {
   if (deps?.llm?.runResearchFor && deps?.llm?.isToolDisabled) return deps.llm;
-  const mod = await import('../../handlers/llmHandler.js');
-  return { runResearchFor: mod.runResearchFor, isToolDisabled: mod.isToolDisabled };
+  if (hasLegacyBridge()) {
+    const mod = await loadLegacy();
+    return { runResearchFor: mod.runResearchFor, isToolDisabled: mod.isToolDisabled };
+  }
+  const { createCoreResearch } = await import('./research.js');
+  return createCoreResearch({ ...(typeof deps?.config === 'function' ? { config: deps.config } : {}), ...(deps?.research ?? {}) });
 }
 const refusalOf = (text, reason) => ({ text, researched: false, kind: 'refused', reason, private: false, historyLine: null });
 const errorTag = (err) => scrubLogText(err?.code ?? err?.message ?? 'erro', 80);
@@ -220,7 +340,8 @@ export async function routeExplicitResearch(p = {}, deps = {}) {
  * regenerate: async (prompt) => texto|'' (pede UMA resposta final ao modelo, sem ferramentas),
  * searchFailure (o motivo da busca automática do generateResponse que JÁ foi tentada e não deu certo: o agente não pesquisa de novo, só diz o motivo; searchRetryAfterMs: daqui a quanto tempo tentar),
  * regenerateWithWeb: async (prompt) => texto|'' (a busca automática trouxe a web mas a síntese só prometeu: nova resposta COM a mesma web, sem pesquisar de novo),
- * rejectToolJson (resposta que ainda for JSON de ferramenta cru é trocada pelo aviso: o /yui e o +yui nunca executam ferramentas) }.
+ * rejectToolJson (resposta que ainda for JSON de ferramenta cru é trocada pelo aviso: o /yui e o +yui nunca executam ferramentas),
+ * semBuscaPorContexto (o /yui do cérebro decidiu que a pergunta não pede fonte externa: a promessa vira "resposta final", nunca pesquisa) }.
  * @returns {Promise<{text, researched, kind, private, historyLine, guarded, action, reason}>} `guarded`: a guarda final trocou uma promessa pelo aviso.
  */
 export async function reviewResearchReply(p = {}, deps = {}) {
@@ -245,6 +366,9 @@ export async function reviewResearchReply(p = {}, deps = {}) {
       }
       // Pedido de ferramenta LOCAL do app ("pesquise o arquivo X"): o nome nunca vai a um buscador; no lugar da pesquisa, pede-se a resposta final.
       if (plan.action === 'search' && p.skipCodeSearch === true) plan = { action: 'regenerate', reason: 'ferramenta local: não pesquisa na web' };
+      // O /yui do cérebro decidiu pelo CONTEXTO que esta pergunta não pede fonte externa (ou que a cota está no fim e ela não pediu a
+      // pesquisa): a promessa do modelo não gasta cota; pede-se a resposta final (ajustes da Liz na etapa 6). Sem o campo, nada muda.
+      if (plan.action === 'search' && p.semBuscaPorContexto === true) plan = { action: 'regenerate', reason: 'a pergunta não pede fonte externa (decisão por contexto)' };
       out.action = plan.action;
       out.reason = plan.reason ?? '';
       if (plan.action !== 'none') {
@@ -372,11 +496,12 @@ export function appResearchRoute({ ctx, text } = {}, deps = {}) {
 }
 
 /** Portas C e D do app sobre a resposta do modelo (a "nova resposta" pede ao MESMO backend, sem ferramentas). @see reviewResearchReply */
-export function appReviewReply({ ctx, text, reply, history = [], memoryBlock = '' } = {}, deps = {}) {
+export function appReviewReply({ ctx, text, reply, history = [], memoryBlock = '', perfil = null } = {}, deps = {}) {
   const cfg = readCfg(deps);
   return reviewResearchReply({
     ...appEntry(ctx, text), reply,
-    regenerate: (prompt) => chat({ prompt, history, ctx, memoryBlock, deadlineAt: Date.now() + (Number(cfg.totalDeadlineMs) || 60_000) }),
+    // `perfil` (etapa 10: o app com o cérebro separado): a nova resposta usa o MESMO perfil da primeira. Sem perfil, a chamada é idêntica à de antes.
+    regenerate: (prompt) => chat({ prompt, history, ctx, memoryBlock, deadlineAt: Date.now() + (Number(cfg.totalDeadlineMs) || 60_000), ...(perfil ? { perfil } : {}) }),
   }, deps);
 }
 
@@ -385,11 +510,12 @@ export function appReviewReply({ ctx, text, reply, history = [], memoryBlock = '
  * `historyLine`: o que vai ao histórico em RAM no lugar da resposta quando ela veio de uma pesquisa (linha curta e neutra, nunca o texto da web).
  * `text` é SÓ a fala do usuário (padrão: o próprio prompt).
  */
-export async function chatTurn({ prompt, history = [], ctx, memoryBlock = '', text = prompt } = {}, deps = {}) {
+export async function chatTurn({ prompt, history = [], ctx, memoryBlock = '', text = prompt, perfil = null } = {}, deps = {}) {
   const routed = await appResearchRoute({ ctx, text }, deps);
   if (routed.handled) return routed;
-  const reply = await chat({ prompt, history, ctx, memoryBlock });
-  return appReviewReply({ ctx, text, reply, history, memoryBlock }, deps);
+  // `perfil` (etapa 10): o perfil de IA que o cérebro escolheu para esta conversa do app (api/perfilDoApp.js). Sem perfil, nenhum campo novo na chamada.
+  const reply = await chat({ prompt, history, ctx, memoryBlock, ...(perfil ? { perfil } : {}) });
+  return appReviewReply({ ctx, text, reply, history, memoryBlock, perfil }, deps);
 }
 
 // ───────────────────────── Backends embutidos ─────────────────────────
@@ -398,8 +524,8 @@ function registerLegacyChain() {
   registerBackend({
     name: 'legacy-chain',
     local: false,
-    async chat({ prompt, system, history, ctx, memoryBlock, deadlineAt }) {
-      const { generateResponse } = await import('../../handlers/llmHandler.js');
+    async chat({ prompt, system, history, ctx, memoryBlock, deadlineAt, sensitive, isolated }) {
+      const { generateResponse } = await loadLegacy();
       // A cadeia legada guarda histórico por canal do Discord, que não existe
       // aqui: o histórico da conversa vai no próprio prompt.
       const transcript = history.length
@@ -412,13 +538,18 @@ function registerLegacyChain() {
         userId: ctx?.userId,
         memoryBlock,
         persona: system || undefined,
-        sensitive: ctx?.memoryScope === 'personal',
+        sensitive: sensitive === true || ctx?.memoryScope === 'personal',
         // O app não tem ferramentas nem a busca automática da cadeia: a pesquisa na web, quando existe, é do agente (ver
         // chatTurn abaixo), que decide por código e roda FORA daqui. Aqui a cadeia só conversa.
         allowSearch: false,
         disableTools: true,
         guildId: null,
+        // chamada isolada (isolatedChat): nem o histórico que a cadeia guarda para "api:<usuário>"
+        ...(isolated === true ? { noHistory: true } : {}),
         ...(deadlineAt ? { deadlineAt } : {}),
+        // Limites unificados (ajustes da Liz, etapa 6): o app pela cadeia do bot usa a configuração da cadeia (a mesma do Discord), cortada
+        // pela capacidade de cada provedor e pelo teto global. Só este backend (o app) passa isto: o Discord no processo único não muda.
+        limiteTokens: (provedorDaCadeia, configurado) => limiteDaCadeiaNoApp(provedorDaCadeia, configurado, process.env),
       });
     },
   });
@@ -439,7 +570,8 @@ function registerOpenAiCompatible() {
   registerBackend({
     name: 'openai-compatible',
     local: String(process.env.AI_BASE_LOCAL || 'false').toLowerCase() === 'true',
-    async chat({ prompt, system, history, memoryBlock }) {
+    async chat({ prompt, system, history, memoryBlock, tokensPorProvedor }) {
+      const { porProvedor } = lerPedidoDeLimite(tokensPorProvedor);
       const persona = system || process.env.AI_SYSTEM_PROMPT ||
         'Você é a Yui, prestativa, direta e simpática. Não se apresente como assistente, IA ou bot. Responda em português do Brasil.';
       const messages = [
@@ -454,7 +586,9 @@ function registerOpenAiCompatible() {
         {
           model: process.env.AI_MODEL || undefined,
           messages,
-          max_tokens: parseInt(process.env.AI_MAX_TOKENS || '1500', 10),
+          // O cérebro (tokensPorProvedor) usa o limite deste backend com o teto global; o app, o AI_MAX_TOKENS abaixo do teto global
+          // (core/ai/limitesTokens.js: os limites unificados; com os padrões, os mesmos 1500 de sempre).
+          max_tokens: porProvedor ? limiteOpenAiCompativel(process.env) : limiteAppOpenAiCompativel(process.env),
         },
         { headers, timeout: 90_000 }
       );
@@ -473,8 +607,12 @@ function registerGateway() {
   registerBackend({
     name: 'gateway',
     local: false,
-    async chat({ prompt, system, history, ctx, memoryBlock }) {
+    async chat({ prompt, system, history, ctx, memoryBlock, sensitive, tokensPorProvedor }) {
       const { getGateway } = await import('../../gateway/index.js');
+      // O cérebro (tokensPorProvedor, etapa 6): cada provedor recebe o limite DELE (a configuração do canal do Discord, com o ajuste do
+      // painel; a capacidade; o teto global). O app (sem o pedido): o AI_MAX_TOKENS, cortado pela capacidade de cada provedor e pelo teto
+      // global (os limites unificados). Nos dois casos o roteador troca o max_tokens pelo limite de cada alvo (maxTokensFor).
+      const { porProvedor, canal } = lerPedidoDeLimite(tokensPorProvedor);
       const persona = system || process.env.AI_SYSTEM_PROMPT ||
         'Você é a Yui, prestativa, direta e simpática. Não se apresente como assistente, IA ou bot. Responda em português do Brasil.';
       const result = await getGateway().chat({
@@ -484,8 +622,8 @@ function registerGateway() {
           ...history.map((m) => ({ role: m.role, content: m.content })),
           { role: 'user', content: prompt },
         ],
-        max_tokens: parseInt(process.env.AI_MAX_TOKENS || '1500', 10),
-      }, { sensitive: ctx?.memoryScope === 'personal' });
+        max_tokens: porProvedor ? tetoGlobal(process.env) : Math.min(aiMaxTokens(process.env), tetoGlobal(process.env)),
+      }, { sensitive: sensitive === true || ctx?.memoryScope === 'personal', maxTokensFor: porProvedor ? limitePorProvedor(process.env, { canal }) : limitePorProvedorNoApp(process.env) });
       const text = result?.choices?.[0]?.message?.content;
       if (!text || !String(text).trim()) throw new Error('Resposta vazia do gateway');
       return String(text).trim();

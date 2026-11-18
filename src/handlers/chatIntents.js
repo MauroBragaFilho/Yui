@@ -125,6 +125,7 @@ function listLines(rows) {
  * Executa o pedido de memória. Nunca lança. `handled:false` => segue para o modelo (ex.: "esquece que ..." sem nenhuma lembrança parecida).
  * @param {object} intent  retorno de detectMemoryIntent
  * @param {object} deps    { userId, isDM, enabled, scopeLabel, memoryCtx, memory:{listMemories,forget,forgetAll}, wipeContext?, audit?, now? }
+ *                         (as funções da memória podem devolver o valor ou uma promessa: com o cérebro separado elas pedem ao cérebro)
  */
 export async function runMemoryIntent(intent, deps) {
     const { userId, isDM = false, enabled = false, scopeLabel = '', memoryCtx, memory, wipeContext, audit, now = Date.now() } = deps;
@@ -135,7 +136,7 @@ export async function runMemoryIntent(intent, deps) {
         }
         if (intent.kind === 'confirm_forget_all') {
             clearForgetAllPending(userId);
-            const n = enabled ? memory.forgetAll(memoryCtx) : 0;
+            const n = enabled ? await memory.forgetAll(memoryCtx) : 0;
             const removedContext = typeof wipeContext === 'function' ? await wipeContext(userId) : 0;
             try { audit?.('memory.forgetAll.chat', { userId, platform: 'discord' }, { memories: n, contextTurns: removedContext }); } catch (_) { /* auditoria nunca derruba */ }
             if (!enabled && removedContext === 0) return { handled: true, text: '🧠 O sistema de memória da Yui está desativado no momento.' };
@@ -149,7 +150,7 @@ export async function runMemoryIntent(intent, deps) {
             return { handled: true, text: '⚠️ Isso apaga **toda** a sua memória comigo (e as falas recentes guardadas como contexto), e não dá para desfazer.\nPara confirmar, responda **sim, apagar tudo** em até 2 minutos. Para desistir, é só dizer **não**.' };
         }
         if (intent.kind === 'view') {
-            const rows = memory.listMemories(memoryCtx, { limit: 25 });
+            const rows = await memory.listMemories(memoryCtx, { limit: 25 });
             if (!rows.length) return { handled: true, text: 'Ainda não guardei nada sobre você. Diga algo como “lembra que eu gosto de Sultan RS” e eu anoto.' };
             if (!isDM) {
                 return { handled: true, text: `Tenho ${rows.length} lembrança(s) sobre você. Aqui o canal é público, então não mostro o conteúdo: me chama no privado ou usa \`/yui-memoria ver\` (só você vê).` };
@@ -157,15 +158,15 @@ export async function runMemoryIntent(intent, deps) {
             return { handled: true, text: `🧠 **O que eu lembro sobre você**\n${listLines(rows)}\n\n-# ${scopeLabel}\n-# Para apagar uma: “esquece a lembrança #número”. Para apagar tudo: “apaga tudo que você sabe de mim”.` };
         }
         if (intent.kind === 'forget_id') {
-            const ok = memory.forget(memoryCtx, intent.id);
+            const ok = await memory.forget(memoryCtx, intent.id);
             return { handled: true, text: ok ? `🗑️ Lembrança #${intent.id} apagada.` : `Não encontrei a lembrança #${intent.id} na sua memória.` };
         }
         if (intent.kind === 'forget_text') {
-            const rows = memory.listMemories(memoryCtx, { limit: 200 });
+            const rows = await memory.listMemories(memoryCtx, { limit: 200 });
             const hits = rows.filter(r => { const c = fold(r.content).toLowerCase(); return intent.tokens.every(t => c.includes(t)); });
             if (hits.length === 0) return { handled: false, text: '' }; // pode ser só uma frase solta ("esquece que eu falei isso"): segue para o modelo
             if (hits.length === 1) {
-                const ok = memory.forget(memoryCtx, hits[0].id);
+                const ok = await memory.forget(memoryCtx, hits[0].id);
                 return { handled: true, text: ok ? '🗑️ Pronto, esqueci essa lembrança.' : 'Não consegui apagar essa lembrança agora.' };
             }
             if (!isDM) return { handled: true, text: `Achei ${hits.length} lembranças parecidas. Diga qual com “esquece a lembrança #número” (os números estão em \`/yui-memoria ver\`).` };

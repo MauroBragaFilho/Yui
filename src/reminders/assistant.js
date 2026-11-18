@@ -30,6 +30,9 @@ const RE = {
   cancelNum: /^(?:cancela|cancele|apaga|apague|remove|remova|exclui|exclua|deleta|delete|tira|tire)\s+(?:o |a )?(?:meu )?lembrete\s*(?:numero |n[o.]? ?|#)?(\d{1,4})\s*[?!.]*$/,
   cancelText: /^(?:cancela|cancele|apaga|apague|remove|remova|exclui|exclua|deleta|delete|tira|tire)\s+(?:o |a )?(?:meu )?lembrete\s+(?:de |da |do |sobre |que )?(.+?)\s*[?!.]*$/,
   snooze: /^(?:adia|adie|empurra|empurre|posterga|postergue|remarca|remarque)\s+(?:o |a )?(?:meu )?lembrete\s*(?:numero |n[o.]? ?|#)?(\d{1,4})\s+(?:por |mais |em |para |pra |ate )?(.+?)\s*[?!.]*$/,
+  // Recuperação de um aviso com entrega INCERTA (cérebro separado): só o dono decide.
+  resend: /^(?:reenvia|reenvie|reenviar|(?:manda|mande|envia|envie) de novo)\s+(?:o |a )?(?:meu )?lembrete\s*(?:numero |n[o.]? ?|#)?(\d{1,4})\s*[?!.]*$/,
+  discard: /^(?:descarta|descarte|descartar)\s+(?:o |a )?(?:aviso do |meu )?lembrete\s*(?:numero |n[o.]? ?|#)?(\d{1,4})\s*[?!.]*$/,
 };
 
 /** Tira a ligação do começo ("de pagar", "que tenho dentista", "para ligar") e a pontuação do fim. */
@@ -49,6 +52,8 @@ export function parseReminderRequest(raw, now = new Date()) {
   let m;
 
   if (RE.agenda.test(head) || RE.agenda2.test(head)) return { action: 'agenda' };
+  if ((m = RE.resend.exec(head))) return { action: 'resend', id: Number(m[1]) };
+  if ((m = RE.discard.exec(head))) return { action: 'discard', id: Number(m[1]) };
   if (RE.cancelAll.test(head)) return { action: 'cancel', all: true };
   if ((m = RE.cancelNum.exec(head))) return { action: 'cancel', id: Number(m[1]) };
   if ((m = RE.snooze.exec(head))) {
@@ -109,9 +114,17 @@ export function parseReminderRequest(raw, now = new Date()) {
   return { action: 'error', message: w.message };
 }
 
+/** Estado da entrega (só com o cérebro separado): o dono vê o aviso incerto e o que fazer com ele. */
+function entregaTag(r) {
+  const estado = r?.entrega?.estado;
+  if (estado === 'incerto') return ` ⚠️ **entrega incerta** (não sei se o aviso chegou): “reenvia o lembrete ${r.id}” ou “descarta o lembrete ${r.id}”`;
+  if (estado === 'enviando') return ' ⏳ confirmando a entrega do aviso';
+  return '';
+}
+
 function line(r, now) {
   const when = r.repeat ? `${describeRepeat(r.repeat)} (próximo: ${describeWhen(r.at, now)})` : describeWhen(r.at, now);
-  return `**#${r.id}** · ${when} — ${r.fromOwner && r.userId ? `(para <@${r.userId}>) ` : ''}${r.text}`;
+  return `**#${r.id}** · ${when} — ${r.fromOwner && r.userId ? `(para <@${r.userId}>) ` : ''}${r.text}${entregaTag(r)}`;
 }
 
 export function formatReminderList(items, now = new Date(), scope = null) {
@@ -127,11 +140,32 @@ export function formatReminderList(items, now = new Date(), scope = null) {
   return [`**${head}** (${list.length})`, ...list.slice(0, 30).map((r) => line(r, now)), ...(list.length > 30 ? [`… e mais ${list.length - 30}.`] : [])].join('\n');
 }
 
-export async function runReminderRequest({ text, store, now = new Date(), report = null, isOwner = true, isOwnerId = () => false }) {
+export async function runReminderRequest({ text, store, now = new Date(), report = null, isOwner = true, isOwnerId = () => false, audit = () => {}, aoMudar = null }) {
   const req = parseReminderRequest(text, now);
   if (!req) return null;
   if (req.action === 'agenda' && !isOwner) return null; // o resumo do dia é do dono
   try {
+    if (req.action === 'resend' || req.action === 'discard') {
+      // Recuperação controlada de um aviso com entrega INCERTA: só o dono, só para o que está incerto, sempre na auditoria.
+      if (!isOwner) return 'Só o dono decide o que fazer com um aviso de entrega incerta.';
+      const r = store.get(req.id);
+      if (!r) return `Não achei o lembrete #${req.id}. Diga “meus lembretes” para ver os números.`;
+      const estado = r.entrega?.estado;
+      if (estado !== 'incerto') {
+        return `O lembrete #${r.id} não está com a entrega incerta${estado === 'enviando' ? ' (ainda estou confirmando a entrega dele)' : ''}: não há o que ${req.action === 'resend' ? 'reenviar' : 'descartar'}.`;
+      }
+      const registrar = (event, data) => { try { audit(event, null, data); } catch { /* a auditoria nunca derruba a resposta */ } };
+      if (req.action === 'resend') {
+        const n = (Number(r.entrega.reenvio) || 0) + 1;
+        store.setEntrega(r.id, { estado: 'pendente', reenvio: n, autorizadoEm: new Date(now).toISOString(), anterior: r.entrega.chave ?? null });
+        registrar('reminder.reenvio_autorizado', { id: r.id, reenvio: n });
+        try { aoMudar?.(); } catch { /* a próxima passada manda de qualquer jeito */ }
+        return `Certo: vou mandar o aviso do lembrete #${r.id} de novo, uma vez, agora. Se o anterior tiver chegado, você vai vê-lo duas vezes.`;
+      }
+      store.complete(r.id, new Date(now).getTime());
+      registrar('reminder.incerto_descartado', { id: r.id, repeat: Boolean(r.repeat) });
+      return `Descartei o aviso incerto do lembrete #${r.id}${r.repeat ? '; ele continua valendo para a próxima vez' : ''}. Nada foi reenviado.`;
+    }
     if (req.action === 'agenda') return report ? await report() : 'O resumo do dia não está disponível agora.';
     if (req.action === 'list') return formatReminderList(store.list(), now, req.scope);
     if (req.target && req.action !== 'add') {
@@ -195,6 +229,27 @@ function defaultStore() {
 /** Instância única do armazenamento (a mesma do agendador e do painel). */
 export function getReminderStore() { return defaultStore(); }
 
+// ── Cérebro separado (etapa 3): o lembretes.json é do CÉREBRO ──
+// O bot com YUI_CEREBRO_EXTERNO=true instala aqui o pedido ao cérebro ({ route({ text, userId, authorName }), list({ userId }) }):
+// o pedido por conversa é interpretado e gravado no cérebro, e o bot nunca abre o arquivo (dois processos gravando o mesmo
+// JSON perdem lembretes). Sem o remoto (processo único), tudo como sempre.
+export const REMINDERS_UNAVAILABLE_TEXT = 'Os lembretes estão indisponíveis agora: o cérebro da Yui não está conectado. Tente de novo daqui a pouco.';
+let remindersRemote = null;
+export function setRemindersRemote(remote) {
+  remindersRemote = remote && typeof remote.route === 'function' && typeof remote.list === 'function' ? remote : null;
+}
+export function isRemindersRemote() { return remindersRemote !== null; }
+
+/** Os lembretes de UMA pessoa (o dono vê os dele). Com o cérebro separado, pede ao cérebro; fora do ar = erro REMINDERS_UNAVAILABLE. */
+export async function listRemindersFor(userId, { isOwner = false } = {}) {
+  if (!remindersRemote) return scopedReminderStore(defaultStore(), userId, isOwner).list();
+  try {
+    return await remindersRemote.list({ userId: String(userId) });
+  } catch (err) {
+    throw Object.assign(new Error(REMINDERS_UNAVAILABLE_TEXT), { code: 'REMINDERS_UNAVAILABLE', cause: err });
+  }
+}
+
 /**
  * Visão de um usuário sobre o armazenamento: cada pessoa vê e mexe só nos PRÓPRIOS lembretes. O dono (`ownerView`) é a pessoa
  * de `userId: null` (os de antes) e novos lembretes dele continuam com userId null.
@@ -212,6 +267,9 @@ export function scopedReminderStore(store, userId, ownerView, authorName = '') {
     removeAll: () => { let n = 0; for (const r of store.list().filter(mine)) if (store.remove(r.id)) n++; return n; },
     reschedule: (id, at) => (mine(store.get(id)) ? store.reschedule(id, at) : null),
     findByText: (term) => store.findByText(term).filter(mine),
+    // só o dono: decidir o que fazer com um aviso de entrega incerta (reenviar ou descartar)
+    setEntrega: ownerView ? (id, entrega) => (mine(store.get(id)) && typeof store.setEntrega === 'function' ? store.setEntrega(id, entrega) : null) : null,
+    complete: ownerView ? (id, at) => (mine(store.get(id)) ? store.complete(id, at) : null) : null,
   };
 }
 
@@ -221,13 +279,22 @@ export function scopedReminderStore(store, userId, ownerView, authorName = '') {
  * YUI_REMINDERS_ALL_USERS=false volta a só o dono. Qualquer pessoa cria e mexe nos PRÓPRIOS lembretes (aviso por DM para ela);
  * só o dono tem o "resumo do dia".
  */
-export async function routeReminders({ text, userId, authorName = '' } = {}, { store = null, env = process.env, now = new Date(), report = null, isOwner = null } = {}) {
+export async function routeReminders({ text, userId, authorName = '' } = {}, { store = null, env = process.env, now = new Date(), report = null, isOwner = null, audit = () => {}, aoMudar = null } = {}) {
   if (String(env?.YUI_REMINDERS_ENABLED ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
   if (!userId || !/^\d{5,25}$/.test(String(userId))) return { handled: false };
+  if (remindersRemote && !store) {
+    // Cérebro separado: ele interpreta e grava. Fora do ar: se a frase É um pedido de lembrete, avisa; senão segue a conversa.
+    try {
+      const out = await remindersRemote.route({ text: String(text ?? ''), userId: String(userId), authorName: String(authorName ?? '') });
+      return out && typeof out === 'object' && out.handled === true ? { handled: true, text: String(out.text ?? ''), researched: true } : { handled: false };
+    } catch {
+      return parseReminderRequest(text, now) ? { handled: true, text: REMINDERS_UNAVAILABLE_TEXT, researched: true } : { handled: false };
+    }
+  }
   const owner = isOwner ?? (await import('../core/permissions.js')).isOwnerId;
   const ownerView = Boolean(owner(String(userId)));
   if (!ownerView && String(env?.YUI_REMINDERS_ALL_USERS ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
-  const reply = await runReminderRequest({ text, store: scopedReminderStore(store || defaultStore(), userId, ownerView, authorName), now, report, isOwner: ownerView, isOwnerId: (id) => Boolean(owner(String(id))) });
+  const reply = await runReminderRequest({ text, store: scopedReminderStore(store || defaultStore(), userId, ownerView, authorName), now, report, isOwner: ownerView, isOwnerId: (id) => Boolean(owner(String(id))), audit, aoMudar });
   return reply === null ? { handled: false } : { handled: true, text: reply, researched: true };
 }
 

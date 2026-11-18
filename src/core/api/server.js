@@ -4,6 +4,7 @@ import { alertOwner } from '../alerts.js';
 import { buildContext, isReadOnlyMode } from '../permissions.js';
 import * as memory from '../memory/store.js';
 import * as ai from '../ai/manager.js';
+import { diagnosticoDosLimites } from '../ai/limitesTokens.js';
 import { buildMemoryBlock, captureFromUserText, isMemoryEnabled } from '../discordAdapter.js';
 import { audit } from '../audit.js';
 import { runAgent, resolvePending } from '../agent/agent.js';
@@ -17,6 +18,7 @@ import { guardRoute } from '../security/routeGuard.js';
 import { startLocalApprovalChannel } from '../security/localChannel.js';
 import { getApprovalManager } from '../security/approvalManager.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
+import { perfilDoApp } from './perfilDoApp.js';
 
 // Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
 // Tentativas de Bearer inválido por origem antes de travar (adivinhação de token).
@@ -192,6 +194,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * @param {Function} [options.notify]     envia uma mensagem privada: (userId, texto) => Promise. Liga a "chave por DM".
  * @param {object} [options.pairing]      chave de uso único (createPairing)
  * @param {string} [options.ownerId]      para quem a chave é enviada (o dono)
+ * @param {Function} [options.selecionarPerfil] seletor de perfil de IA do cérebro (etapa 10): ({ ponto, privada, texto, historicoChars }) => perfil | null.
+ *                                        Sem ele (processo único, testes) o chat do app não passa perfil: a chamada de IA fica idêntica à de antes.
  */
 export function createApiServer({
   tokens = parseTokens(),
@@ -209,6 +213,7 @@ export function createApiServer({
   ownerId = ownerUserId(),
   health = null, // () => objeto extra do /v1/health (ex.: estado do Discord); usado pelo supervisor
   bds = createBdsProxy(), // ponte para o BDS Server (o painel da Yui é a única porta de entrada para os arquivos)
+  selecionarPerfil = null,
 } = {}) {
   const discordKeyEnabled = Boolean(notify && ownerId);
   const hits = new Map();       // userId -> [timestamps]
@@ -285,6 +290,8 @@ export function createApiServer({
     if (m === 'GET' && p === '/v1/admin/audit') return admin.audit(ctx, url.searchParams.get('limit'));
     if (m === 'GET' && p === '/v1/admin/tools') return admin.tools(ctx);
     if (m === 'GET' && p === '/v1/admin/gateway') return admin.gateway(ctx);
+    // Etapa 8: o diagnóstico da aba do app (só leitura, só o dono; nada de conversa, pesquisa privada, ids nem segredos).
+    if (m === 'GET' && p === '/v1/admin/diagnostico') return admin.diagnostico(ctx);
     if (m === 'GET' && p === '/v1/admin/integrations') return admin.integrations(ctx);
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)$/)) && m === 'GET') return admin.guildDetail(ctx, r[1]);
     if (m === 'GET' && p === '/v1/admin/radio') return admin.radio(ctx);
@@ -419,7 +426,11 @@ export function createApiServer({
       if (route === 'GET /v1/health') {
         let extra = {};
         try { extra = typeof health === 'function' ? (health() || {}) : {}; } catch { extra = {}; }
-        return send(res, 200, { ok: true, memory: isMemoryEnabled(), readOnly: isReadOnlyMode(), backends: ai.listBackends(), uptimeSeconds: Math.round(process.uptime()), ...extra });
+        // avisosDeConfiguracao (segunda revisão da Liz, §12): erros de configuração dos limites de tokens (ex.: AI_MAX_TOKENS inválido), só o
+        // nome da variável, o problema e o que vale no lugar. O padrão que vale não esconde o erro.
+        let avisosDeConfiguracao = [];
+        try { avisosDeConfiguracao = diagnosticoDosLimites(); } catch { avisosDeConfiguracao = []; }
+        return send(res, 200, { ok: true, memory: isMemoryEnabled(), readOnly: isReadOnlyMode(), backends: ai.listBackends(), uptimeSeconds: Math.round(process.uptime()), avisosDeConfiguracao, ...extra });
       }
 
       // ── Link curto de vídeo/áudio/foto do BDS Server: o próprio código do link é a credencial (10 min, um só caminho) ──
@@ -565,7 +576,15 @@ export function createApiServer({
         const history = histories.get(ctx.userId) || [];
         const memoryBlock = buildMemoryBlock(ctx, message);
         // Pesquisa na web do app (mesmo agente da fila; o app é conversa PRIVADA e vale o YUI_PRIVATE_SEARCH): ver chatTurn no AI Manager.
-        const turn = await ai.chatTurn({ prompt: message, history: [...history], ctx, memoryBlock, text: message });
+        // Perfil de IA (etapa 10): `{}` sem seletor ou sem perfil configurado (a chamada fica idêntica à de antes); com o perfil privado fechado a pessoa lê a mensagem curta.
+        let turn;
+        try {
+          turn = await ai.chatTurn({ prompt: message, history: [...history], ctx, memoryBlock, text: message, ...perfilDoApp(selecionarPerfil, { ctx, texto: message, history }) });
+        } catch (err) {
+          if (err?.code !== 'PERFIL_FECHADO') throw err;
+          audit('api.chat', ctx, { chars: message.length, perfilFechado: true });
+          return send(res, 200, { reply: String(err.mensagemCurta ?? ''), memoryScope: ctx.memoryScope });
+        }
         const reply = turn.text;
 
         // Resposta de pesquisa vai ao histórico em RAM como uma linha neutra (nunca o texto derivado da web).
@@ -588,14 +607,23 @@ export function createApiServer({
         // ferramentas; uma resposta de conversa que só PROMETE pesquisar passa pela guarda de promessa. Ação de ferramenta nunca é mexida.
         let out;
         let historyLine = null;
+        // Perfil de IA (etapa 10): o mesmo seletor do cérebro; `{}` sem seletor ou sem perfil configurado (nenhum campo novo na chamada de IA).
+        const campoPerfil = perfilDoApp(selecionarPerfil, { ctx, texto: message, history });
         const routed = await ai.appResearchRoute({ ctx, text: message });
         if (routed.handled) {
           out = { type: 'reply', reply: routed.text };
           historyLine = routed.historyLine;
         } else {
-          out = await runAgent(ctx, message, { history: [...history], memoryBlock, origin: isLocalRequest(req) ? 'LOCAL_PC' : 'REMOTE' });
+          try {
+            out = await runAgent(ctx, message, { history: [...history], memoryBlock, origin: isLocalRequest(req) ? 'LOCAL_PC' : 'REMOTE', ...campoPerfil });
+          } catch (err) {
+            // A rota privada fechada: nada foi enviado a nenhum provedor; a pessoa lê a mensagem curta (sem histórico, sem erro interno).
+            if (err?.code !== 'PERFIL_FECHADO') throw err;
+            audit('api.agent', ctx, { chars: message.length, perfilFechado: true });
+            return send(res, 200, { type: 'reply', reply: String(err.mensagemCurta ?? '') });
+          }
           if (out?.type === 'reply') {
-            const reviewed = await ai.appReviewReply({ ctx, text: message, reply: out.reply, history: [...history], memoryBlock });
+            const reviewed = await ai.appReviewReply({ ctx, text: message, reply: out.reply, history: [...history], memoryBlock, ...campoPerfil });
             out = { ...out, reply: reviewed.text };
             historyLine = reviewed.historyLine;
           }
@@ -692,7 +720,10 @@ export function startApi(client = null, overrides = {}) {
     // Chave por DM: usa o próprio bot do Discord para falar com o dono em privado (fora de qualquer servidor).
     notify: overrides.notify ?? (client ? async (userId, text) => (await client.users.fetch(userId)).send(text) : null),
     // O supervisor lê o estado do Discord aqui: API de pé com o Discord fora por muito tempo é motivo para religar.
-    health: () => ({ discord: { online: client?.isReady?.() ?? null } }),
+    // O cérebro separado (src/cerebro.js) passa o dele: sem cliente do Discord neste processo.
+    health: overrides.health ?? (() => ({ discord: { online: client?.isReady?.() ?? null } })),
+    // Etapa 10: o cérebro passa o seletor de perfil de IA dele (o app usa o MESMO seletor determinístico). Sem ele, o chat do app não passa perfil.
+    selecionarPerfil: overrides.selecionarPerfil ?? null,
   });
   server.listen(port, host, () =>
     logger.info(`[API] Yui API ouvindo em http://${host}:${port} (${tokens.length} token(s); login por senha ${panel.enabled ? 'ATIVO' : 'desativado'})`)

@@ -17,12 +17,15 @@
  *   YUI_BACKUP_KEEP       backups mantidos no repositório (padrão 30)
  */
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createMemoryBackup, restoreMemoryBackup, MEMORY_DATABASES, EXTRA_DATABASES, DATA_FILES } from '../src/core/memory/backup.js';
+import {
+  createMemoryBackup, restoreMemoryBackup, verifyMemoryBackup, listBackups, findLatestCompleteBackup,
+  MEMORY_DATABASES, EXTRA_DATABASES, DATA_FILES,
+} from '../src/core/memory/backup.js';
+import { createPrivateTempDir, cleanupStaleSnapshotDirs } from '../src/database/snapshot.js';
 
 const win = process.platform === 'win32';
 const env = process.env;
@@ -80,13 +83,22 @@ function ensureClone() {
   return remoteHasMain;
 }
 
-/** Hash dos arquivos de origem: se não mudou desde o último envio, não há o que enviar. */
+/**
+ * Hash dos arquivos de origem: se não mudou desde o último envio, não há o que enviar.
+ * Banco no motor nativo (WAL): as escritas recentes ficam no <arquivo>-wal e o .db pode nem mudar até o checkpoint, então
+ * o conteúdo do -wal também entra no hash. Sem -wal (bancos do sql.js e JSON) o hash é exatamente o de antes.
+ * Ler o -wal no meio de uma escrita só pode dar um hash diferente (um envio a mais), nunca esconder uma mudança.
+ */
 export function sourcesFingerprint({ dbDir = cfg.dbDir, dataDir = cfg.dataDir } = {}) {
   const h = crypto.createHash('sha256');
   const names = [...MEMORY_DATABASES, ...EXTRA_DATABASES].map((n) => path.join(dbDir, n)).concat(DATA_FILES.map((n) => path.join(dataDir, n)));
   for (const f of names) {
     if (!fs.existsSync(f)) continue;
     h.update(path.basename(f)).update(fs.readFileSync(f));
+    const wal = `${f}-wal`;
+    let walData = null;
+    try { walData = fs.readFileSync(wal); } catch { /* sem -wal (ou apagado pelo checkpoint agora): nada a somar */ }
+    if (walData) h.update(path.basename(wal)).update(walData);
   }
   return h.digest('hex');
 }
@@ -101,13 +113,26 @@ async function backup({ force }) {
     logLine('OK: sem mudanças desde o último envio; nada a enviar.');
     return;
   }
-  const res = await createMemoryBackup({ dbDir: cfg.dbDir, dataDir: cfg.dataDir, backupDir: path.join(cfg.workDir, 'backups'), maxKeep: cfg.keep, keyFile: cfg.keyFile });
+  const backupsRoot = path.join(cfg.workDir, 'backups');
+  // createMemoryBackup já apagou os lotes incompletos abandonados (parados há mais de 30 min) e conferiu, com a chave, o
+  // lote novo. Mesmo assim o lote novo é conferido de novo aqui: só vai para o repositório o que restaura.
+  const res = await createMemoryBackup({ dbDir: cfg.dbDir, dataDir: cfg.dataDir, backupDir: backupsRoot, maxKeep: cfg.keep, keyFile: cfg.keyFile });
+  verifyMemoryBackup({ backupFolder: res.folder, keyFile: cfg.keyFile });
   git(['add', '-A']);
-  const pending = git(['status', '--porcelain']);
-  if (pending) git(['commit', '-m', `backup ${new Date().toISOString().slice(0, 16).replace('T', ' ')} (${res.count} arquivos)`]);
+  // Nenhuma pasta incompleta (sem manifesto íntegro, de qualquer idade: pode ser de outro processo ainda gravando) entra
+  // no envio. Se uma antiga já estava no repositório, sai dele.
+  const incomplete = listBackups(backupsRoot).filter((b) => !b.complete);
+  for (const b of incomplete) {
+    const rel = `backups/${b.name}`;
+    git(['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', rel]);
+    if (git(['ls-files', '--', rel])) throw new Error(`a pasta incompleta ${b.name} continua no índice do git; envio cancelado`);
+  }
+  const staged = git(['diff', '--cached', '--name-only']);
+  if (staged) git(['commit', '-m', `backup ${new Date().toISOString().slice(0, 16).replace('T', ' ')} (${res.count} arquivos)`]);
   git(remoteHadMain ? ['push', 'origin', 'HEAD:main'] : ['push', '-u', 'origin', 'HEAD:main']);
   fs.writeFileSync(stateFile, fp, 'utf8');
-  logLine(`OK: backup cifrado enviado (${res.count} arquivos, pasta ${path.basename(res.folder)}).`);
+  const skipped = incomplete.length ? `; ${incomplete.length} pasta(s) incompleta(s) fora do envio: ${incomplete.map((b) => b.name).join(', ')}` : '';
+  logLine(`OK: backup cifrado enviado (${res.count} arquivos, pasta ${path.basename(res.folder)})${skipped}.`);
 }
 
 /** Teste de restauração: baixa o último backup do repositório, decifra tudo numa pasta temporária e confere que cada banco abre. */
@@ -115,10 +140,16 @@ export async function verifyLatest() {
   if (!cfg.keyFile || !fs.existsSync(cfg.keyFile)) throw new Error('chave de cifra não encontrada');
   ensureClone();
   const root = path.join(cfg.workDir, 'backups');
-  const folders = fs.existsSync(root) ? fs.readdirSync(root).filter((n) => n.startsWith('backup-')).sort() : [];
-  if (folders.length === 0) throw new Error('nenhum backup no repositório');
-  const latest = folders[folders.length - 1];
-  const target = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-restore-check-'));
+  // O mais recente COMPLETO (manifesto íntegro); incompletos mais novos são pulados e avisados no log. A restauração
+  // abaixo confere o lote inteiro com a chave e recusa o que não conferir.
+  const { latest: latestInfo, skipped } = findLatestCompleteBackup(root);
+  if (!latestInfo) throw new Error(listBackups(root).length ? 'nenhum backup completo no repositório (só incompletos)' : 'nenhum backup no repositório');
+  const latest = latestInfo.name;
+  // Os bancos decifrados ficam em claro: pasta temporária privada (ACL só do usuário, SYSTEM e Administradores no
+  // Windows; 700 fora dele), criada protegida antes de receber qualquer byte. Sobras de uma verificação interrompida
+  // (mesmo prefixo yui-snap-) são recolhidas aqui e no começo de cada backup.
+  cleanupStaleSnapshotDirs();
+  const target = createPrivateTempDir();
   try {
     const r = await restoreMemoryBackup({ backupFolder: path.join(root, latest), targetDir: target, keyFile: cfg.keyFile });
     const initSqlJs = (await import('sql.js')).default;
@@ -138,10 +169,11 @@ export async function verifyLatest() {
         report.push(f.name);
       }
     }
-    logLine(`OK: restauração testada com ${latest}: ${report.length} arquivos abrem e conferem.`);
-    return { folder: latest, files: report };
+    const ignored = skipped.length ? ` (${skipped.length} incompleto(s) mais novo(s) ignorado(s): ${skipped.map((b) => b.name).join(', ')})` : '';
+    logLine(`OK: restauração testada com ${latest}: ${report.length} arquivos abrem e conferem.${ignored}`);
+    return { folder: latest, files: report, skipped: skipped.map((b) => b.name) };
   } finally {
-    fs.rmSync(target, { recursive: true, force: true });
+    fs.rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 

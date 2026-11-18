@@ -1,7 +1,7 @@
 import './utils/netDefaultsBoot.js'; // prazo padrão de rede (fetch e axios): precisa vir antes de tudo
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
-import { initDatabase } from './database/db.js';
+import { initDatabase, closeAllDatabases } from './database/db.js';
 import { CORE_SCHEMA, NEWSWIRE_SCHEMA, GTA_DAILY_SCHEMA, GTA_WEEKLY_SCHEMA, YOUTUBE_SCHEMA, TWITCH_SCHEMA } from './database/schemas.js';
 import { createDiscordClient } from './discord/client.js';
 import { startScheduler } from './scheduler/scheduler.js';
@@ -22,6 +22,67 @@ import { isChromeProfileCleanupError } from './utils/chromeProfile.js';
 import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail, isHarmlessNetworkCrash } from './core/alerts.js';
 import { ownerUserId } from './core/api/auth.js';
 import { jobAllowed } from './core/security/jobGuard.js';
+import { setLegacyBridge } from './core/ai/manager.js';
+import { avisarConfigDosLimites } from './core/ai/limitesTokens.js';
+import { ligarCotaHora } from './search/cotaHora.js';
+import { cerebroExterno, prepareSeparatedBot } from './discord/modoSeparado.js';
+
+// Ponte do Core para a cadeia de IA legada do bot (llmHandler): o Core não importa o bot, quem roda o bot instala.
+// Sem ela o app (POST /v1/chat e /v1/agent) ficaria sem o backend "legacy-chain" e sem a pesquisa que depende dele.
+setLegacyBridge(() => import('./handlers/llmHandler.js'));
+
+// Cérebro separado (etapa 3, YUI_CEREBRO_EXTERNO=true): este processo é só o adaptador do Discord. A memória, os lembretes, a
+// API e o Gateway ficam no cérebro (node src/cerebro.js); o bot conversa com ele pelo canal local. Sem a chave: tudo aqui, como sempre.
+const SEPARADO = cerebroExterno();
+let discordClient = null;
+
+// ── Só com o cérebro separado (etapa 4: operação dos dois processos). No processo único nada disto é ligado. ──────────
+// Desligamento limpo (SIGINT, SIGTERM, SIGBREAK ou {tipo:'desligar'} pelo IPC do supervisor): fecha o canal com o cérebro,
+// desconecta do Discord e fecha os bancos do bot (solta as travas de dono). Se o supervisor sumir, o bot se desliga sozinho:
+// nunca sobra um bot órfão com o token.
+let cerebroChannel = null;
+let botPronto = false;
+let shuttingDown = false;
+let supervisorLink = { ativo: false, pronto() {} };
+
+async function shutdownSeparado(reason) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`[Bot] Desligando (${reason})...`);
+  const hard = setTimeout(() => process.exit(1), 10_000);
+  hard.unref?.();
+  try { await cerebroChannel?.close(); } catch (err) { logger.warn(`[Bot] canal: ${err.message}`); }
+  try { await discordClient?.destroy?.(); } catch (err) { logger.warn(`[Bot] Discord: ${err.message}`); }
+  let closed = 0;
+  try { closed = closeAllDatabases(); } catch (err) { logger.warn(`[Bot] bancos: ${err.message}`); }
+  logger.info(`[Bot] Desligado: canal com o cérebro fechado, Discord desconectado; ${closed} banco(s) fechado(s) e travas de dono soltas.`);
+  await new Promise((r) => setTimeout(r, 150)); // deixa a última linha do log sair
+  process.exit(0);
+}
+
+if (SEPARADO) {
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGBREAK']) {
+    try { process.on(signal, () => { shutdownSeparado(signal); }); } catch { /* sinal inexistente nesta plataforma */ }
+  }
+  const { ligarAoSupervisor } = await import('./operacao/filho.js');
+  supervisorLink = ligarAoSupervisor({
+    papel: 'bot',
+    saude: () => ({ pronto: botPronto && !shuttingDown, canal: cerebroChannel?.connected ?? false, discord: Boolean(discordClient?.isReady?.()), discordFalso: Boolean(discordClient?.falso) }),
+    desligar: (motivo) => { shutdownSeparado(motivo); },
+  });
+}
+
+/** Só o bot separado (etapa 6): avisa nas mensagens "Processando..." que ficaram paradas numa queda e apaga os registros. Nunca lança. */
+async function avisarProcessandoParados(client) {
+  try {
+    const { processandoStore, recuperarProcessando } = await import('./discord/processandoGuardado.js');
+    const store = processandoStore();
+    if (!store?.size) return;
+    await recuperarProcessando({ store, client, logger });
+  } catch (err) {
+    logger.warn(`[Bootstrap] Não consegui avisar as mensagens "Processando..." paradas: ${String(err?.message ?? err).slice(0, 120)}`);
+  }
+}
 
 async function registerHikariEvents(client) {
   const eventFiles = [
@@ -47,6 +108,16 @@ async function bootstrap() {
   logger.info(`Ambiente: ${config.environment} | Node: ${process.version} | SO: ${process.platform}`);
   logger.info('====================================================');
 
+  if (SEPARADO) {
+    try {
+      const { auditFile } = prepareSeparatedBot();
+      logger.info(`[Bootstrap] Cérebro separado (YUI_CEREBRO_EXTERNO=true): este processo é o adaptador do Discord; bancos só do bot; auditoria em ${auditFile}.`);
+    } catch (err) {
+      logger.error(`❌ ${err.message}`);
+      process.exit(1);
+    }
+  }
+
   // 1. Inicializar os bancos de dados SQLite (WASM / Puro JS - Sem C++).
   logger.info('[Bootstrap] Inicializando bancos de dados...');
   await initDatabase('core', CORE_SCHEMA);
@@ -58,8 +129,56 @@ async function bootstrap() {
   await initDatabase('social-twitch', TWITCH_SCHEMA);
   // Junta as chaves/provedores salvos pelo painel com o .env (antes de qualquer provedor de IA).
   applyAiSettings();
+  // Erros de configuração dos limites de tokens (ex.: AI_MAX_TOKENS inválido): no log UMA vez e no diagnóstico (segunda revisão da Liz, §12).
+  avisarConfigDosLimites(process.env, logger);
 
-  await initMemory();
+  if (SEPARADO) {
+    // Cota de busca por hora em disco (etapa 8): com o cérebro separado o dono do arquivo é o CÉREBRO; o bot nunca grava (nem tenta pegar a trava).
+    ligarCotaHora({ papel: 'bot-separado', logger });
+    // A memória é do cérebro: o bot não abre os bancos memory-* e pede pelo canal (fachada da memória).
+    const { startBotChannel } = await import('./discord/canalCerebro.js');
+    const cerebro = startBotChannel({ getClient: () => discordClient });
+    cerebroChannel = cerebro;
+    // Etapa 6: o "Processando..." de cada turno fica guardado (DATABASE_DIR/processando-bot.json) até o fim do turno; os que sobraram de uma
+    // queda são avisados quando o Discord estiver pronto (avisarProcessandoParados, mais abaixo).
+    const { ligarProcessando } = await import('./discord/processandoGuardado.js');
+    const processando = ligarProcessando({ logger });
+    if (processando.size) logger.info(`[Bootstrap] ${processando.size} mensagem(ns) "Processando..." ficaram de uma queda: serão avisadas assim que o Discord estiver pronto.`);
+    try {
+      await cerebro.ready(5_000);
+      logger.info('[Bootstrap] Conectado ao cérebro pelo canal local.');
+    } catch {
+      logger.warn('[Bootstrap] O cérebro não respondeu: memória e lembretes ficam indisponíveis até ele voltar (o bot reconecta sozinho).');
+    }
+    // Só nos testes de operação (NODE_ENV=test + YUI_TESTE_DISCORD_FALSO=true): sem login, as DMs vão para um arquivo.
+    const { fakeDiscordMode, createFakeDiscordClient, startFakeInbox } = await import('./discord/discordFalso.js');
+    const fakeMode = fakeDiscordMode();
+    if (fakeMode === 'refused') logger.error('[Bootstrap] YUI_TESTE_DISCORD_FALSO=true ignorado: o Discord falso só liga com NODE_ENV=test e o cérebro separado.');
+    if (fakeMode === 'on') {
+      discordClient = createFakeDiscordClient();
+      // Etapa 8 (tests/test-steam-jogo-processos.js): a loja da Steam também falsa (só com YUI_TESTE_STEAM_FALSA=true e NODE_ENV=test): nenhuma rede.
+      try { const { ativarSteamFalsa } = await import('./discord/steamFalsa.js'); const { default: axiosDoBot } = await import('axios'); ativarSteamFalsa({ axios: axiosDoBot, logger }); } catch (err) { logger.warn(`[Bootstrap] Steam falsa não ligou: ${String(err?.message ?? err).slice(0, 100)}`); }
+      logger.warn(`[Bootstrap] DISCORD FALSO ligado (só teste): sem login; as DMs vão para ${discordClient.arquivo}.`);
+      await avisarProcessandoParados(discordClient);
+      // Conversa (etapa 5): mensagens falsas pelo messageCreate de verdade (fila do llmHandler -> turno do cérebro), se o teste pedir.
+      if (String(process.env.YUI_TESTE_DISCORD_FALSO_ENTRADA ?? '').trim()) {
+        const messageCreate = (await import('./events/messageCreate.js')).default;
+        // Etapa 7: também comandos de barra falsos pelo interactionCreate de verdade (os comentários fora da fila).
+        const interactionCreate = (await import('./events/interactionCreate.js')).default;
+        const inbox = startFakeInbox({ client: discordClient, onMessage: (m) => messageCreate.execute(m, discordClient), onInteraction: (i) => interactionCreate.execute(i, discordClient), logger });
+        logger.warn(`[Bootstrap] Discord falso: mensagens de ${inbox.arquivo}; respostas em ${inbox.saida}.`);
+      }
+      botPronto = true;
+      supervisorLink.pronto();
+      logger.info('✅ Yui inicializada (Discord falso, teste de operação).');
+      return;
+    }
+  } else {
+    await initMemory();
+    // Cota de busca por hora em disco TAMBÉM no processo único (etapa 8, revisão da Liz): o dono do arquivo é este próprio processo (com uma
+    // trava de dono no arquivo: nunca dois processos gravando o mesmo). YUI_COTA_HORA_DISCO=false volta a só memória.
+    ligarCotaHora({ papel: 'unico', logger });
+  }
   logger.info('[Bootstrap] Todos os bancos de dados inicializados com sucesso.');
 
   // 1.1 Baixar/atualizar os tunables (RDO.GG) para a Van de Armas
@@ -123,6 +242,7 @@ async function bootstrap() {
   }
 
   const client = createDiscordClient();
+  discordClient = client;
   await registerHikariEvents(client);
 
   try {
@@ -132,6 +252,12 @@ async function bootstrap() {
       `❌ Falha ao logar no Discord. Verifique se o DISCORD_TOKEN no .env está correto e não expirou. Detalhe: ${err.message}`
     );
     process.exit(1);
+  }
+
+  // Cérebro separado (etapa 6): as mensagens "Processando..." que ficaram paradas numa queda recebem o aviso quando o Discord estiver pronto.
+  if (SEPARADO) {
+    if (client.isReady?.()) avisarProcessandoParados(client);
+    else client.once('ready', () => { avisarProcessandoParados(client); });
   }
 
   // 3. Registrar Slash Commands automaticamente se configurado
@@ -170,15 +296,25 @@ async function bootstrap() {
   }, 10 * 60 * 1000).unref();
 
   // 4. Iniciar Agendador Central (Cron + Newswire com delay de inicialização)
-  startScheduler(client);
+  //    Com o cérebro separado, os lembretes, o relatório matinal e a limpeza da memória rodam no cérebro.
+  if (SEPARADO) startScheduler(client, { reminders: false, memoryPurge: false });
+  else startScheduler(client);
 
-  // 5. Yui API (opcional; YUI_API_ENABLED=true) — interface HTTP do Core para os apps
-  startApi(client);
+  if (SEPARADO) {
+    logger.info('[Bootstrap] Yui API e Gateway: sobem no cérebro (node src/cerebro.js), não aqui.');
+  } else {
+    // 5. Yui API (opcional; YUI_API_ENABLED=true) — interface HTTP do Core para os apps
+    startApi(client);
 
-  // 6. Yui Gateway (servidor de IA compatível com OpenAI; opcional: YUI_GATEWAY_ENABLED=true)
-  startGatewayServer();
+    // 6. Yui Gateway (servidor de IA compatível com OpenAI; opcional: YUI_GATEWAY_ENABLED=true)
+    startGatewayServer();
+  }
 
   logger.info('✅ Yui inicializada e pronta com sucesso!');
+  if (SEPARADO) {
+    botPronto = true;
+    supervisorLink.pronto();
+  }
 }
 
 // Tratamento global de erros para evitar queda do processo

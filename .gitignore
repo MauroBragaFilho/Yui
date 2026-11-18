@@ -70,6 +70,11 @@ database/listas/
 # Dados de runtime e de usuários (nunca versionar: o repositório é público). Tirados do índice em 2026-11-17.
 database/*.db
 database/*.db.bak
+# Motor nativo (node:sqlite, WAL): o -wal e o -shm guardam escritas recentes, inclusive texto pessoal
+database/*.db-wal
+database/*.db-shm
+*.db-wal
+*.db-shm
 database/*.json
 logs/
 src/data/accepted_servers.json

@@ -108,7 +108,7 @@ export function createRouter({
   const totals = { requests: 0, ok: 0, failed: 0 };
 
   const h = (id) => {
-    if (!health.has(id)) health.set(id, { failures: 0, cooldownUntil: 0, ok: 0, fail: 0, lastError: null, lastOkAt: 0 });
+    if (!health.has(id)) health.set(id, { failures: 0, cooldownUntil: 0, ok: 0, fail: 0, lastError: null, lastStatus: null, lastOkAt: 0 });
     return health.get(id);
   };
   const keyUntil = (p, i) => keyCooldown.get(`${p.id}#${i}`) || 0;
@@ -196,12 +196,14 @@ export function createRouter({
     st.ok += 1;
     st.lastOkAt = now();
     st.lastError = null;
+    st.lastStatus = null;
   }
 
   function penalize(t, keyIdx, err, kind) {
     const st = h(t.id);
     st.fail += 1;
     st.lastError = scrub(err.message);
+    st.lastStatus = Number.isInteger(err.status) ? err.status : null; // o código HTTP do último erro (o diagnóstico mostra só ele e o tipo, nunca o texto)
     const until = (ms) => now() + ms;
     if (kind === 'rate') {
       if (keyIdx !== null) keyCooldown.set(`${t.provider.id}#${keyIdx}`, until(err.retryAfter ? err.retryAfter * SEC : COOLDOWN.rate));
@@ -226,9 +228,16 @@ export function createRouter({
   }
 
   // ── chamada ao provedor ──
-  function buildPayload(t, request, stream) {
+  function buildPayload(t, request, stream, opts = {}) {
     const payload = { model: t.model.id, messages: request.messages, stream: Boolean(stream) };
     for (const k of PASS_THROUGH) if (request[k] !== undefined && request[k] !== null) payload[k] = request[k];
+    // Limite POR PROVEDOR (etapa 6, só quando quem chama pede: o cérebro, por core/ai/limitesTokens.js): cada alvo recebe o limite do SEU
+    // provedor (configuração, capacidade e teto global). Sem `maxTokensFor`, o de sempre: o max_tokens do pedido, até o maxTokensCap.
+    if (typeof opts.maxTokensFor === 'function') {
+      let n = null;
+      try { n = Number(opts.maxTokensFor(t.provider)); } catch { n = null; }
+      if (Number.isInteger(n) && n > 0) payload.max_tokens = n;
+    }
     if (payload.max_tokens === undefined || payload.max_tokens > maxTokensCap) payload.max_tokens = Math.min(payload.max_tokens ?? 1024, maxTokensCap);
     for (const d of t.provider.dropParams || []) delete payload[d];
     return payload;
@@ -312,10 +321,11 @@ export function createRouter({
         const t0 = now();
         const timeout = Math.max(1000, Math.min(attemptTimeoutMs, deadlineMs - (t0 - started)));
         try {
-          const out = await callUpstream(target, keyIdx, buildPayload(target, request, stream), stream, timeout);
+          const payload = buildPayload(target, request, stream, opts);
+          const out = await callUpstream(target, keyIdx, payload, stream, timeout);
           markSuccess(target);
           totals.ok += 1;
-          return { ...out, target, attempts: tried, latencyMs: now() - t0, log };
+          return { ...out, target, attempts: tried, latencyMs: now() - t0, log, maxTokens: payload.max_tokens };
         } catch (err) {
           const kind = classify(err);
           penalize(target, keyIdx, err, kind);
@@ -343,7 +353,7 @@ export function createRouter({
     const json = out.json;
     // Resposta cortada pelo limite de tokens: repassa o aviso (só quando acontece; o finish_reason já segue em choices[0]).
     const cut = /^(length|max_tokens)$/i.test(String(json?.choices?.[0]?.finish_reason ?? ''));
-    json.x_gateway = { provider: out.target.provider.id, model: out.target.model.id, attempts: out.attempts, latency_ms: out.latencyMs, ...(cut ? { finish_reason: 'length', truncated: true } : {}) };
+    json.x_gateway = { provider: out.target.provider.id, model: out.target.model.id, attempts: out.attempts, latency_ms: out.latencyMs, ...(cut ? { finish_reason: 'length', truncated: true } : {}), ...(typeof opts.maxTokensFor === 'function' ? { max_tokens: out.maxTokens } : {}) };
     return json;
   }
 
@@ -381,6 +391,7 @@ export function createRouter({
             cooldownSeconds: secs(Math.max(st.cooldownUntil, providerCooldown.get(p.id) || 0)),
             failures: providerFailures.get(p.id) || 0, ok: st.ok, fail: st.fail,
             lastError: st.lastError,
+            lastStatus: st.lastStatus,
             lastOkSecondsAgo: st.lastOkAt ? Math.round((t0 - st.lastOkAt) / SEC) : null,
           };
         }),

@@ -27,6 +27,9 @@ const SLASH = {
   'baixar_musica_atual': 'media.download',
 };
 const CRIADOR_SUB = { banir: 'admin.ban_user', desbanir: 'admin.ban_user', memorias: 'memory.admin_inspect', bot_config: 'admin.bot_config' };
+// /yui-criador memorias: listar e ver são inspeção; apagar (uma lembrança ou tudo de alguém) é memory.admin_wipe_user, igual
+// ao cérebro separado (etapa 4). Sem saber a ação, vale a mais restritiva.
+const MEMORIAS_INSPECT = new Set(['listar', 'ver']);
 
 // Subcomandos do prefixo ("+yui configurar ...") -> ação. Os de consulta (diario, semanal, noticias, status, perguntar) não são avaliados.
 const PREFIX = {
@@ -52,12 +55,15 @@ const CUSTOM_ID = [
   ['srvmcp_', 'admin.guild_configure'],
   ['tos_decline', 'admin.guild_configure'],
   ['compress_video_', 'media.download'],
+  // Botão "Confirmar" do /yui-criador memorias (apagar a memória de outra pessoa). O "Cancelar" não muda nada.
+  ['memadm_ok_', 'memory.admin_wipe_user'],
 ];
 
-/** @param {{ kind: 'slash'|'component'|'prefix', name?: string, sub?: string|null, customId?: string }} data */
-export function actionForInteraction({ kind, name = '', sub = null, customId = '' } = {}) {
+/** @param {{ kind: 'slash'|'component'|'prefix', name?: string, sub?: string|null, customId?: string, acao?: string|null }} data */
+export function actionForInteraction({ kind, name = '', sub = null, customId = '', acao = null } = {}) {
   if (kind === 'prefix') return Object.hasOwn(PREFIX, name) ? PREFIX[name] : null;
   if (kind === 'slash') {
+    if (name === 'yui-criador' && sub === 'memorias') return MEMORIAS_INSPECT.has(String(acao ?? '')) ? 'memory.admin_inspect' : 'memory.admin_wipe_user';
     if (name === 'yui-criador') return (sub && CRIADOR_SUB[sub]) || 'admin.guild_configure';
     return Object.hasOwn(SLASH, name) ? SLASH[name] : null;
   }

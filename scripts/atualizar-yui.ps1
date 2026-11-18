@@ -4,6 +4,11 @@
 #   segredos, logs, node_modules, ambientes Python nem arquivos de dados que a Yui altera sozinha.
 # - Reinstala dependencias se o package-lock mudou, reinicia a tarefa YuiBot e confere se subiu.
 #   Se nao subir, volta o codigo anterior automaticamente.
+# - Modo DOIS PROCESSOS (etapa 4: YUI_CEREBRO_EXTERNO=true no .env de C:\Yui): a tarefa YuiBot roda o supervisor
+#   (node src/supervisor.js), que sobe o cerebro e depois o bot. O teste de subida testa as DUAS entradas (o cerebro sozinho
+#   responde a saude e o bot conecta nele), o reinicio pede antes a parada limpa ao supervisor (arquivo logs\supervisor.parar)
+#   e a conferencia exige os dois processos de pe. Sem a chave, tudo exatamente como antes. Nada e encerrado por PID achado em
+#   varredura: so os processos que este script abriu (pelo objeto do processo) ou a tarefa inteira (Stop-ScheduledTask).
 # Uso manual: powershell -ExecutionPolicy Bypass -File atualizar-yui.ps1 [-Forcar]
 param(
     [switch]$Forcar,
@@ -25,18 +30,64 @@ function Log($m) {
     Write-Host $l
 }
 
+# Modo dois processos (etapa 4): a chave YUI_CEREBRO_EXTERNO=true no .env da Yui. Linhas comentadas e outras variaveis nao contam.
+function Modo-Separado([string]$raiz) {
+    $envFile = Join-Path $raiz '.env'
+    if (-not (Test-Path $envFile)) { return $false }
+    foreach ($linha in (Get-Content $envFile -Encoding UTF8)) {
+        if ($linha -match '^\s*YUI_CEREBRO_EXTERNO\s*=\s*["'']?true["'']?\s*(#.*)?$') { return $true }
+    }
+    return $false
+}
+
+# Processos da Yui, so para SABER se existem (nunca para encerrar): no modo dois, o supervisor, o cerebro e o bot.
+function Processos-Yui([string]$padrao = 'src.index.js') {
+    @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match $padrao })
+}
+
 function YuiRodando([int]$minSegundos) {
+    if ($script:Dois) {
+        # Os dois de pe ha pelo menos `minSegundos`: o cerebro e o bot (um bot que cai no login e religado pelo supervisor e nunca chega la).
+        $c = Processos-Yui 'src.cerebro.js' | Select-Object -First 1
+        $b = Processos-Yui 'src.index.js' | Select-Object -First 1
+        if (-not $c -or -not $b) { return $false }
+        foreach ($p in @($c, $b)) { if (((Get-Date) - $p.CreationDate).TotalSeconds -lt $minSegundos) { return $false } }
+        return $true
+    }
     $p = Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'src.index.js' } | Select-Object -First 1
     if (-not $p) { return $false }
     return ((Get-Date) - $p.CreationDate).TotalSeconds -ge $minSegundos
 }
 
 function Reiniciar-Yui {
+    $padrao = 'src.index.js'
+    if ($script:Dois) {
+        # Pedido limpo ao supervisor: ele desliga o bot e depois o cerebro (soltando as travas de dono) e sai. Sem isso o Stop da
+        # tarefa derruba os dois a forca e o proximo cerebro espera ~75 s as travas vencerem.
+        $padrao = 'src.(supervisor|cerebro|index).js'
+        $parar = Join-Path $Destino 'logs\supervisor.parar'
+        New-Item -ItemType Directory -Force (Split-Path $parar) | Out-Null
+        Set-Content $parar (Get-Date -Format 'o') -Encoding ascii
+        for ($i = 0; $i -lt 30 -and (Processos-Yui $padrao).Count -gt 0; $i++) { Start-Sleep 2 }
+    }
     Stop-ScheduledTask -TaskName YuiBot -ErrorAction SilentlyContinue
     # espera o node antigo morrer E a tarefa sair de "Running": com a tarefa ainda Running o Start e ignorado (MultipleInstances=IgnoreNew)
     # e a Yui so voltava no reinicio automatico, 1 minuto depois (foi o que fez o update de 11/11 ser desfeito sem motivo).
-    for ($i = 0; $i -lt 20 -and ((Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'src.index.js' }) -or (Get-ScheduledTask -TaskName YuiBot).State -eq 'Running'); $i++) { Start-Sleep 2 }
+    for ($i = 0; $i -lt 20 -and ((Processos-Yui $padrao).Count -gt 0 -or (Get-ScheduledTask -TaskName YuiBot).State -eq 'Running'); $i++) { Start-Sleep 2 }
+    if ($script:Dois) { Remove-Item (Join-Path $Destino 'logs\supervisor.parar') -Force -ErrorAction SilentlyContinue }
     Start-ScheduledTask -TaskName YuiBot
+}
+
+# Apaga uma pasta temporaria do atualizador SEM seguir a juncao node_modules que o teste de subida cria (ela aponta para o
+# node_modules de verdade): a juncao sai primeiro, com `rmdir` (que so remove o link), e so depois a pasta.
+function Remover-Temporario([string]$dir) {
+    $ErrorActionPreference = 'Continue'
+    if (-not (Test-Path $dir)) { return }
+    Get-ChildItem $dir -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } |
+        Sort-Object { $_.FullName.Length } -Descending |
+        ForEach-Object { cmd /c "rmdir `"$($_.FullName)`" >nul 2>nul" }
+    Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # Espera a Yui ficar de pe: no notebook (HD, 4 GB) o primeiro carregamento depois de trocar o codigo leva mais de 30 s.
@@ -69,6 +120,99 @@ function Testar-Subida([string]$pasta, [string]$modulos) {
     if ($saida -notmatch 'Inicializando Yui') { return 'o codigo novo nem chegou a iniciar (sem "Inicializando Yui" na saida)' }
     if ($saida -notmatch 'Falha ao logar no Discord|DISCORD_TOKEN') { return 'o codigo novo nao chegou ate o login do Discord em 150 s' }
     return $null
+}
+
+function Porta-Livre {
+    $l = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Loopback), 0
+    $l.Start(); $porta = $l.LocalEndpoint.Port; $l.Stop()
+    return $porta
+}
+
+# Teste de subida do modo DOIS PROCESSOS (etapa 4), ANTES de mexer em C:\Yui, na pasta temporaria do codigo novo:
+#  1. os modulos do supervisor carregam (node src/supervisor.js e o que a tarefa roda);
+#  2. o CEREBRO sozinho sobe e responde /v1/health (porta livre aleatoria, so em 127.0.0.1);
+#  3. o BOT (YUI_CEREBRO_EXTERNO=true, token falso) conecta no canal desse cerebro e chega ate o login do Discord.
+# Tudo isolado da producao: bancos numa pasta vazia do teste (nunca os de C:\Yui\database nem as travas deles), segredo do canal
+# na pasta do teste, porta do canal aleatoria, API e Gateway de producao intocados, sem .env (a pasta temporaria nao tem). Ao fim,
+# o cerebro de teste e encerrado PELO OBJETO DO PROCESSO que este script abriu. Devolve $null se passou, ou o motivo.
+function Testar-Subida-Dois([string]$pasta, [string]$modulos, [string]$nodeExe = 'C:\Program Files\nodejs\node.exe', [int]$prazoBotSeg = 150) {
+    $ErrorActionPreference = 'Continue'   # avisos do node no stderr nao podem virar erro fatal no PowerShell 5.1
+    if (-not (Test-Path $nodeExe)) { return $null }   # sem node no caminho padrao: nao ha como testar, segue como antes
+    foreach ($f in 'src\supervisor.js', 'src\cerebro.js', 'src\index.js') {
+        if (-not (Test-Path (Join-Path $pasta $f))) { return "o codigo novo nao tem $f (necessario com YUI_CEREBRO_EXTERNO=true)" }
+    }
+    if (-not (Test-Path "$pasta\node_modules")) { cmd /c mklink /J "$pasta\node_modules" $modulos | Out-Null }
+    $teste = Join-Path $pasta 'preflight-dois'
+    New-Item -ItemType Directory -Force "$teste\database", "$teste\secrets" | Out-Null
+    $outC = Join-Path $teste 'cerebro-saida.txt'; $errC = Join-Path $teste 'cerebro-erro.txt'
+    $outB = Join-Path $teste 'bot-saida.txt'; $errB = Join-Path $teste 'bot-erro.txt'
+    $porta = Porta-Livre
+    $vars = @{
+        DISCORD_TOKEN = 'token-falso-de-teste'; YUI_API_ENABLED = 'true'; YUI_API_HOST = '127.0.0.1'; YUI_API_PORT = "$porta"
+        YUI_API_TOKENS = ('preflight-' + [guid]::NewGuid().ToString('N') + '=100000000000000001'); YUI_GATEWAY_ENABLED = 'false'
+        GTA_WEEKLY_ENABLED = 'false'; DATABASE_DIR = "$teste\database"; YUI_CHANNEL_SECRET_FILE = "$teste\secrets\channel-secret.json"
+        YUI_CHANNEL_PORT = '0'; YUI_ALERTS = 'false'; YUI_MORNING_REPORT = 'false'; YUI_HEALTH_REPORT = 'false'
+        YUI_CEREBRO_EXTERNO = $null; YUI_DB_OWNER_ROLE = $null
+    }
+    $antes = @{}
+    foreach ($k in $vars.Keys) { $antes[$k] = [Environment]::GetEnvironmentVariable($k, 'Process') }
+    $pc = $null; $pb = $null
+    try {
+        foreach ($k in $vars.Keys) { [Environment]::SetEnvironmentVariable($k, $vars[$k], 'Process') }
+
+        # 1) os modulos do supervisor carregam (na pasta do codigo NOVO: os caminhos relativos do -e saem da pasta atual)
+        Push-Location $pasta
+        try {
+            $chk = & $nodeExe --input-type=module -e "await import('./src/operacao/supervisor.js'); await import('./src/operacao/filho.js'); await import('./src/database/ownerLock.js'); await import('./src/database/owners.js');" 2>&1
+            $codigoChk = $LASTEXITCODE
+            $null = & $nodeExe --check 'src/supervisor.js' 2>&1
+            $codigoSup = $LASTEXITCODE
+        } finally { Pop-Location }
+        $global:LASTEXITCODE = 0
+        if ($codigoChk -ne 0) {
+            # cada linha do stderr do node vem como texto (sem a moldura de erro do PowerShell)
+            $linha = @($chk | ForEach-Object { $_.ToString() }) | Where-Object { $_ -match 'Error' -and $_ -notmatch 'NativeCommandError|FullyQualifiedErrorId|CategoryInfo' } | Select-Object -First 1
+            return ('o supervisor do codigo novo nao carrega: ' + ([string]$linha -replace '\s+', ' ').Trim())
+        }
+        $global:LASTEXITCODE = 0
+        if ($codigoSup -ne 0) { return 'src\supervisor.js do codigo novo tem erro de sintaxe' }
+
+        # 2) o cerebro sozinho responde a saude
+        $pc = Start-Process $nodeExe -ArgumentList 'src/cerebro.js' -WorkingDirectory $pasta -RedirectStandardOutput $outC -RedirectStandardError $errC -PassThru -WindowStyle Hidden
+        $saude = $null
+        $fim = (Get-Date).AddSeconds(120)
+        while (-not $pc.HasExited -and (Get-Date) -lt $fim) {
+            try { $saude = Invoke-RestMethod "http://127.0.0.1:$porta/v1/health" -TimeoutSec 5 } catch { $saude = $null }
+            if ($saude -and $saude.ok) { break }
+            Start-Sleep 2
+        }
+        $erroC = if (Test-Path $errC) { Get-Content $errC -Raw -Encoding UTF8 } else { '' }
+        if ($erroC -match 'ERR_MODULE_NOT_FOUND|SyntaxError|ReferenceError|Cannot find (module|package)|ERR_PACKAGE_PATH_NOT_EXPORTED') {
+            return ('erro ao carregar o cerebro novo: ' + (($erroC -split "`n" | Where-Object { $_ -match 'Error' } | Select-Object -First 1) -replace '\s+', ' ').Trim())
+        }
+        if (-not ($saude -and $saude.ok)) { return "o cerebro novo nao respondeu a saude em 120 s$(if ($pc.HasExited) { " (saiu com codigo $($pc.ExitCode))" })" }
+        if ($null -ne $saude.discord.online) { return 'o /v1/health do cerebro novo nao tem o formato esperado (discord.online deveria ser null)' }
+
+        # 3) o bot conecta no cerebro e chega ate o login
+        [Environment]::SetEnvironmentVariable('YUI_CEREBRO_EXTERNO', 'true', 'Process')
+        $pb = Start-Process $nodeExe -ArgumentList 'src/index.js' -WorkingDirectory $pasta -RedirectStandardOutput $outB -RedirectStandardError $errB -PassThru -WindowStyle Hidden
+        $fim = (Get-Date).AddSeconds($prazoBotSeg)
+        while (-not $pb.HasExited -and (Get-Date) -lt $fim) { Start-Sleep 3 }
+        if (-not $pb.HasExited) { $pb.Kill(); $null = $pb.WaitForExit(10000) }   # o processo que NOS abrimos (objeto $pb), nunca um achado por varredura
+        $saidaB = if (Test-Path $outB) { Get-Content $outB -Raw -Encoding UTF8 } else { '' }
+        $erroB = if (Test-Path $errB) { Get-Content $errB -Raw -Encoding UTF8 } else { '' }
+        if ($erroB -match 'ERR_MODULE_NOT_FOUND|SyntaxError|ReferenceError|Cannot find (module|package)|ERR_PACKAGE_PATH_NOT_EXPORTED') {
+            return ('erro ao carregar o bot novo: ' + (($erroB -split "`n" | Where-Object { $_ -match 'Error' } | Select-Object -First 1) -replace '\s+', ' ').Trim())
+        }
+        if ($saidaB -notmatch 'Inicializando Yui') { return 'o bot novo nem chegou a iniciar (sem "Inicializando Yui" na saida)' }
+        if ($saidaB -notmatch 'Conectado ao c.rebro pelo canal local') { return 'o bot novo nao conectou no canal do cerebro novo' }
+        if ($saidaB -notmatch 'Falha ao logar no Discord|DISCORD_TOKEN') { return "o bot novo nao chegou ate o login do Discord em $prazoBotSeg s" }
+        return $null
+    } finally {
+        if ($pc -and -not $pc.HasExited) { try { $pc.Kill(); $null = $pc.WaitForExit(10000) } catch { } }   # o cerebro de TESTE, pelo objeto que este script abriu
+        if ($pb -and -not $pb.HasExited) { try { $pb.Kill(); $null = $pb.WaitForExit(10000) } catch { } }
+        foreach ($k in $antes.Keys) { [Environment]::SetEnvironmentVariable($k, $antes[$k], 'Process') }
+    }
 }
 
 # Leva o painel web versionado (apps\yui-app\painel-web) do codigo novo para C:\Yui\apps\yui-app\dist, com troca atomica e a versao anterior
@@ -138,6 +282,7 @@ function Esperar-Yui([int]$minSegundos, [int]$maxSegundos) {
 
 $mutex = New-Object Threading.Mutex($false, 'Global\YuiAtualizar')
 if (-not $mutex.WaitOne(0)) { Log 'Ja existe uma atualizacao em andamento.'; exit 0 }
+$script:Dois = Modo-Separado $Destino
 
 try {
     $hdr = @{ 'User-Agent' = 'yui-atualizador'; 'Accept' = 'application/vnd.github+json' }
@@ -149,7 +294,7 @@ try {
     Log "Atualizando de '$(if($local){$local.Substring(0,7)}else{'desconhecida'})' para $($remoto.Substring(0,7))..."
 
     $tmp = Join-Path $env:TEMP 'yui-update'
-    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+    if (Test-Path $tmp) { Remover-Temporario $tmp }
     New-Item -ItemType Directory $tmp | Out-Null
     Invoke-WebRequest "https://github.com/$Repo/archive/$remoto.zip" -OutFile "$tmp\yui.zip" -UseBasicParsing -TimeoutSec 600
     Expand-Archive "$tmp\yui.zip" "$tmp\x" -Force
@@ -176,8 +321,13 @@ try {
     $lockNovo = if (Test-Path "$novo\package-lock.json") { (Get-FileHash "$novo\package-lock.json").Hash } else { '' }
     $lockAtual = if (Test-Path "$Destino\package-lock.json") { (Get-FileHash "$Destino\package-lock.json").Hash } else { '' }
     if ($lockNovo -eq $lockAtual) {
-        Log 'Testando a subida do codigo novo antes de aplicar...'
-        $motivo = Testar-Subida $novo (Join-Path $Destino 'node_modules')
+        if ($script:Dois) {
+            Log 'Testando a subida do codigo novo antes de aplicar (modo dois processos: o cerebro sozinho e o bot conectando nele)...'
+            $motivo = Testar-Subida-Dois $novo (Join-Path $Destino 'node_modules')
+        } else {
+            Log 'Testando a subida do codigo novo antes de aplicar...'
+            $motivo = Testar-Subida $novo (Join-Path $Destino 'node_modules')
+        }
         if ($motivo) {
             Log "ERRO: o teste de subida falhou ($motivo). Nada foi alterado em $Destino; tenta de novo amanha."
             return
@@ -214,7 +364,7 @@ try {
     }
 
     Reiniciar-Yui
-    Log 'Yui reiniciada; aguardando ate 4 min para ela ficar de pe...'
+    Log "Yui reiniciada$(if ($script:Dois) { ' (dois processos: cerebro e bot)' }); aguardando ate 4 min para ela ficar de pe..." 
     if (Esperar-Yui 60 240) {
         Set-Content $arqVersao $remoto -Encoding ascii
         Log "OK: Yui rodando na versao $($remoto.Substring(0,7))."
@@ -235,5 +385,5 @@ try {
     exit 1
 } finally {
     $mutex.ReleaseMutex()
-    if (Test-Path (Join-Path $env:TEMP 'yui-update')) { Remove-Item (Join-Path $env:TEMP 'yui-update') -Recurse -Force -ErrorAction SilentlyContinue }
+    if (Test-Path (Join-Path $env:TEMP 'yui-update')) { Remover-Temporario (Join-Path $env:TEMP 'yui-update') }
 }

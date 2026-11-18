@@ -102,19 +102,22 @@ async function execute(tool, args, ctx) {
 /**
  * @returns {Promise<{ type: 'reply'|'tool_result'|'needs_confirmation'|'denied', reply: string, tool?: string, pendingId?: string }>}
  */
-export async function runAgent(ctx, message, { history = [], memoryBlock = '', origin = undefined } = {}) {
+export async function runAgent(ctx, message, { history = [], memoryBlock = '', origin = undefined, perfil = null } = {}) {
   purgePending();
   // Só ferramentas realmente registradas (uma política órfã nunca pode derrubar o agent).
   const allowed = listAllowedTools(ctx).filter((n) => getTool(n));
   const skills = skillsFor(ctx);
+  // Perfil de IA desta conversa (etapa 10: o app com o cérebro separado; o seletor é o do cérebro, ver api/perfilDoApp.js). Sem perfil, a chamada de IA não ganha campo nenhum.
+  // O perfil só diz COMO chamar a IA: a escolha da ferramenta, a política e o guardToolCall abaixo valem iguais para qualquer perfil.
+  const campoPerfil = perfil ? { perfil } : {};
 
   // Sem ferramentas disponíveis neste contexto -> conversa normal.
   if (!allowed.length && !skills.length) {
-    const reply = await ai.chat({ prompt: message, history, ctx, memoryBlock });
+    const reply = await ai.chat({ prompt: message, history, ctx, memoryBlock, ...campoPerfil });
     return { type: 'reply', reply };
   }
 
-  const raw = await ai.chat({ prompt: buildAgentPrompt(message, allowed, skills), history, ctx, memoryBlock });
+  const raw = await ai.chat({ prompt: buildAgentPrompt(message, allowed, skills), history, ctx, memoryBlock, ...campoPerfil });
   const decision = extractJson(raw);
 
   // LLM não seguiu o formato: trata o texto como resposta (nunca como ação).
@@ -128,7 +131,7 @@ export async function runAgent(ctx, message, { history = [], memoryBlock = '', o
     audit('agent.skill', ctx, { skill: skill.name });
     const reply = await ai.chat({
       prompt: `[SKILL "${skill.name}" — instruções do dono, siga-as]\n${skill.instructions}\n[FIM DA SKILL]\n\nPedido do usuário:\n${message}`,
-      history, ctx, memoryBlock,
+      history, ctx, memoryBlock, ...campoPerfil,
     });
     return { type: 'reply', reply: String(reply).trim() };
   }

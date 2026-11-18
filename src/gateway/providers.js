@@ -34,7 +34,8 @@ const csv = (value) => String(value ?? '').split(',').map((s) => s.trim()).filte
 /**
  * Provedores extras definidos pelo dono em YUI_GATEWAY_CUSTOM (JSON):
  *   [{ "id":"meu", "label":"Meu provedor", "baseUrl":"https://x.com/v1" (ou "endpoint": ".../chat/completions"),
- *      "apiKeyEnv":"MEU_PROVEDOR_KEY", "models":["m1","m2"], "priority":15, "anonymous":false }]
+ *      "apiKeyEnv":"MEU_PROVEDOR_KEY", "models":["m1","m2"], "priority":15, "anonymous":false, "maxTokens":2048 }]
+ * `maxTokens` (opcional, etapa 6): a capacidade de saída do provedor; o cérebro nunca pede mais que isto a ele (core/ai/limitesTokens.js).
  * A chave NUNCA vai no JSON: só o NOME da variável de ambiente que a contém.
  */
 export function loadCustomProviders(env = process.env) {
@@ -65,6 +66,8 @@ export function loadCustomProviders(env = process.env) {
     providers.push({
       id, label: String(c.label || id), endpoint, keys, anonymous,
       noAuth: !keys.length, priority: Number.isFinite(c.priority) ? c.priority : 45, models,
+      // Capacidade de saída declarada pelo dono (opcional, 64 a 8192): o cérebro nunca pede mais que isto a este provedor (core/ai/limitesTokens.js).
+      ...(Number.isInteger(c.maxTokens) && c.maxTokens >= 64 ? { maxTokens: Math.min(c.maxTokens, 8192) } : {}),
     });
   }
   return { providers, errors };

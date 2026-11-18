@@ -5,12 +5,15 @@ import { recordInteraction } from '../../core/interactionStats.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
 import { getCurrentWeekKey } from '../../utils/weekKey.js';
 import { getKnowledgeContext } from '../../utils/knowledgeBase.js';
-import { generateResponse, runResearchFor, isToolDisabled, stripThinking, isSystemReply } from '../../handlers/llmHandler.js';
+import { generateResponse, runResearchFor, isToolDisabled, stripThinking, isSystemReply, createAskTurnForCerebro, withCerebroModelFooter } from '../../handlers/llmHandler.js';
+import { isRemoteTurn, isCerebroUnavailable, CEREBRO_UNAVAILABLE_TEXT } from '../turnoCerebro.js';
 import { contextFromDiscord } from '../../core/discordAdapter.js';
 import { isOwnerId } from '../../core/permissions.js';
 import { buildWebContextPrompt } from '../../handlers/llmSafety.js';
 // Pesquisa na web: o /yui e o +yui usam o MESMO agente da fila (Porta A: pré-rota; Portas C e D: promessa vazia e guarda final).
 import { routeExplicitResearch, reviewResearchReply } from '../../core/ai/manager.js';
+// Sem o dono da cota por hora ou sem o registro em disco a busca NÃO sai: a Yui avisa, com o texto único, que a pesquisa está temporariamente indisponível.
+import { comAvisoDeIndisponivel } from '../../search/indisponivel.js';
 // Lista de mods (Minecraft): o CÓDIGO procura cada nome no Modrinth (a IA não inventa link). Fora da fila, como o resto do /yui.
 import { routeModList } from '../../handlers/modListResolver.js';
 import { routeLists } from '../../handlers/listAssistant.js';
@@ -444,6 +447,7 @@ export const askCommand = {
     }
 
     let progress = null; // progresso da pesquisa na mensagem "Processando..." (createProgressReporter)
+    let remoteTurn = null; // cérebro separado (etapa 5): o turno do cérebro desta pergunta
     try {
       const startedAt = Date.now();
       let meta = {};
@@ -451,7 +455,10 @@ export const askCommand = {
       // Contexto por horas (desligado por padrão; ver src/core/context/contextStore.js): o /yui lê o fio de QUEM pergunta e,
       // numa resposta pública entregue e sem busca na web, grava a troca. A resposta privada (efêmera) só lê.
       let contextTarget = null;
-      try {
+      // Cérebro separado (etapa 5): a pergunta vira um turno do cérebro (o contexto por horas e o histórico são dele); sem a chave, null.
+      remoteTurn = createAskTurnForCerebro({ interaction, question: pergunta, record: !ephemeral });
+      if (remoteTurn) contextTarget = remoteTurn;
+      else try {
         const target = resolveContextTarget({
           userId: interaction.user?.id,
           channelId: interaction.channelId,
@@ -488,9 +495,18 @@ export const askCommand = {
       // Porta T (lembretes do dono: "me lembra amanhã às 9h de ...", "meus lembretes", "resumo do dia"): o código interpreta o horário e grava; só o dono.
       const remRouted = listRouted.handled ? listRouted : await routeReminders(entry, { report: async () => (await import('../../reminders/service.js')).createMorningComposer()() });
       const modRouted = remRouted.handled ? remRouted : await routeModList(entry, deps);
+      // Cérebro separado (etapa 6): depois das pré-rotas do bot (listas, lembretes, mods), o /yui INTEIRO vai ao cérebro num pedido só (chat.yui):
+      // a Porta A, a resposta com a busca automática, as Portas C e D e a nova resposta com a mesma web. O bot fica com a interface (o
+      // progresso nesta mensagem e a entrega). Sem a chave, o caminho de sempre, logo abaixo.
+      const remoteYui = !modRouted.handled && remoteTurn ? await remoteTurn.yui({ pergunta, contexto: ctx }, { progress: progress.show }) : null;
       // Porta A (só com YUI_RESEARCH_PRE_ROUTE=true): pedido explícito e estrito pesquisa por código, sem consultar o modelo.
-      const routed = modRouted.handled ? modRouted : await routeExplicitResearch(entry, deps);
-      if (routed.handled) {
+      const routed = modRouted.handled || remoteYui ? modRouted : await routeExplicitResearch(entry, deps);
+      if (remoteYui) {
+        resposta = remoteYui.researched ? remoteYui.text : withCerebroModelFooter(remoteYui.text, interaction.channelId, remoteYui.failed ? null : remoteYui.model);
+        researchHandled = remoteYui.researched === true;
+        meta = { provider: 'cerebro', model: remoteYui.model, finishReason: 'n/d', continuations: 0, usedSearch: remoteYui.usedSearch === true };
+        recordInteraction();
+      } else if (routed.handled) {
         resposta = routed.text;
         researchHandled = routed.researched === true;
       } else {
@@ -543,6 +559,8 @@ export const askCommand = {
         }, deps);
         resposta = reviewed.text;
         researchHandled = reviewed.researched === true;
+        // A busca automática NÃO saiu (pesquisa indisponível): a resposta segue com o que a Yui sabe e leva o aviso único, uma vez só.
+        if (meta.searchFailure === 'unavailable') resposta = comAvisoDeIndisponivel(resposta);
       }
       // Nenhuma edição de progresso pode sobrescrever a resposta final.
       await progress.settle();
@@ -576,7 +594,9 @@ export const askCommand = {
       }));
       // Só depois da entrega confirmada. Resposta com busca na web (a automática ou a do agente de pesquisa) ou com marcador de ferramenta não vai para o contexto.
       if (contextTarget?.record && delivery.ok && meta.usedSearch !== true && !researchHandled && !/^-# .*🔎/m.test(String(resposta ?? '')) && !isUnsafeForContext(resposta)) {
-        recordContextExchange(contextTarget, { userText: pergunta, assistantText: isErrorReply(resposta) ? ERROR_MARKER : String(resposta ?? '') });
+        const assistantText = isErrorReply(resposta) ? ERROR_MARKER : String(resposta ?? '');
+        if (isRemoteTurn(contextTarget)) contextTarget.noteContext(assistantText); // vai ao cérebro no fim do turno (chat.commit)
+        else recordContextExchange(contextTarget, { userText: pergunta, assistantText });
       }
       // Entrega PARCIAL (as partes 2+ não saíram, mas a parte 1 já avisa disso): não é erro. Lançar aqui trocaria a parte 1 (e o aviso) por "❌ Não consigo te responder".
       if (!delivery.ok && !delivery.partial) throw new Error('entrega da resposta falhou');
@@ -585,9 +605,11 @@ export const askCommand = {
       progress?.close();
       // Detalhe técnico só no log; o usuário recebe uma frase curta.
       logger.error(`[Ask] Falha ao responder o /yui: ${String(error?.message ?? error).slice(0, 200)}`);
+      const cerebroFora = isCerebroUnavailable(error); // cérebro separado fora do ar: o aviso diz isso, e nada vai ao contexto
+      if (cerebroFora) remoteTurn?.discard();
       try {
         return await interaction.editReply({
-          content: '❌ Não consigo te responder agora. Tente de novo em instantes.',
+          content: cerebroFora ? CEREBRO_UNAVAILABLE_TEXT : '❌ Não consigo te responder agora. Tente de novo em instantes.',
           allowedMentions: SAFE_ALLOWED_MENTIONS,
         });
       } catch (replyError) {
@@ -596,6 +618,7 @@ export const askCommand = {
       }
     } finally {
       releaseAsk(asker, slot);
+      if (remoteTurn) remoteTurn.finish().catch(() => {}); // cérebro separado: o fim do turno (nunca lança)
     }
   },
 };

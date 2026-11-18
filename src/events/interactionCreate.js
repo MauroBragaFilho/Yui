@@ -47,7 +47,9 @@ import { executeGameCommand } from '../handlers/gameHandler.js';
 import { handleSauceCommand } from '../handlers/sauceHandler.js';
 import { getSteamGameInfo } from '../handlers/steamHandler.js';
 import { convertCurrency } from '../handlers/currencyHandler.js';
-import { generateResponse } from '../handlers/llmHandler.js';
+// Etapa 7: o comentário curto embaixo do embed (/steam_jogo e /converter_moeda). Sem o cérebro separado, o generateResponse de sempre (o mesmo
+// pedido, de core/ai/promptComentario.js); com ele, o chat.comentario do cérebro (discord/comentarioCerebro.js).
+import { comentarioDaYui } from '../discord/comentarioCerebro.js';
 import { buildThirdPartyLogPrompt } from '../handlers/llmSafety.js';
 import { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect } from '../handlers/configPanelHandler.js';
 import { handleMusicSearchAndDownload, clearSession } from '../handlers/deezerMusicHandler.js';
@@ -426,8 +428,11 @@ export default {
             const isSlash = interaction.isChatInputCommand?.() || (interaction.isCommand() && !interaction.customId);
             let sub = null;
             if (isSlash) { try { sub = interaction.options?.getSubcommand(false) ?? null; } catch { /* sem subcomando */ } }
+            // /yui-criador memorias: a ação da política depende da opção `acao` (listar/ver = inspeção; apagar = memory.admin_wipe_user).
+            let acao = null;
+            if (isSlash && interaction.commandName === 'yui-criador' && sub === 'memorias') { try { acao = interaction.options?.getString?.('acao', false) ?? null; } catch { /* sem a opção */ } }
             const blocked = guardInteraction({
-                data: { kind: isSlash ? 'slash' : 'component', name: interaction.commandName, sub, customId: interaction.customId },
+                data: { kind: isSlash ? 'slash' : 'component', name: interaction.commandName, sub, customId: interaction.customId, acao },
                 userId: interaction.user?.id,
                 channelId: interaction.channelId,
                 guildId: interaction.guildId,
@@ -637,6 +642,10 @@ export default {
 
             if (cid.startsWith('compress_video_')) {
                 return await runCompressVideo(interaction);
+            }
+            if (cid.startsWith('memadm_')) {
+                const { handleMemoriasAdminButton } = await import('../handlers/memoryAdminHandler.js');
+                return await handleMemoriasAdminButton(interaction);
             }
             if (cid.startsWith('srvcfg_')) {
                 return await handleServerAdminInteraction(interaction);
@@ -956,8 +965,7 @@ export default {
 
                 let yuiComment = "";
                 try {
-                    const commentPrompt = `Eu acabei de consultar o jogo "${steamInfo.name}" na Steam via comando manual. O preço atual é ${steamInfo.price}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
-                    const rawComment = await generateResponse(commentPrompt, interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true });
+                    const rawComment = await comentarioDaYui(interaction, 'steam', { nome: steamInfo.name, preco: steamInfo.price });
                     // Mensagem de sistema (erro, cota esgotada) não vira comentário; o texto sai cortado e sem @everyone/@here.
                     yuiComment = extractAiComment(rawComment);
                 } catch (e) {
@@ -1005,8 +1013,7 @@ export default {
                     
                 let yuiComment = "";
                 try {
-                    const commentPrompt = `Eu acabei de converter ${convInfo.amount} ${convInfo.from} para ${convInfo.to} via comando manual. O resultado foi ${resultFormatted}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (Apenas o texto, sem JSON).`;
-                    const rawComment = await generateResponse(commentPrompt, interaction.channelId, { allowSearch: false, disableTools: true, guildId: interaction.guildId, isInternalComment: true });
+                    const rawComment = await comentarioDaYui(interaction, 'cotacao', { valor: convInfo.amount, de: convInfo.from, para: convInfo.to, resultado: resultFormatted });
                     // Mensagem de sistema (erro, cota esgotada) não vira comentário; o texto sai cortado e sem @everyone/@here.
                     yuiComment = extractAiComment(rawComment);
                 } catch (e) {

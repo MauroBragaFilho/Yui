@@ -160,6 +160,15 @@ function Stop-ControlledProcess {
 
 # --- Execução Principal do Supervisor ---
 
+# Modo dois processos (etapa 4, YUI_CEREBRO_EXTERNO=true no .env): este supervisor antigo sobe só o `node src/index.js` (o bot)
+# e não conhece o cérebro. Nesse modo quem cuida dos dois é o src/supervisor.js (tarefa YuiBot). Recusa para não subir um bot
+# sem cérebro nem duplicar o bot do supervisor novo.
+$envFile = Join-Path $WorkingDir ".env"
+if ((Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^\s*YUI_CEREBRO_EXTERNO\s*=\s*["'']?true["'']?\s*(#.*)?$' -Quiet)) {
+    Write-Log "YUI_CEREBRO_EXTERNO=true no .env: este supervisor antigo nao serve para os dois processos. Use node src/supervisor.js (tarefa YuiBot; veja docs/RELATORIO_ETAPA4_OPERACAO.md). Nada foi iniciado." "ERROR"
+    exit 1
+}
+
 Write-Log "=== Yui Windows Watchdog & Supervisor ==="
 Write-Log "Diretório de trabalho: $WorkingDir"
 Write-Log "Modo DryRun: $([bool]$DryRun)"

@@ -1,6 +1,8 @@
 import * as cheerio from 'cheerio';
-import { inspectResults as inspectDuckDuckGo } from '../core/dev/web-search.js';
+import { inspectResults as inspectDuckDuckGo } from './leituraDuckDuckGo.js';
 import { getDefaultBudget } from './budget.js';
+import { ERRO_PESQUISA_INDISPONIVEL, resultadoIndisponivel } from './indisponivel.js';
+import { razaoDoCancelamento, repeteAposCancelamento } from './cancelamento.js';
 
 /**
  * Pesquisa na web com vários provedores em cadeia (o primeiro que responder vence).
@@ -24,7 +26,19 @@ import { getDefaultBudget } from './budget.js';
  *  - cota esgotada (402, 432, 433, 429 de cota) descansa muito mais (1 h) que limite de taxa (429 comum);
  *    Retry-After / X-RateLimit-Reset são respeitados;
  *  - limite por usuário e teto mensal por provedor (budget.js) valem ANTES de chamar o provedor;
- *  - consulta sensível (sensitive: true) nunca sai para terceiros.
+ *  - consulta sensível (sensitive: true) nunca sai para terceiros;
+ *  - PORTA DE SAÍDA (etapa 8, revisão da Liz §12): sem o dono da cota por hora (a trava do arquivo) e no bot separado, e se o registro em disco da busca
+ *    (cota por hora ou mensal) não gravar, NENHUMA busca sai: o resultado é `resultadoIndisponivel` (src/search/indisponivel.js) e a Yui avisa que a
+ *    pesquisa está temporariamente indisponível. Nunca se pesquisa com uma cota independente em memória (só YUI_COTA_HORA_DISCO=false, escolha do dono);
+ *  - REUTILIZAÇÃO (§12): a segunda pessoa que faz a MESMA consulta pública enquanto a primeira ainda roda recebe o resultado CRU dessa busca, sem nova chamada
+ *    externa e sem gastar cota (`budget.peekUser` só confere os limites; `registrarReuso` conta a reutilização). A pesquisa PRIVADA (`privado: true`) NUNCA
+ *    é compartilhada: não entra no mapa das buscas em andamento, não aproveita a de ninguém e não lê nem grava o cache.
+ *  - REUTILIZAÇÃO CANCELADA (§14): se a busca pública que alguém só aproveitava foi CANCELADA por quem a iniciou (razão `dono` no `signal.reason`, veja
+ *    src/search/cancelamento.js), quem esperava pode fazer a PRÓPRIA busca, com cobrança normal, se: tem reserva própria e válida (a porta de saída aberta e
+ *    a reserva dele, com o limite por pessoa e o teto global); o cancelamento não foi pedido por ele nem imposto por política (`politica`), nem foi o prazo
+ *    (`prazo`), e a razão é conhecida (`desconhecida` não repete). No máximo UMA nova tentativa por esperador (sem laço); vários esperadores do mesmo
+ *    cancelamento se juntam numa única nova busca (o primeiro lidera, com a reserva e a execução DELE; os outros só aproveitam, sem cobrança). A nova execução
+ *    tem identidade própria (a reserva, o diário e a chave de idempotência do esperador, nunca os do cancelado).
  */
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -47,7 +61,8 @@ const TRANSIENT_MAX_MS = 5 * MINUTE;
 const MAX_RETRY_AFTER_MS = 24 * 60 * MINUTE;
 
 const rest = new Map(); // provedor -> { until, failures, kind }
-const inflight = new Map(); // consulta idêntica em andamento -> Promise
+const inflight = new Map(); // consulta idêntica (pública) em andamento -> { exec, job }; `exec` é a identidade da execução (só quem a criou a tira do mapa)
+let execSeq = 0; // identidade de cada execução que vai a um provedor (a nova busca de quem esperava uma cancelada é OUTRA execução)
 const cache = new Map(); // consulta -> { at, value } (só se YUI_SEARCH_CACHE_TTL_MIN > 0 e nunca para a Brave)
 
 class SearchError extends Error {
@@ -399,11 +414,18 @@ function intOption(value, fallback, min, max) {
   return Number.isFinite(n) && n > 0 ? Math.min(max, Math.max(min, Math.floor(n))) : fallback;
 }
 
-async function runChain({ q, max, env, fetchImpl, chain, now, budget, emit, providerTimeoutMs }) {
+// `stats.dispatched` conta os pedidos que REALMENTE saíram para um provedor (a cota por hora só fica com a busca que despachou: budget.refund). A vaga só
+// volta quando a AUSÊNCIA de despacho é comprovada (`dispatched === 0` no fim: nenhum provedor ativo, todos descansando, cota mensal cheia, cancelada antes
+// de sair, registro que não gravou); depois do `dispatched += 1` (ou numa queda do processo no meio), sem prova de que nada saiu, a cobrança fica.
+// `stats.semRegistro`: o registro em disco da cota mensal não gravou, então a chamada NÃO saiu (falhar fechado).
+// `stats.cancelamento`: a razão do cancelamento (src/search/cancelamento.js) quando a cadeia foi abortada antes de terminar (o resultado leva `cancelamento`).
+async function runChain({ q, max, env, fetchImpl, chain, now, budget, emit, providerTimeoutMs, stats = { dispatched: 0 } }) {
   const errors = [];
+  const marcarCancelamento = () => { stats.cancelamento ??= razaoDoCancelamento(chain.reason); };
   for (const name of activeProviders(env)) {
     if (chain.aborted) {
       errors.push(chain.reason?.name === 'TimeoutError' ? 'prazo total esgotado' : 'cancelado');
+      marcarCancelamento();
       break;
     }
     const nowMs = now();
@@ -417,7 +439,14 @@ async function runChain({ q, max, env, fetchImpl, chain, now, budget, emit, prov
       errors.push(`${name}: cota mensal atingida`);
       continue;
     }
-    budget.recordProvider(name, nowMs);
+    // O registro da cota mensal vai para o disco ANTES de a chamada sair; sem gravar, a chamada não sai (nunca a cota só em memória).
+    const registro = typeof budget.registrarProvedor === 'function' ? budget.registrarProvedor(name, nowMs) : { ok: true, count: budget.recordProvider(name, nowMs) };
+    if (!registro.ok) {
+      stats.semRegistro = true;
+      emit('warn', '[Search] o registro da cota mensal não gravou: a busca não saiu (a pesquisa fica indisponível até o disco voltar).');
+      break;
+    }
+    stats.dispatched += 1;
 
     const providerTimer = timeoutSignal(providerTimeoutMs);
     const signal = AbortSignal.any([chain, providerTimer.signal]);
@@ -435,12 +464,13 @@ async function runChain({ q, max, env, fetchImpl, chain, now, budget, emit, prov
       errors.push(`${name}: ${message}`);
       emit('warn', `[Search] provider=${name} status=${e.status} ms=${Date.now() - started} falhou: ${message}`);
       // Prazo da cadeia/cancelamento não é culpa do provedor.
-      if (!chain.aborted) noteFailure(name, e, nowMs);
+      if (chain.aborted) marcarCancelamento(); else noteFailure(name, e, nowMs);
     } finally {
       providerTimer.clear();
     }
   }
-  return { provider: null, results: [], errors };
+  if (stats.semRegistro) errors.push(ERRO_PESQUISA_INDISPONIVEL);
+  return { provider: null, results: [], errors, ...(stats.semRegistro ? { indisponivel: true, motivo: 'registro-mensal', retryAfterMs: 0 } : {}) };
 }
 
 /**
@@ -451,9 +481,13 @@ async function runChain({ q, max, env, fetchImpl, chain, now, budget, emit, prov
  * @param {number} [opts.max=5]            resultados desejados
  * @param {string|number} [opts.userId]    quem pediu (limite por usuário; sem userId não há limite por usuário)
  * @param {boolean} [opts.sensitive=false] conversa sensível: NÃO pesquisa (a consulta sairia para terceiros)
- * @param {AbortSignal} [opts.signal]      cancelamento externo
+ * @param {boolean} [opts.privado=false]   pesquisa PRIVADA (conversa privada com a pesquisa liberada): NUNCA compartilhada nem reaproveitada entre pessoas
+ * @param {AbortSignal} [opts.signal]      cancelamento externo (a razão vai em `signal.reason`: veja src/search/cancelamento.js; sem razão tipada = `desconhecida`)
  * Injeção para teste: env, fetchImpl, now, budget, logger, deadlineMs, providerTimeoutMs.
- * @returns {Promise<{ provider: string|null, results: Array<{title,url,snippet}>, errors: string[], limited?: 'user', retryAfterMs?: number, cached?: boolean }>}
+ * @returns {Promise<{ provider: string|null, results: Array<{title,url,snippet}>, errors: string[], limited?: 'user', retryAfterMs?: number, cached?: boolean,
+ *   indisponivel?: true, motivo?: string, cancelamento?: 'dono'|'politica'|'prazo'|'desconhecida', refeita?: true }>} `indisponivel`: a pesquisa está temporariamente
+ *   indisponível e NADA saiu (veja src/search/indisponivel.js); `cancelamento`: a busca foi cancelada antes de ter resultado e esta é a razão (uma palavra fixa);
+ *   `refeita`: é o resultado da nova busca de quem esperava uma busca cancelada pelo dono dela (src/search/cancelamento.js).
  */
 export async function searchWeb(query, {
   max = 5,
@@ -461,6 +495,7 @@ export async function searchWeb(query, {
   fetchImpl = (...a) => fetch(...a),
   userId = null,
   sensitive = false,
+  privado = false,
   signal = null,
   now = () => Date.now(),
   budget = null,
@@ -474,48 +509,100 @@ export async function searchWeb(query, {
   const wanted = intOption(max, 5, 1, 20);
   const emit = (level, message) => (logger ? logger[level]?.(message) : defaultLog(level, message));
   const key = `${q.toLowerCase()}|${wanted}|${activeProviders(env).join(',')}`;
-
-  // Cache opcional (desligado por padrão; nunca guarda resultado da Brave: os Termos proíbem).
-  const ttlMs = Math.max(0, Number(env.YUI_SEARCH_CACHE_TTL_MIN) || 0) * MINUTE;
-  if (ttlMs > 0) {
-    const hit = cache.get(key);
-    if (hit && now() - hit.at < ttlMs) return { ...hit.value, results: hit.value.results.map((r) => ({ ...r })), errors: [], cached: true };
-    if (hit) cache.delete(key);
-  }
-
   const bud = budget ?? getDefaultBudget();
-  const turn = bud.takeUser(userId, env, now());
-  if (!turn.ok) {
-    emit('warn', `[Search] limite por usuário atingido (${turn.limit}/hora)`);
-    return { provider: null, results: [], errors: ['limite de buscas por usuário atingido'], limited: 'user', retryAfterMs: turn.retryAfterMs };
-  }
+  // A pesquisa PRIVADA nunca é compartilhada nem reaproveitada entre pessoas (revisão da Liz, §12): não lê nem grava o cache e não entra nas buscas em andamento.
+  const compartilhavel = privado !== true;
 
-  // Buscas idênticas e simultâneas compartilham a mesma chamada.
-  if (inflight.has(key)) {
-    const shared = await inflight.get(key);
-    return { ...shared, results: shared.results.map((r) => ({ ...r })), errors: [...shared.errors] };
-  }
-
-  const deadline = intOption(deadlineMs ?? env.YUI_SEARCH_DEADLINE_MS, DEFAULT_DEADLINE_MS, 500, 120_000);
-  const deadlineTimer = timeoutSignal(deadline);
-  const chain = AbortSignal.any([deadlineTimer.signal, ...(signal ? [signal] : [])]);
-  const job = (async () => {
-    try {
-      const out = await runChain({ q, max: wanted, env, fetchImpl, chain, now, budget: bud, emit, providerTimeoutMs });
-      if (!out.results.length) emit('warn', `[Search] sem resultados (${out.errors.join('; ') || 'nenhum provedor ativo'})`);
-      if (ttlMs > 0 && out.results.length && out.provider !== 'brave') {
-        cache.set(key, { at: now(), value: out });
-        while (cache.size > MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value);
-      }
-      return out;
-    } catch (err) {
-      emit('warn', `[Search] erro inesperado: ${redact(err?.message, q)}`);
-      return { provider: null, results: [], errors: ['erro inesperado na busca'] };
-    } finally {
-      deadlineTimer.clear();
-      inflight.delete(key);
+  /**
+   * Uma tentativa de pesquisar. `repeticao`: esta é a UMA nova tentativa de quem esperava uma busca idêntica que foi cancelada por quem a iniciou (veja abaixo).
+   * Ela passa de novo por TUDO (porta de saída, cache, o mapa das buscas em andamento, reserva PRÓPRIA) e nunca repete outra vez: sem laço.
+   */
+  async function pesquisar(repeticao) {
+    // PORTA DE SAÍDA: sem o dono da cota (a trava do arquivo), no bot separado ou com a cota desligada por falha, nenhuma busca externa começa. Nada é cobrado,
+    // nada é gravado e nenhum provedor é chamado; a Yui avisa que a pesquisa está temporariamente indisponível. Vem ANTES do cache e do compartilhamento:
+    // um processo sem a trava não opera, em nenhuma hipótese, com uma cota independente em memória.
+    const porta = typeof bud.despacho === 'function' ? bud.despacho() : { permitido: true, codigo: null };
+    if (porta.permitido === false) {
+      emit('warn', `[Search] pesquisa indisponível (${porta.codigo ?? 'sem dono da cota'}): nenhuma busca saiu`);
+      return resultadoIndisponivel(porta.codigo);
     }
-  })();
-  inflight.set(key, job);
-  return job;
+
+    // Cache opcional (desligado por padrão; nunca guarda resultado da Brave: os Termos proíbem; nunca lê nem guarda a pesquisa privada).
+    const ttlMs = Math.max(0, Number(env.YUI_SEARCH_CACHE_TTL_MIN) || 0) * MINUTE;
+    if (ttlMs > 0 && compartilhavel) {
+      const hit = cache.get(key);
+      if (hit && now() - hit.at < ttlMs) {
+        try { bud.registrarReuso?.(); } catch { /* o contador nunca derruba a busca */ }
+        return { ...hit.value, results: hit.value.results.map((r) => ({ ...r })), errors: [], cached: true };
+      }
+      if (hit) cache.delete(key);
+    }
+
+    // Buscas idênticas e simultâneas (públicas) compartilham a mesma chamada: quem só aproveita o resultado CRU da que já está em andamento não faz nova chamada
+    // externa e NÃO gasta cota (nem reserva a vaga nem grava no disco). Os limites continuam valendo: quem já estourou o seu é recusado como sempre.
+    if (compartilhavel && inflight.has(key)) {
+      const limites = typeof bud.peekUser === 'function' ? bud.peekUser(userId, env, now()) : { ok: true };
+      if (!limites.ok) {
+        emit('warn', `[Search] limite de buscas atingido (${limites.limit}/hora)`);
+        return { provider: null, results: [], errors: [limites.scope === 'global' ? 'teto global de buscas por hora atingido' : 'limite de buscas por usuário atingido'], limited: limites.scope === 'global' ? 'global' : 'user', retryAfterMs: limites.retryAfterMs };
+      }
+      const shared = await inflight.get(key).job;
+      // A busca que esta pessoa esperava foi CANCELADA por quem a iniciou (§14 da Liz): ela pode fazer a PRÓPRIA busca, com cobrança normal, se o cancelamento foi
+      // uma escolha de quem a iniciou (razão `dono`; política, prazo e razão desconhecida NÃO repetem), se ela mesma não cancelou (o signal dela não abortou) e se
+      // esta é a primeira tentativa dela (no máximo UMA nova tentativa, sem laço). Quem repete passa de novo pela porta de saída, pelo cache e por este mesmo
+      // mapa (o primeiro esperador lidera a nova busca com a reserva DELE; os outros aproveitam essa execução, sem cobrança) e, se liderar, pela reserva própria
+      // (limite por pessoa e teto global): sem a porta aberta, ou sem reserva, nenhuma busca nova sai.
+      if (!repeticao && !signal?.aborted && !shared.results.length && repeteAposCancelamento(shared.cancelamento)) {
+        emit('info', '[Search] a busca idêntica que esta pessoa esperava foi cancelada por quem a iniciou: ela faz a PRÓPRIA busca (uma nova tentativa, reserva e execução próprias).');
+        return pesquisar(true);
+      }
+      try { bud.registrarReuso?.(); } catch { /* o contador nunca derruba a busca */ }
+      emit('info', '[Search] resultado reaproveitado de uma busca idêntica em andamento (sem nova chamada externa e sem cobrança).');
+      return { ...shared, results: shared.results.map((r) => ({ ...r })), errors: [...shared.errors] };
+    }
+
+    const turn = bud.takeUser(userId, env, now());
+    if (!turn.ok) {
+      // O registro em disco da cota por hora não gravou: a reserva foi desfeita e a busca NÃO sai (falhar fechado).
+      if (turn.scope === 'registro') {
+        emit('warn', '[Search] o registro da cota por hora não gravou: a busca não saiu (a pesquisa fica indisponível até o disco voltar).');
+        return resultadoIndisponivel('registro-da-cota');
+      }
+      emit('warn', `[Search] limite por usuário atingido (${turn.limit}/hora)`);
+      return { provider: null, results: [], errors: ['limite de buscas por usuário atingido'], limited: 'user', retryAfterMs: turn.retryAfterMs };
+    }
+
+    const deadline = intOption(deadlineMs ?? env.YUI_SEARCH_DEADLINE_MS, DEFAULT_DEADLINE_MS, 500, 120_000);
+    const deadlineTimer = timeoutSignal(deadline);
+    const chain = AbortSignal.any([deadlineTimer.signal, ...(signal ? [signal] : [])]);
+    const stats = { dispatched: 0 };
+    const exec = { id: (execSeq += 1) }; // a identidade DESTA execução: a reserva (`turn`) e o que ela registra no mapa são dela e de mais ninguém
+    const job = (async () => {
+      try {
+        let out = await runChain({ q, max: wanted, env, fetchImpl, chain, now, budget: bud, emit, providerTimeoutMs, stats });
+        if (!out.results.length) emit('warn', `[Search] sem resultados (${out.errors.join('; ') || 'nenhum provedor ativo'})`);
+        // Cancelada antes de ter resultado: a razão (uma palavra fixa) vai no resultado, para quem esperava saber se pode fazer a própria busca (cancelamento.js).
+        if (stats.cancelamento && !out.results.length && !out.indisponivel) out = { ...out, cancelamento: stats.cancelamento };
+        if (ttlMs > 0 && compartilhavel && out.results.length && out.provider !== 'brave') {
+          cache.set(key, { at: now(), value: out });
+          while (cache.size > MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value);
+        }
+        // (a marca "refeita" vai só no resultado de quem esperava a busca cancelada e de quem aproveitou a nova; o cache guarda o resultado sem ela)
+        return repeticao ? { ...out, refeita: true } : out;
+      } catch (err) {
+        emit('warn', `[Search] erro inesperado: ${redact(err?.message, q)}`);
+        return { provider: null, results: [], errors: ['erro inesperado na busca'] };
+      } finally {
+        deadlineTimer.clear();
+        if (compartilhavel && inflight.get(key)?.exec === exec) inflight.delete(key);
+        // Sem despacho, sem cobrança, mas SÓ com a ausência de despacho comprovada (`dispatched === 0`): nenhum provedor ativo, todos descansando, cota mensal cheia,
+        // cancelada antes de sair ou registro que não gravou = a vaga volta. Se algo pode ter saído (uma exceção depois do despacho; a queda do processo no meio
+        // nem chega aqui), não há prova: a cobrança fica (o lado conservador aprovado pela Liz).
+        if (!stats.dispatched) { try { bud.refund?.(turn); } catch { /* a devolução nunca derruba a busca */ } }
+      }
+    })();
+    if (compartilhavel) inflight.set(key, { exec, job });
+    return job;
+  }
+  return pesquisar(false);
 }

@@ -24,7 +24,13 @@ export function minutesToCron(minutes) {
   return hours >= 24 ? '0 0 * * *' : `0 */${hours} * * *`;
 }
 
-export function startScheduler(client) {
+/**
+ * @param {import('discord.js').Client} client
+ * @param {{ reminders?: boolean, memoryPurge?: boolean }} [options] com o cérebro separado (YUI_CEREBRO_EXTERNO=true) os
+ *   lembretes, o relatório matinal e a limpeza da memória rodam NO CÉREBRO (dono do lembretes.json e dos bancos de memória):
+ *   o bot passa `false` nos dois. O padrão (processo único) é tudo aqui, como sempre.
+ */
+export function startScheduler(client, { reminders = true, memoryPurge = true } = {}) {
   logger.info('[Scheduler] Inicializando agendador central de tarefas em UTC...');
 
   // 1-2. Newswire automático (notícias + checagem periódica)
@@ -63,16 +69,20 @@ export function startScheduler(client) {
     logger.info('[Scheduler] Newswire automático desativado (NEWSWIRE_ENABLED=false). Disponível via /gta-semanal fonte:newswire.');
   }
 
-  // 2.5 Limpeza diária da memória temporária expirada (Yui Core)
-  schedule('scheduler.memory_purge', '30 5 * * *', () => {
-    try {
-      const removed = memory.purgeExpired();
-      logger.info(`[Scheduler] Memória temporária: ${removed} lembrança(s) expirada(s) removida(s).`);
-    } catch (err) {
-      logger.error(`[Scheduler] Erro ao limpar memória expirada: ${err.message}`);
-      alertOwner('memory-purge', 'Falha ao limpar a memória temporária', err.message, { cooldownMinutes: 360 });
-    }
-  }, { timezone: 'UTC' });
+  // 2.5 Limpeza diária da memória temporária expirada (Yui Core). Com o cérebro separado ela roda no cérebro.
+  if (memoryPurge) {
+    schedule('scheduler.memory_purge', '30 5 * * *', () => {
+      try {
+        const removed = memory.purgeExpired();
+        logger.info(`[Scheduler] Memória temporária: ${removed} lembrança(s) expirada(s) removida(s).`);
+      } catch (err) {
+        logger.error(`[Scheduler] Erro ao limpar memória expirada: ${err.message}`);
+        alertOwner('memory-purge', 'Falha ao limpar a memória temporária', err.message, { cooldownMinutes: 360 });
+      }
+    }, { timezone: 'UTC' });
+  } else {
+    logger.info('[Scheduler] Limpeza da memória: roda no cérebro (dono dos bancos de memória).');
+  }
 
   // 3. Reset Diário do GTA Online às 06:00 UTC pontualmente
   schedule('scheduler.daily', '0 6 * * *', async () => {
@@ -216,7 +226,9 @@ export function startScheduler(client) {
   }
 
   // 7. Lembretes (a cada minuto) e relatório matinal do dono (08:00; inclui a saúde da Yui). YUI_MORNING_REPORT=false volta ao relatório de saúde sozinho.
-  startReminderService({ cron, client, logger });
+  //    Com o cérebro separado, o serviço de lembretes é do cérebro (o aviso chega ao bot pelo canal: discord.dm.send).
+  if (reminders) startReminderService({ cron, client, logger });
+  else logger.info('[Scheduler] Lembretes e relatório matinal: rodam no cérebro (o aviso chega pelo canal).');
 }
 
 export default { startScheduler };

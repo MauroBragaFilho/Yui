@@ -34,7 +34,11 @@ const ROWS = [
   // Apagar a PRÓPRIA memória hoje funciona também em somente leitura (é dado do usuário, não do computador): decisão a confirmar.
   ['memory.wipe_own', false, 'SSSSS'],
   ['memory.admin_inspect', false, 'AAADD'],
-  ['memory.admin_wipe_user', true, 'CDDDD'],
+  // Apagar a memória de OUTRA pessoa (decisão da Liz, 18/11/2026): só o dono, COM a confirmação explícita do alvo
+  // (core/memory/adminWipe.js; no Discord o botão do /yui-criador memorias; no painel a confirmação do app). Em enforce o dono
+  // passa (ASK = segue com a confirmação); qualquer outro papel ou canal público é negado. Era 'CDDDD' (negado para todos fora
+  // do PC). Continua `modifies`: com YUI_READ_ONLY=true a regra 1 (somente leitura vence sempre) segue negando.
+  ['memory.admin_wipe_user', true, 'SSSDD'],
   ['chat.generate_image', false, 'AAAAA'],
   ['chat.summarize', false, 'AAAAA'],
   ['radio.play_control', false, 'AAAAA'],

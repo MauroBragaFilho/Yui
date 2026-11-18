@@ -16,8 +16,10 @@
 //  - Nenhum comando ou painel lê o CONTEÚDO de outras pessoas; a auditoria só recebe contagens.
 //  - Banco com problema (arquivo corrompido, disco cheio): o módulo cai para RAM e a conversa segue. Nada aborta.
 //
-// ARMAZENAMENTO: sql.js do projeto (src/database/db.js), cache em RAM, uma transação por troca (usuário + resposta).
-// O sql.js reescreve o arquivo INTEIRO a cada escrita, então grava-se uma vez por troca, nunca por fala.
+// ARMAZENAMENTO: banco do projeto (src/database/db.js), cache em RAM, uma transação por troca (usuário + resposta).
+// No sql.js (o padrão) o arquivo INTEIRO é reescrito a cada escrita, então grava-se uma vez por troca, nunca por fala.
+// No motor nativo (YUI_DB_NATIVE com memory-context e/ou memory-context-personal: node:sqlite com WAL) as escritas vão
+// para o -wal; depois de apagar, o -wal é esvaziado (veja flushWal) para o texto apagado não ficar nele.
 // Não depende de foreign_keys: as falas do fio são apagadas explicitamente.
 //
 // VARIÁVEIS: YUI_CONTEXT_ENABLED, YUI_CONTEXT_SCOPE, YUI_CONTEXT_TTL_HOURS, YUI_CONTEXT_MAX_CHARS, YUI_CONTEXT_MAX_TURNS.
@@ -257,7 +259,7 @@ export function currentContext() {
   return als.getStore() ?? null;
 }
 
-// ───────────────────────────── Armazenamento (sql.js, via src/database/db.js) ─────────────────────────────
+// ───────────────────────────── Armazenamento (sql.js ou motor nativo, via src/database/db.js) ─────────────────────────────
 
 const DB_NAMES = Object.freeze({ public: 'memory-context', personal: 'memory-context-personal' });
 
@@ -285,6 +287,8 @@ const SCHEMA = `
 `;
 
 const CORRUPT_RE = /not a database|malformed|corrupt|disk image|encrypted/i;
+/** Erros do db.js que vêm de um banco VÁLIDO (formato do motor nativo, banco de outro processo dono): nunca vão à quarentena. */
+const NEVER_CORRUPT_CODES = new Set(['YUI_DB_WAL_NO_SQLJS', 'YUI_DB_NOT_OWNER', 'YUI_DB_OWNER_HELD', 'YUI_DB_OWNER_HUNG', 'YUI_DB_BAD_ROLE']);
 
 function databaseFilePath(name) {
   return path.join(path.resolve(config.database.dir), `${name}.db`);
@@ -301,13 +305,66 @@ export function contextFilesExist() {
 
 // Arquivo corrompido vai para a "quarentena": é renomeado para memory-context[-personal].corrupt-<ts>.db. O nome TERMINA em
 // .db e começa com memory-, então o .gitignore (database/memory-*.db) o cobre e um `git add` não versiona falas pessoais.
+// No motor nativo o -wal e o -shm vão junto (…corrupt-<ts>.db-wal / .db-shm, cobertos por database/*.db-wal e *.db-shm).
 // A quarentena não é eterna: a limpeza apaga o que tem mais de 48 h (a cada hora e na partida) e o apagar-tudo apaga tudo.
 // Também reconhece o nome antigo (memory-context.db.corrupt-<ts>) para limpar o que a versão anterior deixou.
-const CORRUPT_FILE_RE = /^memory-context(?:-personal)?(?:\.db)?\.corrupt-\d+(?:\.db)?$/;
+const CORRUPT_FILE_RE = /^memory-context(?:-personal)?(?:\.db)?\.corrupt-\d+(?:\.db(?:-wal|-shm)?)?$/;
 const CORRUPT_KEEP_MS = 48 * HOUR_MS;
 
-function corruptQuarantinePath(name) {
-  return path.join(path.resolve(config.database.dir), `${name}.corrupt-${Date.now()}.db`);
+/** O banco `name` é (ou seria) aberto no motor nativo? Vale também quando a abertura falhou e ele nem está aberto. */
+function usesNativeEngine(dbApi, name) {
+  try {
+    const engine = dbApi.getDatabaseEngine?.(name) ?? null;
+    if (engine) return engine === 'native';
+    const names = dbApi.nativeDatabaseNames?.();
+    return Boolean(names && (names.has('*') || names.has(name)));
+  } catch {
+    return false;
+  }
+}
+
+/** Leva o -wal e o -shm do arquivo corrompido para junto dele na quarentena; o que não puder ser movido é apagado. */
+function moveWalSidecars(file, dest, name, logger) {
+  for (const suffix of ['-wal', '-shm']) {
+    const from = `${file}${suffix}`;
+    if (!fs.existsSync(from)) continue;
+    try {
+      fs.renameSync(from, `${dest}${suffix}`);
+    } catch {
+      try {
+        fs.unlinkSync(from);
+      } catch (err) {
+        logger.warn(`[Context] "${name}": não consegui mover nem apagar o ${suffix} do arquivo corrompido: ${String(err?.message ?? err).slice(0, 100)}`);
+      }
+    }
+  }
+}
+
+/**
+ * Guarda de lado o arquivo corrompido do banco `name` (vira `<name>.corrupt-<ts>.db`). Nunca lança.
+ *  - sql.js: só renomeia o .db, como sempre (o sql.js leu o arquivo para a memória e não o deixa aberto).
+ *  - nativo (`native`): o arquivo pode estar ABERTO (o erro pode aparecer só na primeira leitura, depois da abertura) e o
+ *    Windows recusa renomear arquivo aberto (EBUSY/EPERM): fecha o banco ANTES com `closeDatabase(name)`. Leva junto o
+ *    -wal e o -shm, para um WAL velho não ficar ao lado do banco novo.
+ * @returns {string|null} o caminho na quarentena, ou null (não havia arquivo, ou o rename falhou)
+ */
+export function quarantineCorruptContextFile(name, { native = false, closeDatabase = null, dir = null, nowMs = Date.now(), logger = defaultLogger } = {}) {
+  try {
+    const base = dir ? path.resolve(dir) : path.resolve(config.database.dir);
+    const file = path.join(base, `${name}.db`);
+    if (!fs.existsSync(file)) return null;
+    if (native && closeDatabase) {
+      try { closeDatabase(name); } catch { /* já fechado, ou nunca chegou a abrir */ }
+    }
+    const dest = path.join(base, `${name}.corrupt-${nowMs}.db`);
+    fs.renameSync(file, dest);
+    if (native) moveWalSidecars(file, dest, name, logger);
+    logger.warn(`[Context] "${name}": arquivo corrompido guardado de lado (.corrupt-*.db, apagado em 48 h); o próximo início recria o banco.`);
+    return dest;
+  } catch (renameErr) {
+    logger.warn(`[Context] "${name}": não consegui guardar o arquivo corrompido de lado: ${String(renameErr?.message ?? renameErr).slice(0, 100)}`);
+    return null;
+  }
 }
 
 /**
@@ -341,7 +398,8 @@ export function purgeCorruptContextFiles({ nowMs = Date.now(), maxAgeMs = CORRUP
 
 // APAGAR DE VERDADE: um DELETE comum do SQLite só marca as páginas como livres e o texto continua legível dentro do
 // arquivo. `secure_delete` zera o conteúdo apagado. O sql.js volta os pragmas ao padrão a cada export() (a cada gravação
-// no disco), então ele é ligado DENTRO de cada transação de escrita, antes dos DELETE. Depois de apagar a pedido, o
+// no disco), então ele é ligado DENTRO de cada transação de escrita, antes dos DELETE. (No motor nativo o pragma fica
+// ligado na conexão; religar a cada transação não muda nada e mantém um código só.) Depois de apagar a pedido, o
 // VACUUM reconstrói o arquivo e elimina de vez as páginas livres.
 function secureDelete(db) {
   db.prepare('PRAGMA secure_delete = ON').run();
@@ -354,12 +412,36 @@ function vacuum(db) {
   }
 }
 
+// MOTOR NATIVO (WAL): cada escrita acrescenta ao -wal a versão NOVA das páginas, e as versões ANTIGAS continuam lá até o
+// checkpoint. O secure_delete e o VACUUM zeram o texto na versão nova, mas a antiga, com o texto, segue legível no -wal (e
+// um checkpoint comum não encolhe o -wal: os bytes antigos ficam até serem sobrescritos). O checkpoint TRUNCATE copia para o
+// .db as páginas atuais (já sem o texto) e deixa o -wal com 0 byte. O -shm é só o índice do -wal (números de página).
+// Devolve false se o -wal não pôde ser esvaziado (outra conexão lendo naquele instante).
+function checkpointWal(db) {
+  try {
+    const row = db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get();
+    return Number(row?.busy ?? 0) === 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Abre um arquivo de contexto. Devolve null (=> só RAM) se não conseguir; nunca lança. */
 async function openDbSink({ dbApi, name, logger }) {
   try {
     await dbApi.initDatabase(name, SCHEMA);
     const db = dbApi.getDbWrapper(name);
     db.prepare('SELECT COUNT(*) AS n FROM context_turns').get(); // arquivo corrompido falha aqui
+    // Só no motor nativo: esvazia o -wal depois de apagar (veja checkpointWal). No sql.js não há -wal e nada roda.
+    let lastWalWarn = 0;
+    const flushWal = () => {
+      if (dbApi.getDatabaseEngine?.(name) !== 'native') return;
+      if (checkpointWal(db)) return;
+      const t = Date.now();
+      if (t - lastWalWarn < 10 * 60_000) return;
+      lastWalWarn = t;
+      logger.warn(`[Context] "${name}": não consegui esvaziar o -wal depois de apagar (outra conexão lendo?); a próxima limpeza tenta de novo.`);
+    };
     return {
       name,
       load() {
@@ -370,9 +452,9 @@ async function openDbSink({ dbApi, name, logger }) {
       },
       /** Troca TODAS as falas do fio de uma vez (uma transação = uma reescrita do arquivo). */
       replaceScope(meta, turns) {
-        db.transaction(() => {
+        const dropped = db.transaction(() => {
           secureDelete(db);
-          db.prepare('DELETE FROM context_turns WHERE scope_key = ?').run(meta.key);
+          const before = db.prepare('DELETE FROM context_turns WHERE scope_key = ?').run(meta.key).changes;
           db.prepare(
             `INSERT INTO context_scopes (scope_key, user_id, channel_id, guild_id, personal, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -381,7 +463,11 @@ async function openDbSink({ dbApi, name, logger }) {
           for (const t of turns) {
             db.prepare('INSERT INTO context_turns (scope_key, role, content, at) VALUES (?, ?, ?, ?)').run(meta.key, t.role, t.content, t.at);
           }
+          // `turns` = as falas antigas que ficaram + a troca nova (2 falas). Saíram mais falas do que voltaram: alguma fala
+          // antiga deixou o fio (limite de falas/caracteres ou prazo) e o texto dela não pode ficar no -wal.
+          return before > turns.length - 2;
         })();
+        if (dropped) flushWal();
       },
       deleteScopes(keys) {
         if (!keys.length) return;
@@ -393,6 +479,7 @@ async function openDbSink({ dbApi, name, logger }) {
           }
         })();
         vacuum(db); // apagar de verdade: também limpa páginas livres que algum DELETE antigo possa ter deixado
+        flushWal();
       },
       /** Apaga do disco as falas mais velhas que o corte e os fios que ficaram vazios. */
       purge(cutoffMs) {
@@ -403,24 +490,21 @@ async function openDbSink({ dbApi, name, logger }) {
           return n;
         })();
         if (removed > 0) vacuum(db);
+        flushWal(); // nativo: a limpeza horária esvazia o -wal mesmo sem apagar nada agora (rede de segurança)
         return removed;
       },
     };
   } catch (err) {
     const msg = String(err?.message ?? err);
     logger.warn(`[Context] "${name}" indisponível, seguindo só em RAM: ${msg.slice(0, 160)}`);
-    if (CORRUPT_RE.test(msg)) {
+    // A trava do db.js (banco VÁLIDO no formato do motor nativo aberto pelo sql.js) nunca é corrupção; e o caminho do arquivo
+    // sai da mensagem antes do teste, para uma pasta com "corrupt" ou "encrypted" no nome não mandar um banco bom à quarentena.
+    const semCaminho = msg.replace(/"(?:[A-Za-z]:[\\/]|[\\/])[^"]*"/g, '"…"');
+    // A recusa por DONO (cérebro e bot separados: banco de outro processo, trava com outro dono) também nunca é corrupção.
+    if (!NEVER_CORRUPT_CODES.has(err?.code) && CORRUPT_RE.test(semCaminho)) {
       // Arquivo corrompido: guarda de lado para o próximo início começar limpo. O nome novo casa com o .gitignore
-      // (memory-*.db) e a limpeza apaga a quarentena depois de 48 h.
-      try {
-        const file = databaseFilePath(name);
-        if (fs.existsSync(file)) {
-          fs.renameSync(file, corruptQuarantinePath(name));
-          logger.warn(`[Context] "${name}": arquivo corrompido guardado de lado (.corrupt-*.db, apagado em 48 h); o próximo início recria o banco.`);
-        }
-      } catch (renameErr) {
-        logger.warn(`[Context] "${name}": não consegui guardar o arquivo corrompido de lado: ${String(renameErr?.message ?? renameErr).slice(0, 100)}`);
-      }
+      // (memory-*.db) e a limpeza apaga a quarentena depois de 48 h. No nativo fecha o banco antes e leva -wal/-shm junto.
+      quarantineCorruptContextFile(name, { native: usesNativeEngine(dbApi, name), closeDatabase: dbApi.closeDatabase, logger });
     }
     return null;
   }
@@ -558,7 +642,7 @@ export function createContextStore({ now = Date.now, env = process.env, logger =
      * Grava UMA troca (fala do usuário + resposta) de uma vez. `assistantText` pode ser ERROR_MARKER.
      * Devolve true se gravou.
      */
-    record(target, { userText, assistantText, userAt = null } = {}) {
+    record(target, { userText, assistantText, userAt = null, assistantAt = null } = {}) {
       if (!target?.active || target.record === false || !target.key) return false;
       const { maxChars } = budget();
       const user = clipUserText(userText, Math.min(LIMITS.userChars, Math.floor(maxChars * 0.4)));
@@ -578,12 +662,29 @@ export function createContextStore({ now = Date.now, env = process.env, logger =
         scopes.set(scope.key, scope);
       }
       const userAtMs = Number.isFinite(userAt) ? Math.min(userAt, t) : t;
-      scope.turns.push({ role: 'user', content: user, at: userAtMs }, { role: 'assistant', content: assistant, at: t });
+      // `assistantAt` (cérebro separado): o MESMO instante da fala, para a troca ficar junta na ordem do disco (at, id) mesmo quando a
+      // resposta é gravada depois da mensagem seguinte da pessoa ter chegado. Sem ele, como sempre: o instante da gravação.
+      const assistantAtMs = Number.isFinite(assistantAt) ? Math.max(userAtMs, Math.min(assistantAt, t)) : t;
+      scope.turns.push({ role: 'user', content: user, at: userAtMs }, { role: 'assistant', content: assistant, at: assistantAtMs });
       scope.updatedAt = t;
       scope.turns = prune(scope.turns, t);
       if (scope.turns.length === 0) { removeScopes([scope]); return false; } // nada cabe no orçamento: não guarda fio vazio
       persist(scope);
       return true;
+    },
+
+    /**
+     * A troca deste alvo já está no fio? (a fala do usuário com o MESMO instante e o MESMO texto, depois do mesmo corte de tamanho que a
+     * gravação usa). É a chave natural de um turno: o instante é o da mensagem do Discord. Vale depois de um reinício (o fio veio do disco).
+     */
+    hasExchange(target, { userText, userAt = null } = {}) {
+      if (!target?.active || !target.key || !Number.isFinite(userAt)) return false;
+      const scope = scopes.get(target.key);
+      if (!scope) return false;
+      const { maxChars } = budget();
+      const user = clipUserText(userText, Math.min(LIMITS.userChars, Math.floor(maxChars * 0.4)));
+      const at = Math.min(userAt, now());
+      return scope.turns.some((t) => t.role === 'user' && t.at === at && t.content === user);
     },
 
     /** Direito de exclusão: apaga todos os fios de uma pessoa (DM e canais, público e pessoal). */
@@ -640,6 +741,19 @@ let defaultStore = null;
 let initPromise = null;
 let purgeTimer = null;
 
+// ── Cérebro separado (etapa 3): os arquivos de contexto são do CÉREBRO ──
+// O bot com YUI_CEREBRO_EXTERNO=true instala aqui o pedido ao cérebro ({ forgetUser(userId), forgetGuild(guildId) }, que
+// devolvem { scopes, turns }). Com ele: o apagar-tudo e a saída de servidor vão ao cérebro pelo canal, e este processo nunca
+// abre os arquivos de contexto (o store fica só em RAM). A leitura e a gravação do contexto por horas são do cérebro (etapa 5): a conversa
+// do Discord vira um turno do cérebro (chat.turn/chat.commit, src/cerebro/conversa.js) e o bot nunca lê nem grava falas aqui.
+let contextRemote = null;
+export function setContextRemote(remote) {
+  contextRemote = remote && typeof remote.forgetUser === 'function' && typeof remote.forgetGuild === 'function' ? remote : null;
+}
+export function isContextRemote() {
+  return contextRemote !== null;
+}
+
 export function getContextStore() {
   if (!defaultStore) defaultStore = createContextStore({});
   return defaultStore;
@@ -665,6 +779,10 @@ export function initContextStore() {
   if (!initPromise) {
     initPromise = (async () => {
       const store = getContextStore();
+      if (contextRemote) {
+        store.attach(null); // os arquivos são do cérebro: este processo fica só em RAM e não agenda a limpeza deles
+        return store;
+      }
       try {
         purgeCorruptContextFiles(); // quarentena velha de uma partida anterior
         store.attach(await createDbBackends({ logger: defaultLogger }));
@@ -705,11 +823,28 @@ export function recordContextExchange(target, payload) {
 }
 
 /**
+ * Grava uma troca UMA vez (cérebro separado, etapa 5: o chat.commit do turno). Com `userAt` (o instante da mensagem do Discord), uma troca
+ * que já está no fio não entra de novo, nem depois de um reinício (o fio é relido do disco). A gravação em si é uma transação só (a fala e a
+ * resposta juntas). Nunca lança. Devolve { recorded, duplicate }.
+ */
+export function recordContextExchangeOnce(target, payload = {}) {
+  if (!target?.active || !defaultStore) return { recorded: false, duplicate: false };
+  try {
+    if (Number.isFinite(payload.userAt) && defaultStore.hasExchange(target, payload)) return { recorded: false, duplicate: true };
+    return { recorded: defaultStore.record(target, payload), duplicate: false };
+  } catch (err) {
+    defaultLogger.warn(`[Context] gravação falhou: ${String(err?.message ?? err).slice(0, 120)}`);
+    return { recorded: false, duplicate: false };
+  }
+}
+
+/**
  * Apaga todos os fios de uma pessoa (usado pelo `/yui-memoria apagar-tudo`). Funciona mesmo com o recurso desligado
  * se houver arquivo de contexto no disco; sem recurso e sem arquivo não cria nada.
  */
 export async function forgetUserContext(userId) {
   if (!userId) return { scopes: 0, turns: 0 };
+  if (contextRemote) return contextRemote.forgetUser(String(userId)); // o cérebro é o dono dos arquivos (pode lançar: quem chama trata)
   // Arquivo corrompido guardado de lado pode ter falas dela e ninguém o lê mais: no apagar-tudo some inteiro (não espera as 48 h).
   purgeCorruptContextFiles({ maxAgeMs: 0 });
   if (!contextEnabled() && !contextFilesExist() && !defaultStore) return { scopes: 0, turns: 0 };
@@ -720,6 +855,7 @@ export async function forgetUserContext(userId) {
 /** Chamado na saída de servidor (events/guildDelete.js): apaga só o contexto do servidor, nunca o de memória pessoal. */
 export async function forgetGuildContext(guildId) {
   if (!guildId) return { scopes: 0, turns: 0 };
+  if (contextRemote) return contextRemote.forgetGuild(String(guildId));
   if (!contextEnabled() && !contextFilesExist() && !defaultStore) return { scopes: 0, turns: 0 };
   const store = await initContextStore();
   return store.forgetGuild(guildId, { keepPersonal: true });

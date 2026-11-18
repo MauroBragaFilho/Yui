@@ -9,23 +9,28 @@ import { buildThirdPartyLogPrompt, fenceUntrustedWeb } from './llmSafety.js';
 import { resolveMentions, neutralizeMassMentions } from '../discord/mentions.js';
 import { restoreMentionIds } from '../utils/mentions.js';
 import { alertOwner } from '../core/alerts.js';
-import { applyPersona, applyVoicePersona, buildPersonaPrompt, publicPersonaText } from '../core/persona.js';
+import { buildPersonaPrompt } from '../core/persona.js';
+import { toolsDefinitionText, radioPromptBlock, buildConversationSystemPrompt, searchOfferedFor } from '../core/ai/promptConversa.js';
+import { LIMITES_PADRAO_CADEIA } from '../core/ai/limitesTokens.js';
+import { stripThinking as stripThinkingCore, extractThinkingFallback, isSystemReply, EMPTY_REPLY_TEXT } from '../core/ai/limpezaResposta.js';
+import { isChatRemote, createRemoteTurn, isRemoteTurn, isCerebroUnavailable, CEREBRO_UNAVAILABLE_TEXT, forgetVoiceInCerebro } from '../discord/turnoCerebro.js';
+import { processandoStore, conversaDe as processandoConversaDe } from '../discord/processandoGuardado.js';
 import { getGateway, gatewayInChain } from '../gateway/index.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-import { smartSearchDetailed, createWebContextMemo, searchForAgent, fetchPageContent, isBlacklisted } from './searchManager.js';
+import { smartSearchDetailed, createWebContextMemo, searchForAgent, fetchPageContent, isBlacklisted, buildSearchContext as buildSearchContextCore } from './searchManager.js';
 import { searchWeb } from '../search/providers.js';
 // Agente de pesquisa: detectores puros (searchIntent) e laço limitado com resposta final garantida (researchAgent). Nenhum dos dois importa este arquivo (sem ciclo).
 import { runResearch, readResearchConfig, createUserGuard, privateSearchAllowed } from './researchAgent.js';
-import { preRouteDecision, recoveryPlan, inspectFinalGuard, finalGuard, finalGuardDetailed, userNeedsAnswer, buildNoPromiseRetryPrompt, buildSearchQuery, isRawToolLeak, NEED_TOPIC_REPLY, VOICE_REFUSAL } from './searchIntent.js';
+import { preRouteDecision, recoveryPlan, inspectFinalGuard, finalGuard, finalGuardDetailed, userNeedsAnswer, buildNoPromiseRetryPrompt, buildSearchQuery, isRawToolLeak, NEED_TOPIC_REPLY, VOICE_REFUSAL, searchFailureNote } from './searchIntent.js';
 import { isOwnerId } from '../core/permissions.js';
 // Lista de mods (Minecraft): o CÓDIGO procura cada nome no Modrinth e monta a lista com os links (Porta M, antes da Porta A).
 import { routeModList } from './modListResolver.js';
 import { routeLibrary } from './libraryIntent.js';
 import { routeLists } from './listAssistant.js';
-import { routeReminders, formatReminderList, scopedReminderStore, getReminderStore, reminderTextFromTool } from '../reminders/assistant.js';
+import { routeReminders, formatReminderList, scopedReminderStore, getReminderStore, reminderTextFromTool, isRemindersRemote, listRemindersFor } from '../reminders/assistant.js';
 import { logger } from '../utils/logger.js';
 import { getMediaUserMessage, formatDeezerDelivery, codeSafe, isUploadTooLargeError, MEDIA_MESSAGES } from '../utils/mediaUrls.js';
 // Textos grandes: corte que não parte emoji, limite de upload, orçamento de prompt e leitor de linhas do stream SSE (TG-02, 05, 08, 11, 16, 37).
@@ -61,7 +66,6 @@ import {
     extractFirstJsonObject,
     canonicalToolName,
     normalizeToolCall,
-    NEVER_PROMISE_RULE,
     STRICT_MODE_SEARCH_LINE,
     STRICT_MODE_REPLY_LINE,
     TOOLS_INTRO_LINE,
@@ -130,9 +134,8 @@ import {
     isUnsafeForContext
 } from '../core/context/contextStore.js';
 const geminiCooldowns = {};
-// A regra "toda resposta é FINAL" do [REGRAS] sem citar nenhuma ferramenta: chamadas com as ferramentas fechadas (voz, /yui, a síntese da pesquisa, pesquisa desligada)
-// não podem ter "search_web" no prompt de sistema (a IA entenderia que a oferece). Com a ferramenta disponível vale a NEVER_PROMISE_RULE completa, do llmSafety.
-const NEVER_PROMISE_RULE_NO_TOOLS = 'Toda resposta tem de ser FINAL: nunca diga que vai pesquisar, verificar ou voltar depois ("vou pesquisar", "um segundo", "já volto"), porque você não consegue mandar nada depois. Responda com o que sabe ou diga que não sabe.';
+// A regra "toda resposta é FINAL" sem citar ferramenta (NEVER_PROMISE_RULE_NO_TOOLS) e o resto do texto do prompt de sistema moram em
+// core/ai/promptConversa.js (uma fonte só para o bot e o cérebro).
 /**
  * Resposta de GTA Online montada pela IA com os dados de TODAS as páginas (o código busca; a IA só escreve). Compartilhada entre a
  * Porta G (regra por código) e a ferramenta gta_online (o modelo escolheu). Se a IA falhar, devolve o texto cru das páginas. Nunca lança.
@@ -286,18 +289,7 @@ function sanitizeToolsForApi(tools) {
     }));
 }
 
-// A pesquisa na web é OFERECIDA ao modelo nesta conversa? Em conversa sensível (DM, canal privado do dono, app) só quando o YUI_PRIVATE_SEARCH libera este usuário;
-// senão a ferramenta seria recusada na hora e o modelo prometeria pesquisar (C7). Nunca lança.
-// Conversa espontânea (`chatter`: a Yui entrando sozinha no canal) nunca pesquisa nem gasta a cota de quem só falou: a ferramenta nem é oferecida (só com o agente ligado;
-// com YUI_RESEARCH_ENABLED=false vale o ramo antigo, que não distinguia). Com o agente desligado o privado também sempre recusa, então a ferramenta não é oferecida lá.
-function searchOfferedFor({ sensitive = false, userId = null, chatter = false } = {}) {
-    try {
-        const cfg = readResearchConfig();
-        if (chatter === true && cfg.enabled) return false;
-        if (sensitive !== true) return true;
-        return cfg.enabled && privateSearchAllowed(cfg.privateSearch, { isOwner: isOwnerId(userId) });
-    } catch (_) { return sensitive !== true; }
-}
+// A pesquisa na web é OFERECIDA ao modelo nesta conversa? (searchOfferedFor, de core/ai/promptConversa.js: a mesma regra que o cérebro usa)
 // `sensitive`: conversa privada. Sem liberação do YUI_PRIVATE_SEARCH, search_web sai da oferta (o interruptor do servidor continua valendo à parte).
 function buildToolsPayload(guildId, userId = null, { sensitive = false, chatter = false } = {}) {
     const disabled = searchOfferedFor({ sensitive, userId, chatter }) ? getDisabledTools(guildId) : [...getDisabledTools(guildId), 'search_web'];
@@ -338,49 +330,54 @@ function buildToolsDefinition(guildId, userId = null, { sensitive = false, chatt
             }
             return true;
         });
-    let toolList = '';
-    let exampleList = '';
-    let idx = 1;
-    for (const t of activeTools) {
-        const f = t.function;
-        if (!f.textual_triggers) continue;
-        toolList += `\n${idx}. **${f.name}**: ${f.description}\n`;
-        toolList += `   - ${f.textual_triggers}\n`;
-        toolList += `   - Args: ${f.textual_args}\n`;
-        idx++;
+    // O texto (lista, exemplos e instruções) é o MESMO que o cérebro monta no chat.turn (core/ai/promptConversa.js).
+    return toolsDefinitionText(activeTools, disabled);
+}
+// Configuração do canal que o CÉREBRO precisa para montar o prompt da conversa (etapa 5, chat.turn): só DADOS do Discord, que são do bot
+// (prompt do servidor, persona e humor do canal, o rádio tocando, as ferramentas ligadas no servidor). O cérebro decide a persona, a memória,
+// o histórico e a oferta da pesquisa. Nunca lança.
+function channelFactsForCerebro({ guildId = null, channelId = null, userId = null } = {}) {
+    const facts = { serverPrompt: null, channelSettings: null, radioBlock: '', toolsActive: [], toolsDisabled: [] };
+    // Etapa 6 (ajustes da Liz): os limites de tokens ajustados pelo painel do Discord valem também com o cérebro separado. Só o que o
+    // painel mudou (o padrão e o YUI_REPLY_MAX_TOKENS o cérebro já lê do mesmo .env).
+    if (Object.keys(painelMaxTokens).length) facts.maxTokens = { ...painelMaxTokens };
+    try {
+        facts.serverPrompt = getServerPrompt(guildId) || null;
+        const settings = channelId ? channelSettings[channelId] : null;
+        facts.channelSettings = typeof settings === 'string' ? settings : (settings ? { instruction: settings.instruction ?? null, mood: settings.mood ?? null } : null);
+        if (guildId) { try { facts.radioBlock = radioPromptBlock(getSession(guildId)); } catch (_) { facts.radioBlock = ''; } }
+        // As ferramentas do servidor como o buildToolsDefinition as vê com a pesquisa oferecida (a oferta da pesquisa é decisão do cérebro).
+        const disabled = getDisabledTools(guildId);
+        const mode = getAutoBlockMode(guildId);
+        facts.toolsDisabled = disabled;
+        facts.toolsActive = ALL_MCP_TOOLS
+            .filter(t => !disabled.includes(t.function.name))
+            .filter(t => !(t.meta && t.meta.switchOnly))
+            .filter(t => {
+                if (t.meta && t.meta.guardAutomod) {
+                    if (userId && config.isAutomodWhitelisted(userId)) return false;
+                    if (mode === 'off') return false;
+                    return mode === 'mcp' || mode === 'both';
+                }
+                return true;
+            })
+            .map(t => t.function.name);
+    } catch (err) {
+        logger.warn(`[Cérebro] não consegui ler a configuração do canal para o cérebro: ${scrubLogText(err?.message, 100)}`);
     }
-    const examplesMap = {
-        download_audio:  'User: "Baixe pra mim https://youtu.be/..."\nResponse: { "thought": "User quer baixar audio.", "tool": "download_audio", "args": { "url": "https://youtu.be/..." } }',
-        download_video:  'User: "Baixa esse vídeo https://www.instagram.com/reel/..."\nResponse: { "thought": "User quer baixar vídeo.", "tool": "download_video", "args": { "url": "https://www.instagram.com/reel/..." } }',
-        search_game:     'User: "Arruma o torrent do GTA V"\nResponse: { "thought": "User quer jogo GTA V.", "tool": "search_game", "args": { "game_name": "Grand Theft Auto V" } }',
-        search_web:      'User: "Pesquise sobre Hytale"\nResponse: { "thought": "User quer info externa (Web).", "tool": "search_web", "args": { "query": "Hytale game information news" } }\n' + SEARCH_WEB_EXTRA_EXAMPLES,
-        show_bot_menu:   'User: "Yui, abra o menu interativo de ajuda por favor"\nResponse: { "thought": "User pediu explicitamente para abrir o menu visual de ajuda.", "tool": "show_bot_menu", "args": { "context": "geral" } }',
-        generate_image:  'User: "gera uma imagem de um gato spacial"\nResponse: { "thought": "User quer uma imagem gerada por IA.", "tool": "generate_image", "args": { "prompt": "a space cat floating in galaxy, cinematic, detailed fur, neon lights", "negative_prompt": "nsfw, nude, explicit, gore, violence, blood, adult content, 18+, pornographic, sexual, disturbing, hentai, r18" } }',
-        check_steam:     'User: "Elden Ring ta em promo na steam?"\nResponse: { "thought": "User quer saber preço de Elden Ring.", "tool": "check_steam", "args": { "game": "Elden Ring" } }',
-        check_game_info: 'User: "qual a nota de Elden Ring?"\nResponse: { "thought": "User quer info geral do jogo.", "tool": "check_game_info", "args": { "game": "Elden Ring" } }\nUser: "quanto tempo pra zerar Baldur\u0027s Gate 3?"\nResponse: { "thought": "User quer tempo de jogo.", "tool": "check_game_info", "args": { "game": "Baldur\u0027s Gate 3" } }',
-        check_pc_compatibility: 'User: "meu pc com rtx 3060 e 16gb roda cyberpunk?"\nResponse: { "thought": "User quer saber se roda.", "tool": "check_pc_compatibility", "args": { "game": "Cyberpunk 2077", "gpu": "RTX 3060", "ram": "16 GB" } }\nUser: "requisitos de GTA VI"\nResponse: { "thought": "User quer requisitos do jogo.", "tool": "check_pc_compatibility", "args": { "game": "GTA VI" } }',
-        convert_currency:'User: "quanto ta 50 dolares em reais?"\nResponse: { "thought": "User quer converter 50 USD para BRL.", "tool": "convert_currency", "args": { "amount": 50, "from": "USD", "to": "BRL" } }',
-        get_current_music:'User: "Yui, baixe a musica do meu status"\nResponse: { "thought": "User quer baixar música tocando no seu status.", "tool": "get_current_music", "args": { "download": true } }\nUser: "oq eu to escutando no status"\nResponse: { "thought": "User quer saber música do seu status.", "tool": "get_current_music", "args": { "download": true } }',
-    };
-    for (const [name, example] of Object.entries(examplesMap)) {
-        if (!disabled.includes(name)) exampleList += `\n${example}\n`;
-    }
-    // Pesquisa ligada no servidor: a introdução cita a web e a 3ª regra manda chamar search_web NA HORA (nunca "vou pesquisar"). Desligada: nada disso entra.
-    const searchOn = !disabled.includes('search_web');
-    const introLine = searchOn ? TOOLS_INTRO_LINE : 'Use-as quando o usuário pedir para baixar algo ou buscar um jogo.';
-    const searchDecisionLine = searchOn ? `\n${TOOLS_SEARCH_DECISION}` : '';
-    return `\n--- FERRAMENTAS DISPONÍVEIS ---\nVocê tem acesso às seguintes ferramentas para executar ações reais.\n${introLine}\n${toolList}\n--- INSTRUÇÃO DE PENSAMENTO E DECISÃO ---\nAntes de responder, ANALISE:\n1. O usuário quer apenas conversar ou uma informação que você já sabe? -> Responda apenas com texto (Sem JSON).\n2. O usuário quer uma AÇÃO ESPECÍFICA (Download, Busca Web)? -> Responda com JSON.${searchDecisionLine}\n\nFORMATO PARA USO DE FERRAMENTA (JSON):\n{\n  "thought": "Pensamento ultra-curto (1 a 3 palavras para economizar tokens, ex: 'baixar audio')",\n  "tool": "nome_da_ferramenta",\n  "args": { ...argumentos... }\n}\n\nEXEMPLOS:${exampleList}\nUser: "Como você está?"\nResponse: Estou bem, e você?\n\n---------------------------------------\n`;
+    return facts;
 }
 loadServerTools();
+// max_tokens de cada provedor: a tabela de core/ai/limitesTokens.js (os mesmos números de sempre), que o cérebro também usa como padrão (etapa 6).
 const providerSettings = {
-    local:        { timeout: 60000, temperature: 0.7, max_tokens: 1024, top_p: 0.9 },
-    gemini:       { timeout: 60000, temperature: 0.7, max_tokens: 2048, top_p: 1.0 },
-    cloudflare:   { timeout: 30000, temperature: 0.7, max_tokens: 1024 },
-    pollinations: { timeout: 60000, temperature: 0.7, max_tokens: 1024 },
-    hf:           { timeout: 60000, temperature: 0.7, max_tokens: 512 },
-    groq:         { timeout: 30000, temperature: 0.7, max_tokens: 1024 },
-    gateway:      { timeout: 60000, temperature: 0.7, max_tokens: 1024 },
-    horde:        { timeout: 60000, temperature: 0.7, max_tokens: 256 }
+    local:        { timeout: 60000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.local, top_p: 0.9 },
+    gemini:       { timeout: 60000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.gemini, top_p: 1.0 },
+    cloudflare:   { timeout: 30000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.cloudflare },
+    pollinations: { timeout: 60000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.pollinations },
+    hf:           { timeout: 60000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.hf },
+    groq:         { timeout: 30000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.groq },
+    gateway:      { timeout: 60000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.gateway },
+    horde:        { timeout: 60000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.horde }
 };
 /**
  * YUI_REPLY_MAX_TOKENS (opcional, 64 a 8192): sobe o max_tokens de saída de todos os provedores (o Horde fica em até 512).
@@ -395,6 +392,33 @@ function applyReplyMaxTokensEnv(env = process.env) {
     return true;
 }
 applyReplyMaxTokensEnv();
+/**
+ * max_tokens de um provedor da cadeia NESTA chamada. Sem `options.limiteTokens`, o de sempre (providerSettings): é o caso do Discord, que
+ * não muda. Só o app pela cadeia (o backend "legacy-chain" do AI Manager) passa `limiteTokens`: os limites unificados da etapa 6 (ajustes da
+ * Liz) cortam a configuração da cadeia pela capacidade do provedor e pelo teto global (core/ai/limitesTokens.js, limiteDaCadeiaNoApp).
+ */
+function maxTokensDe(provider, options) {
+    const configurado = providerSettings[provider].max_tokens;
+    if (typeof options?.limiteTokens !== 'function') return configurado;
+    // Segunda revisão da Liz (§12): o ajuste do PAINEL do Discord vale só no Discord. O app (o único que passa limiteTokens) recebe a
+    // configuração da cadeia SEM o ajuste do painel (o padrão e o YUI_REPLY_MAX_TOKENS), cortada pela capacidade e pelo teto.
+    const semPainel = Object.prototype.hasOwnProperty.call(maxTokensAntesDoPainel, provider) ? maxTokensAntesDoPainel[provider] : configurado;
+    try {
+        const n = options.limiteTokens(provider, semPainel);
+        return Number.isFinite(n) && n > 0 ? n : semPainel;
+    } catch (_) {
+        return semPainel;
+    }
+}
+/**
+ * Os ajustes de max_tokens feitos pelo PAINEL do Discord (configPanelHandler e /yui-config_ia, só o dono) nesta execução do bot. Com o cérebro
+ * separado eles vão ao cérebro como fato do canal (channelFactsForCerebro: `maxTokens`), e o cérebro aplica como o "configurado" do provedor
+ * equivalente, ainda cortado pela capacidade e pelo teto global (etapa 6, ajustes da Liz). No processo único eles valem direto na cadeia.
+ */
+const painelMaxTokens = {};
+// O max_tokens de cada provedor ANTES do primeiro ajuste do painel (o padrão da cadeia e o YUI_REPLY_MAX_TOKENS): é o que o APP usa pela
+// cadeia do bot (o app nunca herda o ajuste do painel do Discord; segunda revisão da Liz, §12).
+const maxTokensAntesDoPainel = {};
 const channelSettingsPath = path.join(__dirname, '../data/channel_settings.json');
 let channelSettings = {};
 function loadChannelSettings() {
@@ -560,9 +584,11 @@ function contextActive() {
     return currentContext()?.active === true;
 }
 // Grava a troca (fala do autor + resposta curta) no contexto por horas. Uma gravação por troca; nunca lança.
+// Cérebro separado (etapa 5): o alvo é o TURNO do cérebro; a fala vai no fim do turno (chat.commit) e o cérebro decide onde gravar.
 function commitContext(target, assistantText) {
     if (!target?.active || target.committed || !target.record || !target.userText) return false;
     target.committed = true;
+    if (isRemoteTurn(target)) return target.noteContext(assistantText);
     return recordContextExchange(target, { userText: target.userText, assistantText });
 }
 // Frase curta da Yui para ferramentas e downloads (nunca o prompt inteiro, nunca título ou texto vindo de fora).
@@ -629,14 +655,9 @@ function localUnreachable(provider, error) {
  */
 // Só pelo TEXTO das respostas de sistema que o generateResponse devolve ("Limites de Processamento Atingidos", o aviso de pedido grande
 // demais, "SYSTEM ERROR"). Um comentário da Yui que começa com emoji ("⚡ Que preço bom!") é comentário de verdade e NÃO é descartado.
-// Nenhuma resposta aproveitável (o modelo só "pensou" ou repetiu lixo). Contém "erro ao processar seu pedido" para o isSystemReply tratá-la como resposta de sistema.
-const EMPTY_REPLY_TEXT = '⚠️ Tive um erro ao processar seu pedido: a IA respondeu algo vazio. Tenta de novo ou reformula a pergunta.';
-const SYSTEM_REPLY_MARKER = /SYSTEM ERROR|Limites de Processamento|erro ao processar seu pedido/i;
+// EMPTY_REPLY_TEXT (nenhuma resposta aproveitável) e isSystemReply moram em core/ai/limpezaResposta.js (etapa 6: o cérebro usa os mesmos).
 // Resposta que COMEÇA com emoji de erro/aviso: vale só para o texto do check_game_info (gameInfoErrorText), nunca para comentário.
 const ERROR_EMOJI_START = /^[\s*_]*(?:⚠|⚡|❌|🛑|🚨)/;
-function isSystemReply(text) {
-    return SYSTEM_REPLY_MARKER.test(String(text ?? ''));
-}
 
 const COMMENT_MAX_CHARS = 400;
 const NO_MENTIONS = Object.freeze({ parse: [] }); // o comentário da IA nunca marca ninguém
@@ -778,6 +799,9 @@ function anonymousTextTooBig(prompt, history) {
 
 function addToHistory(channelId, role, content) {
     if (!channelId) return;
+    // Cérebro separado (etapa 5): o histórico é do cérebro; a linha vai no fim do turno (chat.commit) e ele decide se entra.
+    const remoteTurn = currentContext();
+    if (isRemoteTurn(remoteTurn)) { remoteTurn.noteHistory(role, content); return; }
     if (contextActive()) return; // com o contexto por horas ativo o buffer do canal fica intocado
     const key = String(channelId);
     let list = conversationHistory.get(key) || [];
@@ -798,6 +822,7 @@ function addToolExchangeToHistory(channelId, ownText, assistantLine) {
 }
 function getHistory(channelId, { sensitive = false } = {}) {
     const target = currentContext();
+    if (isRemoteTurn(target)) return []; // cérebro separado: quem lê o histórico (e confere a repetição) é o cérebro
     if (target?.active) return readContextTurns(target, { sensitive });
     return conversationHistory.get(String(channelId)) || [];
 }
@@ -813,6 +838,7 @@ function clearVoiceHistory(guildId) {
     for (const key of Object.keys(lastModelByChannel)) {
         if (key.startsWith(prefix)) delete lastModelByChannel[key];
     }
+    forgetVoiceInCerebro(guildId); // cérebro separado: o histórico da voz fica lá (sem efeito no processo único)
     return removed;
 }
 function setDiscordClient(client) {
@@ -853,178 +879,10 @@ function isKnownToolName(name) {
     if (EXTRA_TOOL_NAMES.has(n.toLowerCase()) || /^radio_/i.test(n)) return true;
     return ALL_MCP_TOOLS.some(t => t?.function?.name === n);
 }
-function isToolCallText(fullMatch, name) {
-    return isKnownToolName(name) || /tool_code|default_api\./i.test(String(fullMatch ?? ''));
-}
-// Tira os blocos <think>...</think> (e um <think> sem fechamento, até o fim do texto) numa passagem só. O par de expressões antigo varria o texto inteiro a
-// partir de CADA "<think>": uma saída degenerada de 100 mil caracteres com "<think>" repetido custava mais de 1 s e parava o laço de eventos (resíduo F1).
-// Mesmo resultado de antes: um bloco vai da PRIMEIRA abertura pendente até o primeiro "</think>" depois dela; "</think>" sem abertura fica como está.
-function removeThinkBlocks(text, { onStrippedBlock } = {}) {
-    const tag = /<(\/?)think>/gi;
-    let out = '';
-    let last = 0;
-    let openAt = -1;
-    let m;
-    while ((m = tag.exec(text)) !== null) {
-        if (m[1] === '') {
-            if (openAt === -1) openAt = m.index;
-        } else if (openAt !== -1) {
-            out += text.slice(last, openAt);
-            if (typeof onStrippedBlock === 'function') {
-                onStrippedBlock(text.slice(openAt + m[0].length, m.index));
-            }
-            last = m.index + m[0].length;
-            openAt = -1;
-        }
-    }
-    if (openAt !== -1) {
-        out += text.slice(last, openAt);
-        if (typeof onStrippedBlock === 'function') {
-            onStrippedBlock(text.slice(openAt + 7));
-        }
-        last = text.length;
-    }
-    return out + text.slice(last);
-}
-function extractThinkingFallback(raw) {
-    if (!raw || typeof raw !== 'string') return '';
-    const innerBlocks = [];
-    removeThinkBlocks(raw, { onStrippedBlock: (b) => innerBlocks.push(b) });
-    for (const block of innerBlocks) {
-        const trimmed = block.trim();
-        if (!trimmed) continue;
-        const respMatch = trimmed.match(/[\(\[\*]*\s*(?:response|reply|resposta|fala|yui|output|text|speech)\s*[\*\)\]]*\s*:\s*([\s\S]+)$/i);
-        if (respMatch) {
-            const cleanResp = respMatch[1].replace(/^[\(\[\*]*\s*(?:fala|resposta|yui|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
-            if (cleanResp) return cleanResp;
-        }
-    }
-    for (let i = innerBlocks.length - 1; i >= 0; i--) {
-        const trimmed = innerBlocks[i].trim();
-        if (trimmed.length > 5 && !/^(?:pensando|thinking|thought)\b/i.test(trimmed)) {
-            return trimmed;
-        }
-    }
-    return innerBlocks.join(' ').trim();
-}
-// A heurística "Thought: ... Response: ..." (expressões sem âncora) só vale para respostas curtas: numa saída degenerada de dezenas de milhares de caracteres
-// ("thought: (((((...") ela custava vários segundos. Um texto maior que isto segue sem essa limpeza.
-const THINK_LABEL_SCAN_MAX = 12000;
+// A limpeza (raciocínio, chamada escrita como texto, embrulho JSON) mora em core/ai/limpezaResposta.js (etapa 6: uma fonte só para o bot e o
+// cérebro, que agora faz o /yui e a síntese da pesquisa). Aqui só o embrulho com os nomes das ferramentas carregadas neste processo.
 function stripThinking(text) {
-    if (!text) return text;
-    text = removeThinkBlocks(text);
-    text = text.replace(/<ctrl\d+>[\s\S]*?(?=\n\n|$)/gi, '');
-    text = text.replace(/<ctrl\d+>/gi, '');
-    const jsonResponseKeys = ['response', 'reply', 'content', 'answer', 'text', 'resposta', 'mensagem', 'message'];
-    const trimmed = text.trim();
-    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-        try {
-            const parsed = JSON.parse(trimmed);
-            if (parsed.generate_reply) {
-                if (typeof parsed.generate_reply === 'string') return parsed.generate_reply.trim();
-                if (typeof parsed.generate_reply === 'object' && parsed.generate_reply.content) return parsed.generate_reply.content.trim();
-            }
-            if (parsed.tool === 'generate_reply' || parsed.name === 'generate_reply' || parsed.action === 'generate_reply') {
-                const c = parsed.args?.content || parsed.args?.text || parsed.arguments?.content || parsed.action_input?.content || parsed.content || parsed.text;
-                if (c && typeof c === 'string') return c.trim();
-            }
-            if (!parsed.tool && !parsed.thought) {
-                for (const key of jsonResponseKeys) {
-                    if (parsed[key] && typeof parsed[key] === 'string') {
-                        return parsed[key].trim();
-                    }
-                }
-            }
-        } catch (e) {}
-    }
-    let cleanVal = text.trim();
-    const genReplyRegex = /(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?(?:generate_reply|gerar_resposta|gerar\s+resposta)(?:\(|\s+)+(?:content=)?(['"]{1,3})([\s\S]*?)\1\)?\)?(?:[\s\n]*```)?/i;
-    const matchGenReply = cleanVal.match(genReplyRegex);
-    if (matchGenReply) {
-        return matchGenReply[2].trim();
-    }
-    const prefixRegex = /^(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?(?:generate_reply|gerar_resposta|gerar\s+resposta)(?:\(|\s+)+(?:content=)?(['"]{1,3})/i;
-    const prefixMatch = cleanVal.match(prefixRegex);
-    if (prefixMatch) {
-        const quoteChar = prefixMatch[1];
-        cleanVal = cleanVal.replace(prefixRegex, '');
-        const escapedQuote = quoteChar.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const suffixRegex = new RegExp(escapedQuote + '\\)?\\)?(?:\\s*```)?$', 'i');
-        cleanVal = cleanVal.replace(suffixRegex, '');
-        return cleanVal.trim();
-    }
-    // O nome da ferramenta tem no máximo 64 caracteres (\w{1,64}, não \w+): com \w+ uma resposta de UMA palavra só e longa (loop degenerado
-    // "aaaa...") custava O(n²) e parava o laço de eventos (100 mil caracteres = 5 s). Nenhuma ferramenta tem nome com mais de 64.
-    const toolCodeGeneric = text.match(/^(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?(\w{1,64})\(([^]*?)\)\)?(?:[\s\n]*```)?$/i);
-    if (toolCodeGeneric && isToolCallText(toolCodeGeneric[0], toolCodeGeneric[1])) {
-        return '';
-    }
-    // O padrão exige um ")" depois de cada "nome(": sem nenhum, não há o que apagar. Cada candidato varre até o primeiro ")" seguinte, então só o trecho até o
-    // ÚLTIMO ")" (mais a cerca de código que pode fechá-lo) é examinado: ")" seguido de "a(" repetido (100 mil caracteres) custava 1,9 s, porque cada "a("
-    // percorria o texto inteiro atrás de um ")" que não existia. Daí em diante a varredura é linear.
-    const lastParen = text.lastIndexOf(')');
-    if (lastParen !== -1) {
-        const scanEnd = Math.min(text.length, lastParen + 1 + 16);
-        text = text.slice(0, scanEnd).replace(/(?:tool_code[\s\n]*)?(?:```(?:python)?[\s\n]*)?(?:print\()?\(?(?:default_api\.)?(\w{1,64})\([^]*?\)\)?(?:[\s\n]*```)?/gi, (full, name) => (isToolCallText(full, name) ? '' : full)) + text.slice(scanEnd);
-    }
-    const mcpToolNames = ['search_game', 'search_web', 'generate_reply', 'download_audio', 'download_video', 'generate_image', 'check_steam', 'convert_currency', 'show_bot_menu', 'ia_automod', 'join_voice_call', 'leave_voice_call', 'default_api'];
-    const toolMentionRegex = new RegExp('(?:`?' + mcpToolNames.join('`?|`?') + '`?)', 'i');
-    const thinkingIndicators = /(?:usar a ferramenta|chamar a ferramenta|a resposta deve ser|a ferramenta mais adequada|o melhor seria usar|preciso (?:saber|analisar|verificar)|vou (?:usar|chamar)|devo (?:usar|chamar))\b/i;
-    if (toolMentionRegex.test(text) && thinkingIndicators.test(text)) {
-        console.log('[StripThinking] Detectado vazamento de raciocínio MCP no texto.');
-        const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
-        if (paragraphs.length > 1) {
-            const cleanParagraphs = [];
-            for (let i = paragraphs.length - 1; i >= 0; i--) {
-                const p = paragraphs[i];
-                const hasToolRef = toolMentionRegex.test(p) && thinkingIndicators.test(p);
-                if (!hasToolRef) {
-                    cleanParagraphs.unshift(p);
-                } else {
-                    break;
-                }
-            }
-            if (cleanParagraphs.length > 0) {
-                const result = cleanParagraphs.join('\n\n').trim();
-                console.log(`[StripThinking] Extraído ${cleanParagraphs.length} parágrafos limpos de ${paragraphs.length} total.`);
-                return result;
-            }
-        }
-        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        for (let i = lines.length - 1; i >= 0; i--) {
-            if (!toolMentionRegex.test(lines[i]) && !thinkingIndicators.test(lines[i]) && lines[i].length > 10) {
-                console.log('[StripThinking] Extraída última linha limpa como resposta.');
-                return lines[i];
-            }
-        }
-        console.warn('[StripThinking] Não foi possível isolar raciocínio MCP. Mantendo resposta original.');
-    }
-    let clean = text.trim();
-    if (clean.length <= THINK_LABEL_SCAN_MAX && /^[\(\[\*]*\s*(?:thought|thinking|pensamento|pensamentos|thinking\s+process|racioc[íi]nio|plan|planejamento)s?[\*\)\]]*\s*:?/i.test(clean)) {
-        const labelMatch = clean.match(/[\(\[\*]*\s*(?:response|reply|resposta|fala|yui|output|text|speech|final\s+speech)\s*[\*\)\]]*\s*:\s*([\s\S]+)$/i);
-        if (labelMatch) {
-            clean = labelMatch[1].replace(/^[\(\[\*]*\s*(?:fala|resposta|yui|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
-        } else {
-            const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            if (lines.length > 1) {
-                let lastLine = lines[lines.length - 1];
-                lastLine = lastLine.replace(/^(?:looks good|lgtm|perfect|done|all set)[\.!\s]*/i, '');
-                lastLine = lastLine.replace(/^(?:let's go with|going with|using)\s+[^.]+[\.!\s]*/i, '');
-                const concatMatch = lastLine.match(/^(?:i'll|i will|i should|i need to|let's|so i'll|therefore|i must)\s+[\s\S]+?[\.!\?]\s*([A-Z\u00C0-\u00DC\d].*)$/i);
-                if (concatMatch) {
-                    clean = concatMatch[1].trim();
-                } else {
-                    clean = lastLine.replace(/^[\(\[\*]*\s*(?:fala|resposta|yui|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
-                }
-            }
-        }
-    }
-    clean = clean.replace(/^[\(\[\*]*\s*(?:gerar\s*resposta|gerar_resposta|resposta|fala|yui|output|text|speech)\s*[\*\)\]]*\s*:\s*/i, '').trim();
-    const quotedMatch = clean.match(/^(['"]{1,3})([\s\S]+?)\1/);
-    if (quotedMatch) {
-        clean = quotedMatch[2].trim();
-    }
-    return clean;
+    return stripThinkingCore(text, { isKnownToolName });
 }
 
 import { guardToolCall } from '../core/security/discordGuard.js';
@@ -1176,32 +1034,8 @@ function savePromptToHistoryOnDisk(prompt, userTag, userId, aiResponse, interact
  * Tudo que sai daqui é texto da web = DADO NÃO CONFIÁVEL (quem chama cerca com buildSearchToolPrompt).
  */
 async function buildSearchContext(found) {
-    const quick = found.results.filter(r => r.url === '#quick-answer').map(r => `[DESTAQUE/RESPOSTA RÁPIDA]: ${r.snippet}`);
-    const results = found.results.filter(r => r.url !== '#quick-answer');
-    if (!results.length && !quick.length) return null;
-    const basicSummary = [...quick, ...results.map(r => `Título: ${r.title}\nResumo: ${r.snippet}\nLink: ${r.url}`)].join('\n---\n');
-    const linksToRead = results
-        .map(r => r.url)
-        .filter(url => /^https?:/.test(url) && !url.includes('youtube.com') && !isBlacklisted(url))
-        .filter(url => {
-            try {
-                const p = new URL(url).pathname;
-                return !(p === '/' || p.length < 3 || p.includes('/search') || p.includes('/login') || p.includes('/tag/'));
-            } catch (e) { return false; }
-        })
-        .slice(0, 3);
-    let finalContext = `[RESUMO GERAL DOS RESULTADOS]:\n${basicSummary}\n`;
-    if (linksToRead.length) {
-        logger.info(`[Search] leitura profunda de ${linksToRead.length} página(s) em paralelo`);
-        const pageContents = await Promise.all(linksToRead.map(url => fetchPageContent(url, { maxChars: 1200 })));
-        finalContext += '\n=== CONTEÚDO DETALHADO (Extraído das páginas) ===\n';
-        pageContents.forEach((content, i) => {
-            if (content && content.length > 200) {
-                finalContext += `\n[FONTE DEEP: ${linksToRead[i]}]:\n${content}\n----------------\n`;
-            }
-        });
-    }
-    return finalContext + `\n\n-# Fonte: ${found.provider}`;
+    // O corpo mora em core/ai/searchManager.js (etapa 6): o cérebro monta o mesmo contexto na pesquisa antiga (YUI_RESEARCH_ENABLED=false).
+    return buildSearchContextCore(found, { log: logger });
 }
 /**
  * Pesquisa da ferramenta search_web. Devolve { context, status, message }:
@@ -1252,7 +1086,8 @@ async function runResearchFor({ question = '', query = '', intent = '', userId =
             },
             {
                 // searchForAgent: sensitive é sempre false (o agente já aplicou as regras do privado) e o teto GLOBAL por hora volta como limited:'global'.
-                search: (q, o) => searchForAgent(q, { ...(o?.max ? { max: o.max } : {}), userId: o?.userId ?? null, signal: o?.signal ?? null }),
+                // `privado`: a pesquisa PRIVADA nunca é compartilhada nem reaproveitada entre pessoas (o searchWeb a deixa fora das buscas em andamento e do cache).
+                search: (q, o) => searchForAgent(q, { ...(o?.max ? { max: o.max } : {}), userId: o?.userId ?? null, signal: o?.signal ?? null, privado: o?.private === true }),
                 // `private` (modo privado): a leitura não registra nem o host da página no log (o host denuncia o assunto de uma pesquisa privada).
                 readPage: (url, o) => fetchPageContent(url, { ...(o?.maxChars ? { maxChars: o.maxChars } : {}), ...(o?.totalDeadlineMs ? { totalDeadlineMs: o.totalDeadlineMs } : {}), ...(o?.signal ? { signal: o.signal } : {}), ...(o?.private ? { quiet: true } : {}) }),
                 // Sem ferramentas, sem busca, SEM histórico (noHistory) e sem memória. No modo privado nem o canal entra (nada de persona de canal).
@@ -1297,27 +1132,7 @@ function isDirectToYui(interaction, type, options = null) {
     }
 }
 
-// Pesquisa tentada e que NÃO deu certo na busca automática do generateResponse (/yui): o modelo recebe o aviso e não promete pesquisar (D1, D2).
-// Só os motivos de "tentou e falhou"; "não era para pesquisar" (no_trigger, otimizador, sensível) não geram aviso.
-const SEARCH_FAILURE_NOTES = Object.freeze({
-    user_limited: 'o limite de pesquisas por hora deste usuário foi atingido',
-    global_limited: 'o limite de pesquisas desta hora foi atingido',
-    deadline: 'o buscador demorou demais',
-    no_providers: 'não há buscador configurado',
-    providers_rest: 'os buscadores estão em descanso ou sem cota',
-    providers_error: 'os buscadores deram erro',
-    no_results: 'não achou nada',
-    filtered: 'os resultados achados não serviram',
-    no_content: 'os resultados vieram sem conteúdo',
-    error: 'houve um erro na pesquisa',
-    sensitive_data: 'a consulta tinha dado pessoal ou segredo',
-    forbidden: 'a consulta tinha palavra proibida'
-});
-function searchFailureNote(reason) {
-    const why = Object.hasOwn(SEARCH_FAILURE_NOTES, reason) ? SEARCH_FAILURE_NOTES[reason] : '';
-    if (!why) return '';
-    return `[AVISO DO SISTEMA: a pesquisa na web foi tentada agora e NÃO deu certo (${why}). Não diga que vai pesquisar, verificar ou voltar depois: você não consegue mandar nada depois. Responda com o que você já sabe e avise, em uma frase, que não conseguiu pesquisar agora.]`;
-}
+// A nota de "a pesquisa foi tentada e não deu certo" (searchFailureNote) mora em core/ai/searchIntent.js: o cérebro usa a mesma (etapa 6).
 
 /** Resposta de texto para a cotação (a promessa "vou ver o dólar" vira a conversão de verdade, sem embed). Nunca lança. */
 async function currencyAnswerText(args) {
@@ -1430,7 +1245,7 @@ async function tryLocal(prompt, systemPrompt, options = {}) {
             { role: 'user', content: prompt }
         ],
         temperature: providerSettings.local.temperature,
-        max_tokens: providerSettings.local.max_tokens,
+        max_tokens: maxTokensDe('local', options),
         stream: true
     };
     if (useMcp && !options.disableTools) {
@@ -1619,7 +1434,7 @@ async function tryGemini(prompt, systemPrompt, options = {}) {
                         { role: 'user', content: prompt }
                     ],
                     temperature: providerSettings.gemini.temperature,
-                    max_tokens: providerSettings.gemini.max_tokens,
+                    max_tokens: maxTokensDe('gemini', options),
                 };
                 if (!options.disableTools) {
                     const rawTools = options.radioMCPTools || buildToolsPayload(options.guildId || null, options.userId || null, { sensitive: options.sensitive === true || options.privateChat === true, chatter: options.chatter === true });
@@ -1745,7 +1560,7 @@ async function tryCloudflare(prompt, systemPrompt, options = {}) {
     try {
         const response = await axios.post(url, {
             messages,
-            max_tokens: providerSettings.cloudflare.max_tokens,
+            max_tokens: maxTokensDe('cloudflare', options),
             temperature: providerSettings.cloudflare.temperature
         }, {
             headers,
@@ -1811,7 +1626,7 @@ async function tryGateway(prompt, systemPrompt, options = {}) {
             ...(options.history || []),
             { role: 'user', content: prompt }
         ],
-        max_tokens: providerSettings.gateway.max_tokens,
+        max_tokens: maxTokensDe('gateway', options),
         temperature: providerSettings.gateway.temperature
     }, { sensitive: Boolean(options.sensitive) });
     const text = result?.choices?.[0]?.message?.content;
@@ -1838,7 +1653,7 @@ async function tryHuggingFace(prompt, systemPrompt, options = {}) {
                 ...options.history || [],
                 { role: 'user', content: prompt }
             ],
-            max_tokens: providerSettings.hf.max_tokens,
+            max_tokens: maxTokensDe('hf', options),
             temperature: providerSettings.hf.temperature,
             stream: false
         }, { headers, timeout: providerSettings.hf.timeout });
@@ -1890,7 +1705,7 @@ async function tryGroq(prompt, systemPrompt, options = {}) {
                     ...options.history || [],
                     { role: 'user', content: prompt }
                 ],
-                max_tokens: providerSettings.groq.max_tokens,
+                max_tokens: maxTokensDe('groq', options),
                 temperature: providerSettings.groq.temperature,
                 stream: false
             }, {
@@ -1951,7 +1766,7 @@ async function tryKoboldHorde(prompt, systemPrompt, options = {}) {
         prompt: `### System:\n${systemPrompt}\n\n### User:\n${prompt}\n\n### Response:\n`,
         params: {
             n: 1,
-            max_length: providerSettings.horde.max_tokens,
+            max_length: maxTokensDe('horde', options),
             temperature: providerSettings.horde.temperature,
             rep_pen: 1.1
         },
@@ -1985,9 +1800,112 @@ async function tryKoboldHorde(prompt, systemPrompt, options = {}) {
     }
     throw new Error('Kobold Horde Timeout (Fila muito longa)');
 }
+// Cérebro separado (etapa 5): um PASSO do turno vai ao cérebro (chat.turn). O cérebro monta o prompt (persona, memória, histórico e a oferta
+// das ferramentas, com as regras dele) e chama a IA; aqui fica só o acabamento que o generateResponse sempre fez com a resposta (raciocínio,
+// chamada de ferramenta escrita como texto, rodapé do modelo). Cérebro fora: lança o erro CEREBRO_INDISPONIVEL (a fila responde o aviso).
+async function generateThroughCerebro(turn, prompt, channelId, options = {}) {
+    if (typeof options.onProviderAttempt === 'function') {
+        try { await options.onProviderAttempt('cérebro'); } catch (_) { /* só o aviso de progresso */ }
+    }
+    const out = await turn.generate(prompt, {
+        noTools: options.disableTools === true,
+        noHistory: options.noHistory === true,
+        persona: Boolean(options.persona),
+        memory: Object.prototype.hasOwnProperty.call(options, 'memoryBlock'),
+        thirdParty: options.thirdPartyPrompt === true,
+        voicePersona: options.voice === true && options.voiceSpeak !== false,
+        attachment: typeof options.attachmentBlock === 'string' && options.attachmentBlock.length > 0,
+        chatter: options.chatter === true,
+        main: options.turnoPrincipal === true,
+        deadlineAt: Number.isFinite(options.deadlineAt) ? Number(options.deadlineAt) : null,
+        guildName: typeof options.guildName === 'string' ? options.guildName : null,
+        channelName: typeof options.channelName === 'string' ? options.channelName : null,
+        // Etapa 6: a BUSCA AUTOMÁTICA (a do allowSearch, ex.: o "jogo não encontrado" do check_game_info) roda no cérebro; só a fala do
+        // próprio autor vai para a porta da busca. Conversa sensível e search_web desligada no servidor: o cérebro não pesquisa.
+        allowSearch: options.allowSearch === true,
+        searchPrompt: typeof options.searchPrompt === 'string' ? options.searchPrompt.slice(0, 2000) : null,
+    });
+    let text = String(out.text ?? '');
+    if (!out.failed) {
+        // com a web no prompt as ferramentas ficaram fora da chamada: nada de converter texto em chamada de ferramenta
+        const writtenCall = (options.disableTools || out.usedSearch) ? null : writtenToolCallToJson(text);
+        let stripped = writtenCall || stripThinking(text);
+        if (!stripped && text) {
+            const recovered = extractThinkingFallback(text);
+            if (recovered && /[\p{L}\p{N}]/u.test(recovered.replace(/<\/?think>/gi, ''))) stripped = recovered;
+        }
+        text = String(stripped ?? '').trim() || EMPTY_REPLY_TEXT;
+    }
+    const model = out.model || 'cérebro';
+    if (typeof options.onMeta === 'function') {
+        try { options.onMeta({ provider: 'cerebro', model, finishReason: 'n/d', continuations: 0, nativeTools: false, truncated: false, usedSearch: out.usedSearch === true, searchFailure: out.searchFailure || '', searchRetryAfterMs: out.searchRetryAfterMs || 0 }); } catch (_) { /* só telemetria */ }
+    }
+    // Rodapé como o do generateResponse: o modelo (quando mudou no canal) e o "🔎 Search" (a resposta veio da web: o contexto não a guarda).
+    if (!out.failed) {
+        const footer = [];
+        if (getShowModel() && (!channelId || lastModelByChannel[channelId] !== model)) {
+            if (channelId) lastModelByChannel[channelId] = model;
+            footer.push(model);
+        }
+        if (out.usedSearch) footer.push('🔎 Search');
+        if (footer.length) text += `\n-# ${footer.join(' | ')}`;
+    }
+    return text;
+}
+// O rodapé do modelo numa resposta que veio pronta do cérebro (o /yui do chat.yui): a mesma regra do generateResponse (só quando o modelo mudou
+// no canal e o painel pede); junta com um "-# 🔎 Search" que já esteja no fim.
+function withCerebroModelFooter(text, channelId, model) {
+    const out = String(text ?? '');
+    if (!model || !getShowModel() || (channelId && lastModelByChannel[channelId] === model)) return out;
+    if (channelId) lastModelByChannel[channelId] = model;
+    const m = /\n-# 🔎 Search$/.exec(out);
+    return m ? `${out.slice(0, m.index)}\n-# ${model} | 🔎 Search` : `${out}\n-# ${model}`;
+}
+// Cérebro separado (etapa 6): a PESQUISA da fila (o modelo chamou search_web, ou a guarda trocou uma promessa por pesquisa) roda inteira no
+// cérebro (research.turn): buscas, escolha das fontes, leitura das páginas, síntese e organização. Aqui fica a interface (o progresso na
+// mensagem "Processando..." e a entrega). Sem o cérebro separado: o agente de sempre, neste processo (runResearchFor).
+function researchForQueue(params) {
+    const turn = currentContext();
+    if (isRemoteTurn(turn)) {
+        noteProcessando('pesquisando');
+        return turn.research({ question: params.question, query: params.query ?? '', intent: params.intent ?? '' }, { progress: params.progress });
+    }
+    return runResearchFor(params);
+}
+// Cérebro separado (etapa 6): o "Processando..." GUARDADO (discord/processandoGuardado.js). Enquanto o turno da fila está aberto, o bot guarda o
+// id da mensagem original e o do "Processando...", o canal, a conversa, o estado e a hora; no fim do turno o registro sai. Se o bot cair no
+// meio, na volta ele avisa nessa mensagem ("fui reiniciada no meio, pede de novo"). No processo único nada disto liga (sem store e sem turno).
+function guardarProcessando({ interaction, replyMessage, guildId, channelId, userId }) {
+    const turn = currentContext();
+    const store = processandoStore();
+    if (!store || !isRemoteTurn(turn) || !replyMessage?.id) return false;
+    try {
+        const canal = String(replyMessage.channelId ?? replyMessage.channel?.id ?? channelId ?? '');
+        const ok = store.guardar({ mensagemOriginal: interaction?.id, mensagemProcessando: replyMessage.id, canal, conversa: processandoConversaDe({ guildId, channelId, userId }), turno: turn.turnId, resposta: true });
+        if (ok) turn.processando = String(replyMessage.id);
+        return ok;
+    } catch (_) { return false; }
+}
+function noteProcessando(estado) {
+    const turn = currentContext();
+    const store = processandoStore();
+    if (!store || !isRemoteTurn(turn) || !turn.processando) return false;
+    try { return store.atualizar(turn.processando, estado); } catch (_) { return false; }
+}
+function soltarProcessando() {
+    const turn = currentContext();
+    const store = processandoStore();
+    if (!store || !isRemoteTurn(turn) || !turn.processando) return false;
+    const key = turn.processando;
+    turn.processando = null;
+    try { return store.remover(key); } catch (_) { return false; }
+}
 async function generateResponse(prompt, channelId = null, options = {}) {
     // Voz sem ferramentas liberadas (YUI_VOICE_TOOLS != true): a OFERTA fecha aqui também, para quem chamar generateResponse direto.
     if (shouldBlockToolForVoice(options)) options = { ...options, disableTools: true };
+    // Cérebro separado (etapa 5): dentro de um turno da fila (ou do /yui), a conversa com a IA é do CÉREBRO (chat.turn). O rádio fica aqui.
+    const remoteTurn = currentContext();
+    if (isRemoteTurn(remoteTurn) && options.radioMode !== true) return generateThroughCerebro(remoteTurn, prompt, channelId, options);
     // Conversa sensível (DM do dono / canal privado): provedores anônimos (Pollinations, Horde e o
     // Hugging Face sem token) ficam de fora da cadeia e nunca recebem a memória pessoal.
     const sensitive = options.sensitive === true;
@@ -2022,68 +1940,26 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     const guildId = options.guildId || options.guild?.id || null;
     // search_web fora da oferta (e fora das regras de prompt que mandam chamá-la): desligada no servidor, ou conversa privada que o YUI_PRIVATE_SEARCH não liberou.
     const searchHiddenHere = isToolDisabled(guildId, 'search_web') || !searchOfferedFor({ sensitive: sensitive || options.privateChat === true, userId: options.userId, chatter: options.chatter === true });
-    const serverCustomPrompt = getServerPrompt(guildId);
-    let baseSystemPrompt = (serverCustomPrompt || config.systemPrompt || config.ai?.systemPrompt || "") + "\n[IDENTIDADE — REGRA DE PRIORIDADE MÁXIMA]: " + publicPersonaText() + "\n[IMAGEM/VISÃO]: Você cria imagens novas com generate_image (pedido vago: invente um prompt criativo). Não enxerga nem edita imagens enviadas.\n[ANTI-REPETIÇÃO]: Não repita frases entre mensagens seguidas.";
-    // Personalidade por contexto (Yui Core): só há override para o dono em DM/canal
-    // privado e para o app; no Discord público segue a persona original.
-    baseSystemPrompt = applyPersona(baseSystemPrompt, options.persona);
-    if (config.sendEnvironmentInfo && (options.guildName || options.channelName)) {
-        baseSystemPrompt += `\n[CONTEXTO DO AMBIENTE]: Você está conversando no servidor Discord "${options.guildName || 'DM'}" no canal/chat "#${options.channelName || 'Chat'}".`;
-    }
+    // O TEXTO do prompt de sistema tem UMA fonte só (etapa 6, pedido da Liz): core/ai/promptConversa.js, o mesmo módulo que o cérebro usa no
+    // chat.turn. Aqui ficam só os DADOS do Discord: o prompt do servidor, a persona (o dono em DM/canal privado e o app têm override; o Discord
+    // público segue a original), o ambiente, o rádio tocando, a regra "toda resposta é FINAL" (sem citar ferramenta quando elas estão fechadas),
+    // a persona e o humor do canal, a memória (só no prompt "com memória": provedor anônimo nunca a recebe) e o bloco de voz, que é o ÚLTIMO
+    // (voiceSpeak=false: pedido de voz cuja resposta fica só no texto; ele não ganha a persona curta de fala).
+    let radioBlock = '';
     if (guildId) {
-        try {
-            const radioSession = getSession(guildId);
-            if (radioSession && (radioSession.status === 'PLAYING' || radioSession.status === 'PAUSED' || radioSession.status === 'BUFFERING') && radioSession.currentTrack) {
-                const track = radioSession.currentTrack;
-                const statusStr = radioSession.status === 'PAUSED' ? 'pausada' : radioSession.status === 'BUFFERING' ? 'carregando' : 'tocando';
-                const posStr = radioSession.currentIndex >= 0 ? `#${radioSession.currentIndex + 1}` : '';
-                const totalStr = Array.isArray(radioSession.playlist) ? `${radioSession.playlist.length}` : '0';
-                let musicInfo = `\n[MODO RÁDIO / MÚSICA ATUAL NO SERVIDOR]:\n- Você está conectada na chamada de voz deste servidor com o Modo Rádio ativo.\n- Status da reprodução: ${statusStr}.\n- Faixa atual (${posStr} de ${totalStr}): "${track.title}" — Artista: "${track.artist}"`;
-                if (track.album) musicInfo += ` (Álbum: "${track.album}")`;
-                if (Array.isArray(radioSession.playlist) && radioSession.playlist.length > 1) {
-                    const nextIdx = radioSession.currentIndex + 1;
-                    if (nextIdx < radioSession.playlist.length) {
-                        const nextTrack = radioSession.playlist[nextIdx];
-                        musicInfo += `.\n- Próxima música da fila: "${nextTrack.title}" — Artista: "${nextTrack.artist}"`;
-                    }
-                }
-                musicInfo += `.\n[INSTRUÇÕES SOBRE O MODO RÁDIO NO CHAT]:\n1) Se o usuário perguntar o que está tocando, qual música é essa, quem está cantando ou sobre a playlist atual, responda informando os dados acima de forma natural.\n2) Se o usuário pedir no chat para você controlar o rádio (ex: pular música, pausar, passar para a próxima, parar) ou adicionar/tocar uma música nova no rádio, informe a ele que para controlar ou adicionar músicas no rádio ele deve usar os botões do menu do Modo Rádio (o painel de embed) ou o comando de voz na call.`;
-                baseSystemPrompt += musicInfo;
-            }
-        } catch (_) {}
+        try { radioBlock = radioPromptBlock(getSession(guildId)); } catch (_) { radioBlock = ''; }
     }
-    baseSystemPrompt += "\n[REGRAS]: Você não tem acesso a cargos, membros, logs nem regras do servidor (diga que não sabe). Código aberto: https://github.com/MauroBragaFilho/Yui (cite se pedirem). Se o histórico tiver 'erro da ia', a resposta anterior falhou: peça desculpas rápido e pergunte de novo. " + ((options.disableTools || searchHiddenHere) ? NEVER_PROMISE_RULE_NO_TOOLS : NEVER_PROMISE_RULE) + "\n[RESPOSTAS LONGAS E LIMITES]: Se pedirem uma lista ou um texto longo, escreva COMPLETO, sem se limitar ao \"curto\": o sistema divide em várias mensagens sozinho. NUNCA escreva \"Parte N de M\" nem peça para o usuário mandar um ponto ou um \"continua\" para você seguir. Você não envia DM, não agenda avisos nem guarda nada por conta própria (listas salvas só o sistema faz, quando a pessoa pede «anota na lista X: itens»); não prometa isso (nada de \"te aviso depois\", \"anotei\", \"te mando mais tarde\"). Se a pessoa mandar o conteúdo na própria mensagem (lista, texto), trabalhe com ele agora e entregue o resultado na resposta: não recuse nem prometa guardar. Nunca invente link de download: sem fonte confirmada, diga que não consegue confirmar o link.";
-    if (channelId) {
-        const settings = channelSettings[channelId];
-        const channelPersona = (typeof settings === 'string') ? settings : settings?.instruction;
-        const channelMood = settings?.mood;
-        if (channelPersona || channelMood) {
-            let overrideMsg = `\n\n====================================================================================\n[⚠️ ALERTA IMPORTANTE DO SISTEMA: DEFINIÇÕES DO CANAL]\n`;
-            if (channelPersona) {
-                overrideMsg += `MESCLE SUA PERSONALIDADE DANDO PRIORIDADE A ESSA NOVA PERSONALIDADE/INSTRUÇÃO:
->>> ${channelPersona} <<<
-VOCÊ DEVE ADERIR A ESSA NOVA PERSONA ACIMA DE TUDO.\n`;
-            }
-            if (channelMood) {
-                overrideMsg += `\nESTADO EMOCIONAL/HUMOR ATUAL (MUDE SUA FORMA DE FALAR DE ACORDO):
->>> ${channelMood} <<<\n`;
-            }
-            overrideMsg += `====================================================================================\n`;
-            baseSystemPrompt += overrideMsg;
-        }
-    }
-    // A memória (pessoal ou não) só vai para provedores identificados, nunca para os anônimos.
-    let systemPromptNoMemory = baseSystemPrompt;
-    if (options.memoryBlock) {
-        baseSystemPrompt += options.memoryBlock;
-    }
-    // Voz: o bloco [MODO VOZ] é o ÚLTIMO do prompt de sistema (depois do override do canal e da memória, que é texto de terceiros e
-    // não pode diluir as regras de fala). Vale para os dois prompts: com e sem memória (provedores anônimos).
-    // (voiceSpeak=false: pedido de voz cuja resposta fica só no texto; ele não ganha a persona curta de fala)
-    if (options.voice === true && options.voiceSpeak !== false) {
-        baseSystemPrompt = applyVoicePersona(baseSystemPrompt);
-        systemPromptNoMemory = applyVoicePersona(systemPromptNoMemory);
-    }
+    const { withMemory: baseSystemPrompt, withoutMemory: systemPromptNoMemory } = buildConversationSystemPrompt({
+        serverPrompt: getServerPrompt(guildId),
+        persona: options.persona,
+        guildName: options.guildName,
+        channelName: options.channelName,
+        radioBlock,
+        noToolRule: Boolean(options.disableTools || searchHiddenHere),
+        channelSettings: channelId ? channelSettings[channelId] : null,
+        memoryBlock: options.memoryBlock,
+        voice: options.voice === true && options.voiceSpeak !== false,
+    });
     let lastError = null;
     let webContextCache = null; // contexto da web já obtido nesta chamada (vale para os provedores seguintes)
     // O resultado da busca desta chamada (inclusive o negativo) vale para TODOS os provedores seguintes, mesmo os que não "decidem" pesquisar: se o
@@ -2408,6 +2284,61 @@ function contextTargetFor({ prompt, interaction, type, userId, channelId, option
         return null;
     }
 }
+// Cérebro separado (etapa 5): os FATOS de um pedido da fila para o turno do cérebro (chat.turn). Só o que o Discord diz (quem, onde, se é DM,
+// se mencionou a Yui, se é voz, a fala do próprio autor) e a configuração do canal, que é do bot. O cérebro decide papel, escopo da memória,
+// contexto por horas e histórico com as regras dele (as mesmas do contextTargetFor acima). Nunca lança.
+function cerebroTurnFacts({ prompt, interaction, type, userId, channelId, options }) {
+    const opts = options || {};
+    const guildId = interaction?.guild?.id || interaction?.guildId || null;
+    const voiceInteraction = interaction?.isVoice === true;
+    const voiceItem = isVoiceItem(opts, interaction);
+    let mentionsBot = false;
+    let repliesToBot = false;
+    let hasBotName = false;
+    if (type === 'mention' && guildId) {
+        try {
+            const botUser = interaction?.client?.user || getDiscordClient()?.user || null;
+            try { mentionsBot = Boolean(botUser && interaction.mentions?.has?.(botUser, { ignoreEveryone: true })); } catch (_) { /* sem menção */ }
+            if (!mentionsBot && getServerSettings(guildId)?.respondToEveryone && interaction?.mentions?.everyone) mentionsBot = true;
+            repliesToBot = Boolean(botUser?.id && interaction?.mentions?.repliedUser?.id === botUser.id);
+            const botName = String(config.botName || 'Yui').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            hasBotName = new RegExp(`\\b${botName}\\b`, 'i').test(String(interaction?.content ?? ''));
+        } catch (_) { /* fatos de menção indisponíveis: o cérebro trata como não dirigido */ }
+    }
+    let isBlocked = false;
+    try { isBlocked = Boolean(checkBan(userId, guildId, null)); } catch (_) { isBlocked = false; }
+    const ownText = authorOwnText({ searchPrompt: opts.searchPrompt, prompt, thirdPartyPrompt: opts.thirdPartyPrompt === true, isVoice: voiceInteraction });
+    return {
+        turn: { id: String(interaction?.id ?? ''), at: Number(interaction?.createdTimestamp) || Date.now() },
+        ctx: { platform: 'discord', userId: String(userId), guildId: guildId ? String(guildId) : null, channelId: channelId ? String(channelId) : null, isDM: !guildId, isBlocked },
+        call: {
+            entry: 'fila', type: type === 'mention' ? 'mention' : 'slash', mentionsBot, hasBotName, repliesToBot,
+            thirdParty: opts.thirdPartyPrompt === true, voice: opts.voice === true, voiceInteraction, voiceItem,
+            chatter: opts.chatter === true, contextOptIn: opts.contextRecord === true,
+        },
+        ownText: ownText || null,
+        memoryQuery: String(opts.searchPrompt || prompt || ''),
+        // A persona de canal usa a mesma chave do generateResponse (na voz, a chave da voz).
+        channel: channelFactsForCerebro({ guildId, channelId: voiceItem ? buildVoiceKey(guildId, userId) : channelId, userId }),
+    };
+}
+// O /yui (e o +yui) com o cérebro separado: um turno do cérebro para a pergunta (o /yui não passa pela fila). `record`: a resposta é pública
+// (a privada só lê o contexto, como sempre). Sem o cérebro separado devolve null e o /yui segue como antes.
+function createAskTurnForCerebro({ interaction, question, record = true } = {}) {
+    if (!isChatRemote()) return null;
+    const guildId = interaction?.guildId ?? null;
+    const userId = interaction?.user?.id ?? null;
+    let isBlocked = false;
+    try { isBlocked = Boolean(checkBan(userId, guildId, null)); } catch (_) { isBlocked = false; }
+    return createRemoteTurn({
+        turn: { id: String(interaction?.id ?? ''), at: Number(interaction?.createdTimestamp) || Date.now() },
+        ctx: { platform: 'discord', userId: String(userId ?? ''), guildId: guildId ? String(guildId) : null, channelId: interaction?.channelId ? String(interaction.channelId) : null, isDM: !guildId, isBlocked },
+        call: { entry: 'yui', type: 'slash', record: record !== false, mentionsBot: false, hasBotName: false, repliesToBot: false, thirdParty: false, voice: false, voiceInteraction: false, voiceItem: false, chatter: false, contextOptIn: false },
+        ownText: String(question ?? '') || null,
+        memoryQuery: String(question ?? ''),
+        channel: channelFactsForCerebro({ guildId, channelId: interaction?.channelId ?? null, userId }),
+    });
+}
 async function processQueue() {
     // Voz: pedido que passou do prazo (a fila da IA é serial) nem chega à IA, ninguém mais espera essa resposta. Log só com IDs.
     while (processingQueue.length > 0 && isStaleVoiceItem(processingQueue[0]?.options, Date.now(), voiceStaleSeconds())) {
@@ -2422,6 +2353,11 @@ async function processQueue() {
     }
     isProcessing = true;
     const item = processingQueue.shift();
+    // Cérebro separado (etapa 5): o pedido vira um TURNO do cérebro (contexto, histórico e prompt são dele). O rádio fica no bot.
+    if (isChatRemote() && item?.options?.radioMode !== true) {
+        const turn = createRemoteTurn(cerebroTurnFacts(item));
+        return runWithContext(turn, () => processQueueItem(item).finally(() => turn.finish()));
+    }
     const target = contextTargetFor(item);
     if (target) {
         try { await initContextStore(); } catch (_) { /* nunca lança; na dúvida, o contexto fica só em RAM */ }
@@ -2575,6 +2511,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         }
         if (!options.radioMode) {
             await unifiedReply('🧠 **Processando...**');
+            // Cérebro separado (etapa 6): o "Processando..." fica guardado até o fim do turno; se o bot cair no meio, ele é avisado na volta.
+            guardarProcessando({ interaction, replyMessage, guildId, channelId: realChannelId, userId });
         }
         const startTime = Date.now();
         // Só metadados: o texto do usuário nunca vai para o log.
@@ -2598,7 +2536,9 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         const privateChat = sensitiveChat || (!(options.guildId || guildId) && !isVoice && !options.radioMode);
         // Só a fala do PRÓPRIO autor entra na memória e no histórico (o prompt pode ser o log de outras pessoas).
         const ownText = authorOwnText({ searchPrompt: options.searchPrompt, prompt, thirdPartyPrompt: options.thirdPartyPrompt === true, isVoice: interaction?.isVoice === true });
-        const memoryBlock = (options.radioMode || options.thirdPartyPrompt === true) ? '' : buildMemoryBlock(coreCtx, options.searchPrompt || prompt);
+        // `await`: com o cérebro separado a memória vem do cérebro pelo canal (no processo único o valor já vem pronto).
+        // Turno do cérebro (etapa 5): quem monta o bloco de memória é o próprio cérebro, no chat.turn (aqui fica vazio de propósito).
+        const memoryBlock = (options.radioMode || options.thirdPartyPrompt === true || isRemoteTurn(currentContext())) ? '' : await buildMemoryBlock(coreCtx, options.searchPrompt || prompt);
         const thoughtLeakRegex = /\{\s*"thought"\s*:/i;
         let lastAttemptTime = 0;
         let lastAttemptKey = '';
@@ -2804,6 +2744,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 persona: buildPersonaPrompt(coreCtx),
                 sensitive: coreCtx.memoryScope === 'personal',
                 privateChat, // só a OFERTA de search_web olha isto (DM de qualquer pessoa: o YUI_PRIVATE_SEARCH decide); o resto segue o `sensitive`
+                turnoPrincipal: true, // cérebro separado: a chamada principal do turno (ele confere a repetição com o histórico dele)
                 guildName,
                 channelName,
                 onProviderAttempt: async (providerKey) => {
@@ -3460,8 +3401,15 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     return;
                 }
                 if (toolData.tool === 'listar_lembretes') {
-                    const store = scopedReminderStore(getReminderStore(), userId, isOwnerId(userId));
-                    await unifiedReply(formatReminderList(store.list(), new Date(), null));
+                    // Com o cérebro separado os lembretes vêm do cérebro (dono do lembretes.json); fora do ar, o aviso no lugar da lista.
+                    let remListText;
+                    try {
+                        remListText = formatReminderList(isRemindersRemote() ? await listRemindersFor(userId, { isOwner: isOwnerId(userId) }) : scopedReminderStore(getReminderStore(), userId, isOwnerId(userId)).list(), new Date(), null);
+                    } catch (remErr) {
+                        if (remErr?.code !== 'REMINDERS_UNAVAILABLE') throw remErr;
+                        remListText = remErr.message;
+                    }
+                    await unifiedReply(remListText);
                     savePromptToHistory(prompt, userTag, userId, `[TOOL: LISTAR_LEMBRETES]`, interaction);
                     return;
                 }
@@ -3528,7 +3476,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     } else if (!searchGate.private && !wantedQuery) {
                         processedResponse = NEED_TOPIC_REPLY; // sem assunto nem no pedido: pergunta, em vez de pesquisar "undefined"
                     } else {
-                        const found = await runResearchFor({
+                        // Cérebro separado (etapa 6): a pesquisa inteira roda no cérebro (researchForQueue); aqui fica o progresso e a entrega.
+                        const found = await researchForQueue({
                             question: ownQuestion || wantedQuery, query: wantedQuery, userId, sensitive: privateChat,
                             channelId, guildId: options.guildId || guildId, progress: researchProgress
                         });
@@ -3552,6 +3501,14 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             .setDescription(`Pesquisando na web por: **"${query}"**\n\n🧠 **Pensamento da IA:**\n> *${toolData.thought || 'Buscando informações'}*`)
                             .setFooter({ text: 'Yui Search • Tool Use: search_web' });
                         await unifiedReply(null, [], [], [searchEmbed]);
+                        const remoteResearch = currentContext();
+                        if (isRemoteTurn(remoteResearch)) {
+                            // Cérebro separado (etapa 6): o ramo antigo também roda no cérebro (busca rápida, leitura e resposta com a web).
+                            noteProcessando('pesquisando');
+                            const found = await remoteResearch.research({ antigo: true, query: String(query ?? ''), prompt, question: ownQuestion, voz: voiceSpeak });
+                            webSearchUsed = found.usedSearch === true;
+                            processedResponse = found.text;
+                        } else {
                         const search = await performWebSearch(query, { userId, sensitive: sensitiveChat });
                         if (search.context) {
                             // O resultado da web é dado não confiável: entra cercado pela marca e a chamada não tem ferramentas.
@@ -3563,6 +3520,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                             processedResponse = search.message;
                         } else {
                             processedResponse = `❌ Não encontrei nada relevante sobre "${query}" na busca rápida.`;
+                        }
                         }
                     }
                 }
@@ -4225,7 +4183,7 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
                 } else {
                     logger.info(`[Pesquisa] guarda: acao=${rPlan.action} motivo=${rPlan.reason}`);
                     if (rPlan.action === 'search') {
-                        const found = await runResearchFor({
+                        const found = await researchForQueue({
                             question: ownQuestion, query: rPlan.query, intent: rPlan.intent, userId, sensitive: privateChat,
                             channelId, guildId: options.guildId || guildId, progress: researchProgress
                         });
@@ -4301,7 +4259,7 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
             if (isVoice) processedResponse = clipForChat(processedResponse, 1900);
             // Voz: a transcrição é fala de terceiros ouvida por todos na call; nunca vira memória.
             const captureText = isVoice ? null : memoryCaptureText({ radioMode: options.radioMode === true, searchPrompt: options.searchPrompt, prompt, thirdPartyPrompt: options.thirdPartyPrompt === true, isVoice: interaction?.isVoice === true });
-            const savedMemories = captureText ? captureFromUserText(coreCtx, captureText) : 0;
+            const savedMemories = captureText ? await captureFromUserText(coreCtx, captureText) : 0;
             // A Yui não envia DM, não agenda e não guarda listas fora da memória: promessa dessas sai com aviso fixo.
             // Porta D — guarda final: uma resposta que ainda é SÓ promessa ("Vou pesquisar isso!") sem nenhuma ação feita nunca vai ao usuário. Vira um pedido de desculpas
             // que contém "Desculpe, tive um erro" (marcador que o histórico e o contexto já tratam como erro da IA, então a promessa não é guardada). Ofertas e
@@ -4325,6 +4283,7 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
                 }
             }
             processedResponse = applyPromiseNotice(processedResponse, { savedSomething: savedMemories > 0 });
+            noteProcessando('entregando');
             const sentMessage = await unifiedReply(processedResponse);
             const delivery = unifiedReply.lastDelivery || { ok: false, mode: 'failed', parts: 1, sentParts: 0, durationMs: 0 };
             // [TTS-HOOK] Fala da resposta SÓ depois da entrega confirmada no chat (rastreabilidade: o texto escrito, com a menção de quem
@@ -4363,12 +4322,21 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
         }
 
     } catch (error) {
+        // Cérebro separado (etapa 5): o cérebro não respondeu (fora do ar e não voltou a tempo). Aviso claro, nada no histórico nem no contexto.
+        if (isCerebroUnavailable(error)) {
+            logger.warn(`[Fila] Cérebro indisponível: pedido respondido com o aviso (tipo=${type}).`);
+            const turnNow = currentContext();
+            if (isRemoteTurn(turnNow)) turnNow.discard();
+            await unifiedReply(CEREBRO_UNAVAILABLE_TEXT);
+            return;
+        }
         // logger (não console): a tarefa roda o node em janela oculta e o console se perde; o log de arquivo guarda só código e mensagem limpa.
         logger.error(`[Fila] Erro ao processar o pedido (tipo=${type}, código=${error?.code || error?.response?.status || 'n/d'}): ${scrubLogText(error?.message, 200)}`);
         addToHistory(channelId, 'assistant', 'erro da ia');
         await unifiedReply('⚠️ Desculpe, tive um erro ao processar seu pedido. Tente novamente.');
         recordErrorExchange(unifiedReply.lastDelivery);
     } finally {
+        soltarProcessando(); // o turno terminou (entregue, com erro ou com o aviso): o "Processando..." guardado sai
         setTimeout(runQueueSafely, 1000);
     }
 }
@@ -4533,7 +4501,13 @@ function getErrorRetries() {
 }
 function updateProviderSetting(provider, key, value) {
     if (providerSettings[provider] && providerSettings[provider][key] !== undefined) {
+        if (key === 'max_tokens' && !Object.prototype.hasOwnProperty.call(maxTokensAntesDoPainel, provider)) maxTokensAntesDoPainel[provider] = providerSettings[provider].max_tokens;
         providerSettings[provider][key] = value;
+        if (key === 'max_tokens') {
+            const n = Number(value);
+            if (Number.isInteger(n) && n >= 64 && n <= 8192) painelMaxTokens[provider] = n;
+            else delete painelMaxTokens[provider];
+        }
         console.log(`[CONFIG] ${provider}.${key} atualizado para ${value}`);
         return true;
     }
@@ -4557,6 +4531,8 @@ export {
     coerceReplyContent, clampToolData, commentText, isSystemReply, aiDeadlineMs, anonymousTextTooBig,
     queueRefusalFor, refuseQueueRequest, uploadLimitLabel, videoUploadVerdict, explainFailedUpload, musicLabel,
     addToHistory, getHistory,
+    // Cérebro separado (etapa 5): o /yui também conversa pelo cérebro; os fatos do canal vão no chat.turn.
+    createAskTurnForCerebro, channelFactsForCerebro, cerebroTurnFacts, withCerebroModelFooter,
     // Agente de pesquisa: runResearchFor é a entrada única para quem pesquisa fora da fila (ask.js, app/API); o resto é exportado para teste.
     runResearchFor, isDirectToYui, writtenToolCallToJson, searchFailureNote, TOOLCALL_SCAN_MAX
 };

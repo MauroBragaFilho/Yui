@@ -67,7 +67,7 @@ function describe(action, params) {
 }
 
 /** Implementação das ferramentas sobre o projeto aberto. */
-function createToolbox({ workspaceFs, indexer, webSearch, runCommand, signal }) {
+function createToolbox({ workspaceFs, indexer, webSearch, runCommand, signal, searchUserId = null }) {
   return {
     async list_dir({ path = '' }) {
       const items = await workspaceFs.listDir(path);
@@ -100,7 +100,8 @@ function createToolbox({ workspaceFs, indexer, webSearch, runCommand, signal }) 
       return `Código de saída: ${res.code}${flags ? ` (${flags})` : ''}\nSTDOUT:\n${res.stdout || '(vazio)'}\nSTDERR:\n${res.stderr || '(vazio)'}`;
     },
     async web_search({ query }) {
-      return (await webSearch.search(query, { signal })).text;
+      // A pesquisa passa pela cota central (src/core/dev/web-search.js -> searchWeb): o id de quem pediu (o dono) é o dono da consulta na cota por hora.
+      return (await webSearch.search(query, { signal, ...(searchUserId ? { userId: searchUserId } : {}) })).text;
     },
   };
 }
@@ -118,6 +119,7 @@ function createAgent({ llm, webSearch, runCommand, persona }) {
    * @param {string} input.modeId
    * @param {string} input.approvalMode
    * @param {boolean} input.webSearchEnabled
+   * @param {string|null} input.searchUserId   id de quem pediu (o dono): é o dono da consulta na cota de busca por hora
    * @param {string|null} input.imageBase64
    * @param {(event: object) => void} input.emit
    * @param {(request: object) => Promise<boolean>} input.requestApproval
@@ -125,7 +127,7 @@ function createAgent({ llm, webSearch, runCommand, persona }) {
    * @param {object} input.settings       { maxIterations, temperature, maxTokens, historyChars }
    */
   async function run(input) {
-    const { message, history = [], workspace, context = '', modeId = 'yui', approvalMode = 'ask', webSearchEnabled = false, imageBase64 = null, emit = () => {}, requestApproval, approvalGate = null, observePolicy = null, signal, settings = {} } = input;
+    const { message, history = [], workspace, context = '', modeId = 'yui', approvalMode = 'ask', webSearchEnabled = false, searchUserId = null, imageBase64 = null, emit = () => {}, requestApproval, approvalGate = null, observePolicy = null, signal, settings = {} } = input;
     const mode = getMode(modeId);
     const allowed = new Set(mode.actions);
     if (!webSearchEnabled) allowed.delete('web_search');
@@ -133,7 +135,7 @@ function createAgent({ llm, webSearch, runCommand, persona }) {
       for (const a of ['list_dir', 'read_file', 'search_code', 'write_file', 'apply_diff', 'run_terminal']) allowed.delete(a);
     }
     const policy = createPolicy({ approvalMode, allowedActions: allowed });
-    const toolbox = workspace ? createToolbox({ workspaceFs: workspace.fs, indexer: workspace.indexer, webSearch, runCommand, signal }) : {};
+    const toolbox = workspace ? createToolbox({ workspaceFs: workspace.fs, indexer: workspace.indexer, webSearch, runCommand, signal, searchUserId }) : {};
 
     const system = [persona, mode.prompt, protocolPrompt(allowed), workspace?.summary ? `PROJETO ABERTO\n${workspace.summary}` : 'Nenhum projeto aberto: responda sem ferramentas de arquivo.'].filter(Boolean).join('\n\n');
     const userText = context ? `${context}\n\n---\nPedido: ${message}` : message;

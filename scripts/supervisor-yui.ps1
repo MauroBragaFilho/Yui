@@ -18,6 +18,13 @@
     Mostra a decisao sem religar nada.
 .PARAMETER SemApi
     A API da Yui esta desligada (YUI_API_ENABLED=false): so confere se o processo existe.
+.PARAMETER Raiz
+    Pasta da Yui (onde fica o .env). Com YUI_CEREBRO_EXTERNO=true no .env, o watchdog trabalha no modo DOIS PROCESSOS
+    (etapa 4): a tarefa YuiBot roda o supervisor em Node (node src/supervisor.js), que sobe o cerebro, espera ele ficar pronto,
+    sobe o bot e cuida da saude de cada um. Aqui o watchdog so vigia o PROPRIO supervisor, pelo arquivo de estado que ele
+    renova a cada ciclo (logs\supervisor-estado.json). Se o supervisor parar de dar sinal, religa pela tarefa: primeiro o
+    pedido limpo (arquivo logs\supervisor.parar: o supervisor desliga o bot e depois o cerebro), depois Stop/Start da tarefa.
+    Sem a chave, tudo exatamente como antes.
 #>
 [CmdletBinding()]
 param(
@@ -25,7 +32,8 @@ param(
     [switch]$SemApi,
     [string]$HealthUrl = 'http://127.0.0.1:3939/v1/health',
     [string]$Dir = 'C:\Tools\supervisor',
-    [string]$TaskName = 'YuiBot'
+    [string]$TaskName = 'YuiBot',
+    [string]$Raiz = 'C:\Yui'
 )
 
 # ---------------- Decisao (funcao pura, testada em tests/test-supervisor.ps1) ----------------
@@ -79,6 +87,40 @@ function Aplicar-Limite($dec, [datetime]$agora, $cfg = $Cfg) {
     return $dec
 }
 
+# ---------------- Modo dois processos (etapa 4) ----------------
+# A chave YUI_CEREBRO_EXTERNO=true no .env da Yui liga o modo. Linhas comentadas e outras variaveis nao contam.
+function Modo-Separado([string]$raiz) {
+    $envFile = Join-Path $raiz '.env'
+    if (-not (Test-Path $envFile)) { return $false }
+    foreach ($linha in (Get-Content $envFile -Encoding UTF8)) {
+        if ($linha -match '^\s*YUI_CEREBRO_EXTERNO\s*=\s*["'']?true["'']?\s*(#.*)?$') { return $true }
+    }
+    return $false
+}
+
+$CfgDois = @{ SinalSec = 180; FailLimit = 3 }
+
+# Decisao do modo dois processos (funcao pura, testada em tests/test-supervisor.ps1). O supervisor em Node cuida do cerebro e do
+# bot (saude, religar com espera crescente); o watchdog so cobre o caso de o PROPRIO supervisor travar ou sumir.
+#   obs.supervisorIdadeSec: segundos desde o ultimo sinal (atualizadoEm do logs\supervisor-estado.json); $null = sem arquivo
+#   obs.supervisorEstado:   'rodando' | 'parando' | 'parado' | $null
+function Decidir-Supervisor-Dois($obs, $estado, [datetime]$agora, $cfg = $CfgDois) {
+    $novo = @{ failCount = [int]$estado.failCount; discordDownSince = $null; restarts = @($estado.restarts | Where-Object { $_ }) }
+    $res = { param($acao, $motivo) @{ acao = $acao; motivo = $motivo; estado = $novo } }
+
+    if ($obs.updaterRunning) { return (& $res 'esperar' 'atualizador em andamento') }
+    if ($obs.taskState -ne 'Running') { $novo.failCount = 0; return (& $res 'iniciar' 'a tarefa da Yui (supervisor dos dois processos) nao esta rodando') }
+    $semSinal = ($null -eq $obs.supervisorIdadeSec) -or ($obs.supervisorIdadeSec -gt $cfg.SinalSec) -or ($obs.supervisorEstado -eq 'parado')
+    if ($semSinal) {
+        $novo.failCount++
+        $porque = if ($null -eq $obs.supervisorIdadeSec) { 'sem arquivo de estado' } elseif ($obs.supervisorEstado -eq 'parado') { 'estado parado com a tarefa rodando' } else { "ultimo sinal ha $([int]$obs.supervisorIdadeSec) s" }
+        if ($novo.failCount -ge $cfg.FailLimit) { return (& $res 'religar' "o supervisor dos dois processos nao da sinal ($porque) em $($novo.failCount) verificacoes seguidas") }
+        return (& $res 'esperar' "supervisor sem sinal ($porque; $($novo.failCount) de $($cfg.FailLimit))")
+    }
+    $novo.failCount = 0
+    return (& $res 'nada' 'supervisor dos dois processos dando sinal')
+}
+
 # ---------------- Execucao ----------------
 if ($MyInvocation.InvocationName -eq '.') { return }   # carregado por um teste: so as funcoes
 
@@ -95,6 +137,10 @@ function Log($m) {
 function Yui-Processo {
     Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'src.index.js' } | Select-Object -First 1
 }
+# Modo dois processos: supervisor, cerebro e bot. So para SABER se ainda existem (nunca para encerrar nada).
+function Yui-Processos-Dois {
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'src.(supervisor|cerebro|index).js' }
+}
 
 try {
     $estado = @{ failCount = 0; discordDownSince = $null; restarts = @() }
@@ -106,6 +152,51 @@ try {
     $mutex = $null
     $updater = [Threading.Mutex]::TryOpenExisting('Global\YuiAtualizar', [ref]$mutex)
     if ($mutex) { $mutex.Dispose() }
+
+    if (Modo-Separado $Raiz) {
+        # ---- Modo dois processos: vigia o supervisor em Node pelo arquivo de estado dele ----
+        $estadoNode = Join-Path $Raiz 'logs\supervisor-estado.json'
+        $idade = $null; $estNode = $null
+        if (Test-Path $estadoNode) {
+            try {
+                $j = Get-Content $estadoNode -Raw -Encoding UTF8 | ConvertFrom-Json
+                $estNode = [string]$j.estado
+                if ($j.atualizadoEm) { $idade = [int]((Get-Date) - [datetime]::Parse($j.atualizadoEm)).TotalSeconds }
+            } catch { $idade = $null }
+        }
+        $obs = @{ updaterRunning = [bool]$updater; taskState = [string](Get-ScheduledTask -TaskName $TaskName).State; supervisorIdadeSec = $idade; supervisorEstado = $estNode }
+        $agora = Get-Date
+        $dec = Aplicar-Limite (Decidir-Supervisor-Dois $obs $estado $agora) $agora
+        if ($dec.acao -in 'religar', 'iniciar') {
+            if ($DryRun) { Log "SIMULACAO (dois processos): $($dec.acao): $($dec.motivo)"; return }
+            if ($dec.acao -eq 'religar') {
+                # 1) pedido limpo: o supervisor desliga o bot, depois o cerebro, e sai
+                Set-Content -Path (Join-Path $Raiz 'logs\supervisor.parar') -Value (Get-Date -Format 'o') -Encoding ascii
+                for ($i = 0; $i -lt 30 -and (Yui-Processos-Dois); $i++) { Start-Sleep 2 }
+                # 2) a tarefa (o laco do PowerShell; se o supervisor travou de vez, o Stop encerra a arvore da tarefa)
+                Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+                for ($i = 0; $i -lt 20 -and ((Yui-Processos-Dois) -or (Get-ScheduledTask -TaskName $TaskName).State -eq 'Running'); $i++) { Start-Sleep 2 }
+                if (Yui-Processos-Dois) {
+                    Log 'ERRO: processos da Yui (supervisor/cerebro/bot) nao sairam depois do pedido limpo e do Stop; NAO vou iniciar outros (evita duas Yuis). Veja o notebook.'
+                    $dec.estado.restarts = @($dec.estado.restarts) + (Get-Date -Format 'o')
+                    ($dec.estado | ConvertTo-Json -Depth 4) | Set-Content $stateFile -Encoding ascii
+                    return
+                }
+                Remove-Item (Join-Path $Raiz 'logs\supervisor.parar') -Force -ErrorAction SilentlyContinue
+            }
+            Start-ScheduledTask -TaskName $TaskName
+            Log "RELIGADA: $($dec.motivo)"
+            $dec.estado.restarts = @($dec.estado.restarts) + (Get-Date -Format 'o')
+            $dec.estado.failCount = 0
+        } elseif ($dec.acao -eq 'esperar' -and $dec.limite) {
+            Log "AVISO: $($dec.motivo)"
+        } elseif ($dec.acao -eq 'esperar' -and $dec.estado.failCount -gt 0) {
+            Log "ATENCAO: $($dec.motivo)"
+        }
+        ($dec.estado | ConvertTo-Json -Depth 4) | Set-Content $stateFile -Encoding ascii
+        if ((Test-Path $logFile) -and (Get-Item $logFile).Length -gt 200KB) { Get-Content $logFile -Tail 500 | Set-Content $logFile -Encoding ascii }
+        return
+    }
 
     $p = Yui-Processo
     $obs = @{

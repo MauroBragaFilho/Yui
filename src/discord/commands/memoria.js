@@ -88,31 +88,37 @@ export const memoriaCommand = {
       return reply({ content: '🛑 Memória indisponível para este usuário.' });
     }
 
-    if (sub === 'ver') {
-      const rows = memory.listMemories(ctx, { limit: 25 });
-      let description = 'Nada guardado ainda. Diga algo como “lembra que eu gosto de Sultan RS” ou use `/yui-memoria lembrar`.';
-      if (rows.length) {
-        const { text, hidden } = fitLines(rows.map((r) => `**#${r.id}** · \`${r.type}\` — ${r.content}`));
-        description = hidden > 0 ? `${text}\n(+${hidden} lembrança(s) não exibida(s))` : text;
+    try {
+      if (sub === 'ver') {
+        const rows = await memory.listMemories(ctx, { limit: 25 });
+        let description = 'Nada guardado ainda. Diga algo como “lembra que eu gosto de Sultan RS” ou use `/yui-memoria lembrar`.';
+        if (rows.length) {
+          const { text, hidden } = fitLines(rows.map((r) => `**#${r.id}** · \`${r.type}\` — ${r.content}`));
+          description = hidden > 0 ? `${text}\n(+${hidden} lembrança(s) não exibida(s))` : text;
+        }
+        const embed = makeEmbed({ color: COLOR, title: '🧠 O que a Yui lembra sobre você', description, footer: scopeLabel(ctx) });
+        return reply({ embeds: [embed] });
       }
-      const embed = makeEmbed({ color: COLOR, title: '🧠 O que a Yui lembra sobre você', description, footer: scopeLabel(ctx) });
-      return reply({ embeds: [embed] });
-    }
 
-    if (sub === 'lembrar') {
-      memory.remember(ctx, { type: 'note', content: interaction.options.getString('texto', true), importance: 3, source: 'discord-command' });
-      return reply({ content: `✅ Guardei na ${scopeLabel(ctx)}.` });
-    }
+      if (sub === 'lembrar') {
+        await memory.remember(ctx, { type: 'note', content: interaction.options.getString('texto', true), importance: 3, source: 'discord-command' });
+        return reply({ content: `✅ Guardei na ${scopeLabel(ctx)}.` });
+      }
 
-    if (sub === 'esquecer') {
-      const ok = memory.forget(ctx, interaction.options.getInteger('id', true));
-      return reply({ content: ok ? '🗑️ Lembrança apagada.' : 'Não encontrei essa lembrança na sua memória.' });
-    }
+      if (sub === 'esquecer') {
+        const ok = await memory.forget(ctx, interaction.options.getInteger('id', true));
+        return reply({ content: ok ? '🗑️ Lembrança apagada.' : 'Não encontrei essa lembrança na sua memória.' });
+      }
 
-    if (sub === 'apagar-tudo') {
-      const n = memory.forgetAll(ctx);
-      const extra = removedContext > 0 ? ` e ${removedContext} fala(s) do contexto das conversas recentes` : '';
-      return reply({ content: `🗑️ Apaguei ${n} lembrança(s) da sua memória${extra}.${HISTORY_NOTE}` });
+      if (sub === 'apagar-tudo') {
+        const n = await memory.forgetAll(ctx);
+        const extra = removedContext > 0 ? ` e ${removedContext} fala(s) do contexto das conversas recentes` : '';
+        return reply({ content: `🗑️ Apaguei ${n} lembrança(s) da sua memória${extra}.${HISTORY_NOTE}` });
+      }
+    } catch (err) {
+      // Só com o cérebro separado: o cérebro (dono da memória) está fora. No processo único o store lança como sempre.
+      if (err?.code !== memory.MEMORY_UNAVAILABLE) throw err;
+      return reply({ content: `🧠 ${memory.MEMORY_UNAVAILABLE_TEXT}` });
     }
   },
 };
