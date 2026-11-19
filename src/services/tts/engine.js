@@ -7,6 +7,9 @@
  *    Quem decide é o backend; a IA nunca escolhe. Provedor de nuvem nem é sondado
  *    nem aquecido enquanto a nuvem estiver desligada. Falha FECHADA: `sensitive` ausente
  *    em `synthesize()` conta como sensível; só `sensitive: false` explícito libera a nuvem.
+ *    Exceção declarada: um provedor com `gate` próprio (o omniroute) responde por si: a chave dele (YUI_TTS_OMNIROUTE) liga a nuvem só para ele
+ *    e texto sensível só entra com `gate.allowsSensitive()` (YUI_TTS_OMNIROUTE_SENSIVEL, padrão desligado).
+ *    Segredos: texto com cara de chave, token ou senha (secretGuard.js) NUNCA vai a uma nuvem, sensível ou não: só o provedor local o fala, e o evento é contado.
  *  - Prazo frio/quente por provedor: quem sabe responde por `isWarm()` (o helper do SAPI
  *    dorme após 10 min parado e a próxima fala paga a partida a frio de novo).
  *  - Falha = exceção, prazo estourado, áudio vazio/curto (< 20 ms) ou formato inválido.
@@ -26,6 +29,7 @@
  */
 
 import { getTtsConfig, KNOWN_PROVIDERS, PLANNED_PROVIDERS } from './config.js';
+import { findSecret } from './secretGuard.js';
 
 const SILENT_LOGGER = { info() {}, warn() {}, error() {}, debug() {} };
 
@@ -87,7 +91,7 @@ const toBuffer = (pcm) => (Buffer.isBuffer(pcm) ? pcm : Buffer.from(pcm.buffer, 
  * @param {function} [o.now]             relógio em ms (injetável)
  * @param {object}   [o.timers]          { setTimeout, clearTimeout } (injetáveis)
  */
-export function createEngine({ providers = [], config, logger, now, timers } = {}) {
+export function createEngine({ providers = [], config, logger, now, timers, env } = {}) {
   const cfg = config || getTtsConfig();
   const clock = typeof now === 'function' ? now : () => Date.now();
   // Chama pelo objeto injetado (e não por referência solta) para não perder o `this` dele.
@@ -150,6 +154,16 @@ export function createEngine({ providers = [], config, logger, now, timers } = {
   }
 
   const isLocal = (p) => p.local === true; // qualquer outra coisa conta como nuvem (falha fechada)
+  // Porta PRÓPRIA de um provedor de nuvem (o omniroute): `gate.enabled()` é a chave dele (no lugar de YUI_TTS_CLOUD) e `gate.allowsSensitive()` diz
+  // se texto sensível pode ir até ele (YUI_TTS_OMNIROUTE_SENSIVEL). Sem `enabled()` o provedor segue a regra de sempre (nuvem + texto não sensível).
+  // Qualquer erro ao perguntar conta como porta FECHADA.
+  const ownGate = (p) => (p.gate && typeof p.gate.enabled === 'function' ? p.gate : null);
+  const gateOpen = (g, sensitive) => {
+    try {
+      if (g.enabled() !== true) return false;
+      return sensitive === false || (typeof g.allowsSensitive === 'function' && g.allowsSensitive() === true);
+    } catch { return false; }
+  };
 
   // ── Log com freio (uma linha por causa a cada 10 min) ─────────────
   const lastLog = new Map();
@@ -172,7 +186,12 @@ export function createEngine({ providers = [], config, logger, now, timers } = {
    */
   function selectChain(opts) {
     const cloudOk = cfg.cloud === true && opts?.sensitive === false;
-    return configured.filter((p) => (isLocal(p) || cloudOk) && state.get(p).probe.ok !== false);
+    return configured.filter((p) => {
+      if (state.get(p).probe.ok === false) return false;
+      if (isLocal(p)) return true;
+      const g = ownGate(p);
+      return g ? gateOpen(g, opts?.sensitive) : cloudOk;
+    });
   }
 
   // ── Disjuntor ─────────────────────────────────────────────────────
@@ -252,6 +271,8 @@ export function createEngine({ providers = [], config, logger, now, timers } = {
   // ── Execução com prazo e cancelamento ─────────────────────────────
   const inflight = new Set(); // AbortControllers das sínteses em andamento
   let disposed = false;
+  /** Quantas sínteses tinham cara de chave, token ou senha e ficaram só no provedor local (só o número; nunca o texto nem o trecho). */
+  let secretBlocked = 0;
 
   /**
    * Roda `fn(signal)` com prazo. Resolve sempre (nunca rejeita):
@@ -375,6 +396,13 @@ export function createEngine({ providers = [], config, logger, now, timers } = {
       }
 
       let chain = selectChain({ sensitive });
+      // Texto com cara de chave, token ou senha NUNCA vai a uma voz da nuvem (OmniRoute, Azure, Edge): fica só no provedor local (que não sai do
+      // computador) e o evento é contado. O log leva só o número: nem o texto, nem o trecho achado, nem o tipo.
+      if (findSecret(clean, env ?? process.env)) {
+        secretBlocked += 1;
+        log('warn', `[TTS] Texto com cara de chave, token ou senha: só o provedor local pode falar (eventos=${secretBlocked}).`);
+        chain = chain.filter(isLocal);
+      }
       const stuck = sticky && typeof sticky === 'object' ? sticky.provider : undefined;
       // Sticky: a resposta inteira usa o mesmo provedor. Se ele não está disponível, não troca de voz.
       if (stuck) chain = chain.filter((p) => p.name === stuck);
@@ -393,7 +421,7 @@ export function createEngine({ providers = [], config, logger, now, timers } = {
           if (!breakerAllow(p)) continue;
           if (halfOpen) trialOwner = p;
 
-          const r = await runBounded((sig) => p.synth(clean, { signal: sig }), timeoutFor(p), signal, audioProblem);
+          const r = await runBounded((sig) => p.synth(clean, { signal: sig, sensitive: sensitive !== false }), timeoutFor(p), signal, audioProblem);
           if (r.ok) {
             trialOwner = null;
             recordSuccess(p);
@@ -422,9 +450,12 @@ export function createEngine({ providers = [], config, logger, now, timers } = {
     const out = [];
     for (const p of configured) {
       const s = state.get(p);
-      if (!isLocal(p) && cfg.cloud !== true) {
-        s.probe = { ok: null, detail: 'nuvem desligada' };
-        out.push({ name: p.name, local: false, ok: false, skipped: true, detail: 'nuvem desligada' });
+      const g = isLocal(p) ? null : ownGate(p);
+      const switchOn = g ? (() => { try { return g.enabled() === true; } catch { return false; } })() : cfg.cloud === true;
+      if (!isLocal(p) && !switchOn) {
+        const detail = g ? 'desligado' : 'nuvem desligada';
+        s.probe = { ok: null, detail };
+        out.push({ name: p.name, local: false, ok: false, skipped: true, detail });
         continue;
       }
       let result;
@@ -477,6 +508,7 @@ export function createEngine({ providers = [], config, logger, now, timers } = {
     return {
       cloudEnabled: cfg.cloud === true,
       disposed,
+      secretBlocked,
       chain: configured.map((p) => p.name),
       mutex: { busy: locked, waiting: waiters.length },
       providers: configured.map((p) => {

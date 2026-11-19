@@ -91,6 +91,11 @@ export const SUITES = [
   // perfil de IA contra o OmniRoute falso; num processo só) e a ponta a ponta com o supervisor, o cérebro e o bot de verdade (Discord e IA falsos, ~15 s).
   'test:pilotoapp',
   'test:reinicioprocessos',
+  // Etapa 12 (voz pelo OmniRoute): a unidade (configuração, preparação do texto, o provedor com fetch falso: corpo, chave, falhas, teto, cache, estilo, MP3, e o lugar dele no
+  // motor: ordem de reserva e porta de privacidade) e a integração com o OmniRoute FALSO em loopback (aberto pelo teste; corpo exato, WAV tocável, cada falha caindo no próximo
+  // provedor, segredos fora do log, o caminho inteiro initTts -> speakVoiceReply -> PCM do Discord). Os dois num processo só, sob o bloqueio de integração externa.
+  'test:ttsomniroute',
+  'test:ttsomnirouteint',
 ];
 
 function argvOf(command) {

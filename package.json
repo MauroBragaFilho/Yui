@@ -64,6 +64,8 @@
     "test:perfisiaprocessos": "node tests/test-perfis-ia-processos.js",
     "test:pilotoapp": "node tests/test-piloto-app.js",
     "test:reinicioprocessos": "node tests/test-reinicio-processos.js",
+    "test:ttsomniroute": "node tests/test-tts-omniroute.js",
+    "test:ttsomnirouteint": "node tests/test-tts-omniroute-integracao.js",
     "test:importarmemoria": "node tests/test-importar-memoria.js",
     "test:diagnostico": "node tests/test-diagnostico.js",
     "test:atualizador": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-atualizador-dois.ps1",

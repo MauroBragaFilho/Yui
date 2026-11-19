@@ -54,17 +54,58 @@ function list(env, name, def) {
 }
 
 /** Provedores que existem nesta versão. Os demais nomes são ignorados com aviso. */
-export const KNOWN_PROVIDERS = Object.freeze(['sapi', 'edge', 'azure']);
+export const KNOWN_PROVIDERS = Object.freeze(['sapi', 'edge', 'azure', 'omniroute']);
 
 /** Provedores previstos mas ainda não implementados (ficam para depois). */
 export const PLANNED_PROVIDERS = Object.freeze(['piper']);
 
+// ── Voz pelo OmniRoute (POST /v1/audio/speech, compatível com a OpenAI) ───────────────────────────────────────────────────────────
+// O modelo e a voz vêm SÓ destas chaves (o código não presume o prefixo do modelo; o do Gemini é o padrão de hoje). Validados aqui porque
+// vão no corpo JSON da chamada: valor com caractere estranho cai no padrão, nunca é repassado.
+export const DEFAULT_OMNIROUTE_MODEL = 'google/gemini-3.8-flash-tts';
+export const DEFAULT_OMNIROUTE_VOICE = 'Leda';
+/** O estilo padrão (em inglês: o Gemini TTS entende melhor), usado só com um modelo do Gemini e sem YUI_TTS_OMNIROUTE_ESTILO. */
+export const DEFAULT_OMNIROUTE_STYLE = 'Say in a warm, natural and slightly playful tone, in Brazilian Portuguese';
+const OMNIROUTE_NAME_RE = /^[A-Za-z0-9][\w.:@/-]{0,119}$/;
+const OMNIROUTE_VOICE_RE = /^[A-Za-z0-9][\w.:@/-]{0,79}$/;
+
+export function safeOmnirouteModel(value, fallback = DEFAULT_OMNIROUTE_MODEL) {
+  const v = String(value ?? '').trim();
+  return OMNIROUTE_NAME_RE.test(v) ? v : fallback;
+}
+
+export function safeOmnirouteVoice(value, fallback = DEFAULT_OMNIROUTE_VOICE) {
+  const v = String(value ?? '').trim();
+  return OMNIROUTE_VOICE_RE.test(v) ? v : fallback;
+}
+
+/** O modelo é da família Gemini (aceita instrução de estilo no texto e as marcas <short pause>, <laugh>...)? */
+export function isGeminiTtsModel(model) {
+  return /gemini/i.test(String(model ?? ''));
+}
+
+/**
+ * A instrução de estilo da voz: `null` = não definida (vale o padrão, só para modelo do Gemini); `''` = "nenhum" (texto puro);
+ * senão o texto, sem controle, em uma linha e com no máximo 200 caracteres.
+ */
+export function cleanOmnirouteStyle(value) {
+  if (value === undefined || value === null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^(nenhum|nenhuma|none|off)$/i.test(raw)) return '';
+  const clean = raw.replace(/[\u0000-\u001F\u007F-\u009F​-‏‪-‮⁦-⁩﻿]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200).trim();
+  return clean || null;
+}
+
 export function getTtsConfig(env = process.env) {
+  const omniroute = bool(env, 'YUI_TTS_OMNIROUTE', false);
+  const cloudProviders = bool(env, 'YUI_TTS_CLOUD', false) ? (String(env.AZURE_SPEECH_KEY || '').trim() ? ['azure', 'edge', 'sapi'] : ['edge', 'sapi']) : ['sapi'];
   return {
     enabled: masterSwitch(env, 'YUI_TTS_ENABLED', true),
     // Com a nuvem ligada (YUI_TTS_CLOUD=true) a voz neural vem primeiro e o SAPI fica de reserva.
     // Nuvem + chave do Azure: azure (oficial) > edge > SAPI. A chave nunca entra neste objeto: só se ela EXISTE.
-    providers: list(env, 'YUI_TTS_PROVIDERS', bool(env, 'YUI_TTS_CLOUD', false) ? (String(env.AZURE_SPEECH_KEY || '').trim() ? ['azure', 'edge', 'sapi'] : ['edge', 'sapi']) : ['sapi']),
+    // Com YUI_TTS_OMNIROUTE=true o omniroute vai na frente de tudo (omniroute > azure > edge > SAPI); uma lista escrita em YUI_TTS_PROVIDERS vale como está.
+    providers: list(env, 'YUI_TTS_PROVIDERS', omniroute ? ['omniroute', ...cloudProviders] : cloudProviders),
     cloud: bool(env, 'YUI_TTS_CLOUD', false),
     voiceTools: bool(env, 'YUI_VOICE_TOOLS', false),
 
@@ -113,6 +154,18 @@ export function getTtsConfig(env = process.env) {
     edgeMaxCharsPerDay: int(env, 'YUI_TTS_EDGE_MAX_CHARS_PER_DAY', 100000, 1000, 2000000),
     edgeTimeoutMs: int(env, 'YUI_TTS_EDGE_TIMEOUT_MS', 8000, 2000, 30000),
     edgeColdTimeoutMs: int(env, 'YUI_TTS_EDGE_COLD_TIMEOUT_MS', 12000, 3000, 60000),
+
+    // Voz pelo OmniRoute (o endereço e a chave NÃO estão aqui: vêm do provedor "omniroute" que a Yui já usa para a IA, em src/gateway/providers.js).
+    // Desligado por padrão. `omnirouteSensitive`: texto sensível (conversa privada) só vai ao OmniRoute com YUI_TTS_OMNIROUTE_SENSIVEL=true.
+    omniroute,
+    omnirouteModel: safeOmnirouteModel(env.YUI_TTS_OMNIROUTE_MODELO),
+    omnirouteVoice: safeOmnirouteVoice(env.YUI_TTS_OMNIROUTE_VOZ),
+    omnirouteStyle: cleanOmnirouteStyle(env.YUI_TTS_OMNIROUTE_ESTILO),
+    omnirouteSensitive: bool(env, 'YUI_TTS_OMNIROUTE_SENSIVEL', false),
+    omnirouteDailyCap: int(env, 'YUI_TTS_OMNIROUTE_TETO_DIA', 400, 1, 100000),
+    omnirouteTimeoutMs: int(env, 'YUI_TTS_OMNIROUTE_TIMEOUT_MS', 10000, 2000, 60000),
+    // a 1ª chamada não ganha prazo maior: o prazo do motor é o mesmo (o do provedor, um pouco mais curto, dispara antes)
+    omnirouteColdTimeoutMs: int(env, 'YUI_TTS_OMNIROUTE_TIMEOUT_MS', 10000, 2000, 60000),
 
     personaVoiceFile: String(env.YUI_PERSONA_VOICE_FILE || 'persona/yui-voz.md').trim(),
   };

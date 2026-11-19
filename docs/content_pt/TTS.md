@@ -140,6 +140,7 @@ Quando ela deixa de falar, **o texto continua no chat**: só a fala é cortada.
 | `YUI_TTS_ENABLED` | Chave mestra. `false` = nunca fala e nem sobe o processo da voz. Um valor que ela não reconhece (por exemplo `falso`) também desliga | `true` |
 | `YUI_TTS_PROVIDERS` | Provedores de voz, em ordem. Existem `sapi` (voz do Windows), `edge` e `azure` (nuvem); `piper` ainda não existe e é ignorado com um aviso no log | `sapi` (com `YUI_TTS_CLOUD=true`: `edge,sapi`, ou `azure,edge,sapi` se houver `AZURE_SPEECH_KEY`) |
 | `YUI_TTS_CLOUD` | `true` liga a voz neural da nuvem (o texto falado sai para a Microsoft; só resposta não sensível). Veja o [passo 9b](#-9b-azure-speech-oficial-como-criar-a-chave) e o [passo 10](#-10-uma-voz-melhor-no-futuro) | `false` |
+| `YUI_TTS_OMNIROUTE` | `true` liga a voz pelo **OmniRoute** (a Leda do Gemini TTS, pelo gateway de IA), na frente de todas as outras. Veja o [passo 9c](#-9c-voz-pelo-omniroute-gemini-tts) | `false` |
 | `YUI_TTS_SAPI_VOICE` | Nome (ou parte do nome) de outra voz instalada | primeira voz pt-BR |
 | `YUI_TTS_SAPI_RATE` | Velocidade da fala, de `-10` (lenta) a `10` (rápida) | `0` |
 | `YUI_TTS_MAX_CHARS` | Quanto ela fala por resposta, em caracteres (60 a 600) | `220` |
@@ -239,6 +240,30 @@ O Azure tem mais vozes pt-BR e **estilos** (alegre, amigável...). A faixa gratu
 6. Reinicie a Yui. Com `YUI_TTS_CLOUD=true` e a chave, a ordem passa a ser Azure, Edge e voz do Windows (cada um assume se o anterior falhar).
 
 > O Azure é oficial e estável (o Edge usa um acesso não oficial). O texto falado também sai do computador da Yui. Há um teto mensal (`YUI_TTS_AZURE_MAX_CHARS_PER_MONTH`, 450 mil) para não passar da faixa gratuita.
+
+## 🌐 9c. Voz pelo OmniRoute (Gemini TTS)
+
+A voz padrão pode vir do **OmniRoute** (o gateway de IA que a Yui já usa): a Yui manda o texto para `POST /v1/audio/speech` (o protocolo de fala compatível com a OpenAI) e o OmniRoute devolve o áudio, hoje com a voz **Leda** do Gemini TTS, usando as chaves do Google que estão conectadas nele. **Não há chave nova:** o endereço e a chave são os do provedor `omniroute` que a Yui já usa para a IA (cadastrado no painel ou em `YUI_GATEWAY_CUSTOM`).
+
+1. Confirme que o provedor `omniroute` aparece no painel da IA (ele precisa estar ativo no Gateway).
+2. No `.env`: `YUI_TTS_OMNIROUTE=true`. A ordem de reserva passa a ser `omniroute,azure,edge,sapi` (ou `omniroute,sapi` sem a nuvem); se você escreveu `YUI_TTS_PROVIDERS` à mão, inclua `omniroute` nela (o log avisa quando ele está ligado e fora da lista).
+3. Reinicie a Yui. No log: `[TTS] OmniRoute ligado: modelo=... voz=... sensivel=... teto_dia=...`.
+
+**Como funciona e o que acontece quando falha**
+- **Uma tentativa e prazo curto** (`YUI_TTS_OMNIROUTE_TIMEOUT_MS`, 10 s). Rede, 401, 429, 5xx, resposta vazia, áudio inválido ou mudo, ou demora: o próximo provedor da ordem fala, sem erro para a pessoa, e o log ganha **uma linha** com o código, o status e o tempo (nunca o texto, a chave ou o endereço). Se o provedor falhar 3 vezes em 2 minutos, ele é pulado por 10 minutos.
+- **Teto por dia** (`YUI_TTS_OMNIROUTE_TETO_DIA`, 400): cada frase falada é uma chamada. Passado o teto, o próximo provedor assume até o dia seguinte. O contador fica só na memória do bot (reiniciar zera).
+- **Cache** de RAM das falas repetidas (até 40 entradas, 10 minutos): poupa a cota. Texto sensível nunca entra no cache.
+- **Latência:** cada fala logada tem `ms_rede` e `ms_total` (só números). O áudio do Gemini chega pronto (WAV), então o tempo é o da chamada inteira por frase (alguns segundos, estimativa ainda não medida com o OmniRoute real: os números do log mostram o valor verdadeiro).
+- **Modelo, voz e estilo** vêm das chaves `YUI_TTS_OMNIROUTE_MODELO`, `YUI_TTS_OMNIROUTE_VOZ` e `YUI_TTS_OMNIROUTE_ESTILO` (o nome do modelo e da voz são só repassados). A instrução de estilo (em inglês) e as marcas `<short pause>`, `<long pause>`, `<laugh>` e `<sigh>` só entram para modelo do Gemini ou quando o estilo está definido; para outros modelos o texto vai puro. O áudio pode vir em WAV ou MP3 (escolhido pelo Content-Type; o MP3 passa pelo `ffmpeg`).
+
+**Privacidade**
+- O texto falado sai do computador da Yui para o OmniRoute e, por ele, para o serviço de voz (hoje o Google). No plano gratuito do Google esse conteúdo pode ser usado por eles para melhorar produtos.
+- Texto **sensível** (resposta de conversa privada, com memória pessoal) **nunca** vai ao OmniRoute com `YUI_TTS_OMNIROUTE_SENSIVEL=false` (o padrão): cai no provedor local. Com `true` ele vai: é uma **exceção explícita**, nunca o padrão. Quem a liga aceita que esse conteúdo passe pelo Google; **no plano gratuito (chaves gratuitas do AI Studio) o conteúdo enviado pode ser usado por eles para melhorar produtos**. Para conteúdo sensível o recomendado é um projeto Google com cobrança (os termos de dados são outros); continuar nas chaves gratuitas é um risco aceito por quem liga a chave. O texto sensível não é guardado no cache.
+- **Cada uso da exceção fica registrado**: um contador (no diagnóstico da fala, bloco `omniroute`: `sensitiveSent`) e uma linha de log `fala sensível enviada ao OmniRoute (total=N)`. O log nunca leva o texto, trecho dele, tamanho nem hash.
+- **Credenciais nunca vão à síntese**, nem com a exceção ligada: texto com cara de chave de API, token (inclusive de bot do Discord), `Bearer`, hexadecimal longo ou senha, ou que contenha o valor de uma variável de segredo, passa pelo mascaramento de segredos da Yui e é falado **só pelo provedor local** (que não sai do computador); o evento é contado (`secretBlocked`, no mesmo diagnóstico) e o log leva só um número. Vale para o OmniRoute, o Azure e o Edge.
+- Esta chave só escolhe para onde o texto pode ir: a regra de nunca falar conteúdo sensível numa call pública (passo 5) continua valendo à parte.
+
+---
 
 ## 🚀 10. Uma voz melhor, no futuro
 

@@ -23,7 +23,8 @@
  *  - Nenhum processo pesado sobe no boot: o SAPI só é sondado "por fora" (o powershell.exe
  *    existe?). O helper residente (~150 MB) nasce na 1ª fala ou em `warmupTts()`.
  *
- * Piper e Edge (nuvem) ficaram para depois (T1b §1): hoje só existe o provedor `sapi`.
+ * Provedores: `sapi` (voz do Windows, local), `edge` e `azure` (nuvem da Microsoft) e `omniroute` (nuvem, pelo gateway de IA: a Leda do Gemini TTS;
+ * providers/omniroute.js). O Piper ficou para depois (T1b §1).
  *
  * Contrato de `deps` (todas SÍNCRONAS): isEnabled(guildId), isBanned(userId, guildId),
  * isBot(userId, guildId) (só `false` EXATO prova humano; `undefined`/`null`/desconhecido = bot),
@@ -42,6 +43,7 @@ import { createEngine } from './engine.js';
 import { createSapiProvider, getPowerShellPath } from './providers/sapi.js';
 import { createEdgeProvider } from './providers/edge.js';
 import { createAzureProvider } from './providers/azure.js';
+import { createOmnirouteProvider } from './providers/omniroute.js';
 import { checkSpeakableText, createLimiter, decideSpeak, findPii, isBlockedSpeech } from './policy.js';
 import { createSpeakerManager } from './output.js';
 
@@ -82,6 +84,11 @@ const NOOP = () => {};
 function tag(value, fallback = 'desconhecido') {
   const s = String(value ?? '').replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 40);
   return s || fallback;
+}
+
+/** Nome de modelo ou de voz para log/status (vem da configuração do dono): como `tag`, mas deixa passar a "/" e o "@" (google/gemini-3.8-flash-tts). */
+function modelTag(value) {
+  return String(value ?? '').replace(/[^A-Za-z0-9_.:/@-]/g, '').slice(0, 80) || 'desconhecido';
 }
 
 /** Código/nome do erro, nunca a mensagem (pode carregar texto falado ou saída de processo). */
@@ -279,6 +286,10 @@ function buildProviders(cfg, overrides, log, now) {
       out.push(withBootProbe(sapi, process.env));
     } else if (name === 'azure') {
       out.push(createAzureProvider({ config: cfg, env: process.env, logger: log, now }));
+    } else if (name === 'omniroute') {
+      // Nuvem pelo OmniRoute: a chave própria (YUI_TTS_OMNIROUTE) e o texto sensível (YUI_TTS_OMNIROUTE_SENSIVEL) são decididos pela porta do próprio
+      // provedor (engine.js); o endereço e a chave são os do provedor "omniroute" da IA, lidos do ambiente a cada fala.
+      out.push(createOmnirouteProvider({ config: cfg, env: overrides.env ?? process.env, logger: log, now }));
     } else if (name === 'edge') {
       // Nuvem: o motor só a usa com YUI_TTS_CLOUD=true e texto não sensível (porta de privacidade do engine.js).
       out.push(createEdgeProvider({ config: cfg, logger: log, now }));
@@ -339,7 +350,7 @@ export async function initTts(options) {
 
     const now = typeof ov.now === 'function' ? ov.now : () => Date.now();
     const providers = buildProviders(cfg, ov, log, now);
-    const engine = createEngine({ providers, config: cfg, logger: log, now, timers: ov.timers });
+    const engine = createEngine({ providers, config: cfg, logger: log, now, timers: ov.timers, env: ov.env ?? process.env });
     if (engine.getStatus().chain.length === 0) {
       log.warn('[TTS] Desligado: nenhum provedor de voz implementado na configuração (YUI_TTS_PROVIDERS).');
       await engine.disposeAll();
@@ -372,6 +383,7 @@ export async function initTts(options) {
       // Relógio monotônico em produção (mexer na hora do PC não pode travar os limites); testes injetam o deles.
       limiter: createLimiter({ config: cfg, now: typeof ov.now === 'function' ? ov.now : undefined }),
       cache: createPcmCache(),
+      omniroute: providers.find((p) => p?.name === 'omniroute' && typeof p.getUsage === 'function') ?? null,
       counters: newCounters(),
       quietLogAt: new Map(),
       warming: null,
@@ -396,8 +408,18 @@ export async function initTts(options) {
     }
     log.info(
       `[TTS] Pronto: provedores=${cfg.providers.map((n) => tag(n)).join(',')}, nuvem=${cfg.cloud ? 'ligada' : 'desligada'}, ` +
-        `limite=${cfg.maxChars} caracteres/${cfg.maxSentences} frases/${cfg.maxSeconds}s.`,
+        `${cfg.omniroute ? 'omniroute=ligado, ' : ''}limite=${cfg.maxChars} caracteres/${cfg.maxSentences} frases/${cfg.maxSeconds}s.`,
     );
+    if (cfg.omniroute) {
+      if (cfg.providers.includes('omniroute')) {
+        log.info(
+          `[TTS] OmniRoute ligado: modelo=${modelTag(cfg.omnirouteModel)} voz=${modelTag(cfg.omnirouteVoice)} sensivel=${cfg.omnirouteSensitive ? 'sim' : 'nao'} ` +
+            `teto_dia=${cfg.omnirouteDailyCap} prazo=${cfg.omnirouteTimeoutMs}ms (o endereco e a chave sao os do provedor "omniroute" da IA).`,
+        );
+      } else {
+        log.warn('[TTS] YUI_TTS_OMNIROUTE=true, mas "omniroute" não está em YUI_TTS_PROVIDERS: a voz do OmniRoute não será usada.');
+      }
+    }
     lastInit = { enabled: true, reason: 'ready' };
     return { enabled: true, providers: summary };
   } catch (err) {
@@ -770,6 +792,8 @@ export function getTtsStatus(options) {
       engine: t.engine.getStatus(),
       output,
       fixedCache: t.cache.stats(),
+      // só contadores e latências (nunca o texto, a chave nem o endereço); ausente se o provedor não está na ordem
+      ...(t.omniroute ? { omniroute: { enabled: t.cfg.omniroute === true, sensitive: t.cfg.omnirouteSensitive === true, model: modelTag(t.cfg.omnirouteModel), voice: modelTag(t.cfg.omnirouteVoice), ...t.omniroute.getUsage() } } : {}),
       counters: {
         requests: c.requests,
         accepted: c.accepted,
