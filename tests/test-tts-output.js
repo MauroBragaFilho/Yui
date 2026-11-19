@@ -16,6 +16,8 @@ import { createRequire } from 'module';
 
 const { createSpeakerManager, OUTPUT_LIMITS } = await import(new URL('../src/services/tts/output.js', import.meta.url));
 
+const { getTtsConfig } = await import(new URL('../src/services/tts/config.js', import.meta.url));
+
 const FRAME = 3840;
 const BYTES_PER_MS = 192;
 
@@ -831,6 +833,28 @@ await test('1ª frase que não fica pronta em 20 s encerra a resposta', async ()
   assert.deepStrictEqual(reasons(job), ['synth-timeout']);
   assert.strictEqual(job.calls[0].signal.aborted, true);
   assert.strictEqual(w.clock.pending(), 0);
+});
+
+await test('o prazo da 1ª frase é o MESMO do orçamento de nuvem do motor: config.firstSentenceWaitMs manda (o padrão é o de OUTPUT_LIMITS)', async () => {
+  assert.strictEqual(getTtsConfig({}).firstSentenceWaitMs, OUTPUT_LIMITS.firstSentenceWaitMs, 'um valor só nos dois lugares');
+  const w = makeWorld({ config: { firstSentenceWaitMs: 9_000 } });
+  w.addConn('g1');
+  const job = w.job({ manual: true });
+  w.mgr.enqueue('g1', job);
+  await flush();
+  await w.clock.advance(8_999);
+  assert.strictEqual(w.mgr.isSpeaking('g1'), true, 'ainda esperando');
+  await w.clock.advance(2);
+  assert.deepStrictEqual(reasons(job), ['synth-timeout'], 'venceu aos 9 s, e não aos 20 s do padrão');
+  const lixo = makeWorld({ config: { firstSentenceWaitMs: 'abc' } }); // valor inválido: volta ao padrão
+  lixo.addConn('g1');
+  const j2 = lixo.job({ manual: true });
+  lixo.mgr.enqueue('g1', j2);
+  await flush();
+  await lixo.clock.advance(OUTPUT_LIMITS.firstSentenceWaitMs - 1);
+  assert.strictEqual(lixo.mgr.isSpeaking('g1'), true);
+  await lixo.clock.advance(2);
+  assert.deepStrictEqual(reasons(j2), ['synth-timeout']);
 });
 
 await test('Buffering preso por 8 s encerra só esta resposta (a fila segue)', async () => {

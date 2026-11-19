@@ -1629,6 +1629,334 @@ await test('o motor expõe isWarm do SAPI sem quebrar o contrato (name, local, p
   await p.dispose();
 });
 
+// ── Orçamento de nuvem (incidente de 19/11/2026: a fala saiu SÓ EM TEXTO) ────────────────────────────────────────────────
+// A cadeia roda em série e a fala só espera `firstSentenceWaitMs` (20 s) pela 1ª frase. OmniRoute (10 s) + Azure (falha) + Edge (9 s) gastavam os 20 s e
+// o SAPI, que sempre funciona, nunca era tentado. Tempo VIRTUAL: os provedores falsos e o motor usam o mesmo relógio, então os 20 s custam zero.
+section('Orçamento de nuvem: o provedor local nunca fica sem tempo');
+
+function virtualTime() {
+  let t = 0;
+  let id = 0;
+  const pend = new Map();
+  const vt = {
+    now: () => t,
+    setTimeout(fn, ms) { id += 1; pend.set(id, { at: t + Math.max(0, ms), fn }); return id; },
+    clearTimeout(h) { pend.delete(h); },
+    /** Anda o tempo virtual até a promessa resolver (ou até esgotar o que há para esperar). */
+    async run(promise) {
+      let done = false;
+      let value;
+      let error;
+      promise.then((v) => { done = true; value = v; }, (e) => { done = true; error = e; });
+      for (let i = 0; i < 5000 && !done; i += 1) {
+        await tick();
+        if (done) break;
+        const next = [...pend.entries()].sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+        if (!next) throw new Error('travou: nada mais a esperar');
+        pend.delete(next[0]);
+        t = Math.max(t, next[1].at);
+        next[1].fn();
+      }
+      await tick();
+      if (error) throw error;
+      return value;
+    },
+    sleep(ms) { return vt.run(new Promise((res) => vt.setTimeout(res, ms))); },
+  };
+  return vt;
+}
+
+/** Provedor falso de tempo virtual: responde (ou falha com `fail`) depois de `delay` ms; guarda o prazo que o motor lhe deu. */
+function vProvider(vt, name, { local = false, delay = 0, fail = null, warm, gate, warmupDelay = 0 } = {}) {
+  const p = {
+    name, local, delay, fail, calls: [], warmupAt: null, keepCalls: 0,
+    async probe() { return { ok: true, detail: 'ok' }; },
+    async warmup() { if (warmupDelay) await new Promise((res) => vt.setTimeout(res, warmupDelay)); p.warmupAt = vt.now(); },
+    async synth(text, { signal, timeoutMs } = {}) {
+      p.calls.push({ at: vt.now(), timeoutMs });
+      await new Promise((res, rej) => {
+        const h = vt.setTimeout(res, p.delay);
+        signal?.addEventListener('abort', () => { vt.clearTimeout(h); rej(abortErr()); }, { once: true });
+      });
+      if (p.fail) throw Object.assign(new Error('falha'), { code: p.fail });
+      return { pcm: pcmFor(200), sampleRate: 24000, channels: 1 };
+    },
+    async dispose() {},
+  };
+  if (warm !== undefined) { p.warm = warm; p.isWarm = () => p.warm; }
+  if (gate) p.gate = gate;
+  return p;
+}
+const openGate = () => ({ enabled: () => true, allowsSensitive: () => false });
+
+/** Motor com a configuração REAL de produção (prazos, orçamento e disjuntor de getTtsConfig) e o tempo virtual. */
+function vEngine(vt, provs, cfgOver = {}) {
+  const config = { ...getTtsConfig({}), cloud: true, providers: provs.map((p) => p.name), ...cfgOver };
+  const engine = createEngine({ providers: provs, config, logger: { info() {}, warn() {}, error() {} }, now: vt.now, timers: vt });
+  return { engine, config };
+}
+const FIRST_WAIT = getTtsConfig({}).firstSentenceWaitMs;
+const nuvem = (vt, o = {}) => ({
+  omni: vProvider(vt, 'omniroute', { warm: false, gate: openGate(), ...o.omni }),
+  azure: vProvider(vt, 'azure', { ...o.azure }),
+  edge: vProvider(vt, 'edge', { ...o.edge }),
+  sapi: vProvider(vt, 'sapi', { local: true, warm: true, delay: 1000, ...o.sapi }),
+});
+
+await test('o incidente: OmniRoute pendurado, Azure com AZURE_AUTH e Edge lento: a fala SAI pelo SAPI dentro de firstSentenceWaitMs', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 60_000 }, azure: { fail: 'AZURE_AUTH' }, edge: { delay: 60_000 } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi]);
+  const r = await vt.run(engine.synthesize('oi, tudo bem', { sensitive: false }));
+  assert.strictEqual(r?.provider, 'sapi', 'o local falou');
+  assert.ok(vt.now() <= FIRST_WAIT, `saiu em ${vt.now()} ms, o prazo da 1ª frase é ${FIRST_WAIT} ms`);
+  assert.strictEqual(sapi.calls.length, 1);
+  assert.strictEqual(omni.calls[0].timeoutMs, 14_000, 'o OmniRoute frio usou o prazo frio (14 s)');
+  assert.strictEqual(sapi.calls[0].at, 14_000, 'o SAPI começou logo depois do prazo do OmniRoute');
+  assert.strictEqual(azure.calls.length + edge.calls.length, 0, 'sem orçamento sobrando, a nuvem que faltava foi pulada');
+});
+
+await test('com o orçamento sobrando, o Azure que falha rápido deixa o resto para o Edge, e o SAPI ainda cabe no prazo', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 5000, fail: 'OMNIROUTE_HTTP' }, azure: { fail: 'AZURE_AUTH' }, edge: { delay: 60_000 } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi]);
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(r?.provider, 'sapi');
+  assert.strictEqual(azure.calls.length, 1, 'o Azure foi tentado (tinha orçamento)');
+  assert.strictEqual(edge.calls[0].timeoutMs, 10_000, 'o Edge ficou com o que sobrou: 20 s - 5 s gastos - 5 s de reserva do SAPI quente');
+  assert.strictEqual(sapi.calls[0].at, 15_000);
+  assert.ok(vt.now() <= FIRST_WAIT, `saiu em ${vt.now()} ms`);
+});
+
+await test('OmniRoute FRIO que responde em 12 s sai pelo OmniRoute (prazo frio de 14 s)', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 12_000 } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi]);
+  const r = await vt.run(engine.synthesize('primeira fala depois de ocioso', { sensitive: false }));
+  assert.strictEqual(r?.provider, 'omniroute');
+  assert.strictEqual(vt.now(), 12_000);
+  assert.strictEqual(omni.calls[0].timeoutMs, 14_000);
+  assert.strictEqual(sapi.calls.length, 0);
+});
+
+await test('OmniRoute MORNO e rápido continua o primeiro da cadeia, com o prazo quente (10 s); o SAPI nem é chamado', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 100, warm: true } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi]);
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(r?.provider, 'omniroute');
+  assert.strictEqual(omni.calls[0].timeoutMs, 10_000);
+  assert.strictEqual(vt.now(), 100);
+  assert.strictEqual(azure.calls.length + edge.calls.length + sapi.calls.length, 0);
+});
+
+await test('SAPI frio reserva menos que o limite configurado e mais que o quente: o prazo do OmniRoute encolhe para 13 s', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 60_000 }, sapi: { warm: false } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi]);
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(omni.calls[0].timeoutMs, 13_000, 'min(14 s frio, 20 s - 7 s de reserva do SAPI frio)');
+  assert.strictEqual(r?.provider, 'sapi');
+  assert.ok(vt.now() <= FIRST_WAIT);
+});
+
+await test('sem provedor local e com a nuvem toda fora: continua texto (null), e a nuvem tem o prazo inteiro dela (não há o que reservar)', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge } = nuvem(vt, { omni: { delay: 60_000 }, azure: { fail: 'AZURE_AUTH' }, edge: { delay: 60_000 } });
+  const { engine } = vEngine(vt, [omni, azure, edge]);
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(r, null);
+  assert.strictEqual(omni.calls[0].timeoutMs, 14_000);
+  assert.strictEqual(edge.calls[0].timeoutMs, 12_000, 'o prazo frio do Edge, sem corte');
+});
+
+await test('SAPI com o disjuntor aberto não é reservado: a nuvem usa o prazo inteiro', async () => {
+  const vt = virtualTime();
+  const { omni, sapi } = nuvem(vt, { omni: { delay: 60_000 }, sapi: { fail: 'SAPI_BAD', delay: 0 } });
+  const { engine } = vEngine(vt, [omni, sapi], { omnirouteColdTimeoutMs: 30_000 });
+  for (let i = 0; i < 3; i += 1) await vt.run(engine.synthesize('oi', { sensitive: false, sticky: { provider: 'sapi' } })); // só o SAPI falha e abre
+  assert.strictEqual(engine.getStatus().providers[1].breaker.state, 'open');
+  assert.strictEqual(omni.calls.length, 0);
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(r, null);
+  assert.strictEqual(omni.calls[0].timeoutMs, 30_000, 'o SAPI aberto não será tentado: nada a reservar para ele');
+});
+
+await test('uma falha fria NÃO abre o disjuntor; a fala seguinte já usa o prazo quente (o frio é uma chance só); só 3 falhas abrem', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 60_000 }, azure: { fail: 'AZURE_AUTH' }, edge: { delay: 60_000 } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi]);
+  await vt.run(engine.synthesize('um', { sensitive: false }));
+  let st = engine.getStatus().providers.find((p) => p.name === 'omniroute');
+  assert.strictEqual(st.breaker.state, 'closed', 'uma falha fria não abre');
+  assert.strictEqual(st.breaker.recentFailures, 1);
+  await vt.run(engine.synthesize('dois', { sensitive: false }));
+  assert.strictEqual(omni.calls[1].timeoutMs, 10_000, 'a 2ª fala já não ganha o prazo frio');
+  assert.strictEqual(engine.getStatus().providers.find((p) => p.name === 'omniroute').breaker.state, 'closed');
+  await vt.run(engine.synthesize('tres', { sensitive: false }));
+  st = engine.getStatus().providers.find((p) => p.name === 'omniroute');
+  assert.strictEqual(st.breaker.state, 'open', 'a 3ª falha em 2 min abre, como sempre');
+  const antes = omni.calls.length;
+  const r = await vt.run(engine.synthesize('quatro', { sensitive: false }));
+  assert.strictEqual(r.provider, 'sapi');
+  assert.strictEqual(omni.calls.length, antes, 'aberto: pulado, e o SAPI fala de imediato');
+});
+
+await test('o disjuntor da nuvem fecha de novo depois da meia-abertura (um sucesso esquenta e zera as falhas)', async () => {
+  const vt = virtualTime();
+  const { omni, sapi } = nuvem(vt, { omni: { delay: 0, fail: 'OMNIROUTE_HTTP' } });
+  const { engine } = vEngine(vt, [omni, sapi]);
+  for (let i = 0; i < 3; i += 1) await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(engine.getStatus().providers[0].breaker.state, 'open');
+  omni.fail = null;
+  await vt.sleep(10 * 60_000 + 1000);
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(r.provider, 'omniroute', 'a meia-abertura testou e deu certo');
+  assert.strictEqual(engine.getStatus().providers[0].breaker.state, 'closed');
+});
+
+await test('o orçamento respeita o sticky: preso ao SAPI a nuvem nem é tentada; preso à nuvem ela ganha o prazo inteiro (não há local depois)', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 60_000 } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi], { omnirouteColdTimeoutMs: 30_000 });
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false, sticky: { provider: 'sapi' } }));
+  assert.strictEqual(r.provider, 'sapi');
+  assert.strictEqual(omni.calls.length, 0);
+  const r2 = await vt.run(engine.synthesize('oi', { sensitive: false, sticky: { provider: 'omniroute' } }));
+  assert.strictEqual(r2, null, 'sem trocar de voz no meio da resposta');
+  assert.strictEqual(omni.calls[0].timeoutMs, 30_000, 'sem local na cadeia, o prazo da nuvem não é cortado');
+  const livre = {};
+  const { omni: o2, azure: a2, edge: e2, sapi: s2 } = nuvem(vt, { omni: { delay: 60_000 } });
+  const { engine: eng2 } = vEngine(vt, [o2, a2, e2, s2], { omnirouteColdTimeoutMs: 30_000 });
+  const r3 = await vt.run(eng2.synthesize('oi', { sensitive: false, sticky: livre }));
+  assert.strictEqual(o2.calls[0].timeoutMs, 15_000, 'sem sticky o prazo frio de 30 s é cortado no orçamento (20 s - 5 s do SAPI quente)');
+  assert.strictEqual(r3.provider, 'sapi');
+  assert.strictEqual(livre.provider, 'sapi', 'o sticky grava o provedor que falou');
+});
+
+await test('a espera pelo mutex entra no orçamento: o pedido que esperou a vez não gasta o que já passou', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 60_000 } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi]);
+  const a = engine.synthesize('primeiro', { sensitive: false });
+  const b = engine.synthesize('segundo', { sensitive: false });
+  const [ra, rb] = await vt.run(Promise.all([a, b]));
+  assert.strictEqual(ra.provider, 'sapi');
+  assert.strictEqual(rb.provider, 'sapi');
+  assert.strictEqual(omni.calls.length, 1, 'o 2º pedido esperou 15 s: sem orçamento de nuvem, foi direto ao SAPI');
+  assert.strictEqual(sapi.calls[1].at, 15_000);
+});
+
+await test('nuvem pulada por falta de orçamento NÃO gasta a tentativa da meia-abertura do disjuntor', async () => {
+  const vt = virtualTime();
+  const { omni, sapi } = nuvem(vt, { omni: { delay: 0, fail: 'OMNIROUTE_HTTP' } });
+  const { engine, config } = vEngine(vt, [omni, sapi]);
+  for (let i = 0; i < 3; i += 1) await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(engine.getStatus().providers[0].breaker.state, 'open');
+  await vt.sleep(10 * 60_000 + 1000);
+  assert.strictEqual(engine.getStatus().providers[0].breaker.state, 'half-open');
+  omni.fail = null;
+  const n = omni.calls.length;
+  config.firstSentenceWaitMs = 6000; // 6 s - 5 s de reserva = 1 s < 1,5 s úteis: a nuvem é pulada
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(r.provider, 'sapi');
+  assert.strictEqual(omni.calls.length, n, 'pulada');
+  assert.strictEqual(engine.getStatus().providers[0].breaker.state, 'half-open', 'a meia-abertura continua disponível');
+  config.firstSentenceWaitMs = FIRST_WAIT;
+  const r2 = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(r2.provider, 'omniroute', 'a tentativa de meia-abertura ainda estava lá');
+  assert.strictEqual(engine.getStatus().providers[0].breaker.state, 'closed');
+});
+
+await test('o local nunca é pulado por falta de tempo, mesmo com o prazo da 1ª frase menor que a reserva', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt);
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi], { firstSentenceWaitMs: 1000 });
+  const r = await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(r.provider, 'sapi');
+  assert.strictEqual(omni.calls.length + azure.calls.length + edge.calls.length, 0);
+});
+
+await test('texto sensível continua só no local, com ou sem orçamento (a porta de privacidade vem antes)', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt);
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi]);
+  const r = await vt.run(engine.synthesize('conversa privada'));
+  assert.strictEqual(r.provider, 'sapi');
+  assert.strictEqual(omni.calls.length + azure.calls.length + edge.calls.length, 0);
+});
+
+await test('o prazo que o motor dá ao provedor segue junto na chamada (timeoutMs), para o provedor não vencer o motor', async () => {
+  const vt = virtualTime();
+  const { omni, azure, edge, sapi } = nuvem(vt, { omni: { delay: 50, warm: true } });
+  const { engine } = vEngine(vt, [omni, azure, edge, sapi], { omnirouteTimeoutMs: 7777, omnirouteColdTimeoutMs: 7777 });
+  await vt.run(engine.synthesize('oi', { sensitive: false }));
+  assert.strictEqual(omni.calls[0].timeoutMs, 7777);
+});
+
+await test('warmup(): os provedores esquentam EM PARALELO (a nuvem lenta não atrasa a partida do local)', async () => {
+  const vt = virtualTime();
+  const { omni, sapi } = nuvem(vt, { omni: { warmupDelay: 12_000 }, sapi: { warmupDelay: 1000 } });
+  const { engine } = vEngine(vt, [omni, sapi]);
+  await vt.run(engine.warmup());
+  assert.strictEqual(sapi.warmupAt, 1000, 'o SAPI esquentou em 1 s, sem esperar os 12 s do OmniRoute');
+  assert.strictEqual(omni.warmupAt, 12_000);
+});
+
+await test('keepWarm(): toca só a nuvem que sabe se manter, com a porta aberta; não mexe no disjuntor, falha em silêncio e não disputa o mutex', async () => {
+  const vt = virtualTime();
+  const { omni, azure, sapi } = nuvem(vt, { sapi: { delay: 5000 } });
+  omni.keepWarm = async () => { omni.keepCalls += 1; return true; };
+  sapi.keepWarm = async () => { throw new Error('local nunca é tocado'); };
+  const { engine } = vEngine(vt, [omni, azure, sapi]);
+  assert.strictEqual(await vt.run(engine.keepWarm()), 1);
+  assert.strictEqual(omni.keepCalls, 1);
+  // falha: nada de disjuntor, nada de exceção
+  omni.keepWarm = async () => { omni.keepCalls += 1; throw new Error('sem rede'); };
+  assert.strictEqual(await vt.run(engine.keepWarm()), 0);
+  assert.strictEqual(engine.getStatus().providers[0].breaker.recentFailures, 0);
+  assert.strictEqual(engine.getStatus().providers[0].failures, 0);
+  // pendurado: o prazo limita
+  omni.keepWarm = () => new Promise(() => {});
+  assert.strictEqual(await vt.run(engine.keepWarm()), 0);
+  // com uma fala em andamento, nem tenta
+  omni.keepWarm = async () => { omni.keepCalls += 1; return true; };
+  const n = omni.keepCalls;
+  const falando = engine.synthesize('oi', { sensitive: false });
+  await tick();
+  assert.strictEqual(engine.getStatus().mutex.busy, true);
+  assert.strictEqual(await engine.keepWarm(), 0);
+  assert.strictEqual(omni.keepCalls, n);
+  await vt.run(falando);
+  // porta fechada (o dono desligou): nada é tocado
+  omni.gate = { enabled: () => false, allowsSensitive: () => false };
+  assert.strictEqual(await vt.run(engine.keepWarm()), 0);
+  assert.strictEqual(omni.keepCalls, n);
+  // depois de encerrado, nada
+  await engine.disposeAll();
+  assert.strictEqual(await engine.keepWarm(), 0);
+});
+
+await test('configuração nova: padrões, limites e chaves lidas a cada uso', () => {
+  const c = getTtsConfig({});
+  assert.deepStrictEqual(
+    [c.firstSentenceWaitMs, c.localReserveMs, c.cloudMinMs, c.omnirouteTimeoutMs, c.omnirouteColdTimeoutMs, c.omnirouteWarmMinutes, c.omnirouteKeepaliveMinutes],
+    [20_000, 7000, 1500, 10_000, 14_000, 5, 4],
+  );
+  const o = getTtsConfig({
+    YUI_TTS_FIRST_SENTENCE_WAIT_MS: '25000', YUI_TTS_LOCAL_RESERVE_MS: '9000', YUI_TTS_CLOUD_MIN_MS: '2000',
+    YUI_TTS_OMNIROUTE_COLD_TIMEOUT_MS: '16000', YUI_TTS_OMNIROUTE_WARM_MINUTES: '8', YUI_TTS_OMNIROUTE_KEEPALIVE_MINUTES: '0',
+  });
+  assert.deepStrictEqual([o.firstSentenceWaitMs, o.localReserveMs, o.cloudMinMs, o.omnirouteColdTimeoutMs, o.omnirouteWarmMinutes, o.omnirouteKeepaliveMinutes], [25_000, 9000, 2000, 16_000, 8, 0]);
+  const x = getTtsConfig({ YUI_TTS_FIRST_SENTENCE_WAIT_MS: '10', YUI_TTS_LOCAL_RESERVE_MS: 'abc', YUI_TTS_CLOUD_MIN_MS: '999999', YUI_TTS_OMNIROUTE_COLD_TIMEOUT_MS: '1', YUI_TTS_OMNIROUTE_WARM_MINUTES: '0' });
+  assert.deepStrictEqual([x.firstSentenceWaitMs, x.localReserveMs, x.cloudMinMs, x.omnirouteColdTimeoutMs, x.omnirouteWarmMinutes], [8000, 7000, 10_000, 2000, 1]);
+  // o prazo frio não vale menos que o quente: o motor usa o maior dos dois
+  const vt = virtualTime();
+  const { omni, sapi } = nuvem(vt, { omni: { delay: 50 } });
+  const { engine } = vEngine(vt, [omni, sapi], { omnirouteTimeoutMs: 12_000, omnirouteColdTimeoutMs: 3000 });
+  return vt.run(engine.synthesize('oi', { sensitive: false })).then(() => assert.strictEqual(omni.calls[0].timeoutMs, 12_000));
+});
+
 // ── Fim ───────────────────────────────────────────────────────────────
 
 await tick();

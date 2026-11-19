@@ -656,7 +656,7 @@ async function joinVoiceCall(member, textChannel, replyFn = null) {
         // (a 1ª fala não paga a partida a frio). Nunca bloqueia nem lança.
         const ttsOn = await isVoiceModeOn(guildId, { isToolDisabled, getAllMcpTools });
         if (ttsOn) {
-            try { warmupTts().catch(() => {}); } catch (_) {}
+            try { warmupTts(guildId).catch(() => {}); } catch (_) {}
         }
 
         await sendOrReply(buildJoinMessage(voiceChannel.name, ttsOn), textChannel, replyFn);

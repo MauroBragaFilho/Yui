@@ -387,6 +387,8 @@ export async function initTts(options) {
       counters: newCounters(),
       quietLogAt: new Map(),
       warming: null,
+      timers: ov.timers,
+      keepWarm: { guilds: new Set(), timer: null }, // calls em que a Yui está com a voz ligada: o toque no OmniRoute roda enquanto houver alguma
       resolveName(guildId, id, kind) {
         // Lida a cada chamada: `deps` é um objeto vivo (o integrador pode trocar uma função).
         const r = syncCall(typeof d.resolveName === 'function' ? d.resolveName : clientLookup, guildId, id, kind);
@@ -436,14 +438,57 @@ export async function initTts(options) {
 }
 
 /**
+ * Mantém o OmniRoute acordado enquanto a Yui está numa call com a voz ligada: de `omnirouteKeepaliveMinutes` em `omnirouteKeepaliveMinutes` (0 = nunca)
+ * o motor faz um toque leve (GET /models). Começa em `warmupTts(guildId)` (entrada na call) e acaba quando a última call sai (`disposeGuild`) ou no
+ * `shutdownTts`. O temporizador não segura o processo; nada daqui lança nem bloqueia a call ou a fala.
+ */
+function startKeepWarm(t, guildId) {
+  try {
+    const minutes = Number(t.cfg.omnirouteKeepaliveMinutes);
+    const id = String(guildId ?? '');
+    if (!id || !t.omniroute || t.cfg.omniroute !== true || !(minutes > 0)) return;
+    const kw = t.keepWarm;
+    kw.guilds.add(id);
+    if (kw.timer) return;
+    const setT = (...a) => (typeof t.timers?.setTimeout === 'function' ? t.timers.setTimeout(...a) : setTimeout(...a));
+    const schedule = () => {
+      if (tts !== t || !kw.guilds.size) { kw.timer = null; return; }
+      try {
+        kw.timer = setT(tick, minutes * 60_000);
+        if (kw.timer && typeof kw.timer.unref === 'function') kw.timer.unref();
+      } catch { kw.timer = null; }
+    };
+    const tick = () => {
+      kw.timer = null;
+      if (tts !== t || !kw.guilds.size) return;
+      Promise.resolve().then(() => t.engine.keepWarm()).catch(() => {}).finally(schedule);
+    };
+    schedule();
+  } catch { /* o toque nunca atrapalha a call */ }
+}
+
+function stopKeepWarm(t, guildId) {
+  try {
+    const kw = t.keepWarm;
+    if (guildId === undefined) kw.guilds.clear(); else kw.guilds.delete(String(guildId));
+    if (!kw.guilds.size && kw.timer) {
+      const clearT = (h) => (typeof t.timers?.clearTimeout === 'function' ? t.timers.clearTimeout(h) : clearTimeout(h));
+      try { clearT(kw.timer); } catch { /* ignora */ }
+      kw.timer = null;
+    }
+  } catch { /* ignora */ }
+}
+
+/**
  * Sobe os helpers dos provedores (ex.: ao entrar numa call de servidor com `voice_tts` ligado),
  * para a 1ª fala não pagar a partida a frio do SAPI. Nunca rejeita. Chamadas simultâneas
  * dividem a mesma execução.
  * @returns {Promise<boolean>} true se o aquecimento rodou sem erro
  */
-export async function warmupTts() {
+export async function warmupTts(guildId) {
   const t = tts;
   if (!t) return false;
+  startKeepWarm(t, guildId);
   try {
     // Provedores (SAPI) e codificador Opus: a partida a frio do Opus trava o laço de eventos por ~100 ms,
     // melhor pagar isso ao entrar na call do que no meio da 1ª fala (e do áudio das outras calls).
@@ -468,6 +513,7 @@ export async function shutdownTts() {
   if (!t) return false;
   tts = null;
   lastInit = { enabled: false, reason: 'shutdown' };
+  stopKeepWarm(t);
   try { t.manager.disposeAll?.('shutdown'); } catch { /* ignora */ }
   try { await t.engine.disposeAll(); } catch { /* ignora */ }
   t.cache.clear();
@@ -719,6 +765,7 @@ export function interruptSpeech(guildId, reason = 'interrupted') {
 export function disposeGuild(guildId) {
   const t = tts;
   if (!t) return false;
+  stopKeepWarm(t, guildId ?? '');
   try {
     return Boolean(t.manager.dispose(String(guildId ?? ''), 'disposed'));
   } catch {

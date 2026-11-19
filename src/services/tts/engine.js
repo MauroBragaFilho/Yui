@@ -12,6 +12,9 @@
  *    Segredos: texto com cara de chave, token ou senha (secretGuard.js) NUNCA vai a uma nuvem, sensível ou não: só o provedor local o fala, e o evento é contado.
  *  - Prazo frio/quente por provedor: quem sabe responde por `isWarm()` (o helper do SAPI
  *    dorme após 10 min parado e a próxima fala paga a partida a frio de novo).
+ *  - Orçamento de nuvem: a cadeia é em série e a fala só espera `firstSentenceWaitMs` pela 1ª frase; os provedores de nuvem dividem esse prazo menos
+ *    a reserva do provedor local que vem depois (cada nuvem fica com `min(prazo, orçamento restante)`; sem `cloudMinMs` sobrando ela é pulada).
+ *    O local nunca é pulado por falta de tempo: a fala não pode falhar só porque a nuvem demorou.
  *  - Falha = exceção, prazo estourado, áudio vazio/curto (< 20 ms) ou formato inválido.
  *  - Disjuntor por provedor: 3 falhas em 2 min abrem por 60 s (local) ou 10 min (nuvem);
  *    depois entra 1 tentativa de meia-abertura.
@@ -28,7 +31,7 @@
  * false` passa pela porta de privacidade, testada com provedor de nuvem falso).
  */
 
-import { getTtsConfig, KNOWN_PROVIDERS, PLANNED_PROVIDERS } from './config.js';
+import { FIRST_SENTENCE_WAIT_MS, getTtsConfig, KNOWN_PROVIDERS, PLANNED_PROVIDERS } from './config.js';
 import { findSecret } from './secretGuard.js';
 
 const SILENT_LOGGER = { info() {}, warn() {}, error() {}, debug() {} };
@@ -261,11 +264,39 @@ export function createEngine({ providers = [], config, logger, now, timers, env 
     return state.get(p).warm;
   }
 
+  /** Falhou há pouco (dentro da janela do disjuntor)? */
+  function failedRecently(p) {
+    const t = clock();
+    return state.get(p).failures.some((at) => t - at < brk.windowMs);
+  }
+
   function timeoutFor(p) {
     const name = p.name;
     const warmMs = num(cfg[`${name}TimeoutMs`], num(cfg.providerTimeoutMs, num(cfg.sapiTimeoutMs, 4000)));
     if (isWarm(p)) return warmMs;
+    // O prazo frio é UMA chance de acordar depois de ocioso: provedor de nuvem que acabou de falhar volta ao prazo quente (o frio já foi usado e não
+    // pode atrasar toda fala seguinte). O local (SAPI) mantém o frio: a partida do helper é sempre lenta.
+    if (!isLocal(p) && failedRecently(p)) return warmMs;
     return Math.max(warmMs, num(cfg[`${name}ColdTimeoutMs`], num(cfg.providerColdTimeoutMs, num(cfg.sapiColdTimeoutMs, warmMs))));
+  }
+
+  // ── Orçamento de nuvem ────────────────────────────────────────────
+  /**
+   * A cadeia roda em SÉRIE e a fala só espera `firstSentenceWaitMs` pela 1ª frase. Sem orçamento, uma nuvem lenta (OmniRoute ~10 s + Edge ~9 s)
+   * come o prazo todo e o provedor local nem chega a ser tentado: a Yui responde só em texto. Por isso os provedores de nuvem dividem
+   * `firstSentenceWaitMs` menos a RESERVA do provedor local que vem depois deles na cadeia (tempo para ele falar, frio ou quente).
+   * @returns {number|null} ms de orçamento que restam à nuvem; null = não há local depois desta nuvem (ex.: sticky na nuvem), vale só o prazo dela
+   */
+  function cloudBudgetLeft(chain, i, startedAt) {
+    let local = null;
+    for (let j = i + 1; j < chain.length; j += 1) {
+      if (isLocal(chain[j]) && breakerState(chain[j]) !== 'open') { local = chain[j]; break; }
+    }
+    if (!local) return null;
+    const reserveCap = num(cfg.localReserveMs, 7000);
+    const reserve = isWarm(local) ? Math.min(reserveCap, timeoutFor(local) + 1000) : Math.min(reserveCap, timeoutFor(local));
+    const total = num(cfg.firstSentenceWaitMs, FIRST_SENTENCE_WAIT_MS);
+    return total - Math.max(0, clock() - startedAt) - reserve;
   }
 
   // ── Execução com prazo e cancelamento ─────────────────────────────
@@ -411,17 +442,32 @@ export function createEngine({ providers = [], config, logger, now, timers, env 
         return null;
       }
 
+      const startedAt = clock(); // o orçamento de nuvem conta desde o pedido, inclusive a espera pelo mutex
       const release = await acquire(signal);
       if (!release) return null;
       let trialOwner = null; // provedor em meia-abertura que ESTA chamada está testando
       try {
-        for (const p of chain) {
+        for (let i = 0; i < chain.length; i += 1) {
+          const p = chain[i];
           if (disposed || signal?.aborted) return null;
+          let ms = timeoutFor(p);
+          if (!isLocal(p)) {
+            // Orçamento de nuvem: o prazo da nuvem nunca passa do que sobra depois de reservar o tempo do provedor local, e sem sobra útil ela é
+            // pulada (sem contar falha, sem gastar a meia-abertura do disjuntor): o local nunca fica sem tempo.
+            const left = cloudBudgetLeft(chain, i, startedAt);
+            if (left !== null) {
+              if (left < num(cfg.cloudMinMs, 1500)) {
+                logThrottled(`budget:${p.name}`, 'warn', `[TTS] Provedor "${p.name}" pulado: sem tempo de nuvem sobrando; a fala segue pelo provedor local.`);
+                continue;
+              }
+              ms = Math.min(ms, left);
+            }
+          }
           const halfOpen = breakerState(p) === 'half-open';
           if (!breakerAllow(p)) continue;
           if (halfOpen) trialOwner = p;
 
-          const r = await runBounded((sig) => p.synth(clean, { signal: sig, sensitive: sensitive !== false }), timeoutFor(p), signal, audioProblem);
+          const r = await runBounded((sig) => p.synth(clean, { signal: sig, sensitive: sensitive !== false, timeoutMs: ms }), ms, signal, audioProblem);
           if (r.ok) {
             trialOwner = null;
             recordSuccess(p);
@@ -478,14 +524,34 @@ export function createEngine({ providers = [], config, logger, now, timers, env 
 
   /** Sobe os helpers dos provedores que podem falar (ex.: ao entrar numa call com TTS ligado). */
   async function warmup() {
-    for (const p of selectChain({ sensitive: false })) {
+    // Em paralelo: o toque na nuvem (OmniRoute frio chega a 12 s) não pode atrasar a partida do helper local.
+    await Promise.all(selectChain({ sensitive: false }).map(async (p) => {
       if (disposed) return;
-      if (typeof p.warmup !== 'function') continue;
+      if (typeof p.warmup !== 'function') return;
       const ms = Math.max(timeoutFor(p), num(cfg.sapiColdTimeoutMs, 15000));
       const r = await runBounded(() => p.warmup(), ms, undefined, null);
       if (r.ok) state.get(p).warm = true;
       else logThrottled(`warmup:${p.name}`, 'warn', `[TTS] Aquecimento de "${p.name}" falhou (${r.code}).`);
-    }
+    }));
+  }
+
+  /**
+   * Toque leve e periódico nos provedores de nuvem que sabem se manter na memória (o OmniRoute: GET /models), chamado de tempos em tempos enquanto a
+   * Yui está numa call com a voz ligada. Nunca fala, não conta falha no disjuntor, não disputa o mutex (se há síntese em andamento, nem tenta) e
+   * falha em silêncio: o prazo é só para o toque não ficar pendurado.
+   * @returns {Promise<number>} quantos provedores responderam ao toque
+   */
+  async function keepWarm() {
+    let touched = 0;
+    try {
+      for (const p of selectChain({ sensitive: false })) {
+        if (disposed || locked) break;
+        if (isLocal(p) || typeof p.keepWarm !== 'function') continue;
+        const r = await runBounded(() => p.keepWarm(), Math.max(timeoutFor(p), 5000), undefined, null);
+        if (r.ok && r.value === true) touched += 1;
+      }
+    } catch { /* o toque nunca derruba nada */ }
+    return touched;
   }
 
   /** Encerra tudo: cancela sínteses, solta quem espera e fecha os provedores. */
@@ -532,5 +598,5 @@ export function createEngine({ providers = [], config, logger, now, timers, env 
     };
   }
 
-  return { selectChain, synthesize, probeAll, warmup, disposeAll, getStatus };
+  return { selectChain, synthesize, probeAll, warmup, keepWarm, disposeAll, getStatus };
 }

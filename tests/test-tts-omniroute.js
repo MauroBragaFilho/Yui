@@ -8,6 +8,7 @@ import { createOmnirouteProvider, prepareOmnirouteText, composeInput, resolveOmn
 import { createFakeProvider } from '../src/services/tts/providers/fake.js';
 import { createEngine } from '../src/services/tts/engine.js';
 import { findSecret } from '../src/services/tts/secretGuard.js';
+import { initTts, warmupTts, disposeGuild, shutdownTts } from '../src/services/tts/index.js';
 import { getTtsConfig, KNOWN_PROVIDERS, DEFAULT_OMNIROUTE_STYLE } from '../src/services/tts/config.js';
 import { criarWavDeTeste } from './helpers/omnirouteFalso.js';
 
@@ -34,7 +35,7 @@ const resposta = (corpo, { status = 200, type = 'audio/wav' } = {}) => new Respo
 function mkFetch(plano) {
   const calls = [];
   const fetchImpl = async (url, init) => {
-    const c = { url, init, body: JSON.parse(init.body) };
+    const c = { url, init, method: init.method, body: init.body ? JSON.parse(init.body) : null };
     calls.push(c);
     if (plano) return plano(c, calls.length);
     return resposta(WAV);
@@ -602,7 +603,10 @@ await test('o provedor cumpre o contrato (name, local, gate, probe, warmup, synt
   assert.equal(p.gate.allowsSensitive(), false);
   assert.equal(createOmnirouteProvider({ config: getTtsConfig({ YUI_TTS_OMNIROUTE: 'true', YUI_TTS_OMNIROUTE_SENSIVEL: 'true' }), env: omniEnv(), fetchImpl: f.fetchImpl }).gate.allowsSensitive(), true);
   await p.warmup();
-  assert.equal(f.calls.length, 0, 'o aquecimento não gasta cota');
+  assert.equal(f.calls.filter((c) => c.method === 'POST').length, 0, 'o aquecimento não fala nada');
+  assert.equal(f.calls.length, 1, 'só um toque leve (GET /models)');
+  assert.equal(p.getUsage().used, 0, 'o aquecimento não gasta cota');
+  for (const fn of ['isWarm', 'keepWarm']) assert.equal(typeof p[fn], 'function', fn);
 });
 
 // ═══ K. Segredos nunca vão à síntese; a exceção da fala sensível fica registrada ═══════════════════════════════════
@@ -727,6 +731,235 @@ await test('sem a exceção (SENSIVEL=false) nada sensível é enviado e nada é
   assert.equal(m.omni.getUsage().sensitiveSent, 0);
   assert.ok(!log.l.some((l) => l.includes('fala sensível enviada')));
   assert.equal(m.f.calls.length, 0);
+});
+
+// ═══ L. Prazo frio, "quente" e toque leve (incidente de 19/11/2026: a 1ª fala depois de ocioso levou 12,7 s e o prazo era de 10 s) ═════════════════
+section('L. Prazo frio, quente e toque leve (GET /models)');
+/** fetch que só responde depois de `ms` (ou falha ao ser abortado), para provar quem vence: o prazo do provedor ou o que o motor passou. */
+const fetchLento = (ms, { ok = true } = {}) => {
+  const calls = [];
+  const fetchImpl = (url, init) => new Promise((resolve, reject) => {
+    calls.push({ url, init, method: init.method });
+    const h = setTimeout(() => resolve(ok ? resposta(WAV) : resposta('x', { status: 500 })), ms);
+    init.signal?.addEventListener('abort', () => { clearTimeout(h); reject(new Error('abortado')); }, { once: true });
+  });
+  return { fetchImpl, calls };
+};
+await test('os padrões novos: prazo frio de 14 s, "quente" por 5 min e toque a cada 4 min (e o prazo frio nunca é menor que o quente)', () => {
+  const c = getTtsConfig({});
+  assert.deepEqual([c.omnirouteTimeoutMs, c.omnirouteColdTimeoutMs, c.omnirouteWarmMinutes, c.omnirouteKeepaliveMinutes], [10000, 14000, 5, 4]);
+  assert.equal(getTtsConfig({ YUI_TTS_OMNIROUTE_COLD_TIMEOUT_MS: '99999999' }).omnirouteColdTimeoutMs, 60000);
+});
+await test('isWarm(): frio no começo, quente com fala bem-sucedida, volta a frio depois de 5 min parado; falha, cache e toque NÃO esquentam', async () => {
+  let t = Date.parse('2026-11-19T12:00:00');
+  const m = mk({ now: () => t, f: mkFetch((c) => (c.body?.input?.includes('quebra') ? resposta('x', { status: 500 }) : resposta(WAV))) });
+  assert.equal(m.p.isWarm(), false, 'recém-criado');
+  await m.p.warmup();
+  assert.equal(m.p.isWarm(), false, 'o toque não esquenta a fala: o prazo frio vale até uma fala de verdade dar certo');
+  assert.ok(await tentar(() => m.p.synth('quebra tudo', { sensitive: false })));
+  assert.equal(m.p.isWarm(), false, 'falha não esquenta');
+  await m.p.synth('Oi, tudo bem por aí.', { sensitive: false });
+  assert.equal(m.p.isWarm(), true, 'fala bem-sucedida pela rede esquenta');
+  t += 4 * 60_000 + 59_000;
+  assert.equal(m.p.isWarm(), true, 'a 4 min e 59 s ainda está quente');
+  t += 2000;
+  assert.equal(m.p.isWarm(), false, 'passou de 5 min: voltou a ser frio');
+  const posts = () => m.f.calls.filter((c) => c.method === 'POST').length;
+  const n = posts();
+  await m.p.synth('Oi, tudo bem por aí.', { sensitive: false }); // mesma fala: vem do cache (10 min de validade)
+  assert.equal(posts(), n, 'veio do cache');
+  assert.equal(m.p.isWarm(), false, 'o cache não esquenta (a rede não foi usada)');
+  await m.p.synth('Outra fala nova.', { sensitive: false });
+  assert.equal(m.p.isWarm(), true, 'um sucesso pela rede esquenta de novo');
+  t -= 60_000; // o relógio andou para trás: nunca fica quente por engano
+  assert.equal(m.p.isWarm(), false);
+});
+await test('a janela do "quente" vem de YUI_TTS_OMNIROUTE_WARM_MINUTES', async () => {
+  let t = 1_700_000_000_000;
+  const m = mk({ now: () => t, cfg: { YUI_TTS_OMNIROUTE_WARM_MINUTES: '1' } });
+  await m.p.synth('Oi, tudo bem por aí.', { sensitive: false });
+  t += 59_000;
+  assert.equal(m.p.isWarm(), true);
+  t += 2000;
+  assert.equal(m.p.isWarm(), false);
+});
+await test('o prazo da chamada vem do motor (timeoutMs): o prazo curto do provedor não vence o prazo frio; sem o aviso, vale o do provedor', async () => {
+  const f = fetchLento(450);
+  const { p } = mk({ f, cfgOver: { omnirouteTimeoutMs: 300, omnirouteColdTimeoutMs: 1500 } });
+  const sem = await tentar(() => p.synth('Oi, tudo bem por aí.', { sensitive: false }));
+  assert.equal(sem?.code, 'OMNIROUTE_TIMEOUT', 'sem timeoutMs: o prazo do próprio provedor (270 ms) vence a resposta de 450 ms');
+  const t0 = Date.now();
+  const audio = await p.synth('Oi, tudo bem por aí.', { sensitive: false, timeoutMs: 1500 });
+  assert.ok(audio.pcm.length > 0, 'com o prazo frio do motor a resposta lenta é aproveitada');
+  assert.ok(Date.now() - t0 >= 400, 'esperou mesmo a resposta lenta');
+  const curto = await tentar(() => p.synth('Terceira fala nova.', { sensitive: false, timeoutMs: 200 }));
+  assert.equal(curto?.code, 'OMNIROUTE_TIMEOUT', 'e um prazo menor também vale');
+  for (const ruim of [undefined, null, 'x', 0, 50, NaN, -5]) {
+    const e = await tentar(() => p.synth(`Fala ${String(ruim)} nova.`, { sensitive: false, timeoutMs: ruim }));
+    assert.equal(e?.code, 'OMNIROUTE_TIMEOUT', `timeoutMs inválido (${String(ruim)}) cai no prazo do provedor`);
+  }
+});
+await test('o toque leve: GET {base}/models com a MESMA chave só no cabeçalho, sem gastar cota, sem POST, sem registrar a chave nem o endereço', async () => {
+  const log = linhas();
+  const m = mk({ log });
+  await m.p.warmup();
+  assert.equal(m.f.calls.length, 1);
+  const c = m.f.calls[0];
+  assert.equal(c.method, 'GET');
+  assert.equal(c.url, 'http://127.0.0.1:20128/v1/models');
+  assert.equal(c.init.headers.Authorization, `Bearer ${KEY}`);
+  assert.equal(c.init.body, undefined);
+  assert.equal(c.init.redirect, 'error', 'a chave não segue redirecionamento');
+  assert.ok(!c.url.includes(KEY));
+  assert.equal(m.p.getUsage().used, 0);
+  assert.ok(!log.l.join('\n').includes(KEY) && !log.l.join('\n').includes('127.0.0.1'), 'nada de chave nem endereço no log');
+});
+await test('o toque nunca atrapalha: desligado, sem rota, rede caída, 401, 500 ou pendurado = em silêncio, sem lançar e sem log', async () => {
+  const falhas = [
+    ['desligado', mk({ cfg: {}, cfgOver: { omniroute: false } })],
+    ['sem a rota da IA', mk({ env: {} })],
+    ['rede caída', mk({ f: mkFetch(() => { throw new Error('ECONNREFUSED'); }) })],
+    ['401', mk({ f: mkFetch(() => resposta('x', { status: 401 })) })],
+    ['500', mk({ f: mkFetch(() => resposta('x', { status: 500 })) })],
+  ];
+  for (const [nome, m] of falhas) {
+    await m.p.warmup();
+    assert.equal(await m.p.keepWarm(), false, nome);
+    assert.equal(m.log.l.length, 0, `${nome}: nada de log`);
+    assert.equal(m.p.getUsage().used, 0);
+  }
+  assert.equal(falhas[0][1].f.calls.length, 0, 'desligado: nem tenta');
+  assert.equal(falhas[1][1].f.calls.length, 0, 'sem rota: nem tenta');
+  const lento = fetchLento(60_000);
+  const { p } = mk({ f: lento, cfgOver: { omnirouteTimeoutMs: 400, omnirouteColdTimeoutMs: 400 } });
+  const t0 = Date.now();
+  assert.equal(await p.keepWarm(), false);
+  assert.ok(Date.now() - t0 < 2000, 'o toque tem prazo e não fica pendurado');
+});
+await test('keepWarm(): não repete o toque se uma fala ou um toque deu certo há menos de 2 min (a fala já o manteve acordado); depois toca de novo', async () => {
+  let t = 1_700_000_000_000;
+  const m = mk({ now: () => t });
+  assert.equal(await m.p.keepWarm(), true);
+  assert.equal(await m.p.keepWarm(), false, 'acabou de tocar');
+  assert.equal(m.f.calls.length, 1);
+  t += 3 * 60_000;
+  assert.equal(await m.p.keepWarm(), true);
+  assert.equal(m.f.calls.length, 2);
+  t += 60_000;
+  await m.p.synth('Oi, tudo bem por aí.', { sensitive: false });
+  t += 60_000;
+  assert.equal(await m.p.keepWarm(), false, 'a fala de 1 min atrás já o manteve acordado');
+  t += 2 * 60_000;
+  assert.equal(await m.p.keepWarm(), true);
+});
+await test('a chave não aparece nos objetos que o provedor expõe nem na configuração nova', async () => {
+  const m = mk();
+  await m.p.warmup();
+  await m.p.synth('Oi, tudo bem por aí.', { sensitive: false });
+  assert.ok(!JSON.stringify(m.p.getUsage()).includes(KEY));
+  assert.ok(!JSON.stringify(getTtsConfig({ ...omniEnv(), YUI_TTS_OMNIROUTE: 'true' })).includes(KEY));
+});
+
+// ═══ M. O toque periódico enquanto a Yui está na call (index.js) ═══════════════════════════════════════════════
+section('M. Toque periódico enquanto a Yui está na call');
+function mundoDoToque(envExtra = {}, { comOmni = true } = {}) {
+  const pend = new Map();
+  let id = 0;
+  const timers = {
+    setTimeout(fn, ms) { id += 1; pend.set(id, { fn, ms }); return { id, unref() { return this; } }; },
+    clearTimeout(h) { pend.delete(h?.id); },
+  };
+  const omniF = {
+    name: 'omniroute', local: false, keep: 0, warm: 0, keepMode: 'ok',
+    gate: { enabled: () => true, allowsSensitive: () => false },
+    probe: async () => ({ ok: true, detail: '' }),
+    warmup: async () => { omniF.warm += 1; },
+    keepWarm: async () => { omniF.keep += 1; if (omniF.keepMode === 'throw') throw new Error('sem rede'); return true; },
+    getUsage: () => ({}),
+    synth: async () => { throw new Error('não deve falar'); },
+    dispose: async () => {},
+  };
+  const sapiF = createFakeProvider({ name: 'sapi', local: true });
+  const manager = { warmup: async () => true, dispose: () => true, disposeAll() {}, getStatus: () => ({ count: 0, guilds: [] }), interrupt: () => false };
+  const deps = { isOpusAvailable: () => true };
+  const providers = comOmni ? [omniF, sapiF] : [sapiF];
+  const iniciar = () => initTts({ client: null, deps, overrides: { env: { YUI_TTS_OMNIROUTE: 'true', ...envExtra }, providers, manager, logger: quieto, timers } });
+  const periodicos = () => [...pend.entries()].filter(([, v]) => v.ms === 240_000);
+  const dispararPeriodico = async () => {
+    const [h, v] = periodicos()[0];
+    pend.delete(h);
+    v.fn();
+    for (let i = 0; i < 10; i += 1) await new Promise((r) => setImmediate(r)); // o toque do motor também usa um prazo (o relógio falso o deixa pendente e sem disparar)
+  };
+  return { omniF, iniciar, periodicos, dispararPeriodico, pend };
+}
+await test('entrar na call (warmupTts com a guilda) agenda o toque a cada 4 min; cada disparo toca o OmniRoute e agenda o próximo; sair da call encerra', async () => {
+  const w = mundoDoToque();
+  assert.equal((await w.iniciar()).enabled, true);
+  assert.equal(w.periodicos().length, 0, 'nada antes de entrar na call');
+  assert.equal(await warmupTts('g1'), true);
+  assert.equal(w.omniF.warm, 1, 'o aquecimento da entrada tocou o provedor');
+  assert.equal(w.periodicos().length, 1);
+  assert.equal(await warmupTts('g1'), true);
+  assert.equal(w.periodicos().length, 1, 'entrar de novo não duplica o temporizador');
+  await w.dispararPeriodico();
+  assert.equal(w.omniF.keep, 1);
+  assert.equal(w.periodicos().length, 1, 'agendou o próximo');
+  await w.dispararPeriodico();
+  assert.equal(w.omniF.keep, 2);
+  disposeGuild('g1');
+  assert.equal(w.periodicos().length, 0, 'saiu da call: o temporizador some');
+  await shutdownTts();
+});
+await test('com duas calls o toque só acaba quando a última sai; o shutdown também limpa; sem guilda, sem OmniRoute ou com 0 minutos não agenda nada', async () => {
+  const w = mundoDoToque();
+  await w.iniciar();
+  await warmupTts('g1');
+  await warmupTts('g2');
+  assert.equal(w.periodicos().length, 1);
+  disposeGuild('g1');
+  assert.equal(w.periodicos().length, 1, 'ainda há uma call');
+  disposeGuild('g2');
+  assert.equal(w.periodicos().length, 0);
+  await warmupTts('g3');
+  assert.equal(w.periodicos().length, 1);
+  await shutdownTts();
+  assert.equal(w.periodicos().length, 0, 'o shutdown limpa o temporizador');
+
+  const semGuilda = mundoDoToque();
+  await semGuilda.iniciar();
+  await warmupTts();
+  await warmupTts('');
+  assert.equal(semGuilda.periodicos().length, 0);
+  await shutdownTts();
+
+  const zero = mundoDoToque({ YUI_TTS_OMNIROUTE_KEEPALIVE_MINUTES: '0' });
+  await zero.iniciar();
+  await warmupTts('g1');
+  assert.equal(zero.periodicos().length, 0, '0 = nunca');
+  await shutdownTts();
+
+  const semOmni = mundoDoToque({}, { comOmni: false });
+  await semOmni.iniciar();
+  await warmupTts('g1');
+  assert.equal(semOmni.periodicos().length, 0, 'sem o provedor omniroute não há o que tocar');
+  await shutdownTts();
+
+  const desligado = mundoDoToque({ YUI_TTS_OMNIROUTE: 'false' });
+  await desligado.iniciar();
+  await warmupTts('g1');
+  assert.equal(desligado.periodicos().length, 0, 'YUI_TTS_OMNIROUTE desligado: nada');
+  await shutdownTts();
+});
+await test('o toque que falha nunca para o ciclo, não lança e não derruba a call', async () => {
+  const w = mundoDoToque();
+  await w.iniciar();
+  w.omniF.keepMode = 'throw';
+  await warmupTts('g1');
+  await w.dispararPeriodico();
+  assert.equal(w.omniF.keep, 1);
+  assert.equal(w.periodicos().length, 1, 'continua agendado apesar da falha');
+  await shutdownTts();
 });
 
 console.log(`\n${ok} testes OK${fail ? `, ${fail} falha(s): ${failures.join('; ')}` : ''}`);

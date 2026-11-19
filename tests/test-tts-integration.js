@@ -1310,7 +1310,7 @@ await test('voiceHandler: usa o serviço novo (interruptSpeech/disposeGuild/note
   assert.equal(llm.clearVoiceHistory('g-qualquer'), 0);
   // Entrada: aquece sem bloquear; a mensagem vem do builder testado acima.
   const join = s.slice(s.indexOf('async function joinVoiceCall'), s.indexOf('async function leaveVoiceCall'));
-  assert.match(join, /warmupTts\(\)\.catch/);
+  assert.match(join, /warmupTts\(guildId\)\.catch/, 'a guilda entra no toque periódico do OmniRoute');
   assert.ok(!/await\s+warmupTts/.test(join), 'o aquecimento nunca bloqueia a entrada');
   assert.match(join, /buildJoinMessage\(voiceChannel\.name, ttsOn\)/);
   // Anti-eco antes do STT; ordem do fluxo de comando; ignorar bots no precheck.

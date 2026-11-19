@@ -46,7 +46,7 @@
  */
 
 import { createRequire } from 'node:module';
-import { getTtsConfig } from './config.js';
+import { FIRST_SENTENCE_WAIT_MS, getTtsConfig } from './config.js';
 import { attachConnectionSafety, attachPlayerSafety } from '../../utils/voiceSafety.js';
 
 /** Constantes de tempo e tamanho (exportadas para os testes e para ajuste fino). */
@@ -60,7 +60,7 @@ export const OUTPUT_LIMITS = Object.freeze({
   /** Depois do Idle, quanto esperar a próxima frase ficar pronta antes de encerrar a resposta. */
   nextSentenceWaitMs: 8_000,
   /** A 1ª frase pode precisar de partida a frio do motor (SAPI frio chega a 15 s). */
-  firstSentenceWaitMs: 20_000,
+  firstSentenceWaitMs: FIRST_SENTENCE_WAIT_MS,
   /** Folga acima de `maxSeconds` antes de o watchdog cortar a fala. */
   watchdogExtraMs: 5_000,
   /** Recurso que não sai de Buffering é sinal de pipeline quebrado. */
@@ -439,7 +439,9 @@ class GuildSpeaker {
         return;
       }
 
-      const got = await this.waitSentence(run, index, index === 0 ? LIMITS.firstSentenceWaitMs : LIMITS.nextSentenceWaitMs);
+      // O prazo da 1ª frase é o MESMO que o motor usa para repartir o orçamento da nuvem e reservar o tempo do provedor local (config.firstSentenceWaitMs).
+      const firstWaitMs = Number(ctx.cfg?.firstSentenceWaitMs) > 0 ? Number(ctx.cfg.firstSentenceWaitMs) : LIMITS.firstSentenceWaitMs;
+      const got = await this.waitSentence(run, index, index === 0 ? firstWaitMs : LIMITS.nextSentenceWaitMs);
       if (!this.live(run)) return;
       if (!got.pcm) {
         this.finishRun(run, got.reason);

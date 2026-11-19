@@ -18,7 +18,11 @@
  * Credenciais, tokens e senhas nunca vão à síntese (secretGuard.js: o mascaramento de segredos da Yui + formatos de chave): o motor manda esse texto só ao
  * provedor local e, para quem chama o provedor direto, ele mesmo recusa (OMNIROUTE_SECRET) e conta o evento.
  *
- * Uma tentativa só, com prazo curto (YUI_TTS_OMNIROUTE_TIMEOUT_MS). Qualquer falha (rede, 401/429/5xx, corpo vazio, áudio inválido ou mudo, tempo) vira
+ * Prazos: o motor passa o prazo de cada fala (`timeoutMs`): YUI_TTS_OMNIROUTE_TIMEOUT_MS com o provedor quente, YUI_TTS_OMNIROUTE_COLD_TIMEOUT_MS (maior) quando
+ * ele está frio (`isWarm()`: sem fala bem-sucedida há YUI_TTS_OMNIROUTE_WARM_MINUTES), sempre limitado ao orçamento de nuvem do motor. `warmup()` (ao entrar na
+ * call) e `keepWarm()` (a cada YUI_TTS_OMNIROUTE_KEEPALIVE_MINUTES na call) só fazem um GET /models leve, com a mesma rota e a mesma chave, para manter o
+ * processo do OmniRoute residente; falham em silêncio.
+ * Uma tentativa só, com prazo curto. Qualquer falha (rede, 401/429/5xx, corpo vazio, áudio inválido ou mudo, tempo) vira
  * uma exceção só com CÓDIGO (OMNIROUTE_*): o motor tenta o próximo provedor, sem erro para a pessoa. Uma linha de log por falha, só com números e o
  * código: nunca o texto falado, a chave, o endereço nem a mensagem crua de rede.
  *
@@ -184,7 +188,15 @@ export function createOmnirouteProvider({ config = {}, env = process.env, logger
   const cap = Number.isFinite(config.omnirouteDailyCap) && config.omnirouteDailyCap >= 1 ? Math.floor(config.omnirouteDailyCap) : 400;
   const timeoutMs = Number.isFinite(config.omnirouteTimeoutMs) && config.omnirouteTimeoutMs >= 100 ? config.omnirouteTimeoutMs : 10_000;
   // o prazo daqui vence um pouco antes do prazo do motor (o mesmo valor), para o código do erro ser o nosso (a configuração real nunca fica abaixo de 2 s)
-  const requestMs = Math.max(50, timeoutMs - Math.min(300, Math.round(timeoutMs / 10)));
+  const requestMsFor = (ms) => Math.max(50, ms - Math.min(300, Math.round(ms / 10)));
+  const requestMs = requestMsFor(timeoutMs);
+  // O prazo FRIO e a janela do "quente": o motor passa o prazo que vale para ESTA fala em `synth(text, { timeoutMs })`; o daqui acompanha esse prazo
+  // (sem isso o prazo curto do provedor venceria o prazo frio do motor). Quente = houve fala bem-sucedida pela rede há menos de `warmMs`.
+  const coldMs = Number.isFinite(config.omnirouteColdTimeoutMs) && config.omnirouteColdTimeoutMs >= 100 ? Math.max(timeoutMs, config.omnirouteColdTimeoutMs) : timeoutMs;
+  const warmMs = (Number.isFinite(config.omnirouteWarmMinutes) && config.omnirouteWarmMinutes >= 1 ? config.omnirouteWarmMinutes : 5) * 60_000;
+  const keepaliveMs = (Number.isFinite(config.omnirouteKeepaliveMinutes) && config.omnirouteKeepaliveMinutes >= 0 ? config.omnirouteKeepaliveMinutes : 4) * 60_000;
+  let lastOkAt = null; // fala bem-sucedida pela rede (o cache não conta)
+  let lastTouchAt = null; // fala ou toque (GET /models) bem-sucedido
   const switchOn = () => config.omniroute === true;
   const allowSensitive = () => config.omnirouteSensitive === true;
 
@@ -236,13 +248,13 @@ export function createOmnirouteProvider({ config = {}, env = process.env, logger
 
   // ── a chamada ───────────────────────────────────────────────────────────────────────────────────
   /** POST ao OmniRoute com UM prazo e o cancelamento do motor. Devolve { buf, contentType } ou lança com código. */
-  async function post(route, body, signal, info) {
+  async function post(route, body, signal, info, reqMs = requestMs) {
     if (signal?.aborted) throw abortedError();
     const ctl = new AbortController();
     let timedOut = false;
     const onAbort = () => ctl.abort();
     signal?.addEventListener?.('abort', onAbort, { once: true });
-    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, requestMs); // sempre limpo no `finally` (não segura o processo)
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, reqMs); // sempre limpo no `finally` (não segura o processo)
     const headers = { 'Content-Type': 'application/json', Accept: 'audio/wav, audio/mpeg;q=0.9' };
     if (route.key) headers.Authorization = `Bearer ${route.key}`;
     const lost = () => {
@@ -273,6 +285,39 @@ export function createOmnirouteProvider({ config = {}, env = process.env, logger
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener?.('abort', onAbort);
+    }
+  }
+
+  /**
+   * Toque leve para manter o processo do OmniRoute na memória (GET {base}/models, a mesma rota e a mesma chave da fala; a chave só no cabeçalho).
+   * Não gasta o teto diário, não fala nada e NUNCA lança: devolve true só se o OmniRoute respondeu 2xx.
+   * Sem `force`, não toca se uma fala ou um toque deu certo há menos da metade do intervalo (a fala já o manteve acordado).
+   */
+  async function touch({ signal, force = false } = {}) {
+    try {
+      if (!switchOn() || signal?.aborted) return false;
+      const route = resolveOmnirouteRoute(env);
+      if (!route.ok) return false;
+      const t = now();
+      if (!force && lastTouchAt !== null && t >= lastTouchAt && t - lastTouchAt < keepaliveMs / 2) return false;
+      const ctl = new AbortController();
+      const onAbort = () => ctl.abort();
+      signal?.addEventListener?.('abort', onAbort, { once: true });
+      const timer = setTimeout(() => ctl.abort(), requestMsFor(coldMs));
+      try {
+        const headers = { Accept: 'application/json' };
+        if (route.key) headers.Authorization = `Bearer ${route.key}`;
+        const res = await doFetch(route.url.replace(/\/audio\/speech$/, '/models'), { method: 'GET', headers, redirect: 'error', signal: ctl.signal });
+        try { await res.body?.cancel?.(); } catch { /* ok */ }
+        if (!res.ok) return false;
+        lastTouchAt = now();
+        return true;
+      } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener?.('abort', onAbort);
+      }
+    } catch {
+      return false; // em silêncio: o toque nunca atrapalha a call nem a fala
     }
   }
 
@@ -344,9 +389,24 @@ export function createOmnirouteProvider({ config = {}, env = process.env, logger
       return { ok: true, detail: `OmniRoute ${model}, voz ${voice} (nuvem; a rota da IA é conferida a cada fala; rede só na 1ª fala)` };
     },
 
-    async warmup() { /* nada residente */ },
+    /** Ao entrar na call: um toque leve (GET /models) para o OmniRoute acordar antes da 1ª fala. Nada residente aqui; nunca lança. */
+    async warmup() { await touch({ force: true }); },
 
-    async synth(text, { signal, sensitive = true } = {}) {
+    /** De tempos em tempos enquanto a Yui está na call (o motor chama; ver `keepWarm` em engine.js). true = o OmniRoute respondeu. */
+    async keepWarm() { return touch({}); },
+
+    /**
+     * Quente = houve fala bem-sucedida pela rede há menos de `omnirouteWarmMinutes` (o cache não conta). Passado esse tempo volta a ser frio e o motor
+     * dá o prazo frio na próxima fala (o OmniRoute do notebook com HDD tem a memória paginada para o disco). Um toque (GET /models) NÃO esquenta a
+     * fala: o prazo frio continua valendo até uma fala de verdade dar certo.
+     */
+    isWarm() {
+      if (lastOkAt === null) return false;
+      const t = now();
+      return t >= lastOkAt && t - lastOkAt < warmMs;
+    },
+
+    async synth(text, { signal, sensitive = true, timeoutMs: askedMs } = {}) {
       const t0 = now();
       const info = { t0, status: null, networkMs: null };
       try {
@@ -379,11 +439,14 @@ export function createOmnirouteProvider({ config = {}, env = process.env, logger
           log('info', `[TTS] OmniRoute: fala sensível enviada ao OmniRoute (total=${stats.sensitiveSent}).`);
         }
         const body = JSON.stringify({ model, input, voice, response_format: 'wav' });
-        const { buf, contentType } = await post(route, body, signal, info);
+        const reqMs = Number.isFinite(askedMs) && askedMs >= 100 ? requestMsFor(askedMs) : requestMs;
+        const { buf, contentType } = await post(route, body, signal, info, reqMs);
         const { audio, format } = await decode(buf, contentType, signal);
         if (useCache) cacheSet(key, audio);
         const total = now() - t0;
         stats.ok += 1;
+        lastOkAt = now();
+        lastTouchAt = lastOkAt;
         stats.latencies.push(total);
         if (stats.latencies.length > LATENCY_SAMPLES) stats.latencies.shift();
         // (fala sensível: nem o tamanho do texto vai ao log)

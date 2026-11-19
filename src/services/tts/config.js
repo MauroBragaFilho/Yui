@@ -56,6 +56,9 @@ function list(env, name, def) {
 /** Provedores que existem nesta versão. Os demais nomes são ignorados com aviso. */
 export const KNOWN_PROVIDERS = Object.freeze(['sapi', 'edge', 'azure', 'omniroute']);
 
+/** Padrão de quanto a fala espera pela 1ª frase (output.js) e base do orçamento de nuvem do motor (engine.js). */
+export const FIRST_SENTENCE_WAIT_MS = 20_000;
+
 /** Provedores previstos mas ainda não implementados (ficam para depois). */
 export const PLANNED_PROVIDERS = Object.freeze(['piper']);
 
@@ -164,8 +167,21 @@ export function getTtsConfig(env = process.env) {
     omnirouteSensitive: bool(env, 'YUI_TTS_OMNIROUTE_SENSIVEL', false),
     omnirouteDailyCap: int(env, 'YUI_TTS_OMNIROUTE_TETO_DIA', 400, 1, 100000),
     omnirouteTimeoutMs: int(env, 'YUI_TTS_OMNIROUTE_TIMEOUT_MS', 10000, 2000, 60000),
-    // a 1ª chamada não ganha prazo maior: o prazo do motor é o mesmo (o do provedor, um pouco mais curto, dispara antes)
-    omnirouteColdTimeoutMs: int(env, 'YUI_TTS_OMNIROUTE_TIMEOUT_MS', 10000, 2000, 60000),
+    // Prazo FRIO: a 1ª fala depois de muito tempo parada pode demorar mais (o OmniRoute do notebook com HDD tem a memória paginada para o disco e
+    // levou 12,7 s para acordar; depois responde em 0,1 s). Vale só enquanto o provedor está "frio" (omnirouteWarmMinutes sem sucesso) e nunca passa do
+    // orçamento de nuvem do motor (firstSentenceWaitMs menos a reserva do provedor local). Nunca fica abaixo do prazo quente.
+    omnirouteColdTimeoutMs: int(env, 'YUI_TTS_OMNIROUTE_COLD_TIMEOUT_MS', 14000, 2000, 60000),
+    // Quantos minutos sem uma fala bem-sucedida até o OmniRoute voltar a ser considerado frio, e de quantos em quantos minutos (0 = nunca) um toque
+    // leve (GET /models, mesma rota e mesma chave da IA) mantém o processo dele na memória enquanto a Yui está numa call com a voz ligada.
+    omnirouteWarmMinutes: int(env, 'YUI_TTS_OMNIROUTE_WARM_MINUTES', 5, 1, 240),
+    omnirouteKeepaliveMinutes: int(env, 'YUI_TTS_OMNIROUTE_KEEPALIVE_MINUTES', 4, 0, 60),
+
+    // Prazo da 1ª frase (quanto a fala espera pela síntese antes de desistir e ficar só em texto) e o ORÇAMENTO DE NUVEM do motor: os provedores de
+    // nuvem dividem `firstSentenceWaitMs - localReserveMs`; o provedor local (SAPI) nunca é pulado por falta de tempo. Abaixo de `cloudMinMs` de orçamento
+    // restante a nuvem que falta é pulada e a fala vai direto ao local.
+    firstSentenceWaitMs: int(env, 'YUI_TTS_FIRST_SENTENCE_WAIT_MS', FIRST_SENTENCE_WAIT_MS, 8000, 60000),
+    localReserveMs: int(env, 'YUI_TTS_LOCAL_RESERVE_MS', 7000, 1000, 30000),
+    cloudMinMs: int(env, 'YUI_TTS_CLOUD_MIN_MS', 1500, 500, 10000),
 
     personaVoiceFile: String(env.YUI_PERSONA_VOICE_FILE || 'persona/yui-voz.md').trim(),
   };
