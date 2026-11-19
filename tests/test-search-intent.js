@@ -486,6 +486,78 @@ await test('Q38: fuzz de repetição (um token x26 com cada separador e sufixo, 
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════
+console.log('7b. Pesquisa privada DIRETA (privateDirectDecision): sem o verbo "pesquise", com o assunto na própria mensagem');
+const direta = (t, o) => I.privateDirectDecision(t, { direct: true, now: NOW, ...o });
+await test('o pedido com o verbo continua explícito (e não vira direto)', () => {
+  const d = direta('yui, pesquise o preço do ps5 hoje');
+  assert.equal(d.explicit, true);
+  assert.equal(d.direct, false);
+  assert.equal(d.query, 'o preço do ps5 hoje 2026');
+});
+await test('com o assunto na própria mensagem e sem o verbo: direta, com a consulta tirada só da fala', () => {
+  for (const [t, q] of [['quanto está o ps5 hoje?', 'quanto está o ps5 hoje 2026'], ['quem ganhou o jogo do flamengo ontem?', 'quem ganhou o jogo do flamengo ontem'], ['qual a previsão de lançamento do gta 6?', 'qual a previsão de lançamento do gta 6 2026']]) {
+    const d = direta(t);
+    assert.equal(d.direct, true, t);
+    assert.equal(d.explicit, false, t);
+    assert.equal(d.query, q, t);
+  }
+});
+await test('sem assunto próprio ("e o João?", "bitcoin", "e aí?") não é direta: o assunto está na conversa, não na frase', () => {
+  for (const t of ['e o João?', 'bitcoin', 'e aí?', 'isso', 'pesquisa isso']) {
+    const d = direta(t);
+    assert.equal(d.direct, false, t);
+    assert.equal(d.explicit, false, t);
+    assert.equal(d.reason, 'no_subject', t);
+  }
+});
+await test('as travas da pré-rota valem na direta: negação, como pesquisar, afirmação, ferramenta própria, música, pedido que não é de web, link, voz, contexto, tamanho', () => {
+  assert.equal(direta('não pesquise isso do ps5 hoje').reason, 'negated');
+  assert.equal(direta('como pesquisar o preço do ps5 hoje?').reason, 'howto');
+  assert.equal(direta('vou pesquisar o ps5 hoje depois').reason, 'statement');
+  assert.equal(direta('baixa o álbum novo do linkin park hoje').reason, 'other_tool');
+  assert.equal(direta('letra da música nova do linkin park hoje').reason, 'music_game');
+  assert.equal(direta('procura um nome legal pro servidor').reason, 'not_web');
+  assert.equal(direta('quanto está o ps5 hoje? https://exemplo.test/a').reason, 'url');
+  assert.equal(direta('quanto está o ps5 hoje?', { voice: true }).reason, 'voice');
+  assert.equal(direta('quanto está o ps5 hoje?', { radioMode: true }).reason, 'context');
+  assert.equal(direta('quanto está o ps5 hoje?', { thirdPartyPrompt: true }).reason, 'context');
+  assert.equal(direta('quanto está o ps5 hoje? ' + 'blá '.repeat(200)).reason, 'size');
+  for (const t of ['não pesquise isso do ps5 hoje', 'quanto está o ps5 hoje? https://exemplo.test/a']) assert.equal(direta(t).direct, false, t);
+});
+await test('padrão seguro: sem direct (a Yui não foi chamada de verdade) não é direta nem explícita', () => {
+  const d = I.privateDirectDecision('quanto está o ps5 hoje?', { now: NOW });
+  assert.deepEqual([d.explicit, d.direct, d.reason], [false, false, 'not_direct']);
+  assert.deepEqual([I.privateDirectDecision(undefined, { direct: true }).direct, I.privateDirectDecision(42, { direct: true }).direct], [false, false]);
+});
+await test('cotação (dólar, euro, bitcoin) não é direta: tem a ferramenta própria', () => {
+  for (const t of ['quanto está o dólar hoje?', 'quanto vale o euro agora?', 'quanto está o bitcoin hoje?']) assert.equal(direta(t).reason, 'currency_tool', t);
+});
+await test('fala em primeira pessoa sobre a própria vida não é direta (sem o "pesquise" a pessoa não escolheu mandar isso a um buscador)', () => {
+  for (const t of ['tenho um ps5 e quero saber quanto vale hoje', 'meu cpf é 123.456.789-09, quanto custa um carro 2024?', 'estou com dor no peito há 3 dias, o que pode ser hoje?', 'eu moro em Niterói, qual o clima de amanhã no Rio?']) {
+    const d = direta(t);
+    assert.equal(d.direct, false, t);
+    assert.equal(d.reason, 'pessoal', t);
+  }
+  // com o verbo a pessoa decidiu pesquisar: a explícita segue valendo (a consulta é cortada no pedido)
+  assert.equal(direta('pesquise o preço do ps5 hoje, porque tenho que comprar um').explicit, true);
+});
+await test('recoveryPlan privado + privateDirect: a promessa com o assunto na fala vira pesquisa direta (consulta da fala, private: true); sem a chave regenera; sem o privado liberado recusa', () => {
+  const reply = 'Vou pesquisar o preço do ps5 agora pra você!';
+  const user = 'quanto está o ps5 hoje?';
+  const sem = plan({ reply, userText: user, sensitive: true, privateSearch: true });
+  assert.equal(sem.action, 'regenerate');
+  const com = plan({ reply, userText: user, sensitive: true, privateSearch: true, privateDirect: true });
+  assert.equal(com.action, 'search');
+  assert.equal(com.private, true);
+  assert.equal(com.query, 'quanto está o ps5 hoje 2026');
+  assert.equal(com.reason, 'pedido direto (privado)');
+  assert.ok(!('intent' in com), 'a intenção do modelo não vai junto');
+  assert.equal(plan({ reply: 'Vou pesquisar o João agora!', userText: 'e o João?', sensitive: true, privateSearch: true, privateDirect: true }).action, 'regenerate');
+  assert.equal(plan({ reply, userText: user, sensitive: true, privateSearch: false, privateDirect: true }).action, 'refuse');
+  const explicito = plan({ reply: 'Vou pesquisar isso!', userText: 'pesquise sobre Hytale', sensitive: true, privateSearch: true, privateDirect: true });
+  assert.equal(explicito.reason, 'pedido explícito (privado)');
+});
+
 console.log('8. Diagnóstico (não reprova): respostas reais gravadas no historico.txt');
 await test('nas respostas reais do historico.txt, só as promessas de verdade são sinalizadas (informativo)', () => {
   const file = path.join(repoRoot, 'src/data/historico.txt');

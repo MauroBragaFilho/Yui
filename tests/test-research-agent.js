@@ -18,7 +18,7 @@ Object.assign(process.env, {
 
 const A = await import('../src/handlers/researchAgent.js');
 const {
-  RESEARCH_DEFAULTS, readResearchConfig, privateSearchAllowed, plainText, neutralizeDomains, cleanUrl, mdLink, scrubQuery, findSensitiveData, containsForbiddenKeyword,
+  RESEARCH_DEFAULTS, readResearchConfig, privateSearchAllowed, privateDirectAllowed, plainText, neutralizeDomains, cleanUrl, mdLink, scrubQuery, findSensitiveData, containsForbiddenKeyword,
   keywordsOf, saneQuery, coverage, normalizeFound, evaluateResults, refineQuery, pickPages, buildEvidence, buildResearchPrompt, cleanAnswer, validateAnswer,
   formatAnswer, fallbackSummary, classifyFailure, failureMessage, historyLineFor, createProgress, progressLine, createUserGuard, runResearch,
 } = A;
@@ -82,7 +82,7 @@ const safeText = (text) => {
 console.log('1. Configuração');
 await test('padrões do CÓDIGO: tudo ligado, pré-rota desligada, privado desligado, 2 passos, 60 s, CHARGE_ALL ligado', () => {
   assert.deepEqual(readResearchConfig({}), {
-    enabled: true, guard: 'on', preRoute: false, privateSearch: 'off', maxSteps: 2, maxPages: 2, totalDeadlineMs: 60000, chargeRefinements: true, showSources: true,
+    enabled: true, guard: 'on', preRoute: false, privateSearch: 'off', privateDirect: 'off', maxSteps: 2, maxPages: 2, totalDeadlineMs: 60000, chargeRefinements: true, showSources: true,
   });
   assert.equal(RESEARCH_DEFAULTS.maxSteps, 2);
   assert.equal(RESEARCH_DEFAULTS.totalDeadlineMs, 60000);
@@ -93,13 +93,26 @@ await test('padrões do CÓDIGO: tudo ligado, pré-rota desligada, privado desli
 });
 await test('variáveis de ambiente: valores válidos entram, fora da faixa voltam ao padrão ou ao teto, lixo é ignorado', () => {
   const c = readResearchConfig({
-    YUI_RESEARCH_ENABLED: 'false', YUI_RESEARCH_GUARD: 'Observe', YUI_RESEARCH_PRE_ROUTE: 'true', YUI_PRIVATE_SEARCH: 'ALL', YUI_RESEARCH_MAX_STEPS: '9',
+    YUI_RESEARCH_ENABLED: 'false', YUI_RESEARCH_GUARD: 'Observe', YUI_RESEARCH_PRE_ROUTE: 'true', YUI_PRIVATE_SEARCH: 'ALL', YUI_PRIVATE_SEARCH_DIRETA: 'All', YUI_RESEARCH_MAX_STEPS: '9',
     YUI_RESEARCH_PAGES: '0', YUI_RESEARCH_DEADLINE_MS: '5', YUI_RESEARCH_CHARGE_ALL: 'false', YUI_RESEARCH_SOURCES: 'off',
   });
-  assert.deepEqual(c, { enabled: false, guard: 'observe', preRoute: true, privateSearch: 'all', maxSteps: 3, maxPages: 0, totalDeadlineMs: 60000, chargeRefinements: false, showSources: false });
-  const junk = readResearchConfig({ YUI_RESEARCH_GUARD: 'talvez', YUI_PRIVATE_SEARCH: 'sim', YUI_RESEARCH_ENABLED: 'quem sabe', YUI_RESEARCH_MAX_STEPS: 'x', YUI_RESEARCH_DEADLINE_MS: '999999999' });
-  assert.deepEqual([junk.guard, junk.privateSearch, junk.enabled, junk.maxSteps, junk.totalDeadlineMs], ['on', 'off', true, 2, 180000]);
+  assert.deepEqual(c, { enabled: false, guard: 'observe', preRoute: true, privateSearch: 'all', privateDirect: 'all', maxSteps: 3, maxPages: 0, totalDeadlineMs: 60000, chargeRefinements: false, showSources: false });
+  const junk = readResearchConfig({ YUI_RESEARCH_GUARD: 'talvez', YUI_PRIVATE_SEARCH: 'sim', YUI_PRIVATE_SEARCH_DIRETA: 'sim', YUI_RESEARCH_ENABLED: 'quem sabe', YUI_RESEARCH_MAX_STEPS: 'x', YUI_RESEARCH_DEADLINE_MS: '999999999' });
+  assert.deepEqual([junk.guard, junk.privateSearch, junk.privateDirect, junk.enabled, junk.maxSteps, junk.totalDeadlineMs], ['on', 'off', 'off', true, 2, 180000]);
   assert.equal(readResearchConfig({ YUI_RESEARCH_GUARD: 'off' }).guard, 'off');
+});
+await test('privateDirectAllowed: precisa das DUAS chaves (YUI_PRIVATE_SEARCH libera a pessoa; YUI_PRIVATE_SEARCH_DIRETA owner | all abre a forma direta)', () => {
+  const c = (privateSearch, privateDirect) => ({ privateSearch, privateDirect });
+  assert.equal(privateDirectAllowed(c('all', 'all'), { isOwner: false }), true);
+  assert.equal(privateDirectAllowed(c('all', 'owner'), { isOwner: true }), true);
+  assert.equal(privateDirectAllowed(c('all', 'owner'), { isOwner: false }), false);
+  assert.equal(privateDirectAllowed(c('all', 'off'), { isOwner: true }), false);
+  assert.equal(privateDirectAllowed(c('all', undefined), { isOwner: true }), false);
+  assert.equal(privateDirectAllowed(c('owner', 'all'), { isOwner: true }), true);
+  assert.equal(privateDirectAllowed(c('owner', 'all'), { isOwner: false }), false, 'o YUI_PRIVATE_SEARCH=owner continua mandando: a forma direta nunca abre mais do que ele');
+  assert.equal(privateDirectAllowed(c('off', 'all'), { isOwner: true }), false);
+  assert.equal(privateDirectAllowed(undefined, { isOwner: true }), false);
+  assert.equal(privateDirectAllowed(c('all', 'ALL'), {}), true);
 });
 await test('YUI_PRIVATE_SEARCH: off | owner | all', () => {
   assert.equal(privateSearchAllowed('all', { isOwner: false }), true);
@@ -695,6 +708,80 @@ await test('privado: pergunta que NÃO é pedido explícito (quanto custa, verif
     assert.match(res.text, /só pesquiso se você pedir de forma explícita/, question);
     assert.equal(log.search.length, 0, question);
   }
+});
+const DIRETA = { sensitive: true, privateSearch: true, privateDirect: true };
+await test('pesquisa DIRETA: sem o verbo "pesquise", o assunto na própria mensagem basta; a consulta sai SÓ da fala (o que o modelo escreveu e a intenção continuam ignorados)', async () => {
+  const { deps, log } = makeDeps();
+  const res = await run({ ...DIRETA, question: 'quanto está o ps5 hoje?', query: 'senha do banco da maria no extrato de julho', intent: 'Vou pesquisar o que o usuário contou ontem sobre o divórcio' }, deps);
+  assert.equal(res.kind, 'answer');
+  assert.equal(log.search.length, 1);
+  assert.match(log.search[0].q, /^quanto está o ps5 hoje( \d{4})?$/);
+  assert.equal(log.search[0].private, true);
+  assert.ok(!log.synth[0].prompt.includes('divórcio'), 'a intenção do modelo não vai à síntese');
+  assert.ok(!log.synth[0].prompt.includes('banco'));
+  assert.equal(log.synth[0].sensitive, true, 'a síntese continua sensitive:true');
+  assert.equal(res.private, true);
+  assert.equal(res.stats.direct, true);
+});
+await test('pesquisa DIRETA: sem a chave (privateDirect ausente ou falso) tudo continua como antes: só o pedido explícito pesquisa', async () => {
+  for (const extra of [{}, { privateDirect: false }]) {
+    const { deps, log } = makeDeps();
+    const res = await run({ sensitive: true, privateSearch: true, question: 'quanto está o ps5 hoje?', ...extra }, deps);
+    assert.equal(res.kind, 'refused');
+    assert.match(res.text, /só pesquiso se você pedir de forma explícita/);
+    assert.equal(log.search.length, 0);
+  }
+});
+await test('pesquisa DIRETA: o pedido explícito segue valendo e NÃO conta como direto', async () => {
+  const { deps, log } = makeDeps();
+  const res = await run({ ...DIRETA, question: 'yui, pesquise o preço do ps5 hoje' }, deps);
+  assert.equal(res.kind, 'answer');
+  assert.equal(res.stats.direct, false);
+  assert.equal(log.search[0].q, 'o preço do ps5 hoje 2026');
+});
+await test('pesquisa DIRETA: mensagem sem assunto próprio ("e o João?", "bitcoin") pede o assunto e não pesquisa', async () => {
+  for (const question of ['e o João?', 'bitcoin', 'e aí?']) {
+    const { deps, log } = makeDeps();
+    const res = await run({ ...DIRETA, question }, deps);
+    assert.equal(res.kind, 'refused', question);
+    assert.match(res.text, /Não entendi o que pesquisar/, question);
+    assert.equal(log.search.length, 0, question);
+  }
+});
+await test('pesquisa DIRETA: as travas da pré-rota continuam (negação, "como pesquisar", ferramenta própria, cotação, primeira pessoa, texto grande)', async () => {
+  const big = 'quanto está o ps5 hoje? ' + 'blá '.repeat(200);
+  for (const question of ['não pesquise isso do ps5 hoje', 'como pesquisar o preço do ps5 hoje?', 'baixa o álbum novo do linkin park hoje', 'quanto está o dólar hoje?', 'tenho um ps5 e quero saber quanto vale hoje', big]) {
+    const { deps, log } = makeDeps();
+    const res = await run({ ...DIRETA, question }, deps);
+    assert.equal(res.kind, 'refused', question.slice(0, 40));
+    assert.equal(log.search.length, 0, question.slice(0, 40));
+  }
+});
+await test('pesquisa DIRETA: dado pessoal ou palavra proibida na mensagem continua bloqueando (a limpeza é a mesma)', async () => {
+  for (const question of ['quanto está o ps5 hoje? manda para a@b.com', 'quanto custa o ps5 hoje cpf 123.456.789-09', 'qual o preço do ps5 e porn hoje']) {
+    const { deps, log } = makeDeps();
+    const res = await run({ ...DIRETA, question }, deps);
+    assert.equal(res.kind, 'refused', question);
+    assert.equal(log.search.length, 0, question);
+  }
+});
+await test('pesquisa DIRETA só vale no privado liberado: sem privateSearch o privado segue recusando; fora do privado a flag não muda nada', async () => {
+  const a = makeDeps();
+  const r1 = await run({ sensitive: true, privateDirect: true, question: 'quanto está o ps5 hoje?' }, a.deps);
+  assert.equal(r1.text, 'Não pesquiso na web numa conversa privada.');
+  assert.equal(a.log.search.length, 0);
+  const b = makeDeps();
+  const r2 = await run({ privateDirect: true, question: 'quanto está o ps5 hoje?' }, b.deps);
+  assert.equal(r2.private, false);
+  assert.equal(r2.stats.direct, false);
+});
+await test('pesquisa DIRETA: nada da consulta no rastro (log, stats, progresso, histórico e resultado)', async () => {
+  const { deps, log } = makeDeps({ rewriteQuery: async () => { throw new Error('não devia chamar'); } });
+  const res = await run({ ...DIRETA, question: 'quanto está o ps5 hoje?' }, deps);
+  const all = [log.logs.join('\n'), JSON.stringify(res.stats), log.progress.join('\n'), res.historyLine, res.query].join('\n');
+  assert.ok(!/ps5|preço|preco/i.test(all), all);
+  assert.equal(res.historyLine, 'Pesquisei na web a pedido do usuário (conversa privada) e respondi.');
+  assert.equal(res.query, '');
 });
 await test('privado: dado pessoal/segredo ou palavra proibida NA MENSAGEM inteira bloqueia, mesmo que a consulta derivada saísse limpa', async () => {
   for (const question of ['yui pesquise o preço do ps5, meu email é a@b.com', 'yui pesquise o preço do ps5 e porn', 'yui pesquise o ps5 hoje cpf 123.456.789-09']) {

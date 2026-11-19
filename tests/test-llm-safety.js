@@ -591,8 +591,8 @@ await test('llmHandler: todo generateResponse da fila leva `sensitive` e a ferra
   // (etapa 6: a fila chama researchForQueue, que no processo único repassa os MESMOS parâmetros ao runResearchFor; com o cérebro separado a
   // pesquisa vai ao cérebro, que remonta a conversa privada a partir dos fatos)
   assert.ok(/researchForQueue\(\{[^}]*?sensitive: privateChat/.test(body), 'o ramo search_web do agente precisa passar sensitive (privateChat)');
-  assert.ok(/function researchForQueue\(params\) \{[\s\S]{0,400}?return runResearchFor\(params\);/.test(llmSrc), 'no processo único, o researchForQueue repassa tudo ao runResearchFor');
-  assert.ok(/webSearchGate\(\{ sensitive: privateChat, privateMode: researchCfg\.privateSearch, isOwner: isOwnerId\(userId\), explicit: explicitReq\.explicit \}\)/.test(body));
+  assert.ok(/function researchForQueue\(params\) \{[\s\S]{0,400}?return runResearchFor\(\{ \.\.\.params, direta: true \}\);/.test(llmSrc), 'no processo único, o researchForQueue repassa tudo ao runResearchFor');
+  assert.ok(/webSearchGate\(\{ sensitive: privateChat, privateMode: researchCfg\.privateSearch, isOwner: isOwnerId\(userId\), explicit: explicitReq\.explicit \|\| directAsk\?\.direct === true \}\)/.test(body));
   assert.equal((body.match(/researchForQueue\(\{/g) || []).length, 2, 'só a Porta B (search_web) e a Porta C (promessa) chamam o agente na fila');
   assert.equal((body.match(/runResearchFor\(\{/g) || []).length, 0, 'a fila chama o agente só pelo researchForQueue');
 });

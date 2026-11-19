@@ -23,8 +23,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { smartSearchDetailed, createWebContextMemo, searchForAgent, fetchPageContent, isBlacklisted, buildSearchContext as buildSearchContextCore } from './searchManager.js';
 import { searchWeb } from '../search/providers.js';
 // Agente de pesquisa: detectores puros (searchIntent) e laço limitado com resposta final garantida (researchAgent). Nenhum dos dois importa este arquivo (sem ciclo).
-import { runResearch, readResearchConfig, createUserGuard, privateSearchAllowed } from './researchAgent.js';
-import { preRouteDecision, recoveryPlan, inspectFinalGuard, finalGuard, finalGuardDetailed, userNeedsAnswer, buildNoPromiseRetryPrompt, buildSearchQuery, isRawToolLeak, NEED_TOPIC_REPLY, VOICE_REFUSAL, searchFailureNote } from './searchIntent.js';
+import { runResearch, readResearchConfig, createUserGuard, privateSearchAllowed, privateDirectAllowed, failureMessage as researchFailureMessage } from './researchAgent.js';
+import { preRouteDecision, privateDirectDecision, recoveryPlan, inspectFinalGuard, finalGuard, finalGuardDetailed, userNeedsAnswer, buildNoPromiseRetryPrompt, buildSearchQuery, isRawToolLeak, NEED_TOPIC_REPLY, VOICE_REFUSAL, searchFailureNote } from './searchIntent.js';
 import { isOwnerId } from '../core/permissions.js';
 // Lista de mods (Minecraft): o CÓDIGO procura cada nome no Modrinth e monta a lista com os links (Porta M, antes da Porta A).
 import { routeModList } from './modListResolver.js';
@@ -1071,15 +1071,19 @@ const SPONTANEOUS_NO_SEARCH_TEXT = 'Eu só pesquiso na web quando alguém me cha
  *  - a síntese roda SEM ferramentas, SEM busca, SEM histórico e SEM memória: recebe só a pergunta e a evidência cercada como dado não confiável.
  * Devolve { kind: 'answer'|'summary'|'refused'|'failed', text, private, historyLine, usedSearch, sources, stats, ... } (ver runResearch).
  */
-async function runResearchFor({ question = '', query = '', intent = '', userId = null, sensitive = false, isOwner, channelId = null, guildId = null, disabled, progress = null, deadlineMs, userGuard = researchUserGuard } = {}) {
+async function runResearchFor({ question = '', query = '', intent = '', userId = null, sensitive = false, isOwner, channelId = null, guildId = null, disabled, progress = null, deadlineMs, direta = false, userGuard = researchUserGuard } = {}) {
     const cfg = researchConfigNow();
-    const privateMode = sensitive === true && privateSearchAllowed(cfg.privateSearch, { isOwner: isOwner === undefined ? isOwnerId(userId) : isOwner === true });
+    const owner = isOwner === undefined ? isOwnerId(userId) : isOwner === true;
+    const privateMode = sensitive === true && privateSearchAllowed(cfg.privateSearch, { isOwner: owner });
+    // Pesquisa DIRETA (sem o verbo "pesquise"): só quando quem chama a pede (`direta`: o turno da fila), no privado liberado e com o YUI_PRIVATE_SEARCH_DIRETA.
+    const privateDirect = privateMode && direta === true && privateDirectAllowed(cfg, { isOwner: owner });
     try {
         return await runResearch(
             {
                 question, query, intent, userId,
                 sensitive: sensitive === true,
                 privateSearch: privateMode,
+                privateDirect,
                 disabled: disabled === undefined ? isToolDisabled(guildId, 'search_web') : disabled === true,
                 deadlineMs,
                 config: { totalDeadlineMs: cfg.totalDeadlineMs, maxSteps: cfg.maxSteps, maxPages: cfg.maxPages, chargeRefinements: cfg.chargeRefinements, showSources: cfg.showSources }
@@ -1870,7 +1874,7 @@ function researchForQueue(params) {
         noteProcessando('pesquisando');
         return turn.research({ question: params.question, query: params.query ?? '', intent: params.intent ?? '' }, { progress: params.progress });
     }
-    return runResearchFor(params);
+    return runResearchFor({ ...params, direta: true }); // o turno da fila: a pesquisa direta (YUI_PRIVATE_SEARCH_DIRETA) só vale aqui
 }
 // Cérebro separado (etapa 6): o "Processando..." GUARDADO (discord/processandoGuardado.js). Enquanto o turno da fila está aberto, o bot guarda o
 // id da mensagem original e o do "Processando...", o canal, a conversa, o estado e a hora; no fim do turno o registro sai. Se o bot cair no
@@ -3469,10 +3473,15 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 } else if (toolData.tool === 'search_web' && researchCfg.enabled) {
                     // AGENTE DE PESQUISA (Porta B): o modelo chamou search_web. O código faz o resto e SEMPRE entrega uma resposta (síntese, resumo com links ou o
                     // motivo). A conversa privada só abre pelo YUI_PRIVATE_SEARCH e só em pedido EXPLÍCITO (webSearchGate); a recusa é imediata, sem progresso nem busca.
-                    const searchGate = webSearchGate({ sensitive: privateChat, privateMode: researchCfg.privateSearch, isOwner: isOwnerId(userId), explicit: explicitReq.explicit });
+                    // Com a pesquisa DIRETA (YUI_PRIVATE_SEARCH_DIRETA + quem pede) o verbo "pesquise" não é exigido: basta o assunto na própria mensagem (privateDirectDecision).
+                    const directAsk = privateChat && privateDirectAllowed(researchCfg, { isOwner: isOwnerId(userId) })
+                        ? privateDirectDecision(ownQuestion, { direct: directToYui, voice: isVoice, radioMode: options.radioMode === true, disableTools: options.disableTools === true, thirdPartyPrompt: options.thirdPartyPrompt === true })
+                        : null;
+                    const searchGate = webSearchGate({ sensitive: privateChat, privateMode: researchCfg.privateSearch, isOwner: isOwnerId(userId), explicit: explicitReq.explicit || directAsk?.direct === true });
                     const wantedQuery = typeof toolData.args?.query === 'string' ? toolData.args.query.trim() : '';
                     if (!searchGate.allowed) {
-                        processedResponse = searchGate.message || SENSITIVE_SEARCH_REFUSAL;
+                        // pesquisa direta ligada e a mensagem sem assunto próprio ("e o João?"): pede o assunto, em vez de ensinar a pedir com "pesquise"
+                        processedResponse = directAsk?.reason === 'no_subject' && searchGate.reason === 'private-needs-explicit' ? researchFailureMessage('no_query') : (searchGate.message || SENSITIVE_SEARCH_REFUSAL);
                     } else if (!searchGate.private && !wantedQuery) {
                         processedResponse = NEED_TOPIC_REPLY; // sem assunto nem no pedido: pergunta, em vez de pesquisar "undefined"
                     } else {
@@ -4168,7 +4177,7 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
             // Voz: o disableTools de um pedido de voz é FORÇADO pela trava de voz (shouldBlockToolForVoice, no começo desta função), não pedido por quem chamou; se ele fosse repassado
             // o plano devolveria "sem pesquisa" antes de olhar a voz, e a promessa falada cairia na guarda final em vez da recusa honesta de voz. Fora da voz vale o que o chamador pediu.
             let rPlan = recoveryPlan({
-                reply: processedResponse, userText: ownQuestion, sensitive: privateChat, privateSearch: privateOk, searchAvailable, voice: isVoice,
+                reply: processedResponse, userText: ownQuestion, sensitive: privateChat, privateSearch: privateOk, privateDirect: privateOk && privateDirectAllowed(researchCfg, { isOwner: isOwnerId(userId) }), searchAvailable, voice: isVoice,
                 direct: directToYui, radioMode: options.radioMode === true, disableTools: options.disableTools === true && !isVoice, thirdPartyPrompt: options.thirdPartyPrompt === true
             });
             // Pesquisa por código para quem NÃO tem ferramentas nativas (Groq, HF, Cloudflare, Pollinations, Horde, Gateway ou o Local sem chave): num pedido

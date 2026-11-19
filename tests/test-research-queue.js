@@ -660,6 +660,63 @@ await test('privado LIBERADO mas o pedido NÃO é explícito: não pesquisa e en
   assert.match(finalText(b.it), /Não sei dizer/);
   assert.equal(searches(), 0);
 }));
+await test('pesquisa DIRETA (YUI_PRIVATE_SEARCH_DIRETA): o modelo chama search_web sem o "pesquise" e a Yui pesquisa; consulta SÓ da fala; outra pessoa e a chave desligada recusam como antes', async () => {
+  resetCooldowns();
+  fetchLog.length = 0;
+  const script = (n, body) => (isSynthBody(body) ? SYNTH_ANSWER : SEARCH_JSON('placar zeferino niteroi'));
+  await withEnv({ YUI_PRIVATE_SEARCH: 'all', YUI_PRIVATE_SEARCH_DIRETA: 'off' }, async () => {
+    const a = await askPrivate({ text: 'quanto está o ps5 hoje?', script });
+    assert.match(finalText(a.it), /explícito/);
+    assert.equal(searches(), 0);
+  });
+  await withEnv({ YUI_PRIVATE_SEARCH: 'all', YUI_PRIVATE_SEARCH_DIRETA: 'owner' }, async () => {
+    const a = await askPrivate({ text: 'quanto está o ps5 hoje?', script });
+    assert.ok(isResearchAnswer(finalText(a.it)), finalText(a.it));
+    assert.equal(searches(), 1);
+    assert.match(queryOf(0), /ps5/i);
+    assert.ok(!/zeferino|niter|placar/i.test(queryOf(0)), 'a consulta levou o que o modelo escreveu: ' + queryOf(0));
+    assert.ok(!logged(/ps5/i), 'a consulta não vai ao log');
+    assert.ok(progressLines(a.it).every((l) => !/ps5/i.test(l)), 'o progresso não mostra a consulta');
+    fetchLog.length = 0;
+    const b = await ask({ userId: 'u-outra', type: 'dm', text: 'quanto está o ps5 hoje?', script });
+    assert.match(finalText(b.it), /explícito/, 'com "owner" a DM de outra pessoa continua pedindo o pedido explícito');
+    assert.equal(searches(), 0);
+  });
+  await withEnv({ YUI_PRIVATE_SEARCH: 'all', YUI_PRIVATE_SEARCH_DIRETA: 'all' }, async () => {
+    resetCooldowns();
+    fetchLog.length = 0;
+    const c = await ask({ userId: 'u-outra', type: 'dm', text: 'quanto está o ps5 hoje?', script });
+    assert.ok(isResearchAnswer(finalText(c.it)), finalText(c.it));
+    assert.equal(searches(), 1);
+    assert.ok(!/zeferino|niter|placar/i.test(queryOf(0)));
+  });
+});
+await test('pesquisa DIRETA: sem assunto próprio ("e o João?"), em primeira pessoa ou com negação não pesquisa; a mensagem sem assunto pede o assunto', () => withEnv({ YUI_PRIVATE_SEARCH: 'all', YUI_PRIVATE_SEARCH_DIRETA: 'owner' }, async () => {
+  resetCooldowns();
+  fetchLog.length = 0;
+  const a = await askPrivate({ text: 'e o João?', script: () => SEARCH_JSON('joao') });
+  assert.match(finalText(a.it), /Não entendi o que pesquisar/);
+  const b = await askPrivate({ text: 'tenho um ps5 e quero saber quanto vale hoje', script: () => SEARCH_JSON('ps5') });
+  assert.match(finalText(b.it), /explícito/);
+  await askPrivate({ text: 'não pesquise o preço do ps5 hoje', script: () => SEARCH_JSON('ps5') });
+  assert.equal(searches(), 0);
+}));
+await test('pesquisa DIRETA e a Porta C: a promessa "vou pesquisar" com o assunto na fala vira pesquisa direta; sem a chave não pesquisa', async () => {
+  resetCooldowns();
+  const script = (n, body) => (isSynthBody(body) ? SYNTH_ANSWER : (n === 1 ? 'Vou pesquisar isso!' : 'Não sei dizer o preço de hoje.'));
+  fetchLog.length = 0;
+  await withEnv({ YUI_PRIVATE_SEARCH: 'all', YUI_PRIVATE_SEARCH_DIRETA: 'off' }, async () => {
+    const a = await askPrivate({ text: 'quanto está o ps5 hoje?', script });
+    assert.match(finalText(a.it), /Não sei dizer/);
+    assert.equal(searches(), 0);
+  });
+  await withEnv({ YUI_PRIVATE_SEARCH: 'all', YUI_PRIVATE_SEARCH_DIRETA: 'owner' }, async () => {
+    const b = await askPrivate({ text: 'quanto está o ps5 hoje?', script });
+    assert.ok(isResearchAnswer(finalText(b.it)), finalText(b.it));
+    assert.equal(searches(), 1);
+    assert.match(queryOf(0), /ps5/i);
+  });
+});
 await test('privado: e-mail, CPF, telefone, token e senha na fala NÃO saem para o buscador (pedem para reescrever), no privado e no público', async () => {
   const samples = [
     'pesquise o email joao@exemplo.com do meu amigo',

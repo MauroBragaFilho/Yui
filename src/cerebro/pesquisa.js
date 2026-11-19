@@ -288,7 +288,7 @@ export function createResearchBrain(deps = {}) {
       const out = await runnerFor(f, channel, diario).runResearchFor({
         question: pedido.question || pedido.query, query: pedido.query, intent: pedido.intent, userId: f.ctx.userId,
         sensitive: conv.privateChat, isOwner: conv.isOwner, channelId: f.realChannelId, guildId: f.ctx.guildId,
-        progress: progressFor(chave),
+        progress: progressFor(chave), direta: true, // o turno da fila: a pesquisa direta (YUI_PRIVATE_SEARCH_DIRETA) só vale aqui; o adaptador confere a chave e quem pede
       });
       resultado = shape(out);
     }

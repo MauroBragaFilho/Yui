@@ -385,6 +385,38 @@ try {
       process.env.YUI_PRIVATE_SEARCH = 'off';
     }
   });
+  await test('pesquisa DIRETA no cérebro (YUI_PRIVATE_SEARCH_DIRETA): o research.turn da DM pesquisa sem o "pesquise" só para quem a chave libera; consulta só da fala', async () => {
+    limparRegistro();
+    process.env.YUI_PRIVATE_SEARCH = 'all';
+    const pergunta = 'quanto está o PS5 tok-D1 hoje?';
+    try {
+      const { research } = brains();
+      const turn = (user, channel) => research.turn({ ...facts({ user, channel, text: pergunta }), pedido: { question: pergunta, query: 'consulta inventada pelo modelo tok-MODELO' } }, META);
+      process.env.YUI_PRIVATE_SEARCH_DIRETA = 'off';
+      const a = await turn(OWNER, DMCH);
+      assert.equal(a.kind, 'refused');
+      assert.equal(registro().length, 0, 'chave desligada: nada saiu');
+      process.env.YUI_PRIVATE_SEARCH_DIRETA = 'owner';
+      const b = await turn(OWNER, DMCH);
+      assert.equal(b.kind, 'answer', b.text);
+      assert.equal(b.private, true);
+      const consultas = registro().filter((r) => r.tipo === 'agente');
+      assert.equal(consultas.length, 1);
+      assert.ok(consultas[0].consulta.includes('tok-D1') && !consultas[0].consulta.includes('tok-MODELO'), 'a consulta é só da fala');
+      assert.equal(consultas[0].privado, true);
+      limparRegistro();
+      const c = await turn(MEMBER, '777777777777777778');
+      assert.equal(c.kind, 'refused', 'owner: o membro em DM continua sem a forma direta');
+      assert.equal(registro().length, 0);
+      process.env.YUI_PRIVATE_SEARCH_DIRETA = 'all';
+      const d = await turn(MEMBER, '777777777777777778');
+      assert.equal(d.kind, 'answer', d.text);
+      assert.equal(d.private, true);
+    } finally {
+      process.env.YUI_PRIVATE_SEARCH = 'off';
+      delete process.env.YUI_PRIVATE_SEARCH_DIRETA;
+    }
+  });
   await test('recusas do cérebro: voz, conversa espontânea e search_web desligada no servidor (nada chega ao buscador)', async () => {
     limparRegistro();
     llm.setServerToolEnabled(GUILD_OFF, 'search_web', false);

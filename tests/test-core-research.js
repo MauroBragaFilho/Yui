@@ -314,6 +314,59 @@ await test('guarda de dados sensíveis no privado: CPF, e-mail, token e palavra 
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+console.log('Pesquisa privada DIRETA no adaptador (YUI_PRIVATE_SEARCH_DIRETA)');
+await test('só com direta, no privado liberado e com a chave para ESTA pessoa; a consulta sai só da fala; sem direta (/yui, app) nunca', async () => {
+  fakeBackend('cerebro-direta');
+  const Q = 'quanto custa a placa de vídeo RTX 5090 hoje?';
+  const mk = (over) => { const { io, seen } = doubles(); const core = research.createCoreResearch({ config: cfgOf(over), search: io.search, readPage: io.readPage, userGuard: createUserGuard() }); return { core, seen }; };
+  const pede = (core, extra) => core.runResearchFor({ question: Q, sensitive: true, direta: true, ...extra });
+  { // chave desligada (padrão): como antes
+    const { core, seen } = mk({ privateSearch: 'all', privateDirect: 'off' });
+    const r = await pede(core, { userId: '111', isOwner: true });
+    assert.equal(r.kind, 'refused');
+    assert.match(r.text, /só pesquiso se você pedir de forma explícita/);
+    assert.equal(seen.searches.length, 0);
+  }
+  { // owner: o dono pesquisa, a outra pessoa não
+    const { core, seen } = mk({ privateSearch: 'all', privateDirect: 'owner' });
+    const dono = await pede(core, { userId: '111', isOwner: true });
+    assert.equal(dono.kind, 'answer', dono.text);
+    assert.equal(dono.private, true);
+    assert.equal(seen.searches.length, 1);
+    assert.match(seen.searches[0].q, /^quanto custa a placa de vídeo RTX 5090 hoje( \d{4})?$/);
+    assert.equal(seen.searches[0].o.private, true);
+    const outro = await pede(core, { userId: '222', isOwner: false });
+    assert.equal(outro.kind, 'refused');
+    assert.equal(seen.searches.length, 1, 'a outra pessoa não gerou consulta');
+  }
+  { // all: qualquer pessoa (com o YUI_PRIVATE_SEARCH liberando)
+    const { core, seen } = mk({ privateSearch: 'all', privateDirect: 'all' });
+    const r = await pede(core, { userId: '222', isOwner: false });
+    assert.equal(r.kind, 'answer', r.text);
+    assert.equal(r.private, true);
+    assert.equal(seen.searches.length, 1);
+  }
+  { // o dono sozinho no YUI_PRIVATE_SEARCH: a forma direta não abre mais do que ele
+    const { core, seen } = mk({ privateSearch: 'owner', privateDirect: 'all' });
+    const r = await pede(core, { userId: '222', isOwner: false });
+    assert.equal(r.kind, 'refused');
+    assert.equal(seen.searches.length, 0);
+  }
+  { // sem direta: o /yui, o app e as outras entradas nunca pesquisam sem o verbo, mesmo com a chave em all
+    const { core, seen } = mk({ privateSearch: 'all', privateDirect: 'all' });
+    const r = await core.runResearchFor({ question: Q, userId: '111', isOwner: true, sensitive: true });
+    assert.equal(r.kind, 'refused');
+    assert.equal(seen.searches.length, 0);
+  }
+  { // privado não liberado: a recusa de sempre
+    const { core, seen } = mk({ privateSearch: 'off', privateDirect: 'all' });
+    const r = await pede(core, { userId: '111', isOwner: true });
+    assert.equal(r.kind, 'refused');
+    assert.equal(r.text, SENSITIVE_SEARCH_REFUSAL);
+    assert.equal(seen.searches.length, 0);
+  }
+});
+
 console.log('Ferramenta search_web e contrato');
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 

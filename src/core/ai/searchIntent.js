@@ -468,6 +468,38 @@ export function preRouteDecision(text, { voice = false, direct = false, radioMod
 }
 
 // ---------------------------------------------------------------------------------------------
+// 5b. PESQUISA PRIVADA DIRETA (YUI_PRIVATE_SEARCH_DIRETA): o modelo chamou search_web na conversa privada, mas a pessoa não escreveu "pesquise"
+// ---------------------------------------------------------------------------------------------
+
+/** Palavras-chave mínimas da consulta direta: uma palavra só ("e o João?") é quase sempre a continuação de um assunto que NÃO está nesta mensagem. */
+export const DIRECT_MIN_KEYWORDS = 2;
+// Dos "não" da pré-rota, só este abre espaço à consulta direta (a mensagem não tem verbo de pesquisa). Os outros continuam barrando: voz, texto grande,
+// link, negação, "como pesquisar", "vou pesquisar", pergunta de capacidade, ferramenta própria, música e jogo, assunto sobre a própria Yui ou a pessoa,
+// e o pedido que tem o verbo mas não é de web ("procura um nome legal pro servidor").
+const DIRECT_SOFT_REASONS = new Set(['no_trigger']);
+// Fala em primeira pessoa sobre a própria vida ("meu ...", "tenho ...", "estou ...", "eu ..."): sem o "pesquise" a pessoa não escolheu mandar isso a um buscador de
+// terceiros, então a forma direta não vale (a explícita continua: ela corta a consulta no pedido e a pessoa decidiu pesquisar).
+const FIRST_PERSON_RE = /\b(?:eu|meu|minha|meus|minhas|comigo|tenho|tinha|estou|tou|to|sou|fui|moro|trabalho)\b/;
+
+/**
+ * Decisão da pesquisa DIRETA no privado. Mesmas travas da pré-rota (preRouteDecision), menos a exigência do verbo de pesquisa.
+ * Devolve { explicit, direct, reason, query? }: explicit = pedido com verbo (como sempre); direct = sem verbo, mas com assunto na PRÓPRIA mensagem
+ * (consulta tirada só dela, com o ano nos dados que mudam). Cotação (dólar, euro, bitcoin) não é direta: tem a ferramenta própria.
+ * Quem chama TEM de ter conferido a chave e quem pede (privateDirectAllowed) e que a Yui foi chamada de verdade (direct: true em opts).
+ */
+export function privateDirectDecision(text, opts = {}) {
+  const now = opts.now ?? new Date();
+  const pre = preRouteDecision(text, { ...opts, now });
+  if (pre.explicit) return { ...pre, direct: false };
+  if (!DIRECT_SOFT_REASONS.has(pre.reason)) return { explicit: false, direct: false, reason: pre.reason };
+  if (FIRST_PERSON_RE.test(norm(String(text ?? '')))) return { explicit: false, direct: false, reason: 'pessoal' };
+  if (detectSearchRequest(text, { now }).route === 'convert_currency') return { explicit: false, direct: false, reason: 'currency_tool' };
+  const query = buildSearchQuery(text, { now });
+  if (!query || keywordsOf(query).length < DIRECT_MIN_KEYWORDS) return { explicit: false, direct: false, reason: 'no_subject' };
+  return { explicit: false, direct: true, reason: 'direta', query };
+}
+
+// ---------------------------------------------------------------------------------------------
 // 6. O QUE FAZER COM UMA PROMESSA VAZIA (Porta C)
 // ---------------------------------------------------------------------------------------------
 
@@ -496,7 +528,7 @@ export function userNeedsAnswer(userText) {
  * @returns {{ action: 'none'|'search'|'route'|'refuse'|'ask'|'regenerate', query?, intent?, private?, tool?, args?, message?, reason }}
  */
 export function recoveryPlan({
-  reply, userText, sensitive = false, privateSearch = false, searchAvailable = true, voice = false, direct = false,
+  reply, userText, sensitive = false, privateSearch = false, privateDirect = false, searchAvailable = true, voice = false, direct = false,
   radioMode = false, disableTools = false, thirdPartyPrompt = false, now = new Date(),
 } = {}) {
   const p = detectUnfulfilledPromise(reply);
@@ -530,9 +562,10 @@ export function recoveryPlan({
   if (req.route === 'convert_currency') return { action: 'route', tool: 'convert_currency', args: req.args, query: req.query, reason: 'cotação' };
   if (sensitive === true) {
     // pesquisa privada liberada: só pedido explícito e estrito, com a consulta tirada do texto literal desta mensagem
-    const pre = preRouteDecision(text, { direct: true, now });
-    if (!pre.explicit) return { action: 'regenerate', reason: 'privado: só pesquisa em pedido explícito' };
-    return { action: 'search', query: pre.query, private: true, reason: 'pedido explícito (privado)' };
+    // privateDirect (o chamador já conferiu YUI_PRIVATE_SEARCH_DIRETA e quem pede): sem o verbo de pesquisa, a consulta sai da fala inteira, mas só dela
+    const pre = privateDirect === true ? privateDirectDecision(text, { direct: true, now }) : preRouteDecision(text, { direct: true, now });
+    if (!pre.explicit && pre.direct !== true) return { action: 'regenerate', reason: 'privado: só pesquisa em pedido explícito' };
+    return { action: 'search', query: pre.query, private: true, reason: pre.explicit ? 'pedido explícito (privado)' : 'pedido direto (privado)' };
   }
   const query = (req.wanted && req.query) || promiseQuery || '';
   if (!query) return req.needsTopic ? { action: 'ask', message: NEED_TOPIC_REPLY, reason: 'sem assunto' } : { action: 'regenerate', reason: 'sem consulta aproveitável' };

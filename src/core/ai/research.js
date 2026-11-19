@@ -15,7 +15,7 @@ import { logger } from '../../utils/logger.js';
 import { isOwnerId } from '../permissions.js';
 import { buildPersonaPrompt } from '../persona.js';
 import { forbiddenKeywords as FORBIDDEN_KEYWORDS } from '../forbiddenKeywords.js';
-import { runResearch, readResearchConfig, createUserGuard, privateSearchAllowed } from './researchAgent.js';
+import { runResearch, readResearchConfig, createUserGuard, privateSearchAllowed, privateDirectAllowed } from './researchAgent.js';
 import { scrubLogText } from './llmSafety.js';
 import { searchForAgent, fetchPageContent, isBlacklisted as isBlacklistedUrl } from './searchManager.js';
 import { isolatedChat } from './manager.js';
@@ -123,9 +123,12 @@ export function createCoreResearch(io = {}) {
    *    ferramenta search_web está desligada (quando `disabled` não vem pronto).
    * Devolve { kind: 'answer'|'summary'|'refused'|'failed', text, private, historyLine, usedSearch, sources, stats, ... } (ver runResearch).
    */
-  async function runResearchFor({ question = '', query = '', intent = '', userId = null, sensitive = false, isOwner, channelId = null, guildId = null, disabled, progress = null, deadlineMs, userGuard = defaultGuard } = {}) {
+  async function runResearchFor({ question = '', query = '', intent = '', userId = null, sensitive = false, isOwner, channelId = null, guildId = null, disabled, progress = null, deadlineMs, direta = false, userGuard = defaultGuard } = {}) {
     const cfg = readConfig();
-    const privateMode = sensitive === true && privateSearchAllowed(cfg.privateSearch, { isOwner: isOwner === undefined ? ownerCheck(userId) : isOwner === true });
+    const owner = isOwner === undefined ? ownerCheck(userId) : isOwner === true;
+    const privateMode = sensitive === true && privateSearchAllowed(cfg.privateSearch, { isOwner: owner });
+    // Pesquisa DIRETA (sem o verbo "pesquise"): só quando quem chama a pede (`direta`: o turno da fila), no privado liberado e com o YUI_PRIVATE_SEARCH_DIRETA.
+    const privateDirect = privateMode && direta === true && privateDirectAllowed(cfg, { isOwner: owner });
     try {
       const config = {};
       for (const k of configKeys) if (cfg[k] !== undefined) config[k] = cfg[k];
@@ -134,6 +137,7 @@ export function createCoreResearch(io = {}) {
           question, query, intent, userId,
           sensitive: sensitive === true,
           privateSearch: privateMode,
+          privateDirect,
           disabled: disabled === undefined ? isToolDisabled(guildId, 'search_web') : disabled === true,
           deadlineMs,
           config,

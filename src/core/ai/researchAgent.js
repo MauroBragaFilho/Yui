@@ -19,6 +19,9 @@
  *  7. MODO PRIVADO (conversa privada com a pesquisa liberada por YUI_PRIVATE_SEARCH): só em pedido EXPLÍCITO, a consulta sai SÓ do
  *     texto literal da mensagem atual, a síntese roda com sensitive:true (nunca provedor anônimo), o log e o histórico não levam
  *     a consulta nem o resultado.
+ *  8. PESQUISA DIRETA (YUI_PRIVATE_SEARCH_DIRETA, off | owner | all): com ela a pessoa não precisa escrever "pesquise"; a consulta continua saindo SÓ
+ *     do texto literal da mensagem atual (nunca de histórico, memória ou do que o modelo escreveu), com as mesmas travas e a mesma limpeza. Mensagem
+ *     sem assunto próprio ("e o João?") não pesquisa: pede o assunto.
  *
  * Funções PURAS ficam exportadas para teste. Só importa llmSafety.js e searchIntent.js (também puros).
  */
@@ -26,7 +29,7 @@ import { fenceUntrustedWeb, sanitizeUntrusted } from './llmSafety.js';
 import { TEXTO_PESQUISA_INDISPONIVEL, ehIndisponivel } from '../../search/indisponivel.js';
 import {
     SENSITIVE_SEARCH_REFUSAL, SEARCH_DISABLED_REPLY, VOICE_REFUSAL, buildSearchQuery, detectUnfulfilledPromise, keywordsOf, saneQuery,
-    norm, oneLine, preRouteDecision, stripTrailingPromise,
+    norm, oneLine, preRouteDecision, privateDirectDecision, stripTrailingPromise,
 } from './searchIntent.js';
 
 export { keywordsOf, saneQuery };
@@ -80,6 +83,7 @@ const oneOf = (value, allowed, fallback) => {
  *  - guard (YUI_RESEARCH_GUARD, on): 'on' promessa sem ação vira pesquisa/aviso; 'observe' só registra; 'off' desliga;
  *  - preRoute (YUI_RESEARCH_PRE_ROUTE, false): pedido explícito pesquisa por código, sem a primeira chamada ao modelo;
  *  - privateSearch (YUI_PRIVATE_SEARCH, off): 'off' | 'owner' | 'all' (pesquisa em conversa privada);
+ *  - privateDirect (YUI_PRIVATE_SEARCH_DIRETA, off): 'off' | 'owner' | 'all' (pesquisa privada sem o verbo "pesquise"; só vale onde o privateSearch já libera);
  *  - maxSteps (YUI_RESEARCH_MAX_STEPS, 2, de 1 a 3), maxPages (YUI_RESEARCH_PAGES, 2, de 0 a 3),
  *    totalDeadlineMs (YUI_RESEARCH_DEADLINE_MS, 60000, de 20000 a 180000), chargeRefinements (YUI_RESEARCH_CHARGE_ALL, true),
  *    showSources (YUI_RESEARCH_SOURCES, true).
@@ -90,6 +94,7 @@ export function readResearchConfig(env = process.env) {
         guard: oneOf(env.YUI_RESEARCH_GUARD, ['on', 'observe', 'off'], 'on'),
         preRoute: flag(env.YUI_RESEARCH_PRE_ROUTE, false),
         privateSearch: oneOf(env.YUI_PRIVATE_SEARCH, ['off', 'owner', 'all'], 'off'),
+        privateDirect: oneOf(env.YUI_PRIVATE_SEARCH_DIRETA, ['off', 'owner', 'all'], 'off'),
         maxSteps: clampInt(env.YUI_RESEARCH_MAX_STEPS, RESEARCH_DEFAULTS.maxSteps, 1, 3),
         maxPages: clampInt(env.YUI_RESEARCH_PAGES, RESEARCH_DEFAULTS.maxPages, 0, 3),
         totalDeadlineMs: clampInt(env.YUI_RESEARCH_DEADLINE_MS, RESEARCH_DEFAULTS.totalDeadlineMs, 20_000, 180_000),
@@ -101,6 +106,18 @@ export function readResearchConfig(env = process.env) {
 /** A pesquisa em conversa PRIVADA está liberada para este usuário? mode = YUI_PRIVATE_SEARCH ('off' | 'owner' | 'all'). */
 export function privateSearchAllowed(mode, { isOwner = false } = {}) {
     const m = String(mode ?? 'off').trim().toLowerCase();
+    if (m === 'all') return true;
+    if (m === 'owner') return isOwner === true;
+    return false;
+}
+
+/**
+ * A pesquisa privada DIRETA (sem o verbo "pesquise") vale para este usuário? Precisa das DUAS chaves: o YUI_PRIVATE_SEARCH libera a pessoa e o
+ * YUI_PRIVATE_SEARCH_DIRETA ('owner' só o dono, 'all' todos) abre a forma direta. cfg = readResearchConfig().
+ */
+export function privateDirectAllowed(cfg, { isOwner = false } = {}) {
+    if (!privateSearchAllowed(cfg?.privateSearch, { isOwner })) return false;
+    const m = String(cfg?.privateDirect ?? 'off').trim().toLowerCase();
     if (m === 'all') return true;
     if (m === 'owner') return isOwner === true;
     return false;
@@ -757,6 +774,8 @@ const REFUSED_CODES = new Set(['sensitive', 'disabled', 'busy', 'no_query', 'sen
  * @property {string|number} userId
  * @property {boolean} [sensitive]      conversa privada (DM, canal privado do dono, app)
  * @property {boolean} [privateSearch]  YUI_PRIVATE_SEARCH liberou a pesquisa neste privado para este usuário. Sem isto, sensitive recusa.
+ * @property {boolean} [privateDirect]  o chamador conferiu que a pesquisa DIRETA vale (privateDirectAllowed) e pede que o agente a aceite: sem o verbo "pesquise",
+ *    com o assunto na própria mensagem. Só tem efeito junto de privateSearch.
  * @property {boolean} [disabled]       search_web desligada no servidor
  * @property {number} [deadlineMs]      prazo total (padrão 60 s)
  * @property {object} [config]   sobrescreve RESEARCH_DEFAULTS
@@ -787,14 +806,14 @@ export async function runResearch(input = {}, deps = {}) {
     const hardAt = started + totalMs;
     const question = oneLine(input.question ?? '');
     const privateMode = input.sensitive === true && input.privateSearch === true;
-    const ctx = { trace: [], searches: 0, steps: 0, pages: 0, queries: [], errors: [], limited: null, retryAfterMs: 0, provider: null, synth: false, retried: false, reason: '', best: { items: [], quick: '' } };
+    const ctx = { trace: [], direct: false, searches: 0, steps: 0, pages: 0, queries: [], errors: [], limited: null, retryAfterMs: 0, provider: null, synth: false, retried: false, reason: '', best: { items: [], quick: '' } };
     const progress = createProgress(deps.onProgress, { maxEdits: cfg.progressMaxEdits, minGapMs: cfg.progressMinGapMs, now });
     const state = (name) => { ctx.trace.push(name); };
     const remaining = () => hardAt - now();
     // Em modo privado a consulta não aparece nem no resultado nem no histórico.
     const shownQuery = () => (privateMode ? '' : (ctx.queries[0] ?? ''));
     // stats: só metadados (nunca a consulta, a pergunta ou o texto da página)
-    const stats = () => ({ steps: ctx.steps, searches: ctx.searches, pages: ctx.pages, ms: now() - started, provider: ctx.provider, synthesized: ctx.synth, retried: ctx.retried, reason: ctx.reason, queries: ctx.queries.length, private: privateMode });
+    const stats = () => ({ steps: ctx.steps, searches: ctx.searches, pages: ctx.pages, ms: now() - started, provider: ctx.provider, synthesized: ctx.synth, retried: ctx.retried, reason: ctx.reason, queries: ctx.queries.length, private: privateMode, direct: ctx.direct });
     const finish = (kind, text, extra = {}) => {
         const result = { ok: kind === 'answer' || kind === 'summary', kind, text, sources: [], usedSearch: true, private: privateMode, query: shownQuery(), historyLine: '', stats: stats(), trace: [...ctx.trace], ...extra };
         result.historyLine = historyLineFor(result);
@@ -840,8 +859,11 @@ export async function runResearch(input = {}, deps = {}) {
             const candidates = [];
             if (privateMode) {
                 // Privado: SÓ pedido explícito, e a consulta sai SÓ do texto literal desta mensagem (nunca de args do modelo, histórico ou memória).
-                const pre = preRouteDecision(input.question ?? '', { direct: true, now: nowDate() }); // quem chama o agente já decidiu que é chamada direta
-                if (!pre.explicit) return failure('private_explicit');
+                const askOpts = { direct: true, now: nowDate() }; // quem chama o agente já decidiu que é chamada direta
+                const wantsDirect = input.privateDirect === true; // pesquisa DIRETA: o chamador já conferiu a chave e quem pede
+                const pre = wantsDirect ? privateDirectDecision(input.question ?? '', askOpts) : preRouteDecision(input.question ?? '', askOpts);
+                if (!pre.explicit && pre.direct !== true) return failure(wantsDirect && pre.reason === 'no_subject' ? 'no_query' : 'private_explicit');
+                if (pre.direct === true) ctx.direct = true;
                 // a frase inteira do usuário ("...porque tô juntando dinheiro pro divórcio da Fulana...") levaria o contexto pessoal a terceiros: vai só o PEDIDO
                 candidates.push(trimLiteralQuery(pre.query));
                 const whole = scrubQuery(input.question, moderation);
