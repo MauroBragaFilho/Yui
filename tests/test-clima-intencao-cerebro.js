@@ -137,8 +137,8 @@ function facts({ id = nextId(), user, guild = null, channel, text, call = {}, en
   };
 }
 const climaServico = (env = {}, extra = {}) => createClimaService({ env: { NODE_ENV: 'test', ...env }, urls: srv.urls, fetchImpl: fetchReal, timeoutMs: 2000, ...extra });
-function brains({ ai = fakeAi(), clima = climaServico(), budget = null, retomada = null, context = null, env = process.env, avaliarIntencao = null } = {}) {
-  const chat = conversa.createChatBrain({ ai, logger: quiet, busca, env, memoryBlock: () => '', persona: () => '', clima, ...(budget ? { budget } : {}), ...(retomada ? { retomada } : {}), ...(context ? { context } : {}), ...(avaliarIntencao ? { avaliarIntencao } : {}) });
+function brains({ ai = fakeAi(), clima = climaServico(), budget = null, retomada = null, context = null, env = process.env, avaliarIntencao = null, extra = {}, log = quiet } = {}) {
+  const chat = conversa.createChatBrain({ ai, logger: log, busca, env, memoryBlock: () => '', persona: () => '', clima, ...(budget ? { budget } : {}), ...(retomada ? { retomada } : {}), ...(context ? { context } : {}), ...(avaliarIntencao ? { avaliarIntencao } : {}), ...extra });
   const research = pesquisa.createResearchBrain({ chat, ai, logger: quiet, busca, env, emit: () => 0, ...(budget ? { budget } : {}), ...(retomada ? { retomada } : {}) });
   return { chat, research, ai };
 }
@@ -267,13 +267,12 @@ try {
     assert.equal(ai.calls.length, 0);
     assert.equal(srv.pedidos.length, 0, 'sem cidade nada sai');
     assert.equal(chat.stats().climaPerguntouCidade, 1);
-    // o bot grava a troca (o histórico do canal) e a pessoa responde só com a cidade
-    await chat.commit({ ...pergunta.f, history: [{ role: 'user', content: 'vai chover hoje? tok-W5' }, { role: 'assistant', content: TEXTO_CLIMA_SEM_CIDADE }], contextLine: null }, META);
+    // a Yui acabou de perguntar a cidade (o estado fica em RAM, por pessoa e conversa): a pessoa responde só com a cidade
     const resposta = await principal(chat, { user: MEMBER, ...SRV, text: 'Recife' });
     assert.equal(resposta.out.usedClima, true, resposta.out.text);
     assert.ok(conversaAi(ai)[0].prompt.includes('Local: Recife (Pernambuco, Brasil)'));
     assert.equal(srv.pedidos[0].params.name, 'Recife');
-    // sem a pergunta de cidade no histórico, "Recife" sozinho é conversa comum
+    // sem a pergunta de cidade pendente, "Recife" sozinho é conversa comum
     const { chat: outro, ai: ai2 } = brains({ context: { enabled: () => false } });
     const sozinho = await principal(outro, { user: MEMBER, ...SRV, text: 'Recife' });
     assert.equal(sozinho.out.usedClima, undefined);
@@ -285,6 +284,133 @@ try {
     const p = await principal(padrao.chat, { user: MEMBER, ...SRV, text: 'vai chover hoje?' });
     assert.equal(p.out.usedClima, true);
     assert.equal(srv.pedidos[0].params.name, 'Manaus');
+  });
+
+  // A1 (revisão independente): antes, depois de "De qual cidade?" QUALQUER fala curta, até horas depois e de qualquer assunto, virava "cidade" e ia ao servidor do clima.
+  await test('A1: a resposta a "De qual cidade?" vale SÓ para a próxima fala da MESMA pessoa na MESMA conversa, em até 10 min, e só se PARECER um lugar; o resto é conversa e nada sai para o clima', async () => {
+    let t = Date.now();
+    const novo = () => brains({ extra: { now: () => t }, context: { enabled: () => false } });
+    const perguntar = async (b, user = MEMBER, onde = SRV) => (await principal(b.chat, { user, ...onde, text: 'vai chover hoje?' })).out;
+    const comum = async (b, text, user = MEMBER, onde = SRV) => (await principal(b.chat, { user, ...onde, text })).out;
+    srv.limpar();
+    // (1) a resposta certa, logo depois: é o local, e a pergunta é gasta (a 2ª fala não é mais resposta)
+    let b = novo();
+    assert.equal((await perguntar(b)).text, TEXTO_CLIMA_SEM_CIDADE);
+    t += 9 * 60_000; // 9 min: ainda vale
+    let r = await comum(b, 'Recife');
+    assert.equal(r.usedClima, true, r.text);
+    assert.equal(srv.pedidos[0].params.name, 'Recife');
+    srv.limpar();
+    r = await comum(b, 'Manaus');
+    assert.equal(r.usedClima, undefined, 'a pergunta foi gasta: "Manaus" agora é conversa comum');
+    assert.match(r.text, /clima=nao/);
+    assert.equal(srv.pedidos.length, 0);
+    // (2) passou de 10 min: "Recife" é conversa comum
+    b = novo();
+    await perguntar(b);
+    t += 10 * 60_000 + 1000;
+    r = await comum(b, 'Recife');
+    assert.equal(r.usedClima, undefined);
+    assert.match(r.text, /clima=nao/);
+    assert.equal(srv.pedidos.length, 0, 'passou de 10 min: nada sai para o clima');
+    // (3) uma fala sem relação logo depois gasta a pergunta: "Recife" depois dela não é resposta
+    b = novo();
+    await perguntar(b);
+    r = await comum(b, 'Boa noite, tudo bem?');
+    assert.match(r.text, /clima=nao/);
+    r = await comum(b, 'Recife');
+    assert.equal(r.usedClima, undefined);
+    assert.equal(srv.pedidos.length, 0);
+    // (4) outra pessoa, e a mesma pessoa em OUTRA conversa, não respondem a pergunta; a pessoa certa ainda pode
+    b = novo();
+    await perguntar(b);
+    assert.equal((await comum(b, 'Recife', OTHER)).usedClima, undefined, 'outra pessoa');
+    assert.equal((await comum(b, 'Recife', MEMBER, { guild: GUILD, channel: '888888888888888888' })).usedClima, undefined, 'a mesma pessoa em outro canal');
+    assert.equal((await comum(b, 'Recife', MEMBER, DM)).usedClima, undefined, 'a mesma pessoa na DM');
+    assert.equal(srv.pedidos.length, 0);
+    assert.equal((await comum(b, 'Recife')).usedClima, true, 'a pessoa certa, na conversa certa');
+    // (5) a fala que não PARECE um lugar nunca vira cidade, mesmo logo depois da pergunta
+    srv.limpar();
+    for (const texto of ['meu exame de HIV deu positivo e estou com medo', 'bom dia Yui, tudo bem?', 'quero cancelar minha conta', 'não sei', 'obrigado', 'vou dormir agora', 'oi', 'manda meu cartão 4111 1111 1111 1111']) {
+      b = novo();
+      await perguntar(b);
+      r = await comum(b, texto);
+      assert.equal(r.usedClima, undefined, texto);
+      assert.match(r.text, /clima=nao/, texto);
+    }
+    assert.equal(srv.pedidos.length, 0, 'nenhuma dessas falas chegou ao servidor do clima');
+    // (6) as formas naturais de responder a cidade
+    for (const [texto, nome] of [['em Recife', 'Recife'], ['na cidade de Curitiba', 'Curitiba'], ['Foz do Iguaçu', 'Foz do Iguaçu'], ['Manaus!', 'Manaus']]) {
+      srv.limpar();
+      b = novo();
+      await perguntar(b);
+      r = await comum(b, texto);
+      assert.equal(r.usedClima, true, `${texto}: ${r.text}`);
+      assert.equal(srv.pedidos[0].params.name, nome, texto);
+    }
+    // (7) "Não achei essa cidade. Me diz o nome de novo" também é uma pergunta de cidade: o nome certo logo depois resolve
+    srv.limpar();
+    b = novo();
+    r = await comum(b, 'vai chover em Zzyzx?');
+    assert.equal(r.text, TEXTO_CLIMA_LOCAL_NAO_ACHADO);
+    assert.equal(srv.pedidos.length, 1, 'só a busca do nome do lugar saiu');
+    r = await comum(b, 'Recife');
+    assert.equal(r.usedClima, true, r.text);
+    assert.ok(conversaAi(b.ai)[0].prompt.includes('Local: Recife (Pernambuco, Brasil)'));
+  });
+
+  // A2/A3/B (revisão independente) no chat.turn: o que SAI para o servidor do clima e o que o clima não pode sequestrar.
+  await test('A2: o texto da conversa NUNCA vira o local nem sai para o clima ("vai chover? meu exame de HIV deu positivo..."): a Yui pergunta a cidade ou usa a padrão', async () => {
+    const conversa = ['vai chover? meu exame de HIV deu positivo e estou assustado', 'como está o clima? meu pai tem câncer de próstata', 'qual a previsão do tempo? estou em casa sozinho em cima da cama',
+      'vai chover amanhã? o Rafael me disse que a Maria foi para a UTI', 'previsão do tempo, depois eu falo do exame de HIV'];
+    srv.limpar();
+    const semPadrao = brains().chat;
+    for (const texto of conversa) {
+      const { out } = await principal(semPadrao, { user: MEMBER, ...SRV, text: texto });
+      assert.equal(out.text, TEXTO_CLIMA_SEM_CIDADE, `sem cidade padrão: a Yui pergunta, e nada sai (${texto})`);
+    }
+    assert.equal(srv.pedidos.length, 0, 'sem cidade, nada saiu para o servidor do clima');
+    for (const texto of conversa) {
+      const { chat, ai } = brains({ clima: climaServico({ YUI_CLIMA_CIDADE_PADRAO: 'Manaus' }) });
+      const { out } = await principal(chat, { user: MEMBER, ...SRV, text: texto });
+      assert.equal(out.usedClima, true, texto);
+      assert.ok(conversaAi(ai)[0].prompt.includes('Local: Manaus (Amazonas, Brasil)'), texto);
+    }
+    const tudo = JSON.stringify(srv.pedidos);
+    for (const proibido of ['HIV', 'exame', 'positivo', 'pai ', 'próstata', 'câncer', 'cama', 'Rafael', 'Maria', 'UTI', 'assustado']) assert.ok(!tudo.includes(proibido), `o servidor do clima NÃO pode ver "${proibido}"`);
+    assert.ok(srv.pedidos.filter((p) => p.params.name).every((p) => p.params.name === 'Manaus'), 'só a cidade padrão foi procurada');
+  });
+
+  await test('A3: o local é só o nome (sem a preposição e sem o resto da frase) e o clima já cobre as frases que antes escapavam ("tempo em Cuiabá?", "tá calor em Cuiabá?", "qual o clima?")', async () => {
+    const casos = [
+      ['clima em Cuiabá na sexta', 'Cuiabá'], ['clima em Cuiabá-MT na próxima semana', 'Cuiabá'], ['preciso de guarda-chuva amanhã em SP?', 'São Paulo'], ['umidade do ar em Cuiabá', 'Cuiabá'],
+      ['vai chover em Sao Paulo capital hoje', 'Sao Paulo'], ['qual a previsão para a semana em Cuiabá-MT?', 'Cuiabá'], ['previsão pra sexta em Cuiabá', 'Cuiabá'], ['clima Cuiabá', 'Cuiabá'],
+      ['tempo em Cuiabá?', 'Cuiabá'], ['tá calor em Cuiabá?', 'Cuiabá'], ['Yui, qual o clima?', 'Manaus'], [FRASE_DO_DONO, 'Cuiabá'],
+    ];
+    for (const [texto, nome] of casos) {
+      srv.limpar();
+      const { chat } = brains({ clima: climaServico({ YUI_CLIMA_CIDADE_PADRAO: 'Manaus' }) });
+      const { out } = await principal(chat, { user: MEMBER, ...SRV, text: texto });
+      assert.equal(out.usedClima, true, `${texto}: ${out.text}`);
+      const geo = srv.pedidos.find((p) => p.params.name);
+      assert.equal(geo.params.name, nome, `${texto}: o servidor deve ver só o nome "${nome}", viu ${JSON.stringify(geo.params)}`);
+    }
+  });
+
+  await test('B: sinal fraco sem "?" nem local, assunto figurado e mensagem MISTA (outro pedido de ferramenta) não são sequestrados pelo clima: seguem com as ferramentas', async () => {
+    srv.limpar();
+    const { chat } = brains({ clima: climaServico({ YUI_CLIMA_CIDADE_PADRAO: 'Manaus' }) });
+    for (const texto of ['o jogo vai esquentar na final hoje', 'vai esfriar a discussão', 'o servidor tá quente agora', 'tá quente', 'hoje faz calor', 'o preço vai esfriar hoje?', 'o notebook tá quente hoje?', 'o mercado vai esquentar amanhã?',
+      'baixa a música X e me diz se vai chover amanhã', 'me lembra de ver o clima amanhã', 'toca uma música e me diz se vai chover', 'mostra a imagem do gato e depois o clima em Manaus', 'me avisa se vai chover amanhã em Cuiabá']) {
+      const { out } = await principal(chat, { user: MEMBER, ...SRV, text: texto });
+      assert.equal(out.usedClima, undefined, texto);
+      assert.match(out.text, /clima=nao web=nao ferramentas=sim/, texto);
+    }
+    assert.equal(srv.pedidos.length, 0, 'nada disso foi ao servidor do clima');
+    for (const texto of ['tá quente aí?', 'tá calor em Cuiabá?', 'hoje faz calor em Manaus']) {
+      const { out } = await principal(brains({ clima: climaServico({ YUI_CLIMA_CIDADE_PADRAO: 'Manaus' }) }).chat, { user: MEMBER, ...SRV, text: texto });
+      assert.equal(out.usedClima, true, texto);
+    }
   });
 
   await test('o que NÃO pede clima segue o caminho de sempre (com as ferramentas); espontânea, voz, log de terceiros e YUI_CLIMA=false nunca consultam', async () => {
@@ -445,10 +571,10 @@ try {
       const barrado = await principal(chat, { user: OWNER, ...DM, text: 'quem ganhou o jogo do time 123.456.789-09 ontem?' });
       assert.equal(barrado.out.usedSearch, false);
       assert.equal(registro().length, 0);
-      const ok = await principal(chat, { user: OWNER, ...DM, text: 'quem ganhou o jogo do Flamengo ontem? é pra decidir o divórcio com a Ana' });
+      const ok = await principal(chat, { user: OWNER, ...DM, text: 'quem ganhou o jogo do Flamengo ontem? é pra decidir uma aposta cara' });
       assert.equal(ok.out.usedSearch, true);
       const consulta = registro().find((r) => r.tipo === 'rapida')?.consulta ?? '';
-      assert.ok(/flamengo/i.test(consulta) && !/div[oó]rcio|Ana/i.test(consulta), consulta);
+      assert.ok(/flamengo/i.test(consulta) && !/aposta|cara/i.test(consulta), consulta);
     });
   });
 
@@ -558,6 +684,113 @@ try {
     assert.match(f.out.text, /-# ⚠️ Não consegui realizar a pesquisa agora\. Posso continuar ajudando com o que já sei\./);
     assert.doesNotMatch(f.out.text, /trava|cota|dono|processo|diário/i, 'sem detalhe interno');
     assert.equal(resultadoIndisponivel('registro-da-cota').indisponivel, true);
+  });
+
+  // C (revisão independente): a pesquisa por intenção é decidida DEPOIS do Google e da skill; quando um deles assume o passo, ela não roda por cima.
+  await test('C: com o Google (a AGENDA do dono) no passo, a pesquisa por intenção NÃO roda por cima: o prompt leva a agenda e não a web, e nenhuma busca sai', async () => {
+    limparRegistro();
+    const google = async () => ({ prompt: 'DADOS-DA-AGENDA tok-AG compromissos de hoje', opcoes: { noTools: true, attachment: true, allowSearch: false, main: false }, revisar: (t) => t, tipo: 'agenda' });
+    for (const [user, onde, privada] of [[OWNER, DM, 'owner'], [OWNER, SRV, 'off']]) {
+      await conEnv({ YUI_PRIVATE_SEARCH: privada }, async () => {
+        const { chat, ai } = brains({ extra: { google } });
+        const { out } = await principal(chat, { user, ...onde, text: `${PERGUNTA} tok-G1` });
+        assert.equal(out.usedSearch, false, 'o Google assumiu: nenhuma pesquisa por cima');
+        assert.equal(registro().length, 0, 'o buscador não foi chamado');
+        const c = conversaAi(ai)[0];
+        assert.ok(c.prompt.includes('DADOS-DA-AGENDA'), 'a agenda chegou ao prompt');
+        assert.ok(!c.prompt.includes('[CONTEXTO OBTIDO NA WEB]'), 'a web NÃO chegou ao prompt junto com a agenda');
+        assert.equal(chat.stats().intencaoBusca, 0, 'a decisão que o Google assumiu não conta como pesquisa por intenção');
+      });
+    }
+  });
+
+  await test('C: o clima continua valendo com o Google e com a skill no passo (a fala do autor decide), e a skill do dono não vira pesquisa na web', async () => {
+    limparRegistro();
+    srv.limpar();
+    const google = async () => ({ prompt: 'DADOS-DA-AGENDA tok-AG2', opcoes: { noTools: true, attachment: true, allowSearch: false, main: false }, revisar: (t) => t, tipo: 'agenda' });
+    const comGoogle = brains({ extra: { google } });
+    const g = await principal(comGoogle.chat, { user: OWNER, ...DM, text: FRASE_DO_DONO });
+    assert.equal(g.out.usedClima, true, `o clima vale com o Google: ${g.out.text}`);
+    // a skill do dono (pasta de teste): casa com a mensagem, entra no prompt de sistema, sem ferramentas e sem web
+    const pasta = path.join(tmp, 'skills-do-dono');
+    fs.mkdirSync(path.join(pasta, 'placar-de-jogos'), { recursive: true });
+    fs.mkdirSync(path.join(pasta, 'clima-semana'), { recursive: true });
+    fs.writeFileSync(path.join(pasta, 'placar-de-jogos', 'SKILL.md'), '---\nname: placar-de-jogos\ndescription: Resume resultado de jogos do Flamengo e de futebol.\n---\nCORPO-DA-SKILL-PLACAR: responda em tópicos.\n');
+    fs.writeFileSync(path.join(pasta, 'clima-semana', 'SKILL.md'), '---\nname: clima-semana\ndescription: Formata o clima da semana em uma tabela curta.\n---\nCORPO-DA-SKILL-CLIMA: responda em tabela.\n');
+    await conEnv({ YUI_SKILLS: 'true', YUI_SKILLS_PASTAS: pasta, YUI_PRIVATE_SEARCH: 'owner' }, async () => {
+      limparRegistro();
+      const placar = brains();
+      const p = await principal(placar.chat, { user: OWNER, ...DM, text: `${PERGUNTA} tok-SK1` });
+      assert.ok(String(conversaAi(placar.ai)[0].system).includes('CORPO-DA-SKILL-PLACAR'), 'a skill do dono entrou no prompt de sistema');
+      assert.equal(p.out.usedSearch, false, 'a skill assumiu o passo: a pesquisa por intenção não roda por cima');
+      assert.equal(registro().length, 0);
+      assert.ok(!conversaAi(placar.ai)[0].prompt.includes('[CONTEXTO OBTIDO NA WEB]'));
+      srv.limpar();
+      const clima = brains();
+      const c = await principal(clima.chat, { user: OWNER, ...DM, text: FRASE_DO_DONO });
+      assert.equal(c.out.usedClima, true, `o clima vale com a skill: ${c.out.text}`);
+      assert.ok(conversaAi(clima.ai)[0].prompt.includes('[DADOS DO CLIMA'), 'os dados do clima chegaram ao prompt');
+      assert.ok(String(conversaAi(clima.ai)[0].system).includes('CORPO-DA-SKILL-CLIMA'), 'a skill continua no prompt de sistema');
+    });
+  });
+
+  await test('D: a busca PRIVADA por intenção (DM do dono) usa o log MUDO: nem a consulta nem o host das fontes vão ao log; a busca de servidor continua logando como sempre', async () => {
+    // O destino real do log da busca é o logger global (src/utils/logger.js, calado nos testes); aqui ele grava as linhas só durante cada busca.
+    const capturar = async (fn) => {
+      const linhas = [];
+      const gravar = (l) => { linhas.push(String(l)); };
+      const antes = {};
+      for (const nivel of ['debug', 'info', 'warn', 'error']) { antes[nivel] = logger[nivel]; logger[nivel] = gravar; }
+      try { await fn(); } finally { for (const nivel of Object.keys(antes)) logger[nivel] = antes[nivel]; }
+      return linhas;
+    };
+    limparRegistro();
+    const privadas = await capturar(() => conEnv({ YUI_PRIVATE_SEARCH: 'owner' }, async () => {
+      const { out } = await principal(brains().chat, { user: OWNER, ...DM, text: 'quem ganhou o jogo do Flamengo tok-LOG1 ontem?' });
+      assert.equal(out.usedSearch, true, out.text);
+    }));
+    assert.ok(!privadas.some((l) => /tok-LOG1|flamengo|exemplo-teste|\[Search\]/i.test(l)), `a busca privada não pode deixar consulta nem fonte no log: ${JSON.stringify(privadas).slice(0, 300)}`);
+    // (a prova de que o teste enxerga o log: a busca de servidor deixa o host das fontes lá)
+    limparRegistro();
+    const doServidor = await capturar(async () => {
+      const sv = await principal(brains().chat, { user: MEMBER, ...SRV, text: `${PERGUNTA} tok-LOG2` });
+      assert.equal(sv.out.usedSearch, true);
+    });
+    assert.ok(doServidor.some((l) => /exemplo-teste/.test(l)), `a busca de servidor continua logando as fontes como sempre: ${JSON.stringify(doServidor).slice(0, 300)}`);
+  });
+
+  await test('D: quando os MONITORES tratam o pedido, o diário da retomada que a pesquisa por intenção abriu é DESCARTADO (nada fica em disco)', async () => {
+    limparRegistro();
+    const retomada = createRetomadaDePesquisa({ dir: path.join(tmp, 'diario-monitor'), env: process.env, logger: quiet });
+    const monitores = { rotear: async () => ({ handled: true, text: 'monitor criado (teste)' }) };
+    const { chat, ai } = brains({ retomada, extra: { monitores } });
+    const r = await principal(chat, { user: MEMBER, ...SRV, text: `${PERGUNTA} tok-MON1`, idem: 'chat.turn:970000000000000042:1' });
+    assert.equal(r.out.text, 'monitor criado (teste)');
+    const st = retomada.stats();
+    assert.equal(st.abertas, 1, 'a pesquisa por intenção chegou a abrir o diário');
+    assert.equal(st.descartadas, 1, 'o diário aberto para a pesquisa foi descartado quando o monitor tratou o pedido');
+    assert.equal(st.porEstado.pending + st.porEstado.running, 0, 'nada ficou pendente no diário');
+    assert.equal(registro().length, 0, 'nenhuma busca saiu');
+    assert.equal(ai.calls.length, 0, 'a IA não foi chamada');
+  });
+
+  await test('D: na DM do DONO só as categorias SEGURAS pesquisam sozinhas (placar, serviço fora do ar, lançamento de produto); notícia, preço e horário ficam para o pedido explícito; no servidor valem todas', async () => {
+    await conEnv({ YUI_PRIVATE_SEARCH: 'owner' }, async () => {
+      for (const texto of ['quem ganhou o jogo do Flamengo ontem?', 'o Discord está fora do ar?', 'quando sai o GTA 6?']) {
+        limparRegistro();
+        const r = await principal(brains().chat, { user: OWNER, ...DM, text: texto });
+        assert.equal(r.out.usedSearch, true, `${texto}: ${r.out.text}`);
+      }
+      for (const texto of ['tem novidade do GTA 6?', 'qual o preço do PS5 hoje?', 'que horas é o jogo do Flamengo hoje?', 'como foi o show do Coldplay ontem?']) {
+        limparRegistro();
+        const dm = await principal(brains().chat, { user: OWNER, ...DM, text: texto });
+        assert.equal(dm.out.usedSearch, false, `na DM do dono não pesquisa: ${texto}`);
+        assert.equal(registro().length, 0, texto);
+        limparRegistro();
+        const sv = await principal(brains().chat, { user: MEMBER, ...SRV, text: texto });
+        assert.equal(sv.out.usedSearch, true, `no servidor pesquisa: ${texto}: ${sv.out.text}`);
+      }
+    });
   });
 
   await test('a pergunta de dado atual com clima junto não vira pesquisa: o clima é ferramenta própria e vence', async () => {

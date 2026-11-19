@@ -16,7 +16,10 @@
 import { detectSearchRequest, preRouteDecision, buildSearchQuery, keywordsOf, foldKeepLength, clipInput } from '../core/ai/searchIntent.js';
 import { scrubQuery, trimLiteralQuery, readResearchConfig } from '../core/ai/researchAgent.js';
 import { privateSearchAllowed } from '../core/ai/llmSafety.js';
-import { detectarPedidoDeClima } from '../core/tools/clima.js';
+import { detectarPedidoDeClima, misturaComFerramenta } from '../core/tools/clima.js';
+
+/** As categorias que a pesquisa por intenção alcança na DM do proprietário. */
+const CATEGORIAS_NA_DM = new Set(['resultado_esportivo', 'servico_no_ar', 'lancamento']);
 
 /** Os valores de YUI_PESQUISA_POR_INTENCAO. */
 export const MODOS_DA_INTENCAO = Object.freeze(['off', 'servidor', 'dono', 'todos']);
@@ -39,7 +42,15 @@ const CAMBIO = /\b(?:dolar|dolares|euro|euros|libra|libras|bitcoin|btc|ethereum|
 const OUTRA_FERRAMENTA = /\b(?:baix\w+|download\w*|torrent\w*|crack\w*|mp3|mp4|imagens?|fotos?|desenh\w+|wallpaper|avatar|banner|steam|requisitos?|hltb|zerar|meu\s+pc|playlist|radio|letra|letras|cifra|cifras)\b/;
 const TOCAR_MUSICA = /\b(?:toca|toque|tocar|bota|coloca|poe|ouvir|escutar)\b.*\b(?:musica|musicas|som|cancao|faixa|clipe)\b|\b(?:musica|musicas|som|cancao|faixa)\b.*\b(?:toca|toque|tocar)\b/;
 const INFO_DE_JOGO = /\bnota\s+d[oae]s?\s+(?:jogo|game)\b|\bsobre\s+o\s+jogo\b/;
-const PESSOAL = /\b(?:meu|minha|meus|minhas)\b/;
+// Primeira pessoa, saúde, nome de pessoa e assunto doméstico NUNCA viram pesquisa (revisão independente: "Como está o Pedro hoje?", "Quando sai o Rafael da UTI?", "Tem Pizza em
+// estoque lá em casa?" viravam busca na DM do dono). "me diz/me fala/me conta..." é pedido à Yui e não conta como primeira pessoa.
+const PESSOAL = /\b(?:meu|minha|meus|minhas|tenho|tinha|tive|estou|estava|fui|sou|eu|comigo|me)\b/;
+const PEDIDO_A_YUI = /\bme\s+(?:diz|fala|conta|passa|mostra|manda|avisa|informa|explica|ajuda)\b/g;
+const SAUDE = /\b(?:hospital|uti|exame|exames|medico|medica|medicos|cancer|doenca|remedio|remedios|consulta|cirurgia|internad[oa]|clinica|pronto\s+socorro|diagnostico|tratamento|sintoma|sintomas|gravida|gravidez|dor|vacina|laudo|biopsia|quimioterapia|enfermeir[oa]|hiv|aids|covid|tdah|depressao|ansiedade|terapia|psicologo|psiquiatra)\b/;
+const NOMES = /\b(?:maria|joao|jose|pedro|ana|paulo|lucas|rafael|gabriel|mateus|matheus|carlos|marcos|luiz|luis|fernando|bruno|felipe|rodrigo|diego|thiago|tiago|daniel|andre|ricardo|eduardo|leonardo|gustavo|juliana|fernanda|patricia|camila|amanda|jessica|leticia|larissa|mariana|beatriz|carolina|aline|bruna|renata|luciana|sandra|marcia|cristina|vanessa|priscila|tatiana|sabrina|raquel|helena|julia|laura|sofia|alice|manuela|isabela|valentina|bia|duda|gabi|nanda|rafa|davi|miguel|arthur|heitor|henrique|vitor|victor|guilherme|samuel|igor|caio|renato|sergio|marcelo|alexandre|roberto|antonio|francisco|raimundo|joaquim|manoel|adriana|simone|claudia|rosana|elaine|monica|silvia|sonia|vera|ines|rita|lucia|denise)\b/;
+const DOMESTICO = /\b(?:em\s+casa|minha\s+casa|nossa\s+casa|geladeira|dispensa|cozinha|quarto|banheiro|vizinh[oa]|familia|mae|pai|irmao|irma|filho|filha|esposa|marido|namorad[oa]|chefe|escola|faculdade|aula)\b/;
+const TIMES = /\b(?:flamengo|corinthians|palmeiras|santos|vasco|botafogo|fluminense|gremio|internacional|cruzeiro|atletico|bahia|fortaleza|sport|ceara|coritiba|athletico|bragantino|juventude|brasil|argentina|selecao|real\s+madrid|barcelona|liverpool|manchester|chelsea|arsenal|psg|bayern|juventus|milan|lakers|warriors|nba|nfl|ufc|f1|formula\s+1)\b/;
+const EVENTOS = /\b(?:oscar|grammy|emmy|bbb|big\s+brother|premio|copa|mundial|olimpiadas|libertadores|brasileirao|champions|rodada|campeao|campeonato)\b/;
 const DO_GRUPO = /\b(?:a\s+gente|nossa|nosso|nossas|nossos|na\s+call|na\s+sala|no\s+grupo|no\s+chat|no\s+canal|nesse\s+servidor|neste\s+servidor|aqui\s+no\s+(?:servidor|grupo|chat|canal))\b/;
 const SEGUNDA_PESSOA = /\b(?:voce|voces|vc|vcs|tu|ce|seu|sua|seus|suas)\b/;
 const CONTEXTO_DE_CONVERSA = /\b(?:servidor|canal|chat|grupo|call|discord|bot)\b/;
@@ -61,6 +72,7 @@ const GENERICAS = new Set(['noticia', 'noticias', 'novidade', 'novidades', 'manc
   'atualizacao', 'versao', 'jogo', 'jogos', 'game', 'filme', 'serie', 'episodio', 'temporada', 'album', 'musica', 'tem', 'estoque', 'disponivel', 'promocao', 'oferta', 'desconto', 'horario',
   'horas', 'proximo', 'proxima', 'transmissao', 'ganhou', 'venceu', 'perdeu', 'placar', 'resultado', 'ar', 'fora', 'caiu', 'online', 'offline', 'sai', 'saira', 'vai', 'dia']);
 
+/** Entidade FORTE: sigla (GTA, BBB, NBA), letras+dígitos (ps5, rtx4090) ou "nome 6". Palavra só com inicial maiúscula NÃO conta (nome de pessoa também tem). */
 function temEntidade(raw, n) {
   const tokens = raw.split(/[\s,;:!?()"“”]+/).filter(Boolean);
   for (let i = 0; i < tokens.length; i += 1) {
@@ -69,7 +81,6 @@ function temEntidade(raw, n) {
     if (IGNORAR_MAIUSCULA.has(f)) continue;
     const todasMaiusculas = /^[\p{Lu}\p{N}-]{2,}$/u.test(t) && /\p{Lu}{2,}/u.test(t);
     if (todasMaiusculas) return true;
-    if (i > 0 && /^\p{Lu}[\p{L}\p{N}-]{1,}$/u.test(t)) return true;
     if (/\p{L}/u.test(t) && /\d/.test(t)) return true; // ps5, rtx4090, ios17
   }
   return SEQUEL.test(n);
@@ -145,8 +156,12 @@ export function detectarIntencaoDeBusca(texto, { now = new Date() } = {}) {
   if (detectarPedidoDeClima(raw).clima) return nao('clima');
   if (preRouteDecision(raw, { direct: true, now }).explicit) return nao('pedido_explicito'); // o agente de pesquisa já cuida
   if (OUTRA_FERRAMENTA.test(n) || TOCAR_MUSICA.test(n) || INFO_DE_JOGO.test(n)) return nao('ferramenta_propria');
-  if (PESSOAL.test(n)) return nao('pessoal');
+  if (PESSOAL.test(n.replace(PEDIDO_A_YUI, ' '))) return nao('pessoal');
   if (DO_GRUPO.test(n)) return nao('do_grupo');
+  if (misturaComFerramenta(n, /(?!)/)) return nao('mistura_com_ferramenta'); // outro pedido (lembrar, baixar, criar...) junto: o outro pedido não pode se perder
+  if (SAUDE.test(n)) return nao('saude');
+  if (NOMES.test(n)) return nao('nome_de_pessoa');
+  if (DOMESTICO.test(n)) return nao('assunto_domestico');
   const semPrefixo = n.replace(PREFIXO, '').trim();
   const pergunta = /\?/.test(raw) || INTERROGATIVA.test(semPrefixo) || QUERO_SABER.test(n) || /\bme\s+(?:diz|fala|conta|passa|mostra)\b/.test(n) || req.explicit;
   if (!pergunta) return nao('sem_pergunta');
@@ -155,14 +170,16 @@ export function detectarIntencaoDeBusca(texto, { now = new Date() } = {}) {
   const entidade = temEntidade(raw, n);
   const assunto = assuntoDe(consulta);
   const segundaPessoa = SEGUNDA_PESSOA.test(n);
+  // o assunto precisa ser de um tipo RECONHECIDO (produto, tópico, serviço, time, evento ou sigla), nunca só uma palavra com inicial maiúscula
+  const reconhecido = entidade || PRODUTO.test(n) || TOPICO.test(n) || SERVICO.test(n) || TIMES.test(n) || EVENTOS.test(n);
   const achou = (nome, ok = true) => (ok ? { busca: true, motivo: 'intencao_de_busca', categoria: nome, consulta } : null);
 
   for (const c of CATEGORIAS) {
     if (!c.res.some((re) => re.test(n))) continue;
     if (c.exigeServico && (segundaPessoa || !(SERVICO.test(n) || entidade))) continue;
     if (c.exigeProduto && !(entidade || (PRODUTO.test(n) && assunto.length >= 2))) continue;
-    if (c.exigeEvento && !(entidade || /\b(?:jogo|partida|final|rodada|corrida|luta|gp|classico)\s+d[oae]s?\s+[a-z]{3,}/.test(n))) continue;
-    if (c.exigeAssunto && !(entidade || assunto.length >= 1)) continue;
+    if (c.exigeEvento && !(entidade || TIMES.test(n) || /\b(?:jogo|partida|final|rodada|corrida|luta|gp|classico)\s+d[oae]s?\s+[a-z]{3,}/.test(n))) continue;
+    if (c.exigeAssunto && !(reconhecido && (entidade || assunto.length >= 1))) continue;
     if (c.nome === 'ultimo_recente' && segundaPessoa) continue;
     const r = achou(c.nome);
     if (r) return r;
@@ -230,6 +247,8 @@ export function avaliarPesquisaPorIntencao({ texto, chamadaDireta = false, conte
     }
     const d = detectarIntencaoDeBusca(texto, { now });
     if (!d.busca) return nao(d.motivo);
+    // na DM do proprietário só as categorias SEGURAS (placar e resultado, serviço fora do ar, lançamento de produto): o resto fica para o pedido explícito
+    if (onde === 'dm_dono' && !CATEGORIAS_NA_DM.has(d.categoria)) return nao('categoria_fora_da_dm', d.categoria);
     if (onde === 'servidor') return { buscar: true, privado: false, motivo: d.motivo, categoria: d.categoria, consultaPrivada: null };
     // DM do proprietário: só o pedido (sem a justificativa pessoal) e só se a limpeza PROVAR que a consulta está limpa
     let limpa;

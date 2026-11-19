@@ -30,13 +30,12 @@ const POSITIVAS = [
   ['ja saiu o trailer do gta 6', 'lancamento'],
   ['quando sai o GTA 6?', 'lancamento'],
   ['quando lança o novo iPhone?', 'lancamento'],
-  ['qual a data de lançamento do Hollow Knight Silksong?', 'lancamento'],
+  ['qual a data de lançamento da DLC do Elden Ring?', 'lancamento'],
   ['quando estreia a nova temporada de Stranger Things?', 'lancamento'],
-  ['vê se já saiu o novo Zelda', 'lancamento'],
+  ['vê se já saiu o trailer do GTA 6', 'lancamento'],
   ['tem novidade do GTA 6?', 'noticia'],
   ['quais as últimas notícias do Flamengo?', 'noticia'],
   ['o que rolou no BBB ontem?', 'noticia'],
-  ['o que aconteceu com a Taylor Swift hoje?', 'noticia'],
   ['qual o último episódio de Demon Slayer?', 'ultimo_recente'],
   ['qual a versão mais recente do Node?', 'ultimo_recente'],
   ['qual o último álbum do Coldplay?', 'ultimo_recente'],
@@ -57,7 +56,6 @@ const POSITIVAS = [
   ['o que mudou no último patch de Elden Ring?', null],
   ['tem atualização nova do Windows?', 'patch_ou_atualizacao'],
   ['como foi o show do Coldplay ontem?', 'tempo_e_fato'],
-  ['o que aconteceu hoje com o Bolsonaro?', 'tempo_e_fato'],
   ['Yui, quem ganhou o jogo do Flamengo ontem?', 'resultado_esportivo'],
   ['<@900000000000000001> já saiu o trailer do GTA 6?', 'lancamento'],
   ['me diz quem ganhou o jogo do Flamengo ontem', 'resultado_esportivo'],
@@ -286,12 +284,12 @@ await test('DM do proprietário: a consulta é só o pedido (sem a justificativa
   assert.equal(ok.buscar, true);
   assert.equal(ok.privado, true);
   assert.match(ok.consultaPrivada, /flamengo/i);
-  const longa = dm({ texto: 'quem ganhou o jogo do Flamengo ontem porque eu apostei dinheiro que não tinha e estou desesperado' });
+  const longa = dm({ texto: 'quem ganhou o jogo do Flamengo ontem porque apostaram dinheiro que não tinham e estão desesperados' });
   assert.equal(longa.buscar, true);
-  assert.ok(!/apostei|desesperado|dinheiro/i.test(longa.consultaPrivada), longa.consultaPrivada);
-  const frases = dm({ texto: 'quem ganhou o jogo do Flamengo ontem? é pra decidir o divórcio com a Ana' });
+  assert.ok(!/apostaram|desesperados|dinheiro/i.test(longa.consultaPrivada), longa.consultaPrivada);
+  const frases = dm({ texto: 'quem ganhou o jogo do Flamengo ontem? é pra decidir o divórcio dos dois' });
   assert.equal(frases.buscar, true);
-  assert.ok(!/divorcio|divórcio|Ana/i.test(frases.consultaPrivada), frases.consultaPrivada);
+  assert.ok(!/divorcio|divórcio|dois/i.test(frases.consultaPrivada), frases.consultaPrivada);
   for (const texto of ['quem ganhou o jogo do time 123.456.789-09 ontem?', 'já saiu o trailer do GTA 6 fulano@exemplo.com?', 'quem ganhou o jogo do Flamengo ontem senha=abc123456xyz']) {
     const r = dm({ texto });
     assert.equal(r.buscar, false, texto);
@@ -307,6 +305,42 @@ await test('a política não inventa pesquisa onde o detector diz não (pedido e
   const envs = [{ YUI_PESQUISA_POR_INTENCAO: 'todos', YUI_PRIVATE_SEARCH: 'all' }, {}];
   for (const env of envs) for (const texto of ['pesquise o preço do PS5', 'quanto está o dólar hoje?', 'como está o clima em Manaus?', 'baixa a música Ninguém Explica', 'oi tudo bem?']) {
     for (const contexto of Object.values(CTX)) assert.equal(avaliar({ texto, contexto, env }).buscar, false, `${texto} / ${JSON.stringify(contexto)}`);
+  }
+});
+
+// ─────────────── Revisão independente (19/11/2026) ───────────────
+await test('D: nome de pessoa, saúde, primeira pessoa e assunto doméstico NÃO viram pesquisa (a capitalização sozinha não é entidade)', () => {
+  const nao = ['Quando sai o Rafael da UTI?', 'Como está o Pedro hoje?', 'qual o resultado do exame da Maria hoje?', 'Quais compromissos tenho hoje com a Maria?', 'Tem Pizza em estoque lá em casa?',
+    'Como está a Ana hoje?', 'Quando sai o Pedro do hospital?', 'estou com dor, tem remédio em estoque?', 'Quem ganhou o jogo da Maria ontem?', 'Quando volta o Lucas da viagem?',
+    'o que aconteceu com o João hoje?', 'Qual o resultado do exame de HIV?', 'Tem o Carlos em casa hoje?', 'como está meu pai hoje?', 'quando sai meu exame?', 'tenho consulta hoje, que horas?',
+    // só a SAÚDE barra estas (sem primeira pessoa nem nome de pessoa): o assunto de saúde nunca vai ao buscador
+    'quem ganhou o jogo do Flamengo ontem? o paciente está internado', 'o resultado do exame de HIV saiu hoje? e quem ganhou o jogo do Flamengo ontem', 'quando sai o GTA 6? depois da cirurgia eu jogo'];
+  for (const t of nao) assert.equal(detectarIntencaoDeBusca(t).busca, false, t);
+  // o que continua valendo: sigla, produto, tópico, serviço e time
+  for (const t of ['quando sai o GTA 6?', 'o Discord está fora do ar?', 'quem ganhou o jogo do Flamengo ontem?', 'como foi o show do Coldplay ontem?', 'qual o preço do PS5 hoje?']) assert.equal(detectarIntencaoDeBusca(t).busca, true, t);
+  assert.equal(detectarIntencaoDeBusca('me diz quem ganhou o jogo do Flamengo ontem').busca, true, '"me diz" é pedido à Yui, não primeira pessoa');
+});
+
+await test('C: mensagem com OUTRO pedido de ferramenta (lembrar, baixar, criar...) não vira pesquisa: o outro pedido não se perde', () => {
+  for (const t of ['me lembra amanhã quando sai o GTA 6?', 'baixa a música X e me diz quando sai o GTA 6?', 'cria um lembrete: quando sai o GTA 6?', 'me avisa quando o Discord cair? o Discord está fora do ar?', 'anota aí e diz quem ganhou o jogo do Flamengo ontem']) {
+    const r = detectarIntencaoDeBusca(t);
+    assert.equal(r.busca, false, t);
+    assert.ok(['mistura_com_ferramenta', 'ferramenta_propria', 'pessoal', 'bloqueado_howto', 'bloqueado_statement'].includes(r.motivo), `${t}: ${r.motivo}`);
+  }
+  assert.equal(detectarIntencaoDeBusca('cria um lembrete: quando sai o GTA 6?').motivo, 'mistura_com_ferramenta');
+  assert.equal(detectarIntencaoDeBusca('anota aí e diz quem ganhou o jogo do Flamengo ontem').motivo, 'mistura_com_ferramenta');
+});
+
+await test('D: na DM do proprietário só as categorias SEGURAS (resultado esportivo, serviço fora do ar, lançamento de produto); as outras ficam para o pedido explícito; no servidor valem todas', () => {
+  const env = { YUI_PRIVATE_SEARCH: 'owner' };
+  const dm = (texto) => avaliar({ contexto: CTX.dono_dm, env, texto });
+  const srv = (texto) => avaliar({ contexto: CTX.membro_srv, env: {}, texto });
+  for (const t of ['quem ganhou o jogo do Flamengo ontem?', 'o Discord está fora do ar?', 'quando sai o GTA 6?']) assert.equal(dm(t).buscar, true, t);
+  for (const t of ['tem novidade do GTA 6?', 'qual o preço do PS5 hoje?', 'que horas é o jogo do Flamengo hoje?', 'saiu patch novo do Fortnite?', 'qual o último episódio de Demon Slayer?', 'como foi o show do Coldplay ontem?']) {
+    const r = dm(t);
+    assert.equal(r.buscar, false, t);
+    assert.equal(r.motivo, 'categoria_fora_da_dm', t);
+    assert.equal(srv(t).buscar, true, `no servidor vale: ${t}`);
   }
 });
 

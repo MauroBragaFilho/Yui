@@ -234,19 +234,25 @@ try {
     const s = servico({ now: () => t, env: { YUI_CLIMA_POR_HORA: '10,300' } });
     const a = await s.obter({ local: { nome: 'Manaus', uf: null }, quando: quadro.hoje, userId: 'A' });
     assert.deepEqual([a.ok, a.cache], [true, false]);
-    for (let i = 0; i < 6; i += 1) assert.equal((await s.obter({ local: 'manaus', quando: { tipo: 'agora', rotulo: 'agora' }, userId: 'A' })).cache, true, 'a mesma cidade (com outra grafia) e "agora" = "hoje"');
+    for (let i = 0; i < 6; i += 1) assert.equal((await s.obter({ local: 'manaus', quando: quadro.hoje, userId: 'A' })).cache, true, 'a mesma cidade (com outra grafia) e o mesmo pedido');
     assert.equal(srv.pedidos.length, 2, 'uma geocodificação e uma previsão');
     const outraPessoa = await s.obter({ local: 'Manaus', quando: quadro.hoje, userId: 'B' });
     assert.equal(outraPessoa.cache, true, 'dado público: a outra pessoa também usa o cache');
     await s.obter({ local: 'Manaus', quando: { tipo: 'semana', rotulo: 'a semana' }, userId: 'A' });
     await s.obter({ local: 'Recife', quando: quadro.hoje, userId: 'A' });
     assert.equal(srv.pedidos.length, 6, 'outro dia e outra cidade: duas consultas novas');
+    // o RÓTULO e a "próxima semana" vão ao modelo: fazem parte da chave ("agora" não reaproveita o "hoje"; "semana que vem" não reaproveita "essa semana")
+    await s.obter({ local: 'Manaus', quando: { tipo: 'agora', rotulo: 'agora' }, userId: 'A' });
+    assert.equal(srv.pedidos.length, 8, 'o rótulo "agora" é outro pedido');
+    await s.obter({ local: 'Manaus', quando: { tipo: 'semana', rotulo: 'os próximos 7 dias', proximaSemana: true }, userId: 'A' });
+    assert.equal(srv.pedidos.length, 10, 'a "próxima semana" não reaproveita a semana de hoje');
+    assert.equal((await s.obter({ local: 'Manaus', quando: { tipo: 'semana', rotulo: 'os próximos 7 dias', proximaSemana: true }, userId: 'A' })).cache, true);
     t += 11 * 60_000;
     assert.equal((await s.obter({ local: 'Manaus', quando: quadro.hoje, userId: 'A' })).cache, false, 'passou o prazo do cache');
-    assert.equal(srv.pedidos.length, 8);
+    assert.equal(srv.pedidos.length, 12);
     const st = s.stats();
-    assert.equal(st.cache, 7);
-    assert.equal(st.consultas, 4);
+    assert.equal(st.cache, 8);
+    assert.equal(st.consultas, 6);
   });
 
   await test('a mesma consulta ao mesmo tempo vira UMA chamada só (as outras esperam e usam o resultado)', async () => {

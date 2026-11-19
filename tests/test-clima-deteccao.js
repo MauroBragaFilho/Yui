@@ -5,7 +5,7 @@
 // como "promessa vazia" pelas portas do bot); e todos os códigos WMO traduzidos.
 // Execução: npm run test:climadeteccao
 import assert from 'node:assert/strict';
-import { detectarPedidoDeClima, interpretarLocal, interpretarRespostaDeCidade, traduzirCodigoDoTempo, UF_PARA_ESTADO, TEXTO_CLIMA_FALHA, TEXTO_CLIMA_SEM_CIDADE, TEXTO_CLIMA_LOCAL_NAO_ACHADO, TEXTO_CLIMA_LIMITE, textoDeFalhaDoClima } from '../src/core/tools/clima.js';
+import { detectarPedidoDeClima, misturaComFerramenta, interpretarLocal, interpretarRespostaDeCidade, traduzirCodigoDoTempo, UF_PARA_ESTADO, TEXTO_CLIMA_FALHA, TEXTO_CLIMA_SEM_CIDADE, TEXTO_CLIMA_LOCAL_NAO_ACHADO, TEXTO_CLIMA_LIMITE, textoDeFalhaDoClima } from '../src/core/tools/clima.js';
 import { detectUnfulfilledPromise, finalGuardDetailed } from '../src/core/ai/searchIntent.js';
 
 let passed = 0;
@@ -36,7 +36,7 @@ const POSITIVAS = [
   ['previsão do tempo', null, 'hoje'],
   ['tá chovendo aí?', null, 'hoje'],
   ['será que vai chover amanhã?', null, 'amanha'],
-  ['preciso levar guarda-chuva hoje em BH?', { nome: 'BH', uf: null }, 'hoje'],
+  ['preciso levar guarda-chuva hoje em BH?', { nome: 'Belo Horizonte', uf: null }, 'hoje'], // o apelido vira o nome da cidade
   ['faz calor em Fortaleza?', { nome: 'Fortaleza', uf: null }, 'hoje'],
   ['quantos graus tá fazendo em Brasília?', { nome: 'Brasília', uf: null }, 'hoje'],
   ['clima em Belém essa semana', { nome: 'Belém', uf: null }, 'semana'],
@@ -49,7 +49,7 @@ const POSITIVAS = [
   ['clima em Foz do Iguaçu amanhã', { nome: 'Foz do Iguaçu', uf: null }, 'amanha'],
   ['previsão do tempo em Santa Cruz do Sul/RS depois de amanhã', { nome: 'Santa Cruz do Sul', uf: 'RS' }, 'depois_de_amanha'],
   ['yui, previsão do tempo pra sexta em Goiânia', { nome: 'Goiânia', uf: null }, 'dia'],
-  ['como vai estar o tempo no sábado em Floripa?', { nome: 'Floripa', uf: null }, 'dia'],
+  ['como vai estar o tempo no sábado em Floripa?', { nome: 'Florianópolis', uf: null }, 'dia'],
   ['Yui, o clima de Rio Branco - AC pros próximos dias', { nome: 'Rio Branco', uf: 'AC' }, 'semana'],
   ['qual o clima em Cuiabá/MT pro fds?', { nome: 'Cuiabá', uf: 'MT' }, 'fim_de_semana'],
   ['vai ter chuva em Belo Horizonte amanhã?', { nome: 'Belo Horizonte', uf: null }, 'amanha'],
@@ -116,7 +116,7 @@ await test('o texto de uma URL ou de uma menção não vira local', () => {
 });
 
 await test('local que não é cidade (casa, aqui, no jogo, no Brasil) não vira local: a Yui pergunta a cidade', () => {
-  for (const t of ['vai chover em casa hoje?', 'como está o clima aqui?', 'clima no Brasil hoje', 'como está o clima na minha cidade?', 'vai chover no servidor hoje?']) {
+  for (const t of ['vai chover em casa hoje?', 'como está o clima aqui?', 'clima no Brasil hoje', 'como está o clima na minha cidade?']) {
     const r = detectarPedidoDeClima(t);
     assert.equal(r.clima, true, t);
     assert.equal(r.local, null, `sem cidade: ${t}`);
@@ -183,6 +183,95 @@ await test('as frases fixas da Yui: curtas, sem erro técnico e NENHUMA vira "pr
   assert.equal(textoDeFalhaDoClima('limite_pessoa'), TEXTO_CLIMA_LIMITE);
   assert.equal(textoDeFalhaDoClima('limite_global'), TEXTO_CLIMA_LIMITE);
   for (const m of ['rede', 'api', 'resposta', 'limite_api', 'erro', 'qualquer']) assert.equal(textoDeFalhaDoClima(m), TEXTO_CLIMA_FALHA, m);
+});
+
+// ─────────────── Revisão independente (19/11/2026): privacidade, sequestro e lacunas do detector ───────────────
+const PALAVRAS_DA_CONVERSA = /cama|cima|HIV|positivo|pr[oó]stata|c[aâ]ncer|exame|pai|assustado|notebook|spam|servidor|jogo|discuss/i;
+
+await test('A2: o TEXTO DA CONVERSA nunca vira local: só um nome com cara de lugar, COLADO ao sinal do clima (a Yui pergunta a cidade ou usa a padrão)', () => {
+  const casos = [
+    'vai chover? meu exame de HIV deu positivo e estou assustado', 'como está o clima? meu pai tem câncer de próstata', 'vai chover hoje? vou levar meu pai no hospital de Brasília',
+    'qual a previsão do tempo? estou em casa sozinho em cima da cama', 'vai chover amanhã? o Rafael me disse que a Maria foi para a UTI', 'previsão do tempo, depois eu falo do exame de HIV',
+    'como está o clima? Meu Deus o exame deu Positivo', 'clima? estou em Crise Existencial', 'qual a temperatura? sobre o jogo de Ontem',
+  ];
+  for (const t of casos) {
+    const r = detectarPedidoDeClima(t);
+    assert.ok(!r.local || !PALAVRAS_DA_CONVERSA.test(r.local.nome), `"${t}" virou o local "${r.local?.nome}"`);
+    assert.equal(r.local, null, `sem local colado ao sinal: "${t}" -> ${JSON.stringify(r.local)}`);
+  }
+  assert.equal(local('o notebook ta quente agora em cima da cama'), null);
+  assert.equal(detectarPedidoDeClima('o notebook ta quente agora em cima da cama').clima, false);
+});
+
+await test('A3: o local não leva a preposição nem o resto da frase ("Cuiabá na sexta" é Cuiabá) e o candidato mais próximo do sinal vence', () => {
+  const nomes = [
+    ['clima em Cuiabá na sexta', 'Cuiabá', null], ['clima em Cuiabá no domingo', 'Cuiabá', null], ['clima em Cuiabá-MT na próxima semana', 'Cuiabá', 'MT'],
+    ['clima em Cuiabá pelo fim de semana', 'Cuiabá', null], ['clima em Cuiabá nos próximos dias', 'Cuiabá', null], ['clima em Cuiabá em novembro', 'Cuiabá', null],
+    ['preciso de guarda-chuva amanhã em SP?', 'São Paulo', null], ['umidade do ar em Cuiabá', 'Cuiabá', null], ['vai chover em Sao Paulo capital hoje', 'Sao Paulo', null],
+    ['clima em Foz do Iguaçu na quinta', 'Foz do Iguaçu', null], ['previsão do tempo em Santa Cruz do Sul/RS na sexta', 'Santa Cruz do Sul', 'RS'], ['vai chover hoje em BH?', 'Belo Horizonte', null],
+  ];
+  for (const [t, nome, uf] of nomes) assert.deepEqual(local(t), { nome, uf }, t);
+  assert.equal(detectarPedidoDeClima('clima em Cuiabá na sexta').quando.tipo, 'dia');
+});
+
+await test('A3: só entra como local um nome com inicial maiúscula, "Cidade-UF" ou uma cidade conhecida (minúsculas só da lista)', () => {
+  assert.deepEqual(local('como está o clima em manaus?'), { nome: 'manaus', uf: null });
+  assert.deepEqual(local('clima em cuiabá-mt hoje'), { nome: 'cuiabá', uf: 'MT' });
+  assert.equal(local('vai chover hoje em casa do vizinho?'), null);
+  assert.equal(local('clima em lugar nenhum hoje'), null);
+
+  assert.deepEqual(local('Em Manaus, como está o clima?'), { nome: 'Manaus', uf: null }, 'o lugar na frente da frase');
+});
+
+await test('B: sinais fracos ("vai esquentar", "tá quente", "faz calor") só com "?" ou com o local dito, e NUNCA com sujeito figurado', () => {
+  const nao = ['o jogo vai esquentar na final hoje', 'vai esfriar a discussão', 'o servidor tá quente agora', 'vai chover muito spam no servidor', 'o café esfriou', 'vai chover no servidor hoje?',
+    'a discussão no chat tá quente', 'o mercado vai esquentar amanhã?', 'o preço vai esfriar hoje?', 'o notebook tá quente hoje?', 'o PC faz calor demais?', 'vai chover bala no lobby hoje',
+    'tá quente', 'tá frio', 'hoje faz calor', 'vai esfriar', 'vai esquentar amanhã'];
+  for (const t of nao) assert.equal(detectarPedidoDeClima(t).clima, false, t);
+  const sim = ['tá quente aí?', 'faz calor em Fortaleza?', 'vai esfriar amanhã?', 'tá calor em Cuiabá?', 'hoje faz calor em Manaus', 'vai fazer frio no final de semana em Gramado?', 'vai esquentar em Cuiabá amanhã'];
+  for (const t of sim) assert.equal(detectarPedidoDeClima(t).clima, true, t);
+});
+
+await test('B: mensagem MISTA (outro pedido de ferramenta junto) não é sequestrada pelo clima: o outro pedido não se perde', () => {
+  const mistas = ['baixa a música X e me diz se vai chover amanhã', 'me lembra de ver o clima amanhã', 'cria um lembrete pro clima de amanhã em Manaus', 'toca uma música e me diz se vai chover',
+    'gera uma imagem de um dia de chuva e vê o clima em Manaus', 'me avisa se vai chover amanhã em Cuiabá', 'mostra a imagem do gato e depois o clima em Manaus', 'baixa o vídeo e como está o clima em Recife?'];
+  for (const t of mistas) {
+    const r = detectarPedidoDeClima(t);
+    assert.equal(r.clima, false, t);
+    assert.equal(r.motivo, 'mistura_com_ferramenta', t);
+  }
+  for (const t of ['mostra o clima em Manaus', 'me manda o clima de Salvador', 'me diz o clima de Salvador e se vai chover amanhã', 'manda a previsão do tempo de Belém']) assert.equal(detectarPedidoDeClima(t).clima, true, t);
+  assert.equal(misturaComFerramenta('baixa a musica x e me diz se vai chover'), true);
+  assert.equal(misturaComFerramenta('como esta o clima em manaus'), false);
+});
+
+await test('lacunas do detector: "previsão para a semana em Cuiabá-MT", "previsão pra sexta em Cuiabá", "clima Cuiabá", "tempo em Cuiabá?", "tá calor em Cuiabá?", "qual o clima?"', () => {
+  const certos = [
+    ['qual a previsão para a semana em Cuiabá-MT?', { nome: 'Cuiabá', uf: 'MT' }, 'semana'], ['previsão pra sexta em Cuiabá', { nome: 'Cuiabá', uf: null }, 'dia'],
+    ['clima Cuiabá', { nome: 'Cuiabá', uf: null }, 'hoje'], ['tempo em Cuiabá?', { nome: 'Cuiabá', uf: null }, 'hoje'], ['tá calor em Cuiabá?', { nome: 'Cuiabá', uf: null }, 'hoje'],
+    ['Yui, qual o clima?', null, 'hoje'], ['qual é o clima?', null, 'hoje'], ['previsão pro fim de semana em Cuiabá-MT', { nome: 'Cuiabá', uf: 'MT' }, 'fim_de_semana'],
+  ];
+  for (const [t, loc, quando] of certos) {
+    const r = detectarPedidoDeClima(t);
+    assert.equal(r.clima, true, t);
+    assert.deepEqual(r.local, loc, t);
+    assert.equal(r.quando.tipo, quando, t);
+  }
+  for (const t of ['tempo em casa?', 'previsão para amanhã das vendas', 'tempo na fila?', 'a previsão para a semana é de trabalho em Cuiabá']) assert.equal(detectarPedidoDeClima(t).clima, false, t);
+  // a frase exata do dono continua funcionando
+  assert.deepEqual(local('Olá, poderia ver o clima de Cuiabá-MT para essa semana?'), { nome: 'Cuiabá', uf: 'MT' });
+});
+
+await test('A1: a resposta a "De qual cidade?" tem de PARECER o nome de um lugar (a mensagem inteira): frases, saudações e desabafos não viram cidade', () => {
+  for (const t of ['meu pai tem câncer', 'bom dia', 'Bom dia', 'to triste hoje', 'To triste', 'Obrigado', 'sim', 'Não', 'Oi', 'Tudo bem', 'não sei', 'cansado', 'Meu exame deu positivo', 'o jogo foi bom', 'Cuiabá é quente demais', 'hoje não']) {
+    assert.equal(interpretarRespostaDeCidade(t), null, t);
+  }
+  assert.deepEqual(interpretarRespostaDeCidade('Cuiabá'), { nome: 'Cuiabá', uf: null });
+  assert.deepEqual(interpretarRespostaDeCidade('em Manaus'), { nome: 'Manaus', uf: null });
+  assert.deepEqual(interpretarRespostaDeCidade('recife'), { nome: 'recife', uf: null });
+  assert.deepEqual(interpretarRespostaDeCidade('Cuiabá-MT'), { nome: 'Cuiabá', uf: 'MT' });
+  assert.deepEqual(interpretarRespostaDeCidade('na cidade de Campinas, SP'), { nome: 'Campinas', uf: 'SP' });
+  assert.deepEqual(interpretarRespostaDeCidade('SP'), { nome: 'São Paulo', uf: null });
 });
 
 await test('desempenho: entrada hostil (milhares de espaços e preposições) responde rápido', () => {

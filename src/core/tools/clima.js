@@ -121,14 +121,18 @@ export function interpretarLocal(texto) {
   return { nome, uf };
 }
 
-/** A resposta curta a "De qual cidade?" ("Cuiabá", "em Manaus", "Campinas, SP"): o local, ou null se parecer outra coisa (frase, pergunta, número). */
+/**
+ * A resposta curta a "De qual cidade?" ("Cuiabá", "em Manaus", "Campinas, SP", "recife"): o local, ou null se NÃO parecer o nome de um lugar. A mensagem INTEIRA tem de ser
+ * o nome (inicial maiúscula, "Cidade-UF" ou uma cidade conhecida): "bom dia", "to triste hoje" e "meu pai tem câncer" nunca viram cidade.
+ */
 export function interpretarRespostaDeCidade(texto) {
   const raw = String(texto ?? '').normalize('NFC').replace(MENCAO_RE, ' ').replace(/\s+/g, ' ').trim();
   if (!raw || raw.length > 40 || /[?]/.test(raw)) return null;
-  const s = raw.replace(/^(?:em|de|do|da|na|no|aqui em|ai em|la em|pra|para)\s+/i, '').replace(/[.!]+$/, '');
-  if (s.split(' ').length > 4) return null;
-  if (/\b(?:nao|sim|obrigad[oa]|valeu|tchau|oi|ola|ok|beleza|nada|esquece|deixa|cancela)\b/.test(semAcento(s))) return null;
-  return interpretarLocal(s);
+  const s = raw.replace(/^(?:na cidade de|em|de|do|da|na|no|aqui em|ai em|la em|pra|para)\s+/i, '').replace(/[.!]+$/, '').trim();
+  if (!s || s.split(' ').length > 5) return null;
+  const r = lerCandidato(s, 0);
+  if (!r || s.slice(r.fim).trim() !== '') return null;
+  return r.local;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -145,9 +149,13 @@ const CHUVA_NAO_E_CEU = /\bchuva\s+de\s+(?:ideias|meteoros|estrelas|criticas|elo
 
 // Sinais POSITIVOS (sobre o texto sem acento e em minúsculas).
 const PRAZO_NAO_CLIMA = /\b(?:tempo|clima|previsao)\s+(?:d[eo]s?|da)\s+(?:jogo|download|resposta|entrega|vendas|venda|lancamento|saida|chegada)\b/;
-const SINAIS_CLIMA = [
-  // "como está o clima", "qual o clima", "como vai estar o clima"
-  /\b(?:como|qual|quais)\s+(?:esta|ta|e|era|vai\s+estar|vai\s+ficar|sera|fica|anda|estara|ficou|foi)\s+(?:o\s+)?clima\b/,
+// Palavras que ancoram o clima na frase (o LOCAL só vale COLADO a uma destas) e que separam as cláusulas da mensagem.
+const SINAL_CLIMA_SOLTO = /\b(?:clima|tempo|previsao|temperatura|chover|chuva|chovendo|chove|chovia|choveu|garoa|garoando|nevar|nevando|neve|calor|frio|friozinho|quente|abafado|gelado|nublado|ensolarado|chuvoso|esfriar|esquentar|sol|graus|umidade|guarda\s*-?\s*chuva|meteorologia|sensacao\s+termica|ventando|vento|tempestade|temporal)\b/;
+
+// Sinais FORTES: bastam para pedir o clima (sobre o texto sem acento e em minúsculas).
+const SINAIS_FORTES = [
+  // "como está o clima", "qual o clima", "qual é o clima", "como vai estar o clima"
+  /\b(?:como|qual|quais)\s+(?:(?:esta|ta|e|era|vai\s+estar|vai\s+ficar|sera|fica|anda|estara|ficou|foi)\s+)?(?:o\s+)?clima\b/,
   // "poderia ver o clima de...", "me diz o clima", "quero saber o clima", "ver a previsão do tempo"
   /\b(?:ver|veja|olha|olhar|checa|checar|confere|conferir|consulta|consultar|mostra|mostrar|manda|me\s+diz|me\s+fala|me\s+passa|saber|sabe|quero|queria|preciso|gostaria|poderia\s+ver|pode\s+ver|da\s+uma\s+olhada\s+(?:n[oa])?)\s+(?:de\s+|d[oa]\s+|sobre\s+)?(?:o\s+|a\s+)?(?:clima|previsao\s+do\s+tempo|previsao\s+climatica|tempo\s+(?:hoje|amanha|agora|em|de|na|no|para|pra))\b/,
   // "clima em/de/na/no X", "clima hoje", "clima essa semana"
@@ -160,26 +168,50 @@ const SINAIS_CLIMA = [
   /\bo\s+tempo\s+(?:esta|ta|vai\s+ficar|vai\s+estar|fica|ficara|estara|anda|vai)\s+(?:muito\s+|bem\s+|meio\s+|bastante\s+)?(?:bom|ruim|feio|nublado|chuvoso|seco|aberto|fechado|instavel|quente|frio|firme|lindo|bonito|abrindo|fechando|melhorar|piorar|virar|esfriar|esquentar|mudar)\b/,
   /\btempo\s+(?:hoje|amanha|agora)\s+(?:em|na|no|de|por|pra|para|aqui)\b/,
   /\bque\s+tempo\s+(?:esta|ta|faz|vai\s+fazer|fazia)\b/,
-  // sol, calor, frio
-  /\b(?:faz|fazendo|vai\s+fazer|vai\s+estar\s+fazendo|esta\s+fazendo|ta\s+fazendo)\s+(?:muito\s+|bastante\s+|um\s+)?(?:sol|calor|frio|friozinho|calorao)\b/,
-  /\bfaz\s+(?:muito\s+|bastante\s+|um\s+)?(?:calor|frio|sol|friozinho|calorao)\b/,
   // temperatura
   /\b(?:qual|quanto|como)\s+(?:e\s+|esta\s+|ta\s+|vai\s+estar\s+|sera\s+)?(?:a\s+)?temperatura\b/,
   /\btemperatura\s+(?:em|de|na|no|hoje|amanha|agora|atual|maxima|minima|max|min|da\s+cidade|ai|aqui|la|nos\s+proximos|dessa|desta|essa|esta)\b/,
   /\bquantos\s+graus\s+(?:esta|ta|faz|fazendo|vai\s+fazer|tem|fez|vai\s+estar|vai\s+ficar|esta\s+fazendo|ta\s+fazendo)\b/,
   /\bsensacao\s+termica\b/, /\bumidade\s+do\s+ar\b/,
   // chuva e companhia
-  /\b(?:vai|ira|deve|pode|sera\s+que\s+vai|sera\s+que)\s+(?:chover|nevar|trovejar|garoar|ventar|esfriar|esquentar|fazer\s+(?:sol|calor|frio)|ter\s+(?:chuva|sol|neve|geada|frio|calor|vento|tempestade|temporal|granizo|trovoada))\b/,
+  /\b(?:vai|ira|deve|pode|sera\s+que\s+vai|sera\s+que)\s+(?:chover|nevar|trovejar|garoar|ventar|ter\s+(?:chuva|neve|geada|vento|tempestade|temporal|granizo|trovoada))\b/,
   /\b(?:esta|ta|estao|tao|estava)\s+(?:chovendo|nevando|garoando|ventando|trovejando)\b/,
   /\b(?:chove|chovia|choveu)\s+(?:ai|la|hoje|amanha|em|na|no|bastante|muito)\b/,
   /\b(?:tem|ha|vai\s+ter|vai\s+haver|tera|havera)\s+(?:previsao|chance|probabilidade)\s+de\s+(?:chuva|chover|neve|geada|frio|calor|tempestade)\b/,
   /\b(?:chance|probabilidade)\s+de\s+(?:chuva|chover|neve)\b/,
   /\b(?:tem|vai\s+ter|havera)\s+chuva\b/,
   /\bchuva\s+(?:hoje|amanha|agora|essa|esta|nesta|nessa|no\s+fim|na\s+semana)\b/,
-  /\b(?:esta|ta)\s+(?:muito\s+|bem\s+|tao\s+|bastante\s+|meio\s+)?(?:quente|frio|abafado|gelado|friozinho|nublado|ensolarado|chuvoso)\s+(?:ai|aqui|la|hoje|agora|em\s+\S|na\s+\S|no\s+\S|fora|na\s+rua)/,
   /\b(?:levar|levo|preciso\s+de|devo\s+levar|vale\s+levar|vou\s+precisar\s+de|precisa\s+de|usar|uso)\s+(?:um\s+|uma\s+)?(?:guarda\s*-?\s*chuva|capa\s+de\s+chuva)\b/,
   /\b(?:meteorologia|meteorologico|climatempo|inmet|accuweather)\b/,
 ];
+// Sinais FRACOS (também são fala figurada: "o jogo vai esquentar", "o servidor tá quente"): só com "?" na frase ou com o LOCAL dito, e nunca com sujeito figurado.
+const SINAIS_FRACOS = [
+  /\b(?:vai|ira|deve|pode|sera\s+que\s+vai|sera\s+que)\s+(?:esfriar|esquentar|fazer\s+(?:sol|calor|frio)|ter\s+(?:sol|frio|calor))\b/,
+  /\b(?:faz|fazendo|vai\s+fazer|vai\s+estar\s+fazendo|esta\s+fazendo|ta\s+fazendo)\s+(?:muito\s+|bastante\s+|um\s+)?(?:sol|calor|frio|friozinho|calorao)\b/,
+  /\b(?:esta|ta)\s+(?:muito\s+|bem\s+|tao\s+|bastante\s+|meio\s+)?(?:quente|frio|abafado|gelado|friozinho|nublado|ensolarado|chuvoso|calor)\b/,
+];
+// Sinais que só valem COM o local dito ("tempo em Cuiabá?", "previsão pra sexta em Cuiabá", "clima Cuiabá").
+const SINAIS_COM_LOCAL = [
+  /\btempo\s+(?:em|de|na|no)\s+\S/,
+  /\bprevisao\s+(?:para|pra|pro|de|do)\s+(?:hoje|amanha|depois\s+de\s+amanha|a\s+semana|essa\s+semana|esta\s+semana|(?:o\s+)?(?:fim|final)\s+de\s+semana|fds|domingo|segunda|terca|quarta|quinta|sexta|sabado)\b/,
+];
+const COM_LOCAL_MAIUSCULO = /\b(?:[Cc]lima|[Tt]emperatura|[Pp]revis[ãa]o do tempo)\s+(?:(?:de|em|na|no)\s+)?\p{Lu}/u;
+// O sujeito é figurado (o jogo, o preço, o servidor, o PC...): nunca é o céu.
+const SUJEITO_FIGURADO = /\b(?:jogo|jogos|preco|precos|servidor|servidores|discussao|debate|pc|notebook|computador|meta|mercado|cafe|comida|agua|cpu|gpu|placa|console|ps5|xbox|partida|campeonato|time|torcida|crise|economia|bolsa|ambiente|briga|treta|spam|bot|chat|call|grupo|lobby|sala|quarto|motor|celular|bateria|forno|geladeira|sopa|cerveja|leite|banho|chuveiro|panela|fritadeira|sinal|wifi|internet|rede|conversa|clima\s+d[aeo]s?)\b/;
+const CHOVER_FIGURADO = /\bchover\s+(?:muito\s+|bastante\s+|tanto\s+|mais\s+)?(?:spam|bala|balas|mensagem|mensagens|pedido|pedidos|notificac\w+|dinheiro|gente|critica|criticas|elogio|elogios|ideia|ideias|bug|bugs|ban|bans|raid|raids|convite|convites|reclamac\w+|problema|problemas|trabalho|conta|contas|boleto|boletos)\b|\bchover\s+(?:no|na|nos|nas)\s+(?:servidor|chat|canal|grupo|call|discord|jogo|lobby|sala|time|equipe|empresa)\b/;
+
+// Mensagem MISTA: outro pedido de ferramenta junto do clima ("baixa a música X e me diz se vai chover", "me lembra de ver o clima"): o clima NÃO assume
+// (ele tira as ferramentas da chamada e o outro pedido se perderia). Verbos que SEMPRE são ferramenta, e verbos que só são em cláusula SEM clima.
+const VERBO_SEMPRE_FERRAMENTA = /\b(?:lembr(?:a|e|ar|ete|etes)|avis(?:a|e|ar)|agend(?:a|e|ar)|anot(?:a|e|ar)|cri(?:a|e|ar)|ger(?:a|e|ar)|desenh(?:a|e|ar)|baix(?:a|e|ar)|toc(?:a|ar)|toque|abr(?:a|e|ir)|salv(?:a|e|ar)|envi(?:a|e|ar)|pul(?:a|e|ar)|paus(?:a|e|ar)|apag(?:a|ue|ar)|delet(?:a|e|ar)|cancel(?:a|e|ar)|conect(?:a|e|ar)|entr(?:a|e|ar)\s+na\s+call|sai\s+da\s+call|sair\s+da\s+call)\b/;
+const VERBO_FERRAMENTA_SE_SEPARADO = /\b(?:mostr(?:a|e|ar)|mand(?:a|e|ar)|coloc(?:a|ue|ar)|bot(?:a|e|ar))\b/;
+/** Há outro pedido de ferramenta na mensagem (texto sem acento e em minúsculas)? `cue`: o sinal que torna uma cláusula "de clima". */
+export function misturaComFerramenta(n, cue = SINAL_CLIMA_SOLTO) {
+  for (const c of String(n ?? '').split(/[,;.!?]+|\s+e\s+|\s+mas\s+|\s+depois\s+|\s+tambem\s+/)) {
+    if (VERBO_SEMPRE_FERRAMENTA.test(c)) return true;
+    if (VERBO_FERRAMENTA_SE_SEPARADO.test(c) && !cue.test(c)) return true;
+  }
+  return false;
+}
 
 function normalizarPedido(texto) {
   const raw = String(texto ?? '').normalize('NFC').replace(MENCAO_RE, ' ').replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -191,46 +223,122 @@ const PARAR_LOCAL = new Set(['hoje', 'hj', 'amanha', 'agora', 'depois', 'essa', 
   'semana', 'semanas', 'fim', 'final', 'fds', 'sabado', 'domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'proxima', 'proximo', 'proximos', 'proximas', 'atual',
   'atualmente', 'ai', 'aqui', 'la', 'vai', 'vem', 'ta', 'sera', 'ficar', 'fazer', 'faz', 'tem', 'tera', 'como', 'qual', 'quando', 'por', 'para', 'pra', 'com', 'e', 'ou', 'mas',
   'que', 'se', 'durante', 'ate', 'ao', 'aos', 'manha', 'tarde', 'noite', 'madrugada', 'favor', 'obrigado', 'obrigada', 'valeu', 'yui', 'pf', 'pfv', 'tbm', 'tambem', 'ainda',
-  'mesmo', 'mais', 'muito', 'bem', 'previsao', 'clima', 'tempo', 'temperatura', 'chuva', 'chover', 'sol', 'calor', 'frio', 'sera', 'esta', 'estao', 'fica', 'ficou', 'foi', 'era',
-  'nos', 'proximos', 'dias', 'todo', 'toda', 'tudo', 'pessoal', 'galera', 'gente', 'cara', 'mano', 'mano', 'vc', 'voce', 'poderia', 'pode', 'consegue']);
-const LIGACAO = new Set(['de', 'da', 'do', 'dos', 'das', 'del', 'e']);
+  'mesmo', 'mais', 'muito', 'bem', 'previsao', 'clima', 'tempo', 'temperatura', 'chuva', 'chover', 'sol', 'calor', 'frio', 'estao', 'fica', 'ficou', 'foi', 'era',
+  'nos', 'dias', 'todo', 'toda', 'tudo', 'pessoal', 'galera', 'gente', 'cara', 'mano', 'vc', 'voce', 'poderia', 'pode', 'consegue',
+  // a preposição ou o artigo que segue o nome ("Cuiabá na sexta", "Cuiabá no domingo", "Cuiabá pelo fim de semana"), "capital" e o que não é nome
+  'na', 'no', 'nas', 'em', 'num', 'numa', 'pelo', 'pela', 'pelos', 'pelas', 'capital', 'ar', 'guarda', 'guardachuva', 'chuvas', 'umidade', 'graus', 'oi', 'ola', 'ei', 'bom', 'boa',
+  'sim', 'nao', 'ok', 'beleza', 'tchau', 'to', 'estou', 'meu', 'minha', 'eu', 'ele', 'ela', 'eles', 'elas', 'isso', 'aquilo', 'aquele', 'aquela', 'seu', 'sua']);
+const CONECTORES = new Set(['de', 'da', 'do', 'dos', 'das', 'del']);
 
-/** O local dito na frase ("em Manaus", "de Cuiabá-MT", "pra Curitiba"), ou null. */
-function extrairLocal(raw, n) {
-  const prep = /\b(?:perto\s+de|ao\s+redor\s+de|aqui\s+em|ai\s+em|la\s+em|em|de|do|da|na|no|para|pra|por)\s+/g;
-  const candidatos = [];
-  for (const m of n.matchAll(prep)) candidatos.push(m.index + m[0].length);
-  // sem preposição: "clima Cuiabá" (só com a primeira letra maiúscula, para não pegar lixo)
-  const direto = /\b(?:clima|tempo|previsao|temperatura)\s+(?:do\s+tempo\s+)?(?:(?:hoje|amanha|agora)\s+)?(?=[a-z])/g;
-  for (const m of n.matchAll(direto)) {
-    const i = m.index + m[0].length;
-    if (/^\p{Lu}/u.test(raw.slice(i))) candidatos.push(i);
-  }
-  for (const inicio of candidatos) {
-    const palavras = [];
-    let pos = inicio;
-    while (palavras.length < 7) {
-      const m = /^([\p{L}][\p{L}'’.-]*)/u.exec(raw.slice(pos));
-      if (!m) break;
-      const palavra = m[1].replace(/[.]+$/, '');
-      const f = semAcento(palavra).replace(/-[a-z]{2}$/, '');
-      const semUf = semAcento(palavra);
-      if (PARAR_LOCAL.has(semUf) || PARAR_LOCAL.has(f)) break;
-      if (!palavras.length && DETERMINANTES.has(semUf)) break;
-      if (palavras.length && LIGACAO.has(semUf) && semUf === 'e') break;
-      palavras.push(palavra);
-      pos += m[1].length;
-      // vírgula, hífen ou barra seguidos de uma sigla de estado ("Cuiabá, MT", "Cuiabá - MT", "Cuiabá/MT")
-      const uf = /^\s*[-–—/,]\s*([A-Za-z]{2})(?![\p{L}])/u.exec(raw.slice(pos));
-      if (uf && Object.hasOwn(UF_PARA_ESTADO, uf[1].toUpperCase())) { palavras.push(`- ${uf[1]}`); break; }
-      const espaco = /^ +/.exec(raw.slice(pos));
-      if (!espaco) break;
-      pos += espaco[0].length;
+// Cidades conhecidas (sem acento, minúsculas): quem escreve tudo minúsculo ("clima em manaus") ainda é entendido. Nada fora desta lista, e nada sem inicial
+// maiúscula, vira local: o texto da conversa nunca é mandado como nome de cidade.
+const CIDADES_CONHECIDAS = new Set(('sao paulo|rio de janeiro|belo horizonte|brasilia|salvador|fortaleza|curitiba|manaus|recife|porto alegre|belem|goiania|guarulhos|campinas|sao luis|sao goncalo|maceio|' +
+  'duque de caxias|natal|teresina|campo grande|nova iguacu|sao bernardo do campo|joao pessoa|santo andre|osasco|jaboatao dos guararapes|sao jose dos campos|ribeirao preto|uberlandia|' +
+  'sorocaba|contagem|aracaju|feira de santana|cuiaba|joinville|juiz de fora|londrina|aparecida de goiania|ananindeua|porto velho|serra|niteroi|belford roxo|caxias do sul|' +
+  'campos dos goytacazes|macapa|florianopolis|vila velha|sao joao de meriti|sao jose do rio preto|santos|mogi das cruzes|betim|diadema|campina grande|jundiai|maringa|montes claros|' +
+  'piracicaba|carapicuiba|olinda|cariacica|rio branco|anapolis|bauru|vitoria|caruaru|blumenau|franca|pelotas|canoas|petropolis|gramado|foz do iguacu|ouro preto|paraty|bonito|palmas|' +
+  'boa vista|chapeco|cascavel|ponta grossa|volta redonda|taubate|limeira|suzano|guaruja|sumare|santa maria|itajai|balneario camboriu|cabo frio|buzios|angra dos reis|rondonopolis|sinop|' +
+  'varzea grande|tangara da serra|marilia|presidente prudente|vitoria da conquista|ilheus|porto seguro|juazeiro do norte|sobral|mossoro|imperatriz|maraba|santarem|dourados|uberaba|' +
+  'governador valadares|ipatinga|divinopolis|passo fundo|novo hamburgo|sao leopoldo|criciuma|lages|bage|uruguaiana|gramado|canela|campos do jordao|ubatuba|bertioga|petrolina|' +
+  'jequie|barreiras|lencois|tiradentes|araraquara|sao carlos|indaiatuba|itu|atibaia|braganca paulista|cuiaba|varzea grande|poconé|pocone|chapada dos guimaraes').split('|'));
+const APELIDOS_DE_CIDADE = new Map([['sp', 'São Paulo'], ['rj', 'Rio de Janeiro'], ['bh', 'Belo Horizonte'], ['poa', 'Porto Alegre'], ['floripa', 'Florianópolis'], ['bsb', 'Brasília'],
+  ['cwb', 'Curitiba'], ['sampa', 'São Paulo'], ['sao paulo capital', 'São Paulo']]);
+
+/**
+ * Lê um nome de lugar que começa em `inicio` do texto ORIGINAL. Só aceita: palavras com inicial maiúscula (ligadas por "de/da/do/dos/das" quando a próxima também é
+ * maiúscula), "Cidade-UF"/"Cidade, UF"/"Cidade/UF", ou uma cidade da lista conhecida (mesmo em minúsculas). Para na primeira palavra que não é nome ("na", "no", "hoje",
+ * "capital"...). Devolve { local: { nome, uf }, fim } ou null (na dúvida, null: o texto da conversa nunca vira nome de cidade).
+ */
+function lerCandidato(raw, inicio) {
+  const resto = raw.slice(inicio);
+  const palavras = [];
+  let pos = 0;
+  let fim = 0;
+  for (;;) {
+    const m = /^[\p{L}][\p{L}'’]*/u.exec(resto.slice(pos));
+    if (!m) break;
+    const w = m[0];
+    const f = semAcento(w);
+    const maiuscula = /^\p{Lu}/u.test(w);
+    if (!palavras.length) {
+      if (!maiuscula || PARAR_LOCAL.has(f) || DETERMINANTES.has(f)) break;
+    } else if (CONECTORES.has(f)) {
+      const prox = /^ ([\p{L}][\p{L}'’]*)/u.exec(resto.slice(pos + w.length));
+      if (!prox || !/^\p{Lu}/u.test(prox[1]) || PARAR_LOCAL.has(semAcento(prox[1]))) break;
+    } else if (!maiuscula || PARAR_LOCAL.has(f)) {
+      break;
     }
-    while (palavras.length && LIGACAO.has(semAcento(palavras.at(-1)))) palavras.pop();
-    if (!palavras.length) continue;
-    const local = interpretarLocal(palavras.join(' ').replace(/ - /g, '-').replace(/\s*-\s*([A-Za-z]{2})$/, '-$1'));
-    if (local) return local;
+    palavras.push(w);
+    pos += w.length;
+    fim = pos;
+    if (palavras.length >= 5 || resto[pos] !== ' ') break;
+    pos += 1;
+  }
+  if (palavras.length) {
+    while (palavras.length && CONECTORES.has(semAcento(palavras.at(-1)))) { palavras.pop(); }
+    if (palavras.length) {
+      const nome = palavras.join(' ');
+      let uf = null;
+      const depois = resto.slice(fim - 0).slice(0);
+      const ufm = /^\s*[-–—/,]\s*([A-Za-z]{2})(?![\p{L}])/u.exec(depois) ?? /^ ([A-Z]{2})(?![\p{L}])/u.exec(depois);
+      let fimTotal = inicio + fim;
+      if (ufm && Object.hasOwn(UF_PARA_ESTADO, ufm[1].toUpperCase())) { uf = ufm[1].toUpperCase(); fimTotal += ufm[0].length; }
+      const apelido = !uf && palavras.length === 1 ? APELIDOS_DE_CIDADE.get(semAcento(nome)) : null;
+      const local = interpretarLocal(apelido ?? `${nome}${uf ? `-${uf}` : ''}`);
+      if (local) return { local, fim: fimTotal };
+    }
+    return null;
+  }
+  // tudo minúsculo: só uma cidade da lista conhecida (a mais longa que casa) ou um apelido
+  const toks = [];
+  let p = 0;
+  while (toks.length < 4) {
+    const m = /^[\p{L}][\p{L}'’]*/u.exec(resto.slice(p));
+    if (!m) break;
+    toks.push({ w: m[0], fim: p + m[0].length });
+    p += m[0].length;
+    if (resto[p] !== ' ') break;
+    p += 1;
+  }
+  for (let k = toks.length; k >= 1; k -= 1) {
+    const f = toks.slice(0, k).map((t) => semAcento(t.w)).join(' ');
+    const apelido = k === 1 ? APELIDOS_DE_CIDADE.get(f) : null;
+    if (apelido || CIDADES_CONHECIDAS.has(f)) {
+      const ufm = /^\s*[-–—/,]\s*([A-Za-z]{2})(?![\p{L}])/u.exec(resto.slice(toks[k - 1].fim));
+      const uf = ufm && Object.hasOwn(UF_PARA_ESTADO, ufm[1].toUpperCase()) ? ufm[1].toUpperCase() : null;
+      const local = interpretarLocal(apelido ?? `${toks.slice(0, k).map((t) => t.w).join(' ')}${uf ? `-${uf}` : ''}`);
+      if (local) return { local, fim: inicio + toks[k - 1].fim + (uf ? ufm[0].length : 0) };
+    }
+  }
+  return null;
+}
+
+/**
+ * O local dito na frase, COLADO ao sinal de clima (até 4 palavras depois dele, sem pontuação de frase no meio): "clima de Cuiabá-MT", "vai chover hoje em São Paulo",
+ * "no sábado em Floripa", "clima Cuiabá", ou o lugar na frente ("Em Manaus, como está o clima?"). Na dúvida, null (usa a cidade padrão ou pergunta a cidade).
+ */
+function extrairLocal(raw, n) {
+  const PREP = /(?:^|\s)(?:perto\s+de|aqui\s+em|ai\s+em|la\s+em|na\s+cidade\s+de|na\s+capital\s+de|em|de|do|da|na|no|para|pra|por)\s+/g;
+  for (const c of n.matchAll(new RegExp(SINAL_CLIMA_SOLTO.source, 'g'))) {
+    const fimCue = c.index + c[0].length;
+    const janela = n.slice(fimCue, fimCue + 80);
+    const corte = janela.search(/[?!.;]/);
+    const trecho = corte >= 0 ? janela.slice(0, corte) : janela;
+    // sem preposição: o nome colado ao sinal ("clima Cuiabá", "clima hoje Cuiabá")
+    const direto = /^\s+(?:(?:hoje|amanha|agora)\s+)?/.exec(trecho);
+    if (direto) { const r = lerCandidato(raw, fimCue + direto[0].length); if (r) return r.local; }
+    for (const m of trecho.matchAll(PREP)) {
+      const antes = trecho.slice(0, m.index).trim();
+      if (antes && antes.split(/\s+/).length > 4) break;
+      const r = lerCandidato(raw, fimCue + m.index + m[0].length);
+      if (r) return r.local;
+    }
+  }
+  // o lugar ANTES do sinal, no começo da frase: "Em Manaus, como está o clima?"
+  const lead = /^(?:(?:oi|ola|ei|yui|e ai|bom dia|boa tarde|boa noite)[\s,!.]*)*(?:em|na|no|de)\s+/.exec(n);
+  if (lead) {
+    const r = lerCandidato(raw, lead[0].length);
+    if (r && /^\s*[,;:\-]/.test(raw.slice(r.fim)) && SINAL_CLIMA_SOLTO.test(n.slice(r.fim))) return r.local;
   }
   return null;
 }
@@ -251,6 +359,10 @@ function extrairQuando(n) {
 
 /**
  * O texto pede o clima? Decide só pelo CONTEÚDO da fala do próprio autor (nenhuma IA, nenhuma rede).
+ *  - sinal FORTE ("clima", "previsão do tempo", "temperatura", "vai chover"...) basta; sinal FRACO ("vai esfriar", "faz calor", "tá quente") só com "?" ou com o local
+ *    dito e nunca com sujeito figurado ("o jogo vai esquentar", "o servidor tá quente"); alguns só com o local dito ("tempo em Cuiabá?");
+ *  - mensagem MISTA (outro pedido de ferramenta junto: baixar, lembrar, criar...) não é do clima: o outro pedido não pode se perder;
+ *  - o LOCAL só vale colado ao sinal de clima e com cara de nome (inicial maiúscula, "Cidade-UF" ou cidade conhecida): na dúvida, null.
  * @returns {{ clima: boolean, motivo: string, local: { nome: string, uf: string|null }|null, quando: { tipo: string, dia?: number, rotulo: string, proximaSemana?: boolean } }}
  */
 export function detectarPedidoDeClima(texto) {
@@ -260,8 +372,19 @@ export function detectarPedidoDeClima(texto) {
   if (raw.length > MAX_TEXTO) return nao('longo');
   if (/```|`[^`]+`/.test(raw)) return nao('codigo');
   if (TEMPO_NAO_E_CLIMA.test(n) || CLIMA_NAO_E_CEU.test(n) || TEMPERATURA_NAO_E_CEU.test(n) || CHUVA_NAO_E_CEU.test(n) || PRAZO_NAO_CLIMA.test(n)) return nao('nao_e_o_do_ceu');
-  if (!SINAIS_CLIMA.some((re) => re.test(n))) return nao('sem_sinal');
-  return { clima: true, motivo: 'pedido_de_clima', local: extrairLocal(raw, n), quando: extrairQuando(n) };
+  const forte = SINAIS_FORTES.some((re) => re.test(n));
+  const fraco = !forte && SINAIS_FRACOS.some((re) => re.test(n));
+  const comLocal = !forte && !fraco && (SINAIS_COM_LOCAL.some((re) => re.test(n)) || COM_LOCAL_MAIUSCULO.test(raw));
+  if (!forte && !fraco && !comLocal) return nao('sem_sinal');
+  if (misturaComFerramenta(n)) return nao('mistura_com_ferramenta');
+  const local = extrairLocal(raw, n);
+  if (forte && CHOVER_FIGURADO.test(n)) return nao('sujeito_figurado');
+  if (fraco) {
+    if (SUJEITO_FIGURADO.test(n)) return nao('sujeito_figurado');
+    if (!local && !/\?/.test(raw)) return nao('sinal_fraco_sem_pergunta');
+  }
+  if (comLocal && (!local || SUJEITO_FIGURADO.test(n))) return nao('sinal_que_exige_o_local');
+  return { clima: true, motivo: 'pedido_de_clima', local, quando: extrairQuando(n) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -543,7 +666,7 @@ export function createClimaService(deps = {}) {
       }
       const t = now();
       const q = quando?.tipo === 'agora' ? { ...quando, tipo: 'hoje' } : quando;
-      const chave = `${semAcento(lugar.nome)}|${lugar.uf ?? ''}|${q?.tipo ?? 'hoje'}${q?.tipo === 'dia' ? `:${q.dia}` : ''}|${new Date(t).toISOString().slice(0, 10)}`;
+      const chave = `${semAcento(lugar.nome)}|${lugar.uf ?? ''}|${q?.tipo ?? 'hoje'}${q?.tipo === 'dia' ? `:${q.dia}` : ''}|${q?.proximaSemana === true ? 'proxima' : ''}|${String(q?.rotulo ?? '').slice(0, 40)}|${new Date(t).toISOString().slice(0, 10)}`; // o rótulo e a "próxima semana" vão ao modelo: fazem parte da chave
       const guardado = cache.get(chave);
       if (guardado && t - guardado.em < cacheMs) { contadores.cache += 1; return { ok: true, dados: guardado.dados, cache: true }; }
       if (emVoo.has(chave)) { contadores.juntadas += 1; return await emVoo.get(chave); }
