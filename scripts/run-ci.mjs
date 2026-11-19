@@ -125,6 +125,9 @@ export const SUITES = [
   // a cota e o relógio são injetados); a de ponta a ponta usa processos de verdade (cérebro e bot, Discord, IA e busca falsos, sob o bloqueio de integração externa).
   'test:monitoresunidade',
   'test:monitores',
+  // Prova de IDENTIDADE do servidor para o app (GET /v1/identidade: assinatura Ed25519 de um desafio com a chave privada que só o servidor tem): a rota desligada e ligada, o nonce, o limite de
+  // repetição por origem, o sigilo da chave privada (nunca no corpo, em log nem no repositório) e o gerador da identidade (permissão restrita, nunca sobrescreve sem --forcar). Num processo só, sem rede.
+  'test:identidadeapi',
 ];
 
 function argvOf(command) {

@@ -27,7 +27,14 @@ export default function App() {
   // Os endereços do servidor vêm do build (lista: rede local e Tailscale; ou um só). Com mais de um, o app sonda e usa o primeiro que responde.
   const config = useMemo(() => getConfigServidores(), []);
   const servidor = useMemo(
-    () => (config.enderecos.length > 0 ? criarGerenciadorDeServidor({ enderecos: config.enderecos, lembrado: armazemDoServidorLembrado }) : null),
+    () => (config.enderecos.length > 0
+      ? criarGerenciadorDeServidor({
+        enderecos: config.enderecos,
+        lembrado: armazemDoServidorLembrado,
+        // Com a chave pública do servidor no build, nenhum endereço recebe senha nem token sem provar a identidade (assinatura Ed25519).
+        identidade: config.chavePublica ? { chavePublica: config.chavePublica } : undefined,
+      })
+      : null),
     [config]
   );
   const [booting, setBooting] = useState(true);

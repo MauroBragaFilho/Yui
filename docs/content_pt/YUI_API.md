@@ -20,7 +20,7 @@ Interface HTTP do **Yui Core** para o app (Android e web) e para integrações. 
 
 - **Desligada por padrão** (`YUI_API_ENABLED=false`).
 - Escuta em **`127.0.0.1`**. O acesso de outros aparelhos é **só pelo Tailscale**; nunca abra a porta na internet nem no *security group* da AWS.
-- Toda rota, exceto `/v1/health`, `/v1/auth/status`, `/v1/auth/login`, `/v1/auth/discord/*` e a pré-verificação CORS, exige `Authorization: Bearer <token ou sessão>` (o `/v1/auth/logout` também exige).
+- Toda rota, exceto `/v1/health`, `/v1/identidade` (quando a prova de identidade está ligada), `/v1/auth/status`, `/v1/auth/login`, `/v1/auth/discord/*` e a pré-verificação CORS, exige `Authorization: Bearer <token ou sessão>` (o `/v1/auth/logout` também exige).
 - O token/sessão só identifica **quem é o usuário**. O **papel** (OWNER, MEMBER...) e o **escopo de memória** são decididos pelo backend a partir do `userId`; o cliente não escolhe nenhum dos dois.
 - Tokens fixos têm **16+ caracteres**, são guardados como hash SHA-256 e comparados em tempo constante.
 - **CORS** só para origens listadas em `YUI_API_CORS_ORIGINS` (nunca `*`); não substitui a autenticação.
@@ -28,6 +28,7 @@ Interface HTTP do **Yui Core** para o app (Android e web) e para integrações. 
 - **Limites por usuário:** 30 requisições/min nas rotas de IA (`/v1/chat`, `/v1/agent`, `/v1/agent/confirm` e o início de uma execução em `/v1/dev/projects/:id/runs`) e 240/min no resto.
 - Cada cliente da API é uma conversa 1:1 privada, como uma DM: o dono usa a **memória pessoal** e a **personalidade pessoal**.
 - Ações sensíveis ficam em `logs/core-audit.jsonl` (só metadados, nunca senhas nem o conteúdo das memórias).
+- **Prova de identidade (opcional):** com o arquivo da chave privada Ed25519 do servidor (`YUI_API_IDENTIDADE_ARQUIVO`), a rota pública `GET /v1/identidade` assina um desafio do app, que só então envia senha e token (veja [Prova de identidade do servidor](#prova-de-identidade-do-servidor)). A chave privada fica só no servidor, num arquivo restrito ao seu usuário, e nunca vai para log, resposta nem repositório.
 
 ---
 
@@ -101,6 +102,7 @@ No app: **Chave pelo Discord → Enviar chave para o meu Discord**. A Yui manda 
 | Método | Rota | Corpo | Resposta |
 |--------|------|-------|----------|
 | GET | `/v1/health` | — | `{ ok, memory, readOnly, backends[] }` (sem token) |
+| GET | `/v1/identidade?nonce=<hex>` | — | `{ ok, assinatura }` (sem token; **só com a prova de identidade ligada**, senão `404`; veja [Prova de identidade do servidor](#prova-de-identidade-do-servidor)) |
 | GET | `/v1/auth/status` | — | `{ passwordLogin, discordKey }` (sem token) |
 | POST | `/v1/auth/login` | `{ user, password }` | `{ token, expiresAt, userId }` |
 | POST | `/v1/auth/discord/request` | — | `{ ok, expiresInSeconds }` (a chave vai **por DM**) |
@@ -128,6 +130,17 @@ curl -s http://127.0.0.1:3939/v1/chat \
   -H "Authorization: Bearer $YUI_TOKEN" -H "Content-Type: application/json" \
   -d '{"message":"lembra que meu projeto principal é o BDS"}'
 ```
+
+### Prova de identidade do servidor
+
+O app aceita uma lista de endereços (rede local e Tailscale) e escolhe o primeiro que responde `GET /v1/health`. Isso prova que **alguém** responde, não **quem**: em outra rede, uma máquina com o mesmo IP privado responderia `{"ok":true}` e receberia a senha e o token. A prova de identidade fecha essa porta com uma assinatura:
+
+1. No servidor, gere a identidade uma vez: `node scripts/gerar-identidade-yui.mjs`. O script cria um par de chaves **Ed25519** (`node:crypto`, sem pacote), grava a chave **privada** em `secrets/identidade-yui.key` (ou no caminho de `YUI_API_IDENTIDADE_ARQUIVO`) com permissão restrita ao seu usuário, **nunca sobrescreve** um arquivo existente sem `--forcar` e imprime **só a chave pública** (base64, 32 bytes). `--publica` mostra de novo a pública de uma identidade que já existe. Reinicie a Yui para a rota ligar.
+2. No build do app, coloque a chave **pública** em `EXPO_PUBLIC_YUI_IDENTIDADE_PUBKEY` (é pública: pode estar no APK; a privada nunca sai do servidor). Veja o README do app.
+
+`GET /v1/identidade?nonce=<hexadecimal de 32 a 64 caracteres>` (sem token) devolve `{ "ok": true, "assinatura": "<base64>" }`: a assinatura Ed25519 do texto `yui-identidade-v1|` + o nonce, que o app gera aleatório e novo a cada verificação. Com o arquivo da chave ausente a rota responde `404`; nonce inválido (ausente, repetido, fora do tamanho ou não hexadecimal) `400`; outro método `405`; mais de 30 pedidos por minuto da mesma origem, `429` com `Retry-After`. O app só envia senha, token ou qualquer pedido autenticado depois de conferir a assinatura com a chave pública do build, **também para o endereço "lembrado"** e de novo a cada nova escolha, queda de rede ou a cada 60 s de uso. Servidor sem assinatura válida (404, atraso, assinatura de outra chave ou de outro nonce, qualquer bit trocado) é rejeitado como se não respondesse; se nenhum endereço passar, o app mostra "Não consegui confirmar que este servidor é a sua Yui." e não envia nada. Sem a chave no build, o app se comporta como antes (e a versão web não usa a prova).
+
+**O que a prova não faz:** ela garante que o endereço é o servidor da Yui, mas **não cifra** o tráfego (com `http://` na rede local, o token ainda passa em texto claro pelo Wi-Fi) e não impede quem consiga **retransmitir** em tempo real o desafio ao servidor verdadeiro (um intermediário ativo na mesma rede). O caminho do Tailscale já é cifrado; para a rede local, o que fecha essas duas pontas é HTTPS com certificado fixado, que não está implementado.
 
 ---
 

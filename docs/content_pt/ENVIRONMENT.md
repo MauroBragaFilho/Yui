@@ -363,6 +363,7 @@ A voz precisa de um codificador **Opus**. O `package.json` traz o `opusscript` (
 | `YUI_API_HOST` / `YUI_API_PORT` | Endereço e porta (mantenha `127.0.0.1`) | `127.0.0.1` / `3939` |
 | `YUI_API_TOKENS` | Tokens fixos `token=ID_do_Discord`, separados por vírgula (16+ caracteres) | — |
 | `YUI_API_CORS_ORIGINS` | Origens web autorizadas (CORS), separadas por vírgula | vazio (desligado) |
+| `YUI_API_IDENTIDADE_ARQUIVO` | Arquivo da chave **privada** Ed25519 do servidor, com a qual a rota pública `GET /v1/identidade` assina o desafio do app (**prova de identidade**: o app só envia senha e token a um servidor que provar ser a Yui, e não a qualquer máquina que responda `/v1/health`). Gere com `node scripts/gerar-identidade-yui.mjs` (grava o arquivo com permissão restrita ao seu usuário, nunca sobrescreve um existente sem `--forcar` e imprime só a chave **pública**, que vai no build do app em `EXPO_PUBLIC_YUI_IDENTIDADE_PUBKEY`). Sem o arquivo a rota responde `404` (desligada) e a API se comporta como antes. A chave privada nunca vai para log, para uma resposta nem para o repositório; reinicie a Yui depois de criar ou trocar o arquivo | `secrets/identidade-yui.key` |
 | `YUI_PANEL_USER` | Usuário do login do app/painel | — |
 | `YUI_PANEL_PASSWORD_HASH` | Hash scrypt da senha, gerado por `npm run panel:password` | — |
 | `YUI_PANEL_PASSWORD` | Senha em texto (menos segura; mínimo 10 caracteres). O hash tem prioridade | — |

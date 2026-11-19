@@ -19,6 +19,7 @@ import { startLocalApprovalChannel } from '../security/localChannel.js';
 import { getApprovalManager } from '../security/approvalManager.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
 import { perfilDoApp } from './perfilDoApp.js';
+import { criarIdentidade } from './identidade.js';
 
 // Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
 // Tentativas de Bearer inválido por origem antes de travar (adivinhação de token).
@@ -214,6 +215,7 @@ export function createApiServer({
   health = null, // () => objeto extra do /v1/health (ex.: estado do Discord); usado pelo supervisor
   bds = createBdsProxy(), // ponte para o BDS Server (o painel da Yui é a única porta de entrada para os arquivos)
   selecionarPerfil = null,
+  identidade = criarIdentidade({ arquivo: null }), // prova de identidade do servidor (GET /v1/identidade, assinatura Ed25519); o startApi liga com a chave do arquivo. Sem ela, a rota responde 404
 } = {}) {
   const discordKeyEnabled = Boolean(notify && ownerId);
   const hits = new Map();       // userId -> [timestamps]
@@ -439,6 +441,13 @@ export function createApiServer({
         let avisosDeConfiguracao = [];
         try { avisosDeConfiguracao = diagnosticoDosLimites(); } catch { avisosDeConfiguracao = []; }
         return send(res, 200, { ok: true, memory: isMemoryEnabled(), readOnly: isReadOnlyMode(), backends: ai.listBackends(), uptimeSeconds: Math.round(process.uptime()), avisosDeConfiguracao, ...extra });
+      }
+
+      // ── Prova de identidade do servidor (pública, sem token): assina o desafio do app com a chave privada Ed25519 do servidor (identidade.js) ──
+      if (url.pathname === '/v1/identidade') {
+        const r = identidade.responder({ method: req.method, searchParams: url.searchParams, origem: authFailKey(req) });
+        if (r.retryAfter) res.setHeader('Retry-After', String(r.retryAfter));
+        return send(res, r.status, r.body);
       }
 
       // ── Link curto de vídeo/áudio/foto do BDS Server: o próprio código do link é a credencial (10 min, um só caminho) ──
@@ -718,6 +727,10 @@ export function startApi(client = null, overrides = {}) {
     logger.warn(`[API] O login por senha está ativo e a API escuta em ${host} (sem HTTPS próprio). Use HTTPS (tailscale serve) para a senha não trafegar em texto.`);
   }
 
+  // Prova de identidade do servidor: só liga se o arquivo da chave privada Ed25519 existir (scripts/gerar-identidade-yui.mjs). O aviso nunca traz a chave.
+  const identidade = overrides.identidade ?? criarIdentidade();
+  if (identidade.aviso) logger.warn(`[API] ${identidade.aviso}`);
+
   const hours = Number(process.env.YUI_PANEL_SESSION_HOURS) > 0 ? Number(process.env.YUI_PANEL_SESSION_HOURS) : 12;
   const server = createApiServer({
     tokens,
@@ -732,9 +745,10 @@ export function startApi(client = null, overrides = {}) {
     health: overrides.health ?? (() => ({ discord: { online: client?.isReady?.() ?? null } })),
     // Etapa 10: o cérebro passa o seletor de perfil de IA dele (o app usa o MESMO seletor determinístico). Sem ele, o chat do app não passa perfil.
     selecionarPerfil: overrides.selecionarPerfil ?? null,
+    identidade,
   });
   server.listen(port, host, () =>
-    logger.info(`[API] Yui API ouvindo em http://${host}:${port} (${tokens.length} token(s); login por senha ${panel.enabled ? 'ATIVO' : 'desativado'})`)
+    logger.info(`[API] Yui API ouvindo em http://${host}:${port} (${tokens.length} token(s); login por senha ${panel.enabled ? 'ATIVO' : 'desativado'}; prova de identidade ${identidade.ativa ? 'ATIVA' : 'desligada'})`)
   );
   server.on('error', (err) => logger.error(`[API] Falha ao iniciar: ${err.message}`));
 
