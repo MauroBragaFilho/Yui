@@ -141,7 +141,8 @@ export function isErrorReply(text) {
     || /O modelo não gerou uma resposta válida/i.test(t)
     || /Erro de Processamento/i.test(t)
     || /Desculpe, tive um erro/i.test(t)
-    || /erro ao processar seu pedido/i.test(t);
+    || /erro ao processar seu pedido/i.test(t)
+    || /🔒 Rota privada de IA/i.test(t);
 }
 
 // ───────────────────────────── Sequência de falas ─────────────────────────────

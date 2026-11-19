@@ -77,6 +77,7 @@
     "test:devtarefas": "node tests/test-dev-tarefas.js",
     "test:sondahardware": "node tests/test-sonda-hardware.js",
     "test:ialocal": "node tests/test-ia-local.js",
+    "test:ialocalprivada": "node tests/test-ia-local-privada.js",
     "sonda:hardware": "node scripts/sonda-hardware.mjs",
     "test:rotaprivadaadmin": "node tests/test-rota-privada-admin.js",
     "test:scriptcabecalho": "node tests/test-script-cabecalho-omniroute.js",

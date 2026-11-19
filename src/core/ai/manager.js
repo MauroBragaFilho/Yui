@@ -14,6 +14,7 @@ import {
 } from './limitesTokens.js';
 // Perfis de IA (etapa 9): a rota por perfil (UMA chamada ao OmniRoute com o modelo do perfil). Só entra em ação quando quem chama passa `perfil`.
 import { tentarPerfil } from './rotaPerfil.js';
+import { localPrivadaLigada, chamarLocalPrivada, ErroRotaLocalFechada } from './localPrivada.js';
 export { verificarRotaPrivada, estadoDosPerfis, estadoDaRotaPrivada, ErroDePerfil } from './rotaPerfil.js';
 
 /**
@@ -104,13 +105,20 @@ export function listBackends() {
  * como fato do canal. Sem ele (o app), vale o limite do app: o AI_MAX_TOKENS, cortado pela capacidade do provedor e pelo teto global
  * (ajustes da Liz, §11 do relatório da etapa 6).
  */
-export async function chat({ prompt, system = '', history = [], ctx, memoryBlock = '', deadlineAt = null, sensitive = false, tokensPorProvedor = false, perfil = null }) {
+export async function chat({ prompt, system = '', history = [], ctx, memoryBlock = '', deadlineAt = null, sensitive = false, tokensPorProvedor = false, perfil = null, localPrivada = null }) {
   const backend = activeBackendFor(ctx);
 
   // Personalidade decidida pelo backend a partir do contexto (papel + canal).
   const persona = system || buildPersonaPrompt(ctx);
 
   const started = Date.now();
+  // A rota privada com IA local (YUI_IA_LOCAL_PRIVADA, desligada por padrão): só a chamada privada, ANTES do perfil e do backend; qualquer falha segue o fluxo de hoje, na mesma chamada.
+  const local = await tentarRotaLocalPrivada({ backend, sensitive, ctx, localPrivada, persona, memoryBlock, history, prompt, deadlineAt });
+  if (local !== null) {
+    logger.info(`[AI] rota=local-privada ${Date.now() - started}ms`);
+    recordInteraction();
+    return local;
+  }
   if (perfil) {
     const via = await viaPerfil({ perfil, persona, history, memoryBlock, prompt, ctx, sensitive, deadlineAt });
     if (via) {
@@ -123,6 +131,28 @@ export async function chat({ prompt, system = '', history = [], ctx, memoryBlock
   logger.info(`[AI] backend=${backend.name} ${Date.now() - started}ms`);
   recordInteraction();
   return text;
+}
+
+/**
+ * A rota privada com IA local para o AI Manager (o app e o cérebro separado). Devolve o TEXTO da resposta local ou null (segue o fluxo de hoje, sem erro visível).
+ * Só vale para a chamada PRIVADA: `localPrivada.privada` (o cérebro decide a partir dos FATOS: memória pessoal, texto de anexo) vence; sem ele, `sensitive` ou o escopo pessoal do
+ * contexto. Chamada pública: nada é enviado. O backend "legacy-chain" já passa pelo mesmo local DENTRO da cadeia do bot (llmHandler), então aqui não repete.
+ * `localPrivada.system` / `sistemaLeve` / `ferramentas`: o prompt em versão que cabe no modelo pequeno (o cérebro manda o dele com as ferramentas curtas).
+ */
+async function tentarRotaLocalPrivada({ backend, sensitive, ctx, localPrivada, persona, memoryBlock, history, prompt, deadlineAt }) {
+  if (backend?.cadeiaTemLocalPrivada === true || !localPrivadaLigada()) return null;
+  const privada = typeof localPrivada?.privada === 'boolean' ? localPrivada.privada : sensitive === true || ctx?.memoryScope === 'personal';
+  if (!privada) return null;
+  const r = await chamarLocalPrivada({
+    system: typeof localPrivada?.system === 'string' ? localPrivada.system : persona + (memoryBlock || ''),
+    sistemaLeve: typeof localPrivada?.sistemaLeve === 'string' ? localPrivada.sistemaLeve : (memoryBlock ? persona : null),
+    history, prompt, ferramentas: typeof localPrivada?.ferramentas === 'boolean' ? localPrivada.ferramentas : null,
+    deadlineAt,
+  });
+  if (r.ok) return r.texto;
+  // fallback `fechar` (o padrão): a conversa privada NÃO vai a nenhum backend nem perfil; quem chamou mostra a frase fixa (code PERFIL_FECHADO, como a falha fechada do perfil privado)
+  if (r.fechar === true) throw new ErroRotaLocalFechada(r.motivo);
+  return null;
 }
 
 /** O pedido de limite por provedor (o cérebro) que segue ao backend: `true` ou `{ canal }` (os ajustes do painel, conferidos). Sem pedido: nada. */
@@ -159,9 +189,14 @@ function activeBackendFor(ctx) {
  * (pergunta + evidência cercada como dado não confiável) e o `system`. `sensitive: true` = nunca provedor anônimo. Não conta no gráfico
  * de interações (quem conta é a resposta entregue do turno, como na síntese do bot). AI_PRIVATE_LOCAL_ONLY vale como no chat().
  */
-export async function isolatedChat({ prompt, system = '', ctx = null, sensitive = false, deadlineAt = null, tokensPorProvedor = false, perfil = null } = {}) {
+export async function isolatedChat({ prompt, system = '', ctx = null, sensitive = false, deadlineAt = null, tokensPorProvedor = false, perfil = null, localPrivada = null } = {}) {
   const backend = activeBackendFor(ctx);
   const started = Date.now();
+  const local = await tentarRotaLocalPrivada({ backend, sensitive, ctx, localPrivada, persona: system || buildPersonaPrompt(ctx), memoryBlock: '', history: [], prompt, deadlineAt });
+  if (local !== null) {
+    logger.info(`[AI] rota=local-privada ${Date.now() - started}ms (sem histórico nem memória)`);
+    return local;
+  }
   if (perfil) {
     const via = await viaPerfil({ perfil, persona: system || buildPersonaPrompt(ctx), history: [], memoryBlock: '', prompt, ctx, sensitive, deadlineAt });
     if (via) {
@@ -524,6 +559,7 @@ function registerLegacyChain() {
   registerBackend({
     name: 'legacy-chain',
     local: false,
+    cadeiaTemLocalPrivada: true, // a cadeia do bot (llmHandler) tem a rota privada com IA local à frente dela: o Manager não repete
     async chat({ prompt, system, history, ctx, memoryBlock, deadlineAt, sensitive, isolated }) {
       const { generateResponse } = await loadLegacy();
       // A cadeia legada guarda histórico por canal do Discord, que não existe

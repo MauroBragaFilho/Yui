@@ -45,6 +45,7 @@ import { activateFakeAi } from './cerebro/iaFalsa.js';
 import { ligarAoSupervisor } from './operacao/filho.js';
 // Etapa 9: o motor do agente (só a interface: o Mastra não está implementado) e os perfis de IA (a rota privada precisa de uma verificação prévia).
 import { escolherMotorAgente, estadoDoMotor } from './core/ai/motorAgente.js';
+import { diagnosticoLocalPrivada } from './core/ai/localPrivada.js';
 import { privadoDeclarado } from './core/ai/perfis.js';
 import { selecionarPerfil } from './cerebro/seletorPerfil.js';
 
@@ -123,6 +124,8 @@ function cerebroHealth() {
     // Etapa 9: o motor do agente (nativo; o Mastra é recusado) e o estado dos perfis de IA (só contadores e palavras fixas: sem chave, cabeçalho, prompt nem conteúdo).
     motorAgente: estadoDoMotor(),
     perfisDeIa: ai.estadoDosPerfis(),
+    // A rota privada com IA local (só com YUI_IA_LOCAL_PRIVADA ligada; desligada, a saúde é idêntica à de antes): só números e palavras fixas (o tipo do endereço, nunca o endereço).
+    ...(diagnosticoLocalPrivada().estado !== 'desligada' ? { iaLocalPrivada: diagnosticoLocalPrivada() } : {}),
     // Etapa 16 (proatividade): só aparecem com a chave ligada (sem ela a saúde é idêntica à de antes). Só números.
     ...(monitores ? { monitores: monitores.status() } : {}),
     ...(eventos ? { alertasPorEvento: eventos.status() } : {}),

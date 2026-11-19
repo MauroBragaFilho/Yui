@@ -196,7 +196,7 @@ export function stripThinking(text, { isKnownToolName = isKnownToolNameDefault }
 // ── Respostas de sistema (movidas do llmHandler na etapa 6, com o mesmo texto) ─────────────────────────────────────────────────────────
 // Nenhuma resposta aproveitável (o modelo só "pensou" ou repetiu lixo). Contém "erro ao processar seu pedido" para o isSystemReply tratá-la como resposta de sistema.
 export const EMPTY_REPLY_TEXT = '⚠️ Tive um erro ao processar seu pedido: a IA respondeu algo vazio. Tenta de novo ou reformula a pergunta.';
-const SYSTEM_REPLY_MARKER = /SYSTEM ERROR|Limites de Processamento|erro ao processar seu pedido/i;
+const SYSTEM_REPLY_MARKER = /SYSTEM ERROR|Limites de Processamento|erro ao processar seu pedido|🔒 Rota privada de IA/i;
 /**
  * "Isto é uma resposta de erro/aviso do SISTEMA", nunca um comentário da Yui (TG-16/C13): "Limites de Processamento Atingidos", o aviso de
  * pedido grande demais, "SYSTEM ERROR", "erro ao processar seu pedido". Um comentário que começa com emoji ("⚡ Que preço bom!") NÃO é.

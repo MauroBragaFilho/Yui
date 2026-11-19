@@ -65,6 +65,7 @@ import { contextFromWire } from './metodos.js';
 // Perfis de IA (etapa 9): o cérebro escolhe o perfil de cada chamada (seletor determinístico); o OmniRoute escolhe o provedor.
 import { selecionarPerfil, campoPerfil, MARCADOR_DE_IMAGEM } from './seletorPerfil.js';
 import { TEXTO_PRIVADA_REENVIAR } from './pesquisaRetomada.js';
+import { localPrivadaLigada } from '../core/ai/localPrivada.js';
 // Google (etapa 15, somente leitura, desligado): a pré-rota por código só do dono (agenda, tarefas e e-mails travado). Sem YUI_GOOGLE devolve null e nada muda.
 import { preRotaGoogle } from '../integrations/google/index.js';
 // Etapa 11: o clima como ferramenta própria e a pesquisa por intenção.
@@ -321,8 +322,8 @@ export function createChatBrain(deps = {}) {
 
   // tokensPorProvedor (etapa 6): o tamanho da resposta segue o limite de cada provedor, com o teto global (core/ai/limitesTokens.js) e o
   // ajuste do painel do Discord que o bot mandou como fato do canal (ajustes da Liz).
-  async function callAi({ prompt, system, history, ctx, sensitive, deadlineAt, channel, perfil = null }) {
-    return ai.chat({ prompt, system, history, ctx, memoryBlock: '', sensitive, tokensPorProvedor: pedidoDeLimiteDoCanal(channel), ...(deadlineAt ? { deadlineAt } : {}), ...campoPerfil(perfil) });
+  async function callAi({ prompt, system, history, ctx, sensitive, deadlineAt, channel, perfil = null, localPrivada = null }) {
+    return ai.chat({ prompt, system, history, ctx, memoryBlock: '', sensitive, tokensPorProvedor: pedidoDeLimiteDoCanal(channel), ...(deadlineAt ? { deadlineAt } : {}), ...campoPerfil(perfil), ...(localPrivada ? { localPrivada } : {}) });
   }
 
   /**
@@ -527,7 +528,7 @@ export function createChatBrain(deps = {}) {
     const privateChat = sensitive || (!ctx.guildId && !call.voiceItem);
     const offerSearch = searchOfferedFor({ sensitive: sensitive || privateChat, userId: ctx.userId, chatter: call.chatter || o.chatter });
     const searchHidden = channel.toolsDisabled.includes('search_web') || !offerSearch;
-    const { withMemory } = buildConversationSystemPrompt({
+    const { withMemory, withoutMemory } = buildConversationSystemPrompt({
       serverPrompt: channel.serverPrompt, persona, guildName: o.guildName, channelName: o.channelName, radioBlock: channel.radioBlock,
       noToolRule: o.noTools || searchHidden, channelSettings: channel.channelSettings, memoryBlock, voice: o.voicePersona,
     });
@@ -574,9 +575,25 @@ export function createChatBrain(deps = {}) {
     if (skill?.bloco) system += skill.bloco;
     // Com a web ou o clima no prompt as ferramentas saem desta chamada: a resposta é o texto, nunca o JSON de uma ferramenta. Na pesquisa por intenção as
     // ferramentas saem também quando a busca NÃO deu certo: o modelo não pode chamar search_web depois (o bot recusaria na conversa privada).
-    if (!o.noTools && !usedSearch && !dadosDoClima && !porIntencao) system += toolsDefinitionFromNames({ allTools: allTools(), active: channel.toolsActive, disabled: channel.toolsDisabled, offerSearch });
+    const ofereceFerramentas = !o.noTools && !usedSearch && !dadosDoClima && !porIntencao;
+    if (ofereceFerramentas) system += toolsDefinitionFromNames({ allTools: allTools(), active: channel.toolsActive, disabled: channel.toolsDisabled, offerSearch });
     // Nunca provedor anônimo: conversa sensível, texto de anexo (dado de terceiros) e qualquer memória no prompt (como na cadeia do bot).
     const noAnonymous = sensitive || o.attachment || Boolean(memoryBlock);
+    // A rota privada com IA local (YUI_IA_LOCAL_PRIVADA, desligada por padrão): o CÉREBRO decide se a chamada é privada, só pelos FATOS (memória pessoal ou texto de anexo), nunca por uma
+    // afirmação do bot; memória pública no prompt é só "não anônimo", e não leva a chamada ao computador do dono. O prompt vai em versão que cabe no modelo pequeno (ferramentas curtas).
+    // Desligada: nenhum campo novo vai à chamada.
+    let localPrivada = null;
+    if (localPrivadaLigada(env)) {
+      const privadaLocal = sensitive || o.attachment === true;
+      localPrivada = { privada: privadaLocal };
+      if (privadaLocal) {
+        const base = (skill?.bloco ?? '');
+        const curtas = ofereceFerramentas ? toolsDefinitionFromNames({ allTools: allTools(), active: channel.toolsActive, disabled: channel.toolsDisabled, offerSearch, compact: true }) : '';
+        localPrivada.system = withMemory + base + curtas;
+        localPrivada.sistemaLeve = withoutMemory + base + curtas;
+        localPrivada.ferramentas = ofereceFerramentas;
+      }
+    }
     const backend = (ai.listBackends?.() ?? []).find((b) => b.active)?.name ?? 'cérebro';
     // O perfil de IA desta chamada (etapa 9): escolhido SÓ pelos fatos deste pedido (o ponto, a privacidade, o texto e o tamanho do histórico), nunca por
     // algo guardado de outra conversa. null = sem perfil configurado: a chamada segue idêntica à de antes.
@@ -587,7 +604,7 @@ export function createChatBrain(deps = {}) {
     });
     let text;
     try {
-      text = String(await callAi({ prompt: finalPrompt, system, history, ctx, sensitive: noAnonymous, deadlineAt: o.deadlineAt, channel, perfil }) ?? '');
+      text = String(await callAi({ prompt: finalPrompt, system, history, ctx, sensitive: noAnonymous, deadlineAt: o.deadlineAt, channel, perfil, localPrivada }) ?? '');
     } catch (err) {
       counters.aiFailures += 1;
       // A falha FECHADA do perfil privado (etapa 9): nada saiu a nenhum provedor; a pessoa recebe a mensagem curta e clara, sem o aviso de "IA fora"
@@ -612,7 +629,7 @@ export function createChatBrain(deps = {}) {
           const again = buildConversationSystemPrompt({
             serverPrompt: channel.serverPrompt, radioBlock: channel.radioBlock, noToolRule: true, channelSettings: channel.channelSettings, voice: o.voicePersona,
           });
-          const retry = String(await callAi({ prompt: `(responda de forma diferente, com outras palavras): ${f.ownText || prompt}`, system: again.withMemory + (skill?.bloco ?? ''), history, ctx, sensitive: noAnonymous, channel, perfil }) ?? '');
+          const retry = String(await callAi({ prompt: `(responda de forma diferente, com outras palavras): ${f.ownText || prompt}`, system: again.withMemory + (skill?.bloco ?? ''), history, ctx, sensitive: noAnonymous, channel, perfil, localPrivada: localPrivada ? { privada: localPrivada.privada } : null }) ?? '');
           if (retry.trim()) text = retry;
         } catch { /* fica a primeira */ }
       }

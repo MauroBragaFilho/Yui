@@ -112,6 +112,9 @@ export const SUITES = [
   'test:devtarefas',
   'test:sondahardware',
   'test:ialocal',
+  // A rota privada com IA local (YUI_IA_LOCAL_PRIVADA, desligada por padrão): a chamada privada tenta o modelo local ANTES da cadeia e cai para ela na mesma chamada (computador fora,
+  // prazo, resposta vazia, só raciocínio, JSON quebrado, pedido grande), o disjuntor, a pública que nunca passa por ali e a chave desligada que não muda nada; servidor FALSO em 127.0.0.1.
+  'test:ialocalprivada',
   // Etapa 11 (clima como ferramenta própria e pesquisa por intenção no chat, só no cérebro): o detector do clima; o cliente e o serviço do Open-Meteo contra um servidor FALSO em
   // loopback (a cota por hora, o cache, as falhas); o detector e a política da pesquisa por intenção (chave x dono/membro x DM/servidor x YUI_PRIVATE_SEARCH); e o chat.turn, a fila do
   // llmHandler e o /yui de ponta a ponta com a IA, o buscador e o Open-Meteo falsos. Todos num processo só, sob o bloqueio de integração externa.

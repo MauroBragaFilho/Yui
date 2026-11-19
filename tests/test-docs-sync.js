@@ -54,6 +54,13 @@ const NEW_VARS = [
   ['YUI_QUEUE_MAX_PER_USER', '2'],
   ['YUI_HISTORY_MAX_CHANNELS', '500'],
   ['YUI_FUSO', 'America/Cuiaba'], // o exemplo; o padrão do código (America/Sao_Paulo) é conferido no test-fuso-dono
+  // a rota privada com IA local (desligada por padrão)
+  ['YUI_IA_LOCAL_PRIVADA', 'off'],
+  ['YUI_IA_LOCAL_PRIVADA_URL', null],
+  ['YUI_IA_LOCAL_PRIVADA_MODELO', 'granite-4.0-micro'],
+  ['YUI_IA_LOCAL_PRIVADA_TIMEOUT_S', '20'],
+  ['YUI_IA_LOCAL_PRIVADA_MAX_TOKENS', '768'],
+  ['YUI_IA_LOCAL_PRIVADA_FALLBACK', 'fechar'],
 ];
 
 // Scripts novos desta rodada e o arquivo de teste de cada um.

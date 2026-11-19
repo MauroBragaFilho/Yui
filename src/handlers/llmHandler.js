@@ -10,7 +10,8 @@ import { resolveMentions, neutralizeMassMentions } from '../discord/mentions.js'
 import { restoreMentionIds } from '../utils/mentions.js';
 import { alertOwner } from '../core/alerts.js';
 import { buildPersonaPrompt } from '../core/persona.js';
-import { toolsDefinitionText, radioPromptBlock, buildConversationSystemPrompt, searchOfferedFor } from '../core/ai/promptConversa.js';
+import { toolsDefinitionText, toolsCompactText, radioPromptBlock, buildConversationSystemPrompt, searchOfferedFor } from '../core/ai/promptConversa.js';
+import { localPrivadaLigada, chamarLocalPrivada, fallbackLocalPrivada, ErroRotaLocalFechada } from '../core/ai/localPrivada.js';
 import { LIMITES_PADRAO_CADEIA } from '../core/ai/limitesTokens.js';
 import { stripThinking as stripThinkingCore, extractThinkingFallback, isSystemReply, EMPTY_REPLY_TEXT } from '../core/ai/limpezaResposta.js';
 import { isChatRemote, createRemoteTurn, isRemoteTurn, isCerebroUnavailable, CEREBRO_UNAVAILABLE_TEXT, forgetVoiceInCerebro } from '../discord/turnoCerebro.js';
@@ -315,7 +316,7 @@ function buildToolsPayload(guildId, userId = null, { sensitive = false, chatter 
             }
         }));
 }
-function buildToolsDefinition(guildId, userId = null, { sensitive = false, chatter = false } = {}) {
+function buildToolsDefinition(guildId, userId = null, { sensitive = false, chatter = false, compact = false } = {}) {
     const disabled = searchOfferedFor({ sensitive, userId, chatter }) ? getDisabledTools(guildId) : [...getDisabledTools(guildId), 'search_web'];
     const mode = getAutoBlockMode(guildId);
     const automodActive = mode !== 'off';
@@ -331,7 +332,7 @@ function buildToolsDefinition(guildId, userId = null, { sensitive = false, chatt
             return true;
         });
     // O texto (lista, exemplos e instruções) é o MESMO que o cérebro monta no chat.turn (core/ai/promptConversa.js).
-    return toolsDefinitionText(activeTools, disabled);
+    return compact === true ? toolsCompactText(activeTools, disabled) : toolsDefinitionText(activeTools, disabled);
 }
 // Configuração do canal que o CÉREBRO precisa para montar o prompt da conversa (etapa 5, chat.turn): só DADOS do Discord, que são do bot
 // (prompt do servidor, persona e humor do canal, o rádio tocando, as ferramentas ligadas no servidor). O cérebro decide a persona, a memória,
@@ -1233,6 +1234,21 @@ function replyFromToolCall(name, argumentsText, finishReason, modelName) {
     const cut = isTruncatedFinish(finishReason);
     return { text: rec.content, modelName, truncated: rec.parsed ? cut : cut && !rec.complete, finishReason: finishReason ?? null };
 }
+// A ROTA PRIVADA COM IA LOCAL (core/ai/localPrivada.js; DESLIGADA por padrão: YUI_IA_LOCAL_PRIVADA): um provedor que só entra para a chamada privada (sensitive ou texto de anexo),
+// ANTES da cadeia. Responde pelo modelo local do dono e, em qualquer falha (computador fora, prazo, resposta vazia, só raciocínio, JSON de ferramenta quebrado, pedido grande demais, disjuntor
+// aberto), lança um erro `notTried`: o laço segue para a cadeia de sempre na MESMA chamada, sem contar como falha de provedor nem repetir nada ao usuário. Nada aqui vai ao log além do motivo.
+async function tryLocalPrivada(prompt, systemPrompt, options = {}) {
+    const r = await chamarLocalPrivada({
+        system: systemPrompt, sistemaLeve: options.sistemaLeve ?? null, history: options.history || [], prompt,
+        ferramentas: options.disableTools !== true, deadlineAt: options.deadlineAt,
+    });
+    if (!r.ok) {
+        // fallback `fechar` (o padrão): o laço NÃO segue para a cadeia; a frase fixa é a resposta. `nuvem`: segue para a cadeia na mesma chamada.
+        if (r.fechar === true) throw Object.assign(new ErroRotaLocalFechada(r.motivo), { notTried: true });
+        throw Object.assign(new Error(`local-privada: ${r.motivo}`), { notTried: true, localPrivada: true, motivo: r.motivo });
+    }
+    return { text: r.texto, modelName: `${r.modelo} (local)`, truncated: r.finishReason === 'length', finishReason: r.finishReason };
+}
 async function tryLocal(prompt, systemPrompt, options = {}) {
     const useMcp = !!config.lmStudioApiKey;
     const connectionTimeout = providerSettings.local.timeout;
@@ -1938,10 +1954,16 @@ async function generateResponse(prompt, channelId = null, options = {}) {
     // O pedido leva o texto de um ANEXO lido (messageCreate): um .log pode ter chave e dado de terceiros; como na conversa sensível, nada
     // disso vai para provedor anônimo (Pollinations, Horde), qualquer que seja o tamanho do pedido.
     const noAnonymous = typeof options.attachmentBlock === 'string' && options.attachmentBlock.length > 0;
-    const providers = providersAllowed(allProviders, { sensitive, noAnonymous });
-    if (providers.length < allProviders.length) {
-        logger.info(`[IA] ${sensitive ? 'Conversa sensível' : 'Pedido com anexo de texto'}: ${allProviders.length - providers.length} provedor(es) anônimo(s) fora da cadeia.`);
+    const chainProviders = providersAllowed(allProviders, { sensitive, noAnonymous });
+    if (chainProviders.length < allProviders.length) {
+        logger.info(`[IA] ${sensitive ? 'Conversa sensível' : 'Pedido com anexo de texto'}: ${allProviders.length - chainProviders.length} provedor(es) anônimo(s) fora da cadeia.`);
     }
+    // A rota privada com IA local (desligada por padrão): só a chamada PRIVADA (sensitive, que vem do cérebro/da conversa a partir dos fatos, ou texto de anexo) e nunca o rádio.
+    // Chamada pública: a lista é exatamente a de antes.
+    const usarLocalPrivada = (sensitive || noAnonymous) && options.radioMode !== true && localPrivadaLigada();
+    const localPrivadaProvider = { func: tryLocalPrivada, supportsSearch: false, id: 'local-privada' };
+    // `fechar` (padrão): a chamada privada tem SÓ o local na lista (nenhum provedor da cadeia a recebe); `nuvem`: o local vai à frente da cadeia de sempre.
+    const providers = usarLocalPrivada ? (fallbackLocalPrivada() === 'fechar' ? [localPrivadaProvider] : [localPrivadaProvider, ...chainProviders]) : chainProviders;
     const guildId = options.guildId || options.guild?.id || null;
     // search_web fora da oferta (e fora das regras de prompt que mandam chamá-la): desligada no servidor, ou conversa privada que o YUI_PRIVATE_SEARCH não liberou.
     const searchHiddenHere = isToolDisabled(guildId, 'search_web') || !searchOfferedFor({ sensitive: sensitive || options.privateChat === true, userId: options.userId, chatter: options.chatter === true });
@@ -2006,7 +2028,8 @@ async function generateResponse(prompt, channelId = null, options = {}) {
         }
         let attemptTokens = 0;
         try {
-            const providerKey = provider.func === tryLocal ? 'local' :
+            const providerKey = provider.func === tryLocalPrivada ? 'local privado' :
+                                provider.func === tryLocal ? 'local' :
                                 provider.func === tryGateway ? 'gateway' :
                                 provider.func === tryHuggingFace ? 'hf' :
                                 provider.func === tryGroq ? `groq 1/${config.groqApiKeys.length || 1}` :
@@ -2043,6 +2066,9 @@ async function generateResponse(prompt, channelId = null, options = {}) {
                 } else if (provider.func === tryLocal && config.lmStudioApiKey) {
                     // A linha de pesquisa manda chamar search_web NA HORA (anunciar "vou pesquisar" com generate_reply não pesquisa nada) e só entra com a ferramenta ligada.
                     effectiveSystemPrompt += "\n[SYSTEM NOTICE]: You operate in STRICT TOOL MODE. You MUST ALWAYS call a tool.\n- If the user wants an action (search, download, help), use the specific tool.\n" + (searchHiddenHere ? '' : STRICT_MODE_SEARCH_LINE + "\n") + STRICT_MODE_REPLY_LINE + "\n- DO NOT output plain text. ALWAYS output a tool call.";
+                } else if (provider.func === tryLocalPrivada) {
+                    // modelo pequeno (contexto de 4096 tokens): as ferramentas vão em versão curta, no mesmo formato JSON em texto (o despachante da fila lê igual)
+                    effectiveSystemPrompt += buildToolsDefinition(guildId, options.userId || null, { sensitive: sensitive || options.privateChat === true, chatter: options.chatter === true, compact: true });
                 } else if (provider.func === tryGemini) {
                     effectiveSystemPrompt += "\n[REGRAS DE FERRAMENTAS (TOOLS)]:\nVocê possui ferramentas poderosas. REGRA CRÍTICA DE OURO: Se o usuário pedir uma AÇÃO que pode ser feita por uma ferramenta, você DEVE chamar a ferramenta imediatamente. NUNCA responda com texto prometendo fazer a ação (ex: PROIBIDO dizer 'blz vou baixar', 'vou procurar', 'ok, buscando' quando houver uma ferramenta aplicável — isso é falso atendimento. Aja ou recuse, nunca prometa).\n- Pediu para BAIXAR MÚSICA POR NOME/ARTISTA (sem URL)? → OBRIGATÓRIO chamar search_and_download_music com o nome. NUNCA diga que vai baixar sem chamar.\n- Pediu para GERAR/CRIAR/DESENHAR uma imagem? → OBRIGATÓRIO chamar generate_image. Crie um prompt detalhado e criativo mesmo se o pedido for vago.\n- Pediu para BAIXAR áudio/vídeo e deu um link URL? → Chame download_audio ou download_video.\n- Pediu para entrar na call, canal de voz ou conversar por voz? → OBRIGATÓRIO chamar join_voice_call.\n- Pediu para sair da call, canal de voz ou desconectar da voz? → OBRIGATÓRIO chamar leave_voice_call.\n" + (searchHiddenHere ? '' : GEMINI_SEARCH_RULE + "\n") + "- Pediu jogo/torrent ou para baixar/crackear qualquer jogo de PC? → Chame search_game obrigatoriamente.\n- Pediu preço na Steam? → Chame check_steam.\n- Pediu conversão de moeda/cotação? → Chame convert_currency.\n- Conversa casual sem ação (oi, piada, pergunta simples, pergunta sobre você)? → Responda com texto puro direto, NUNCA chame ferramenta.\n\n[ANTI-LOOP DE CONTEXTO]: O histórico da conversa pode conter chamadas de ferramenta anteriores (como downloads de música). Isso NÃO significa que você deve chamar essas ferramentas novamente. Analise APENAS a mensagem mais recente do usuário para decidir qual ação tomar.\n\n[FORMATO DA RESPOSTA]:\n- Para texto: escreva APENAS a fala final pro usuário. Sem análise interna, sem mencionar ferramentas.\n- NUNCA escreva 'tool_code', 'print()', 'default_api.' ou código na resposta.\n- NUNCA encapsule em JSON como {\"response\": \"...\"}. Texto puro sempre.\n- NUNCA exponha qual ferramenta vai usar ou seu raciocínio de decisão.\n- NUNCA repita literalmente o que o usuário acabou de dizer nem o que você disse na mensagem anterior.";
                 } else {
@@ -2092,7 +2118,9 @@ async function generateResponse(prompt, channelId = null, options = {}) {
             const sentHistory = options.noHistory === true ? [] : history;
             attemptTokens = estimateTokens(effectiveSystemPrompt.length + finalPrompt.length + sentHistory.reduce((n, h) => n + String(h?.content ?? '').length, 0));
             maxEstTokens = Math.max(maxEstTokens, attemptTokens);
-            const historyOptions = { ...options, sensitive, history: sentHistory, approxTokens: attemptTokens, ...(usedSearch ? { disableTools: true } : {}) };
+            // o prompt SEM a memória (mesmas ferramentas): a rota privada local cabe em 4096 tokens e usa isto quando a memória não cabe
+            const leveLocal = provider.func === tryLocalPrivada && effectiveSystemPrompt.startsWith(promptForProvider) ? { sistemaLeve: systemPromptNoMemory + effectiveSystemPrompt.slice(promptForProvider.length) } : {};
+            const historyOptions = { ...options, sensitive, history: sentHistory, approxTokens: attemptTokens, ...leveLocal, ...(usedSearch ? { disableTools: true } : {}) };
             const result = await provider.func(finalPrompt, effectiveSystemPrompt, historyOptions);
             if (!result || !result.text || result.text.trim().length === 0) throw new Error('Resposta vazia');
             logger.info(`[IA] Sucesso! Provedor: ${result.modelName}`);
@@ -2165,6 +2193,11 @@ async function generateResponse(prompt, channelId = null, options = {}) {
             }
             return finalOutput;
         } catch (error) {
+            // A rota privada local fechada (fallback `fechar`): nada foi (nem será) enviado a um provedor da cadeia; a resposta é a frase fixa (só o motivo em palavra fixa no log).
+            if (error instanceof ErroRotaLocalFechada) {
+                logger.info(`[IA] Rota privada local fechada (${error.motivo}): a conversa privada não foi enviada a nenhum provedor da cadeia.`);
+                return error.mensagemCurta;
+            }
             let errorDetails = error.response?.data?.error?.message || error.response?.data?.error || error.message;
             if (typeof errorDetails === 'object') errorDetails = JSON.stringify(errorDetails);
             errorDetails = scrubLogText(errorDetails, 300);

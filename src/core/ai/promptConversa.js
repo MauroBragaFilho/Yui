@@ -166,6 +166,25 @@ export function toolsDefinitionText(activeTools, disabled) {
     return `\n--- FERRAMENTAS DISPONÍVEIS ---\nVocê tem acesso às seguintes ferramentas para executar ações reais.\n${introLine}\n${toolList}\n--- INSTRUÇÃO DE PENSAMENTO E DECISÃO ---\nAntes de responder, ANALISE:\n1. O usuário quer apenas conversar ou uma informação que você já sabe? -> Responda apenas com texto (Sem JSON).\n2. O usuário quer uma AÇÃO ESPECÍFICA (Download, Busca Web)? -> Responda com JSON.${searchDecisionLine}\n\nFORMATO PARA USO DE FERRAMENTA (JSON):\n{\n  "thought": "Pensamento ultra-curto (1 a 3 palavras para economizar tokens, ex: 'baixar audio')",\n  "tool": "nome_da_ferramenta",\n  "args": { ...argumentos... }\n}\n\nEXEMPLOS:${exampleList}\nUser: "Como você está?"\nResponse: Estou bem, e você?\n\n---------------------------------------\n`;
 }
 
+/**
+ * A definição de ferramentas em versão CURTA, para um modelo pequeno com contexto de 4096 tokens (a rota privada com IA local, core/ai/localPrivada.js): o nome, a primeira frase da
+ * descrição e os argumentos de cada ferramenta, mais a regra de quando chamar. O formato da chamada é o MESMO da definição completa (um JSON { thought, tool, args } em texto), então o
+ * despachante da fila o lê igual. Só entra a ferramenta que a definição completa também ofereceria.
+ * @param {Array<object>} activeTools  as ferramentas oferecidas (objetos do mcp_tools.json), já filtradas
+ * @param {string[]} disabled          os nomes que NÃO estão disponíveis
+ */
+export function toolsCompactText(activeTools, disabled = []) {
+    const linhas = [];
+    for (const t of activeTools) {
+        const f = t?.function;
+        if (!f?.name || !f.textual_triggers) continue;
+        const frase = String(f.description ?? '').split(/(?<=[.!?])\s/)[0].replace(/\s+/g, ' ').trim().slice(0, 110);
+        linhas.push(`- ${f.name}: ${frase} | Args: ${String(f.textual_args ?? '').replace(/\s+/g, ' ').slice(0, 200)}`);
+    }
+    const searchOn = !disabled.includes('search_web');
+    return `\n--- FERRAMENTAS (versão curta) ---\nConversa comum, ou algo que você já sabe: responda só com texto, sem JSON.\nPedido de uma AÇÃO desta lista: responda SOMENTE com o JSON { "thought": "motivo curto", "tool": "nome", "args": { ... } } e nada mais; nunca prometa a ação em texto.\n${searchOn ? 'Pediu para pesquisar na web ou ver novidades: chame search_web na hora.\n' : ''}${linhas.join('\n')}\n`;
+}
+
 /** As ferramentas do mcp_tools.json (código versionado, só leitura). [] se não der para ler. */
 export function loadMcpTools(file = MCP_TOOLS_FILE) {
     try {
@@ -182,9 +201,9 @@ export function loadMcpTools(file = MCP_TOOLS_FILE) {
  * Mesma saída do buildToolsDefinition do bot para a mesma situação (conferido no teste).
  * @param {{ allTools: object[], active: string[], disabled: string[], offerSearch: boolean }} p
  */
-export function toolsDefinitionFromNames({ allTools, active, disabled, offerSearch }) {
+export function toolsDefinitionFromNames({ allTools, active, disabled, offerSearch, compact = false }) {
     const activeSet = new Set(active);
     const off = offerSearch ? [...disabled] : [...disabled, 'search_web'];
     const list = allTools.filter((t) => activeSet.has(t?.function?.name) && !off.includes(t.function.name));
-    return toolsDefinitionText(list, off);
+    return compact === true ? toolsCompactText(list, off) : toolsDefinitionText(list, off);
 }

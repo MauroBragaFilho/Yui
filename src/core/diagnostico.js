@@ -22,6 +22,7 @@ import { activeProviders } from '../search/providers.js';
 import { estadoDaCotaHora } from '../search/cotaHora.js';
 import { estadoDosPerfis } from './ai/rotaPerfil.js';
 import { estadoDoMotor } from './ai/motorAgente.js';
+import { diagnosticoLocalPrivada, MOTIVOS as MOTIVOS_LOCAL_PRIVADA } from './ai/localPrivada.js';
 import { pareceSegredo } from './ai/decisaoOmniRoute.js';
 import { NOMES_DE_PERFIL } from './ai/perfis.js';
 import { readLogStats, summarizeDatabases } from './healthReport.js';
@@ -241,6 +242,36 @@ function secaoPerfisIa(fontes) {
   };
 }
 
+const ESTADOS_LOCAL_PRIVADA = ['ativa', 'em-descanso', 'sondando', 'url-invalida'];
+const FALLBACKS_LOCAL_PRIVADA = ['fechar', 'nuvem'];
+const TIPOS_DE_HOST = ['loopback', 'rede-privada', 'tailscale', 'nome-local'];
+/**
+ * A rota privada com IA local (YUI_IA_LOCAL_PRIVADA): só aparece com a chave ligada (desligada, o diagnóstico é idêntico ao de antes). Só estado, números e palavras fixas: o TIPO do
+ * endereço (nunca o endereço), o nome do modelo (filtrado), quantas respostas vieram do local e quantas caíram para a cadeia, por motivo em palavra fixa. Nunca prompt nem conteúdo.
+ */
+function secaoIaLocalPrivada(fontes) {
+  const l = fontes.iaLocalPrivada && typeof fontes.iaLocalPrivada === 'object' ? fontes.iaLocalPrivada : null;
+  if (!l || !ESTADOS_LOCAL_PRIVADA.includes(l.estado)) return null;
+  const motivos = {};
+  for (const [k, v] of Object.entries(l.motivosDasQuedas && typeof l.motivosDasQuedas === 'object' ? l.motivosDasQuedas : {})) {
+    if (MOTIVOS_LOCAL_PRIVADA.includes(k)) motivos[k] = inteiro(v);
+  }
+  return {
+    estado: l.estado,
+    fallback: FALLBACKS_LOCAL_PRIVADA.includes(l.fallback) ? l.fallback : null,
+    tipoDeHost: TIPOS_DE_HOST.includes(l.tipoDeHost) ? l.tipoDeHost : null,
+    modelo: idSeguro(l.modelo),
+    respostasLocais: inteiro(l.respostasLocais),
+    quedasParaCadeia: inteiro(l.quedasParaCadeia),
+    respostasFechadas: inteiro(l.respostasFechadas),
+    motivosDasQuedas: motivos,
+    ultimoMotivo: MOTIVOS_LOCAL_PRIVADA.includes(l.ultimoMotivo) ? l.ultimoMotivo : null,
+    ultimaLatenciaMs: inteiroOuNull(l.ultimaLatenciaMs),
+    falhasSeguidas: inteiro(l.falhasSeguidas),
+    descansoSegundos: inteiro(l.descansoSegundos),
+  };
+}
+
 /** O motor do agente: o que foi pedido (YUI_MOTOR_AGENTE), o que está ativo (sempre o nativo) e se o pedido foi recusado. */
 function secaoMotor(fontes) {
   const m = fontes.motor && typeof fontes.motor === 'object' ? fontes.motor : {};
@@ -324,6 +355,8 @@ const MOTIVOS = Object.freeze({
   'rota-privada-nao-validada': 'O perfil privado da IA está declarado, mas a rota dele não está verificada: a conversa privada responde com um aviso.',
   'perfis-com-erro': 'A configuração dos perfis de IA tem erros (os perfis com erro não valem).',
   'motor-recusado': 'O motor do agente pedido não está implementado: o cérebro segue no motor nativo.',
+  'ia-local-privada-fora': 'A IA local da conversa privada não está respondendo (o computador pode estar desligado ou lento): a conversa privada segue o fallback configurado (YUI_IA_LOCAL_PRIVADA_FALLBACK).',
+  'ia-local-privada-url-invalida': 'A IA local da conversa privada está ligada, mas o endereço (YUI_IA_LOCAL_PRIVADA_URL) não é aceito: nada é enviado a ela.',
 });
 
 /** O estado ("ok", "atencao" ou "problema") e os motivos (códigos fixos com a frase). Só vê os números já sanitizados. */
@@ -348,6 +381,8 @@ export function avaliarEstado(d) {
   else if (rotaPrivada === 'incompleta' || rotaPrivada === 'nao-validada' || rotaPrivada === 'nao-verificada') atencoes.push('rota-privada-nao-validada');
   if ((d.perfisDeIa?.errosDeConfiguracao?.length ?? 0) > 0) atencoes.push('perfis-com-erro');
   if (d.motorAgente?.recusado === true) atencoes.push('motor-recusado');
+  if (d.iaLocalPrivada?.estado === 'url-invalida') problemas.push('ia-local-privada-url-invalida');
+  else if (d.iaLocalPrivada?.estado === 'em-descanso') atencoes.push('ia-local-privada-fora');
   const r = d.cerebro?.retomadaDaPesquisa;
   if (r && (inteiro(r.interrompidas) > 0 || inteiro(r.porEstado?.uncertain) > 0)) atencoes.push('pesquisas-incertas');
   if (d.erros.ultimas24h >= 20) atencoes.push('erros-no-log');
@@ -402,6 +437,8 @@ export function fontesPadrao(env = process.env) {
     // etapa 9: os perfis de IA (contadores e o estado da rota privada) e o motor do agente escolhido por este processo
     perfisIa: () => estadoDosPerfis(env),
     motor: () => estadoDoMotor(),
+    // a rota privada com IA local: o estado só vira seção do diagnóstico com a chave ligada (secaoIaLocalPrivada)
+    iaLocalPrivada: () => { const l = diagnosticoLocalPrivada({ env }); return l.estado === 'desligada' ? null : l; },
   };
 }
 
@@ -438,6 +475,7 @@ export function montarDiagnostico({ modo = 'unico', fontes = {}, now = Date.now,
     bancos: secaoBancos(f),
     perfisDeIa: secaoPerfisIa(f),
     motorAgente: secaoMotor(f),
+    ...(secaoIaLocalPrivada(f) ? { iaLocalPrivada: secaoIaLocalPrivada(f) } : {}),
   };
   // `d.cotas` é o nome curto que o avaliarEstado lê; o nome público da seção é `cotasDeBusca`
   const { estado, motivos } = avaliarEstado({ ...d, cotas: d.cotasDeBusca });
