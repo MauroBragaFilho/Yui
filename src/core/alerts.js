@@ -136,7 +136,7 @@ export function createAlerter({ notify = null, ownerId = null, env = process.env
     sent.push(t);
 
     const body = redact(String(detail ?? ''), env).replace(/\s+\n/g, '\n').trim().slice(0, 500);
-    const text = [`${ICON[level] ?? ICON.warn} **Yui: ${title}**`, body ? `\n${body}` : '', '\n-# Aviso automático. Para desligar: YUI_ALERTS=false no .env.']
+    const text = [`${ICON[level] ?? ICON.warn} **Yui: ${title}**`, body ? `\n${body}` : '']
       .filter(Boolean)
       .join('\n');
     try {

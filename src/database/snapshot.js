@@ -37,6 +37,23 @@ export const SID_SYSTEM = 'S-1-5-18';
 export const SID_ADMINISTRATORS = 'S-1-5-32-544';
 const SDDL_ALIASES = { SY: SID_SYSTEM, BA: SID_ADMINISTRATORS };
 
+/**
+ * Converte um sid do SDDL no SID completo. SY e BA têm SID fixo. O apelido LA (a conta Administrador embutida da máquina, RID 500) só vira o SID completo
+ * quando o USUÁRIO ATUAL é essa conta (é o caso do runner do GitHub Actions, que roda como ela): em qualquer outro caso o `LA` continua sem mapa e a conferência
+ * da permissão falha fechada (nunca se aceita uma conta que não é o usuário atual).
+ * @param {string} sid
+ * @param {{ userSid?: string|null }} [opts] `userSid`: o SID do usuário atual (só para teste; o padrão é o do `whoami`)
+ */
+export function resolveSddlSid(sid, { userSid } = {}) {
+  if (SDDL_ALIASES[sid]) return SDDL_ALIASES[sid];
+  if (sid === 'LA') {
+    let me = userSid ?? null;
+    if (me === null) { try { me = currentUserSid(); } catch { me = null; } }
+    if (me && /^S-1-5-21(?:-\d+){3}-500$/.test(me)) return me;
+  }
+  return sid;
+}
+
 /** Ferramenta do Windows pelo caminho completo em System32 (não pelo PATH, que poderia apontar para outra). */
 function windowsTool(exe) {
   const candidate = path.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', exe);
@@ -71,7 +88,7 @@ export function readWindowsAcl(target) {
     execFileSync(windowsTool('icacls.exe'), [target, '/save', tmpFile, '/q'], toolOptions);
     const sddl = fs.readFileSync(tmpFile).toString('utf16le').replace(/^\uFEFF/, '').split(/\r?\n/).find((l) => l.startsWith('D:')) || '';
     const head = sddl.match(/^D:([A-Z]*)/);
-    const aces = [...sddl.matchAll(/\(([^;()]*);([^;()]*);([^;()]*);[^;()]*;[^;()]*;([^;()]*)\)/g)].map(([, type, flags, rights, sid]) => ({ type, flags, rights, sid: SDDL_ALIASES[sid] || sid }));
+    const aces = [...sddl.matchAll(/\(([^;()]*);([^;()]*);([^;()]*);[^;()]*;[^;()]*;([^;()]*)\)/g)].map(([, type, flags, rights, sid]) => ({ type, flags, rights, sid: resolveSddlSid(sid) }));
     return { sddl, protected: !!head && head[1].includes('P'), aces };
   } catch (err) {
     throw new Error(`não foi possível ler a ACL de ${target}: ${toolError(err)}`);

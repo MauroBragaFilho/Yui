@@ -25,14 +25,14 @@ function make(extra = {}) {
 }
 
 console.log('Envio');
-await test('manda DM para o dono, com título, detalhe e como desligar', async () => {
+await test('manda DM para o dono, com título e detalhe, SEM a linha "Aviso automático / como desligar" (retirada a pedido do Braga em 18/11/2026)', async () => {
   const { alerter, sent } = make();
   assert.equal(await alerter.alert('ia', 'Todos os provedores de IA falharam', 'sem créditos', { level: 'error' }), true);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].id, '111111111111111111');
   assert.match(sent[0].text, /Yui: Todos os provedores de IA falharam/);
   assert.match(sent[0].text, /sem créditos/);
-  assert.match(sent[0].text, /YUI_ALERTS=false/);
+  assert.doesNotMatch(sent[0].text, /YUI_ALERTS|Aviso autom/, 'a linha do rodapé não vai mais');
 });
 
 await test('mascara chaves e senhas no texto', async () => {

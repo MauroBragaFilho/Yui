@@ -18,7 +18,7 @@ const { startChannelServer, findProxyHeader, isLoopbackHost } = await import('..
 const { connectChannel } = await import('../src/core/channel/client.js');
 const { createIdemCache, CLOSE, ChannelError, PROTOCOL_VERSION } = await import('../src/core/channel/protocol.js');
 const { readChannelSecretFile, allowedSecretSids, channelSecretFilePath, channelPortFromEnv } = await import('../src/core/channel/secret.js');
-const { readWindowsAcl } = await import('../src/database/snapshot.js');
+const { readWindowsAcl, resolveSddlSid, SID_SYSTEM, SID_ADMINISTRATORS } = await import('../src/database/snapshot.js');
 
 let passed = 0;
 let finished = false;
@@ -472,6 +472,19 @@ try {
       for (const s of secretsSeen) assert.ok(!text.includes(s), `segredo num erro: ${err.message}`);
       assert.ok(!text.includes(MARKER), `parâmetro num erro: ${err.message}`);
     }
+  });
+
+  await test('apelidos do SDDL: SY e BA têm SID fixo; LA (Administrador embutido) só vale quando é o USUÁRIO ATUAL (o runner do GitHub); senão continua sem mapa (falha fechada)', async () => {
+    const RID500 = 'S-1-5-21-1111111111-2222222222-3333333333-500';
+    const OUTRO = 'S-1-5-21-1111111111-2222222222-3333333333-1001';
+    assert.equal(resolveSddlSid('SY', { userSid: OUTRO }), SID_SYSTEM);
+    assert.equal(resolveSddlSid('BA', { userSid: OUTRO }), SID_ADMINISTRATORS);
+    assert.equal(resolveSddlSid('LA', { userSid: RID500 }), RID500, 'o usuário atual É o Administrador embutido: o apelido LA é ele');
+    assert.equal(resolveSddlSid('LA', { userSid: OUTRO }), 'LA', 'outro usuário: o LA não é aceito (continua desconhecido e a conferência falha)');
+    assert.equal(resolveSddlSid('LA', { userSid: SID_SYSTEM }), 'LA', 'como SYSTEM (produção) o LA também não é aceito');
+    assert.equal(resolveSddlSid('LA', { userSid: 'S-1-5-21-1-2-3-501' }), 'LA', 'a conta Convidado (RID 501) não vira o Administrador');
+    assert.equal(resolveSddlSid('S-1-5-18'), 'S-1-5-18', 'um SID completo passa como está');
+    assert.equal(resolveSddlSid('WD', { userSid: RID500 }), 'WD', 'Todos continua sem mapa');
   });
 
   console.log(`\n${passed} verificações do canal passaram.`);
