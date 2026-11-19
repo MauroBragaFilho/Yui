@@ -32,7 +32,53 @@ export async function criarGoogleFalso({ clientId = CLIENT_ID, clientSecret = CL
     expiraEmS: 3599,
     escoposDoCodigo: null, // se definido, os escopos que a troca devolve (simula quem desmarcou uma caixa)
     semRefreshNaTroca: false,
+    fusoDoCalendarioMin: 0, // o fuso da AGENDA (minutos a leste de UTC) que decide em que dia cai um evento de dia inteiro
+    paginasServidas: 0,
+    refreshNaTroca: null, // se definido, o refresh token que a próxima troca de código devolve
   };
+
+  /**
+   * A projeção do parâmetro `fields` do Google ("nextPageToken,items(summary,attendees(self))"): só os campos pedidos voltam (o que o cliente NÃO pediu não existe para ele).
+   * Sem `fields`, volta tudo. Só entende nomes, vírgulas e parênteses (o que a Yui usa).
+   */
+  function projetar(valor, selecao) {
+    if (Array.isArray(valor)) return valor.map((v) => projetar(v, selecao));
+    if (!valor || typeof valor !== 'object') return valor;
+    const saida = {};
+    for (const [nome, sub] of Object.entries(selecao)) if (nome in valor) saida[nome] = sub ? projetar(valor[nome], sub) : valor[nome];
+    return saida;
+  }
+  function lerFields(texto) {
+    let i = 0;
+    const lista = () => {
+      const o = {};
+      for (;;) {
+        let nome = '';
+        while (i < texto.length && !',()'.includes(texto[i])) nome += texto[i++];
+        if (nome) o[nome] = texto[i] === '(' ? (i++, lista()) : null;
+        if (texto[i] === ',') { i++; continue; }
+        if (texto[i] === ')') i++;
+        return o;
+      }
+    };
+    return lista();
+  }
+  /** As páginas do Google: maxResults (padrão 100) e pageToken (aqui, o deslocamento em base64). Devolve { items, nextPageToken? }, já com a projeção de fields. */
+  function paginar(itens, q) {
+    const tamanho = Math.max(1, Math.min(2500, Number(q.maxResults) || 100));
+    let de = 0;
+    if (q.pageToken) {
+      const n = Number(Buffer.from(String(q.pageToken), 'base64url').toString('utf8').replace(/^pagina:/, ''));
+      if (!Number.isInteger(n) || n < 0) return { error: 'token inválido', items: [] };
+      de = n;
+    }
+    estado.paginasServidas = (estado.paginasServidas ?? 0) + 1;
+    const fatia = itens.slice(de, de + tamanho);
+    const corpo = { items: fatia };
+    if (de + tamanho < itens.length) corpo.nextPageToken = Buffer.from(`pagina:${de + tamanho}`).toString('base64url');
+    if (!q.fields) return corpo;
+    return projetar(corpo, lerFields(q.fields));
+  }
 
   const json = (res, status, corpo) => {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -56,9 +102,12 @@ export async function criarGoogleFalso({ clientId = CLIENT_ID, clientSecret = CL
       if (corpo.get('redirect_uri') !== c.redirectUri) return json(res, 400, { error: 'invalid_grant', error_description: 'redirect' });
       const acesso = `ya29.falso-${++estado.contadorAccess}-${crypto.randomBytes(6).toString('hex')}`;
       estado.accessEmitidos.add(acesso);
+      // `refreshNaTroca`: uma nova autorização recebe um refresh token NOVO (como no Google), que passa a valer.
+      const refreshDaTroca = estado.refreshNaTroca ?? refreshToken;
+      estado.refreshValidos.add(refreshDaTroca);
       return json(res, 200, {
         access_token: acesso, expires_in: estado.expiraEmS, token_type: 'Bearer',
-        ...(estado.semRefreshNaTroca ? {} : { refresh_token: refreshToken }), scope: (estado.escoposDoCodigo ?? c.escopos).join(' '),
+        ...(estado.semRefreshNaTroca ? {} : { refresh_token: refreshDaTroca }), scope: (estado.escoposDoCodigo ?? c.escopos).join(' '),
       });
     }
     if (tipo === 'refresh_token') {
@@ -123,16 +172,19 @@ export async function criarGoogleFalso({ clientId = CLIENT_ID, clientSecret = CL
       if (req.method === 'GET' && u.pathname === '/calendar/v3/calendars/primary/events') {
         return api(req, res, u, 'agenda', (q) => {
           const min = Date.parse(q.timeMin); const max = Date.parse(q.timeMax);
+          // Como no Google: o evento de DIA INTEIRO vale no fuso da AGENDA (`fusoDoCalendarioMin`, minutos a leste de UTC; padrão 0), não no fuso da consulta.
+          // Uma agenda em Brasília (-180) consultada com a janela de Cuiabá devolve também o evento de dia inteiro do dia vizinho.
+          const deslocamento = (estado.fusoDoCalendarioMin ?? 0) * 60_000;
           const dentro = estado.eventos.filter((e) => {
             if (!e || typeof e !== 'object') return true; // item estranho: passa direto (o cliente é que tem de aguentar)
-            const ini = Date.parse(e.start?.dateTime ?? `${e.start?.date}T00:00:00Z`);
-            const fim = Date.parse(e.end?.dateTime ?? `${e.end?.date}T00:00:00Z`);
+            const ini = e.start?.dateTime ? Date.parse(e.start.dateTime) : Date.parse(`${e.start?.date}T00:00:00Z`) - deslocamento;
+            const fim = e.end?.dateTime ? Date.parse(e.end.dateTime) : Date.parse(`${e.end?.date}T00:00:00Z`) - deslocamento;
             return fim > min && ini < max;
           });
-          return { kind: 'calendar#events', items: dentro };
+          return paginar(dentro, q);
         });
       }
-      if (req.method === 'GET' && u.pathname === '/tasks/v1/lists/@default/tasks') return api(req, res, u, 'tarefas', () => ({ kind: 'tasks#tasks', items: estado.tarefas }));
+      if (req.method === 'GET' && u.pathname === '/tasks/v1/lists/@default/tasks') return api(req, res, u, 'tarefas', (q) => ({ kind: 'tasks#tasks', ...paginar(estado.tarefas, q) }));
       if (req.method === 'GET' && u.pathname === '/gmail/v1/users/me/messages') return api(req, res, u, 'gmail', () => ({ messages: estado.emails.map((m) => ({ id: m.id })) }));
       const m = /^\/gmail\/v1\/users\/me\/messages\/([0-9a-f]+)$/.exec(u.pathname);
       if (req.method === 'GET' && m) return api(req, res, u, 'gmail', () => estado.emails.find((x) => x.id === m[1]) ?? {});

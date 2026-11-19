@@ -66,6 +66,8 @@ const indexMod = await imp('src/integrations/google/index.js');
 const conversa = await imp('src/cerebro/conversa.js');
 const morning = await imp('src/reminders/morning.js');
 const llmSafety = await imp('src/core/ai/llmSafety.js');
+const { ROLES, MEMORY_SCOPES } = await imp('src/core/permissions.js');
+const scriptAutorizar = await imp('scripts/google-autorizar.mjs');
 const { readWindowsAcl, SID_SYSTEM, SID_ADMINISTRATORS, currentUserSid } = await imp('src/database/snapshot.js');
 
 const HOSTS = E.hostsDeBaseLocal(fake.base);
@@ -96,12 +98,13 @@ const envGoogle = (file, extra = {}) => ({ YUI_GOOGLE: 'true', YUI_GOOGLE_TOKEN_
 function novoAutenticador(file, extra = {}) {
   const alertas = []; const avisos = []; const relogio = { t: AGORA };
   const log = { warn: (m) => avisos.push(String(m)), info: (m) => avisos.push(String(m)), error: (m) => avisos.push(String(m)) };
-  const a = authMod.criarAutenticador({ env: envGoogle(file), hosts: () => HOSTS, agora: () => relogio.t, alertar: (...x) => alertas.push(x), log, timeoutMs: 1500, restringir: () => {}, ...extra });
+  // O alerter de teste CONFIRMA a entrega (`true`): sem isso o aviso não conta como entregue e a Yui o reenvia (auth.js).
+  const a = authMod.criarAutenticador({ env: envGoogle(file), hosts: () => HOSTS, agora: () => relogio.t, alertar: (...x) => { alertas.push(x); return true; }, log, timeoutMs: 1500, restringir: () => {}, ...extra });
   return { a, alertas, avisos, relogio };
 }
 function resetaFalso({ eventos = [], tarefas = [], emails = [] } = {}) {
   fake.limpar();
-  Object.assign(fake.estado, { modoToken: 'ok', modoApi: {}, eventos, tarefas, emails, consentimento: 'ok', escoposDoCodigo: null, semRefreshNaTroca: false });
+  Object.assign(fake.estado, { modoToken: 'ok', modoApi: {}, eventos, tarefas, emails, consentimento: 'ok', escoposDoCodigo: null, semRefreshNaTroca: false, fusoDoCalendarioMin: 0, paginasServidas: 0, refreshNaTroca: null });
   fake.estado.refreshValidos = new Set([REFRESH_TOKEN]);
 }
 const pedidosApi = () => fake.pedidos.filter((p) => p.caminho !== '/token' && p.caminho !== '/o/oauth2/v2/auth');
@@ -316,7 +319,7 @@ try {
     const dms = [];
     const alerter = createAlerter({ notify: async (id, texto) => { dms.push({ id, texto }); }, ownerId: OWNER, env: { YUI_ALERTS: 'true' } });
     const f = arquivoDeToken();
-    const mk = () => novoAutenticador(f, { alertar: (...a) => { alerter.alert(...a).catch(() => {}); } }).a;
+    const mk = () => novoAutenticador(f, { alertar: (...a) => alerter.alert(...a) }).a;
     const a = mk();
     for (let i = 0; i < 5; i++) await a.obterToken({ recurso: 'agenda' });
     await new Promise((resolve) => setImmediate(resolve));
@@ -339,7 +342,7 @@ try {
     /** Um "processo" novo: o alerter de verdade com o intervalo (cooldown) em branco e um autenticador novo lendo o MESMO arquivo, com o relógio em `quando`. */
     const novoProcesso = (quando) => {
       const alerter = createAlerter({ notify: async (id, texto) => { dms.push({ id, texto, quando }); }, ownerId: OWNER, env: { YUI_ALERTS: 'true' } });
-      const r = novoAutenticador(f, { alertar: (...x) => { alerter.alert(...x).catch(() => {}); } });
+      const r = novoAutenticador(f, { alertar: (...x) => alerter.alert(...x) });
       r.relogio.t = quando;
       return r.a;
     };
@@ -645,7 +648,7 @@ try {
       ai, env, logger: quiet, memoryBlock: () => '', persona: () => '', tools: () => [FERRAMENTA],
       context: { enabled: () => false, read: readHistory ?? (() => []), recordOnce: recordOnce ?? ((...a) => { registro.push(a); return { recorded: true }; }) },
       ...(selecionar ? { selecionarPerfil: selecionar } : {}), ...(busca ? { busca } : {}),
-      google: (a) => indexMod.preRotaGoogle({ ...a, env, deps: { agora: () => AGORA, alertar: (...x) => alertas.push(x), log: quiet, restringir: () => {}, timeoutMs: 1500, ...(estadoDaRota === 'real' ? {} : { estadoDaRota }) } }),
+      google: (a) => indexMod.preRotaGoogle({ ...a, env, deps: { agora: () => AGORA, alertar: (...x) => { alertas.push(x); return true; }, log: quiet, restringir: () => {}, timeoutMs: 1500, ...(estadoDaRota === 'real' ? {} : { estadoDaRota }) } }),
     });
     return { brain, ai, alertas, registro, env };
   }
@@ -1125,13 +1128,14 @@ try {
     const c = cfg.semRotaPrivadaPelaChave;
     assert.equal(c({}), false);
     assert.equal(c({ YUI_GOOGLE: 'true' }), false, 'padrão: false');
-    for (const v of ['1', 'sim', 'on', 'yes', 'false', '', 'verdadeiro', 'tru', 'truee']) assert.equal(c({ YUI_GOOGLE: 'true', YUI_GOOGLE_SEM_ROTA_PRIVADA: v }), false, v);
-    for (const v of ['true', 'TRUE', ' true ']) assert.equal(c({ YUI_GOOGLE: 'true', YUI_GOOGLE_SEM_ROTA_PRIVADA: v }), true, v);
+    // B6: STRITO (`=== 'true'`): nem a caixa diferente nem o espaço ao redor valem (é uma decisão expressa do dono, não se adivinha a intenção).
+    for (const v of ['1', 'sim', 'on', 'yes', 'false', '', 'verdadeiro', 'tru', 'truee', 'True', 'TRUE', ' true ', 'true ', ' true', 'true\n', 'tRuE', true, 1]) assert.equal(c({ YUI_GOOGLE: 'true', YUI_GOOGLE_SEM_ROTA_PRIVADA: v }), false, JSON.stringify(v));
+    assert.equal(c({ YUI_GOOGLE: 'true', YUI_GOOGLE_SEM_ROTA_PRIVADA: 'true' }), true);
     assert.equal(c({ YUI_GOOGLE_SEM_ROTA_PRIVADA: 'true' }), false, 'sem YUI_GOOGLE a exceção não vale nada');
     // e um valor que não é "true" NÃO abre o portão (a exceção não é lida frouxa)
     resetaFalso({ eventos: EVENTOS(), tarefas: TAREFAS() });
     const { a } = novoAutenticador(arquivoDeToken());
-    for (const v of ['1', 'sim', 'on', 'yes', 'false', '']) {
+    for (const v of ['1', 'sim', 'on', 'yes', 'false', '', 'True', 'TRUE', ' true ']) {
       const r = await agendaMod.listarEventos({ autenticador: a, hosts: () => HOSTS, env: envGoogle('x', { YUI_GOOGLE_SEM_ROTA_PRIVADA: v }), estadoDaRota: ROTA('desligada'), agora: () => AGORA, fuso: FUSO });
       assert.deepEqual(r, { ok: false, motivo: 'sem-rota-privada' }, v);
     }
@@ -1267,7 +1271,449 @@ try {
   });
 
   // ═════════════════════════════════════════════════════════════════════════════════════
-  section('K. Fechamento');
+  section('L. Endurecimento da revisão independente: dia inteiro vizinho, convite recusado, páginas, aviso entregue, relatório do painel');
+  // ═════════════════════════════════════════════════════════════════════════════════════
+  const DIA_INTEIRO = (summary, de, ate) => ({ summary, start: { date: de }, end: { date: ate }, status: 'confirmed' });
+  const lerAgendaFalsa = async (periodo, eventos, { calendarioMin = 0, extra = {} } = {}) => {
+    resetaFalso({ eventos });
+    fake.estado.fusoDoCalendarioMin = calendarioMin;
+    const { a } = novoAutenticador(arquivoDeToken());
+    const r = await agendaMod.listarEventos({ autenticador: a, periodo, agora: () => AGORA, fuso: FUSO, hosts: () => HOSTS, env: envGoogle('x'), estadoDaRota: VALIDADA, ...extra });
+    return { r, a };
+  };
+  const titulosDe = (r) => r.eventos.map((e) => e.titulo).sort();
+
+  await test('M2: o evento de DIA INTEIRO do dia vizinho NÃO entra no "hoje" (o Google decide o dia inteiro pelo fuso da AGENDA e o devolve na janela de outro fuso; o fim é exclusivo)', async () => {
+    const INTEIROS = [DIA_INTEIRO('Ontem inteiro', '2026-11-19', '2026-11-20'), DIA_INTEIRO('Hoje inteiro', '2026-11-20', '2026-11-21'), DIA_INTEIRO('Amanhã inteiro', '2026-11-21', '2026-11-22'),
+      DIA_INTEIRO('Viagem de 19 a 21', '2026-11-19', '2026-11-22'), DIA_INTEIRO('Depois de amanhã', '2026-11-22', '2026-11-23')];
+    // agenda em Brasília (UTC-3) e consulta com a janela de Cuiabá (UTC-4): o "amanhã inteiro" volta na janela de hoje; agenda a oeste (UTC-5): o "ontem inteiro" é que volta
+    for (const calendarioMin of [-180, -300]) {
+      const { r, a } = await lerAgendaFalsa('hoje', INTEIROS, { calendarioMin });
+      // a premissa: o Google (falso) de fato devolveu um vizinho cru na janela
+      const t = await a.obterToken({ recurso: 'agenda' });
+      const q = new URLSearchParams({ timeMin: '2026-11-20T04:00:00.000Z', timeMax: '2026-11-21T04:00:00.000Z' });
+      const cru = await (await fetch(`${fake.base}/calendar/v3/calendars/primary/events?${q}`, { headers: { Authorization: `Bearer ${t.token}` } })).json();
+      const crus = cru.items.map((x) => x.summary);
+      assert.ok(crus.includes(calendarioMin === -180 ? 'Amanhã inteiro' : 'Ontem inteiro'), `o Google falso devia vazar o vizinho (${calendarioMin}): ${crus}`);
+      assert.deepEqual(titulosDe(r), ['Hoje inteiro', 'Viagem de 19 a 21'], `calendário ${calendarioMin}`);
+    }
+    // amanhã e semana: a mesma conferência em código
+    const am = await lerAgendaFalsa('amanha', INTEIROS, { calendarioMin: -300 });
+    assert.deepEqual(titulosDe(am.r), ['Amanhã inteiro', 'Viagem de 19 a 21'], 'amanhã: o "hoje inteiro" que vazou pela janela não entra');
+    const SEMANA = [DIA_INTEIRO('Quinta 26', '2026-11-26', '2026-11-27'), DIA_INTEIRO('Sexta 27', '2026-11-27', '2026-11-28'), DIA_INTEIRO('Hoje inteiro', '2026-11-20', '2026-11-21')];
+    const sem = await lerAgendaFalsa('semana', SEMANA, { calendarioMin: -180 });
+    assert.deepEqual(titulosDe(sem.r), ['Hoje inteiro', 'Quinta 26'], 'a semana são 20 a 26 (os 7 dias): o dia 27, que vazou pela janela, fica de fora');
+  });
+
+  await test('M2: a conferência do dia inteiro (puro): fim EXCLUSIVO, evento de vários dias que cobre hoje fica, sem fim vale um dia, o evento com horário passa direto', () => {
+    const d = agendaMod.diaInteiroDentroDaJanela;
+    const [de, ate] = ['2026-11-20', '2026-11-21'];
+    assert.equal(d(DIA_INTEIRO('x', '2026-11-19', '2026-11-20'), de, ate), false, 'terminou à meia-noite de hoje (fim exclusivo)');
+    assert.equal(d(DIA_INTEIRO('x', '2026-11-20', '2026-11-21'), de, ate), true);
+    assert.equal(d(DIA_INTEIRO('x', '2026-11-21', '2026-11-22'), de, ate), false, 'começa amanhã');
+    assert.equal(d(DIA_INTEIRO('x', '2026-11-18', '2026-11-25'), de, ate), true, 'cobre hoje');
+    assert.equal(d({ start: { date: '2026-11-20' } }, de, ate), true, 'sem fim: um dia');
+    assert.equal(d({ start: { date: '2026-11-19' } }, de, ate), false);
+    assert.equal(d({ start: { date: '2026-11-20' }, end: { date: '2026-11-20' } }, de, ate), true, 'fim inválido (igual ao início): um dia');
+    assert.equal(d({ start: { dateTime: '2026-11-20T10:00:00-04:00' }, end: { dateTime: '2026-11-20T11:00:00-04:00' } }, de, ate), true, 'com horário: quem decide é o Google');
+    assert.equal(d({ start: {} }, de, ate), true, 'sem data nenhuma: o eventoEnxuto descarta');
+    assert.equal(d(DIA_INTEIRO('x', '2026-12-30', '2027-01-01'), '2026-12-31', '2027-01-01'), true, 'vira o ano');
+  });
+
+  const COM_CONVITE = (summary, resposta, extra = {}) => ({ summary, start: { dateTime: '2026-11-20T10:00:00-04:00' }, end: { dateTime: '2026-11-20T11:00:00-04:00' }, status: 'confirmed', attendees: [{ email: 'outra@exemplo.com', responseStatus: 'accepted' }, { email: 'eu@exemplo.com', self: true, responseStatus: resposta }], ...extra });
+  await test('B8: o convite que o DONO recusou fica de fora (aceito, talvez e sem resposta ficam; se OUTRA pessoa recusou, fica); o pedido só pede self e responseStatus dos participantes', async () => {
+    const eventos = [COM_CONVITE('Recusei', 'declined'), COM_CONVITE('Aceitei', 'accepted'), COM_CONVITE('Talvez', 'tentative'), COM_CONVITE('Sem resposta', 'needsAction'),
+      { ...COM_CONVITE('Outra pessoa recusou', 'accepted'), attendees: [{ email: 'outra@exemplo.com', responseStatus: 'declined' }, { email: 'eu@exemplo.com', self: true, responseStatus: 'accepted' }] },
+      { summary: 'Dia inteiro recusado', start: { date: '2026-11-20' }, end: { date: '2026-11-21' }, attendees: [{ self: true, responseStatus: 'declined' }] },
+      { summary: 'Sem participantes', start: { dateTime: '2026-11-20T14:00:00-04:00' }, end: { dateTime: '2026-11-20T15:00:00-04:00' } }];
+    const { r } = await lerAgendaFalsa('hoje', eventos);
+    assert.equal(r.ok, true);
+    assert.deepEqual(titulosDe(r), ['Aceitei', 'Outra pessoa recusou', 'Sem participantes', 'Sem resposta', 'Talvez']);
+    const fields = pedidosApi()[0].query.fields;
+    assert.match(fields, /attendees\(self,responseStatus\)/, 'sem pedir os participantes o Google não diz quem recusou');
+    assert.ok(!/email|displayName/.test(fields), 'os e-mails dos outros participantes nem são pedidos');
+    assert.ok(r.eventos.every((e) => !('attendees' in e)), 'o dado enxuto não carrega participantes');
+  });
+
+  const TAREFA = (titulo, due = '2027-01-01T00:00:00.000Z', status = 'needsAction') => ({ title: titulo, status, due });
+  const lerTarefasFalsas = async (tarefas, extra = {}) => {
+    resetaFalso({ tarefas });
+    const { a } = novoAutenticador(arquivoDeToken());
+    return tarefasMod.listarTarefas({ autenticador: a, hosts: () => HOSTS, env: envGoogle('x'), estadoDaRota: VALIDADA, ...extra });
+  };
+  await test('B9: as Tarefas seguem o nextPageToken: a atrasada que está na 3ª página aparece em primeiro; cada página leva o pageToken; só GET', async () => {
+    const muitas = Array.from({ length: 230 }, (_, i) => TAREFA(`Tarefa ${i}`));
+    muitas[215] = TAREFA('Atrasada da página 3', '2026-11-01T00:00:00.000Z');
+    muitas[5] = TAREFA('Concluída', '2026-10-01T00:00:00.000Z', 'completed');
+    const r = await lerTarefasFalsas(muitas);
+    assert.equal(r.ok, true);
+    assert.equal(r.tarefas[0].titulo, 'Atrasada da página 3');
+    assert.equal(r.tarefas.length, 25);
+    assert.equal(r.truncado, true);
+    const reqs = pedidosApi();
+    assert.equal(reqs.length, 3, 'três páginas de 100');
+    assert.equal(reqs[0].query.pageToken, undefined);
+    assert.ok(reqs[1].query.pageToken && reqs[2].query.pageToken && reqs[1].query.pageToken !== reqs[2].query.pageToken);
+    assert.match(reqs[0].query.fields, /nextPageToken/, 'sem pedir o nextPageToken o Google não o devolve');
+    assert.ok(reqs.every((p) => p.metodo === 'GET'));
+    // poucas tarefas em várias páginas: todas vêm e não há "cortado"
+    const vinte = await lerTarefasFalsas(Array.from({ length: 20 }, (_, i) => TAREFA(`T${i}`)), { tamanhoDaPagina: 7 });
+    assert.equal(vinte.tarefas.length, 20);
+    assert.equal(vinte.truncado, false);
+    assert.equal(fake.estado.paginasServidas, 3);
+  });
+
+  await test('B9: o TETO de páginas vale (um Google que nunca para de mandar nextPageToken não gera um laço sem fim): tarefas 10 páginas, agenda 5, e o resultado diz que foi cortado', async () => {
+    resetaFalso({});
+    const { a } = novoAutenticador(arquivoDeToken());
+    let chamadas = 0;
+    const semFim = (item) => async () => { chamadas += 1; return new Response(JSON.stringify({ items: [item], nextPageToken: `p${chamadas}` }), { status: 200, headers: { 'content-type': 'application/json' } }); };
+    const t = await tarefasMod.listarTarefas({ autenticador: a, hosts: () => HOSTS, env: envGoogle('x'), estadoDaRota: VALIDADA, fetchImpl: semFim(TAREFA('Sempre a mesma')) });
+    assert.equal(chamadas, tarefasMod.MAX_PAGINAS);
+    assert.equal(tarefasMod.MAX_PAGINAS, 10);
+    assert.equal(t.ok, true);
+    assert.equal(t.truncado, true, 'parou no teto com páginas por ler: a lista é parcial');
+    chamadas = 0;
+    const ev = await agendaMod.listarEventos({ autenticador: a, hosts: () => HOSTS, env: envGoogle('x'), estadoDaRota: VALIDADA, agora: () => AGORA, fuso: FUSO, fetchImpl: semFim(COM_CONVITE('Sempre o mesmo', 'accepted')) });
+    assert.equal(chamadas, agendaMod.MAX_PAGINAS);
+    assert.equal(agendaMod.MAX_PAGINAS, 5);
+    assert.equal(ev.truncado, true);
+    chamadas = 0;
+    await tarefasMod.listarTarefas({ autenticador: a, hosts: () => HOSTS, env: envGoogle('x'), estadoDaRota: VALIDADA, maxPaginas: 2, fetchImpl: semFim(TAREFA('x')) });
+    assert.equal(chamadas, 2, 'o teto é injetável');
+  });
+
+  await test('B9: a Agenda também segue as páginas: 70 convites recusados na frente não escondem os 5 compromissos de verdade (nas duas primeiras páginas); muitos eventos reais cortam em 25', async () => {
+    const recusados = Array.from({ length: 70 }, (_, i) => COM_CONVITE(`Recusado ${i}`, 'declined'));
+    const reais = Array.from({ length: 5 }, (_, i) => COM_CONVITE(`Real ${i}`, 'accepted', { start: { dateTime: `2026-11-20T${String(11 + i).padStart(2, '0')}:00:00-04:00` }, end: { dateTime: `2026-11-20T${String(11 + i).padStart(2, '0')}:30:00-04:00` } }));
+    const { r } = await lerAgendaFalsa('hoje', [...recusados, ...reais]);
+    assert.deepEqual(titulosDe(r), reais.map((e) => e.summary).sort());
+    assert.equal(r.truncado, false);
+    assert.equal(fake.estado.paginasServidas, 2);
+    const pagina2 = pedidosApi()[1];
+    assert.ok(pagina2.query.pageToken && pagina2.query.timeMin === pedidosApi()[0].query.timeMin, 'a página seguinte repete a janela e leva o pageToken');
+    const muitos = Array.from({ length: 140 }, (_, i) => COM_CONVITE(`Evento ${i}`, 'accepted'));
+    const { r: cortado } = await lerAgendaFalsa('hoje', muitos);
+    assert.equal(cortado.eventos.length, 25);
+    assert.equal(cortado.truncado, true);
+    assert.equal(fake.estado.paginasServidas, 1, 'já há eventos de sobra na primeira página: não pede mais');
+  });
+
+  /** O alerter de teste que devolve, a cada entrega, o resultado da lista (a última se repete como `true`). */
+  const alerterDeTeste = (resultados) => {
+    const chamadas = []; let n = 0;
+    return { chamadas, alertar: (...x) => { chamadas.push(x); const f = resultados[n++]; return f ? f() : true; } };
+  };
+  const MIN = 60_000;
+  await test('B10: o aviso que NÃO saiu (false, truthy que não é true, lança ou rejeita) não conta como entregue: o arquivo fica sem avisadoEm, tenta de novo no próximo uso depois de 15 min e, confirmado, grava e NUNCA repete', async () => {
+    resetaFalso(); fake.estado.modoToken = 'invalid_grant';
+    const f = arquivoDeToken();
+    const { chamadas, alertar } = alerterDeTeste([() => false, () => { throw new Error('discord fora'); }, () => Promise.reject(new Error('dm fechada')), () => 1, () => Promise.resolve(true)]);
+    const { a, relogio, avisos } = novoAutenticador(f, { alertar });
+    assert.deepEqual(await a.obterToken({ recurso: 'agenda' }), { ok: false, motivo: 'precisa-autorizar' });
+    await a.aguardarAviso();
+    assert.equal(chamadas.length, 1);
+    const marca = () => arq.lerArquivoDeToken(f).dados.invalido;
+    assert.equal(marca().impressao, arq.impressaoDoToken(REFRESH_TOKEN));
+    assert.equal(marca().avisadoEm, null, 'a DM não saiu: nada de avisadoEm');
+    assert.equal(a.estado().avisoPendente, true);
+    relogio.t += 14 * MIN; // ainda dentro do intervalo de reentrega
+    await a.obterToken({ recurso: 'agenda' }); await a.aguardarAviso();
+    assert.equal(chamadas.length, 1, 'dentro de 15 min não repete');
+    for (const esperado of [2, 3, 4]) {
+      relogio.t += 16 * MIN;
+      assert.equal((await a.obterToken({ recurso: 'agenda' })).motivo, 'precisa-autorizar');
+      await a.aguardarAviso();
+      assert.equal(chamadas.length, esperado, `tentativa ${esperado}`);
+      assert.equal(marca().avisadoEm, null, `a tentativa ${esperado} não foi confirmada`);
+    }
+    relogio.t += 16 * MIN;
+    await a.obterToken({ recurso: 'agenda' }); await a.aguardarAviso();
+    assert.equal(chamadas.length, 5);
+    assert.ok(marca().avisadoEm, 'confirmado: avisadoEm gravado');
+    assert.equal(a.estado().avisoPendente, false);
+    assert.equal(a.estado().avisos, 1);
+    // confirmado: nunca mais (nem neste processo, nem depois de um reinício, nem 30 dias depois)
+    for (const dias of [1, 2, 30]) { relogio.t += dias * 24 * 60 * MIN; await a.obterToken({ recurso: 'agenda' }); await a.aguardarAviso(); }
+    const reinicio = novoAutenticador(f, { alertar });
+    reinicio.relogio.t = relogio.t;
+    await reinicio.a.obterToken({ recurso: 'agenda' }); await reinicio.a.aguardarAviso();
+    assert.equal(chamadas.length, 5, 'nenhuma entrega depois da confirmada');
+    assert.equal(pedidosToken().length, 1, 'e nenhuma tentativa nova ao Google');
+    semSegredos(avisos, chamadas, a.estado());
+  });
+
+  await test('B10: se o arquivo NÃO puder ser regravado (restringir falha), a marca e a confirmação ficam em memória: neste processo o aviso confirmado nunca repete, mesmo 15 min, 1 dia ou 30 dias depois', async () => {
+    resetaFalso(); fake.estado.modoToken = 'invalid_grant';
+    const f = arquivoDeToken();
+    const antes = fs.readFileSync(f, 'utf8');
+    const { chamadas, alertar } = alerterDeTeste([]);
+    const { a, relogio } = novoAutenticador(f, { alertar, restringir: () => { throw new Error('icacls falhou'); } });
+    assert.equal((await a.obterToken({ recurso: 'agenda' })).motivo, 'precisa-autorizar');
+    await a.aguardarAviso();
+    assert.equal(chamadas.length, 1, 'o aviso sai mesmo sem conseguir gravar a marca');
+    assert.equal(fs.readFileSync(f, 'utf8'), antes, 'o arquivo ficou como estava (nada gravado sem a permissão restrita)');
+    for (const dias of [16 / 1440, 1, 30]) {
+      relogio.t += dias * 24 * 60 * MIN;
+      assert.equal((await a.obterToken({ recurso: 'agenda' })).motivo, 'precisa-autorizar');
+      await a.aguardarAviso();
+    }
+    assert.equal(chamadas.length, 1, 'confirmado em memória: não repete');
+    assert.equal(pedidosToken().length, 1, 'e não volta a tentar o Google');
+    assert.equal(a.estado().avisoPendente, false);
+  });
+
+  await test('B10: reiniciar com o aviso PENDENTE (arquivo sem avisadoEm): o processo novo entrega, UMA entrega mesmo com várias chamadas ao mesmo tempo; uma autorização NOVA que trocou o arquivo no meio não é sobrescrita', async () => {
+    resetaFalso(); fake.estado.modoToken = 'invalid_grant';
+    const f = arquivoDeToken();
+    const antes = novoAutenticador(f, { alertar: () => false });
+    await antes.a.obterToken({ recurso: 'agenda' }); await antes.a.aguardarAviso();
+    assert.equal(arq.lerArquivoDeToken(f).dados.invalido.avisadoEm, null, 'o processo antigo morreu com o aviso pendente');
+    let liberar; const emAndamento = new Promise((resolve) => { liberar = resolve; });
+    const { chamadas, alertar } = alerterDeTeste([() => emAndamento]);
+    const novo = novoAutenticador(f, { alertar });
+    await Promise.all([1, 2, 3, 4, 5].map(() => novo.a.obterToken({ recurso: 'agenda' })));
+    assert.equal(chamadas.length, 1, 'uma entrega por vez, mesmo com cinco chamadas');
+    assert.equal(pedidosToken().length, 1, 'o processo novo nem tenta o Google (a marca está no arquivo)');
+    // enquanto a DM está em andamento, o dono roda o script de novo: o arquivo é de OUTRA autorização
+    const refreshNovo = fake.novoRefresh();
+    arq.gravarArquivoDeToken(f, { client_id: CLIENT_ID, client_secret: CLIENT_SECRET, refresh_token: refreshNovo, escopos: [E.ESCOPOS.agenda, E.ESCOPOS.tarefas] }, { restringir: () => {} });
+    liberar(true);
+    await novo.a.aguardarAviso();
+    const depois = arq.lerArquivoDeToken(f).dados;
+    assert.equal(depois.refresh_token, refreshNovo, 'o arquivo novo continua como estava');
+    assert.equal(depois.invalido, null, 'sem marca de expiração herdada');
+    fake.estado.modoToken = 'ok';
+    assert.equal((await novo.a.obterToken({ recurso: 'agenda' })).ok, true, 'e a autorização nova funciona');
+  });
+
+  await test('B10: com o alerter de VERDADE e o Discord fora do ar: a primeira DM falha, 16 min depois sai (o intervalo do alerter não segura a reentrega), uma só, e um reinício não repete', async () => {
+    resetaFalso(); fake.estado.modoToken = 'invalid_grant';
+    const { createAlerter } = await imp('src/core/alerts.js');
+    const rel = { t: AGORA };
+    let discordFora = true; const dms = [];
+    const alerter = createAlerter({ notify: async (id, texto) => { if (discordFora) throw new Error('Discord fora do ar'); dms.push({ id, texto }); }, ownerId: OWNER, env: { YUI_ALERTS: 'true' }, now: () => rel.t });
+    const f = arquivoDeToken();
+    const mk = () => novoAutenticador(f, { alertar: (...x) => alerter.alert(...x), agora: () => rel.t }).a;
+    const a = mk();
+    await a.obterToken({ recurso: 'agenda' }); await a.aguardarAviso();
+    assert.equal(dms.length, 0);
+    assert.equal(arq.lerArquivoDeToken(f).dados.invalido.avisadoEm, null);
+    discordFora = false;
+    rel.t += 16 * MIN;
+    await a.obterToken({ recurso: 'agenda' }); await a.aguardarAviso();
+    assert.equal(dms.length, 1);
+    assert.equal(dms[0].id, OWNER);
+    assert.match(dms[0].texto, /autorize o Google de novo/);
+    assert.ok(arq.lerArquivoDeToken(f).dados.invalido.avisadoEm);
+    for (const dias of [1, 7]) { rel.t += dias * 24 * 60 * MIN; const b = mk(); await b.obterToken({ recurso: 'agenda' }); await b.aguardarAviso(); }
+    assert.equal(dms.length, 1, 'uma DM só');
+    semSegredos(dms);
+  });
+
+  await test('B10: o alerter de produção (alertOwnerConfirmado) devolve true SÓ se a DM saiu, nunca lança, e é o que o autenticador usa por padrão', async () => {
+    resetaFalso(); fake.estado.modoToken = 'invalid_grant';
+    const al = await imp('src/core/alerts.js');
+    const dms = [];
+    try {
+      al.configureAlerts({ notify: async (id, texto) => { dms.push({ id, texto }); }, ownerId: OWNER, env: { YUI_ALERTS: 'true' } });
+      assert.equal(await al.alertOwnerConfirmado('chave-a', 'Título', 'corpo'), true);
+      assert.equal(await al.alertOwnerConfirmado('chave-a', 'Título', 'corpo'), false, 'no intervalo do alerter');
+      al.configureAlerts({ notify: async () => { throw new Error('DM fechada'); }, ownerId: OWNER, env: { YUI_ALERTS: 'true' } });
+      assert.equal(await al.alertOwnerConfirmado('chave-b', 'Título'), false);
+      al.configureAlerts({ ownerId: OWNER, env: { YUI_ALERTS: 'true' } });
+      assert.equal(await al.alertOwnerConfirmado('chave-c', 'Título'), false, 'sem o Discord pronto');
+      // o autenticador SEM alerter injetado usa o de produção
+      al.configureAlerts({ notify: async (id, texto) => { dms.push({ id, texto }); }, ownerId: OWNER, env: { YUI_ALERTS: 'true' } });
+      const f = arquivoDeToken();
+      const { a } = novoAutenticador(f, { alertar: undefined });
+      await a.obterToken({ recurso: 'agenda' }); await a.aguardarAviso();
+      assert.equal(dms.filter((d) => /autorize o Google de novo/.test(d.texto)).length, 1);
+      assert.ok(arq.lerArquivoDeToken(f).dados.invalido.avisadoEm);
+    } finally { al.configureAlerts({}); }
+  });
+
+  await test('B11: "enviar relatório agora" (POST /v1/admin/morning/send, o botão do painel) pede dm:true ao compositor e o relatório enviado por DM leva a agenda e as tarefas; a prévia no painel não leva', async () => {
+    const hoje = fuso.dataDeHoje(Date.now(), FUSO);
+    const amanha = fuso.somarDias({ ano: Number(hoje.slice(0, 4)), mes: Number(hoje.slice(5, 7)), dia: Number(hoje.slice(8, 10)) }, 1);
+    resetaFalso({ eventos: [DIA_INTEIRO('Aniversário do dia', hoje, `${amanha.ano}-${String(amanha.mes).padStart(2, '0')}-${String(amanha.dia).padStart(2, '0')}`)], tarefas: [TAREFA('Tarefa de hoje', `${hoje}T00:00:00.000Z`)] });
+    const env = { ...process.env, ...envGoogle(arquivoDeToken(), { YUI_GOOGLE_SEM_ROTA_PRIVADA: 'true' }) };
+    const compose = await compositor(env);
+    const opcoesVistas = []; const enviados = [];
+    const { createAdmin } = await imp('src/core/api/admin.js');
+    const admin = createAdmin({ reminders: { store: { list: () => [] }, compose: async (now, opcoes) => { opcoesVistas.push(opcoes ?? null); return compose(now, opcoes); }, send: async (t) => { enviados.push(t); return true; } } });
+    const dono = { role: ROLES.OWNER, userId: OWNER };
+    assert.deepEqual(await admin.morningSend(dono), { ok: true });
+    assert.deepEqual(opcoesVistas, [{ dm: true }]);
+    assert.equal(enviados.length, 1);
+    assert.match(enviados[0], /\*\*📅 Agenda e tarefas de hoje\*\*\n• dia inteiro — Aniversário do dia\n• tarefa: Tarefa de hoje/);
+    const previa = await admin.morningPreview(dono);
+    assert.ok(!previa.text.includes('Agenda e tarefas de hoje'), 'a prévia (que aparece no painel, não por DM) não leva a agenda');
+    await assert.rejects(() => admin.morningSend({ role: ROLES.MEMBER }), /dono/i);
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════════════════
+  section('M. O FLUXO COMPLETO contra o Google falso: autorizar, guardar, ler, renovar, expirar, avisar uma vez, portão e exceção');
+  // ═════════════════════════════════════════════════════════════════════════════════════
+  const aclRestrita = (f) => {
+    if (process.platform === 'win32') {
+      const acl = readWindowsAcl(f);
+      const permitidos = [currentUserSid(), SID_SYSTEM, SID_ADMINISTRATORS];
+      assert.equal(acl.protected, true, 'a herança de permissões tem de estar cortada');
+      assert.ok(acl.aces.length > 0 && acl.aces.every((a) => a.type === 'A' && permitidos.includes(a.sid)), `ACL fora do esperado: ${acl.sddl}`);
+    } else assert.equal(fs.statSync(f).mode & 0o777, 0o600);
+  };
+  /** O script de autorização de verdade (em processo), com este teste no papel do navegador contra o Google falso. */
+  async function autorizarNoFalso(saida) {
+    const dir = novaPasta(); fs.mkdirSync(dir, { recursive: true });
+    const cliente = path.join(dir, 'cliente.json');
+    fs.writeFileSync(cliente, JSON.stringify({ installed: { client_id: CLIENT_ID, client_secret: CLIENT_SECRET, project_id: 'projeto-falso', redirect_uris: ['http://localhost'] } }));
+    const linhas = []; const navegacoes = [];
+    const codigo = await scriptAutorizar.autorizar({
+      argv: ['--cliente', cliente, '--saida', saida], io: { out: (t) => linhas.push(t), err: (t) => linhas.push(t) }, hosts: HOSTS,
+      abrir: (url) => navegacoes.push((async () => { const r1 = await fetch(url, { redirect: 'manual' }); assert.equal(r1.status, 302, 'o Google falso recusou o link'); await fetch(r1.headers.get('location')); })()),
+    });
+    await Promise.all(navegacoes);
+    return { codigo, texto: linhas.join('\n') };
+  }
+  const relogioFluxo = { t: AGORA };
+  const entregues = [];
+  const fluxo = { saida: path.join(novaPasta(), 'secrets', 'google-token.json'), google: null };
+  const donoPrivado = { role: ROLES.OWNER, memoryScope: MEMORY_SCOPES.PERSONAL };
+  const novoGoogle = (env, estado = 'validada') => googleMod.criarGoogle({ env, agora: () => relogioFluxo.t, alertar: (...x) => { entregues.push(x); return true; }, log: quiet, estadoDaRota: ROTA(estado), timeoutMs: 1500 });
+  const perguntar = (g, texto) => g.rotear({ ctx: donoPrivado, call: {}, texto, prompt: `user: "${texto}"` });
+
+  await test('1. AUTORIZAR: o script de verdade troca o código (PKCE) e grava secrets/google-token.json com o refresh token, os escopos concedidos e a permissão RESTRITA; nenhum segredo é impresso', async () => {
+    resetaFalso({ eventos: EVENTOS(), tarefas: TAREFAS() });
+    const r = await autorizarNoFalso(fluxo.saida);
+    assert.equal(r.codigo, 0, r.texto);
+    assert.equal(pedidosToken().length, 1);
+    assert.equal(pedidosToken()[0].campos.grant_type, 'authorization_code');
+    const lido = arq.lerArquivoDeToken(fluxo.saida);
+    assert.equal(lido.ok, true);
+    assert.equal(lido.dados.refresh_token, REFRESH_TOKEN);
+    assert.deepEqual(lido.dados.escopos, [E.ESCOPOS.agenda, E.ESCOPOS.tarefas]);
+    aclRestrita(fluxo.saida);
+    assert.deepEqual(fs.readdirSync(path.dirname(fluxo.saida)), ['google-token.json']);
+    semSegredos(r.texto);
+    assert.match(r.texto, /APAGUE o arquivo/);
+  });
+
+  await test('2. LER: agenda de hoje, da semana e tarefas pelo arquivo guardado, com UM access token (renovado uma vez pelo refresh token e reaproveitado), só GET e o fuso do dono', async () => {
+    fake.limpar();
+    fluxo.google = novoGoogle(envGoogle(fluxo.saida));
+    const hoje = await perguntar(fluxo.google, 'o que tenho hoje na agenda?');
+    assert.equal(hoje.tipo, 'agenda');
+    assert.match(hoje.prompt, /Reunião de planejamento/);
+    assert.match(hoje.prompt, /10:00–11:00/, 'a hora no fuso do dono');
+    assert.ok(!hoje.prompt.includes('Dentista amanhã'));
+    const semana = await perguntar(fluxo.google, 'compromissos da semana');
+    assert.match(semana.prompt, /Retrospectiva da sprint/);
+    assert.match(semana.prompt, /Dentista amanhã/);
+    assert.ok(!semana.prompt.includes('Fora da semana'));
+    const tarefas = await perguntar(fluxo.google, 'minhas tarefas');
+    assert.equal(tarefas.tipo, 'tarefas');
+    assert.match(tarefas.prompt, /Pagar a conta de luz \(vence 18\/11, atrasada\)/);
+    assert.ok(!tarefas.prompt.includes('Tarefa já concluída'));
+    assert.equal(pedidosToken().length, 1, 'três leituras, uma renovação');
+    assert.deepEqual({ ...pedidosToken()[0].campos }, { client_id: CLIENT_ID, client_secret: CLIENT_SECRET, refresh_token: REFRESH_TOKEN, grant_type: 'refresh_token' });
+    assert.ok(pedidosApi().length >= 3 && pedidosApi().every((p) => p.metodo === 'GET' && p.auth === true));
+    assert.ok(hoje.opcoes.noTools && hoje.opcoes.attachment && hoje.opcoes.allowSearch === false, 'chamada sensível, sem ferramentas nem busca');
+  });
+
+  await test('3. RENOVAR: o access token vence pelo relógio (1 h) e a próxima leitura renova sozinha; a permissão do arquivo continua restrita', async () => {
+    relogioFluxo.t += 61 * MIN;
+    const r = await perguntar(fluxo.google, 'o que tenho hoje na agenda?');
+    assert.equal(r.tipo, 'agenda');
+    assert.equal(pedidosToken().length, 2, 'uma renovação nova');
+    assert.equal(fluxo.google.estado().renovacoes, 2);
+    aclRestrita(fluxo.saida);
+  });
+
+  await test('4. EXPIRAR (invalid_grant, o refresh token de 7 dias do modo "Testing"): a Yui responde a frase curta, PARA de tentar, avisa o dono UMA vez e a marca fica no arquivo (ainda restrito); reiniciar e esperar dias não repete nada', async () => {
+    fake.estado.modoToken = 'invalid_grant';
+    relogioFluxo.t += 61 * MIN;
+    const tokensAntes = pedidosToken().length;
+    const r1 = await perguntar(fluxo.google, 'o que tenho hoje na agenda?');
+    assert.equal(r1.resposta, googleMod.FRASES.autorizarDeNovo);
+    await fluxo.google.autenticador.aguardarAviso();
+    for (const p of ['minhas tarefas', 'compromissos da semana', 'o que tenho amanhã?']) assert.equal((await perguntar(fluxo.google, p)).resposta, googleMod.FRASES.autorizarDeNovo);
+    assert.equal(pedidosToken().length, tokensAntes + 1, 'UMA tentativa recusada e depois nada: não martela o Google');
+    assert.equal(entregues.length, 1, 'o dono é avisado uma vez');
+    assert.equal(entregues[0][0], 'google-reautorizar');
+    assert.match(entregues[0][2], /google-autorizar\.mjs/);
+    const marca = arq.lerArquivoDeToken(fluxo.saida).dados.invalido;
+    assert.ok(marca?.avisadoEm && marca.impressao === arq.impressaoDoToken(REFRESH_TOKEN));
+    aclRestrita(fluxo.saida);
+    // reinício, e dias depois: nem DM, nem Google
+    for (const dias of [1, 8, 40]) {
+      relogioFluxo.t += dias * 24 * 60 * MIN;
+      const g = novoGoogle(envGoogle(fluxo.saida));
+      assert.equal((await perguntar(g, 'o que tenho hoje na agenda?')).resposta, googleMod.FRASES.autorizarDeNovo);
+      await g.autenticador.aguardarAviso();
+    }
+    assert.equal(entregues.length, 1);
+    assert.equal(pedidosToken().length, tokensAntes + 1);
+    semSegredos(entregues, fluxo.google.estado(), logs);
+  });
+
+  await test('5. AUTORIZAR DE NOVO: rodar o script outra vez (refresh token novo) devolve o funcionamento SEM reiniciar o processo que já estava "expirado"', async () => {
+    fake.estado.modoToken = 'ok';
+    fake.estado.refreshNaTroca = fake.novoRefresh();
+    const r = await autorizarNoFalso(fluxo.saida);
+    assert.equal(r.codigo, 0, r.texto);
+    const lido = arq.lerArquivoDeToken(fluxo.saida).dados;
+    assert.equal(lido.refresh_token, fake.estado.refreshNaTroca);
+    assert.equal(lido.invalido, null, 'o arquivo novo não tem a marca de expiração');
+    aclRestrita(fluxo.saida);
+    const volta = await perguntar(fluxo.google, 'o que tenho hoje na agenda?');
+    assert.equal(volta.tipo, 'agenda', 'o mesmo processo volta a ler');
+    assert.equal(entregues.length, 1, 'e não houve outro aviso');
+  });
+
+  await test('6. PORTÃO DO PERFIL PRIVADO: sem a rota privada validada (e sem a exceção) a agenda e as tarefas respondem a frase FIXA, sem fallback, e o Google NEM é consultado (nem o token); a rota validada, a cada uso, abre', async () => {
+    fake.limpar();
+    for (const estado of ['desligada', 'incompleta', 'nao-verificada', 'nao-validada', 'bloqueada']) {
+      const g = novoGoogle(envGoogle(fluxo.saida, { YUI_GOOGLE_GMAIL: 'true' }), estado);
+      assert.equal((await perguntar(g, 'o que tenho hoje na agenda?')).resposta, FRASE_AGENDA, estado);
+      assert.equal((await perguntar(g, 'minhas tarefas')).resposta, FRASE_TAREFAS, estado);
+      assert.equal((await perguntar(g, 'tenho e-mails novos?')).resposta, FRASE_EMAIL, estado);
+    }
+    assert.equal(fake.pedidos.length, 0, 'nenhuma chamada ao Google (nem o token)');
+    let estadoAtual = 'validada';
+    const g = googleMod.criarGoogle({ env: envGoogle(fluxo.saida), agora: () => relogioFluxo.t, alertar: () => true, log: quiet, estadoDaRota: () => ({ estado: estadoAtual }), timeoutMs: 1500 });
+    assert.equal((await perguntar(g, 'o que tenho hoje na agenda?')).tipo, 'agenda');
+    estadoAtual = 'bloqueada';
+    assert.equal((await perguntar(g, 'o que tenho hoje na agenda?')).resposta, FRASE_AGENDA, 'bloqueada depois: fecha na hora');
+  });
+
+  await test('7. A EXCEÇÃO do dono é ESTRITA: só YUI_GOOGLE_SEM_ROTA_PRIVADA=true (exato) abre a agenda e as tarefas sem a rota; True, TRUE, " true ", 1 e sim não abrem; e o Gmail nunca abre', async () => {
+    fake.limpar();
+    for (const v of ['True', 'TRUE', ' true ', 'true ', '1', 'sim', 'on', 'yes']) {
+      const g = novoGoogle(envGoogle(fluxo.saida, { YUI_GOOGLE_SEM_ROTA_PRIVADA: v }), 'desligada');
+      assert.equal((await perguntar(g, 'o que tenho hoje na agenda?')).resposta, FRASE_AGENDA, JSON.stringify(v));
+    }
+    assert.equal(fake.pedidos.length, 0);
+    const g = novoGoogle(envGoogle(fluxo.saida, { YUI_GOOGLE_SEM_ROTA_PRIVADA: 'true', YUI_GOOGLE_GMAIL: 'true' }), 'desligada');
+    const ag = await perguntar(g, 'o que tenho hoje na agenda?');
+    assert.equal(ag.tipo, 'agenda');
+    assert.equal(ag.opcoes.attachment, true, 'segue sensível: nunca provedor anônimo');
+    assert.equal((await perguntar(g, 'minhas tarefas')).tipo, 'tarefas');
+    const antes = pedidosApi().length;
+    assert.equal((await perguntar(g, 'tenho e-mails novos?')).resposta, FRASE_EMAIL, 'o Gmail não é dispensado pela exceção');
+    assert.equal(pedidosApi().length, antes, 'nada do Gmail foi baixado');
+    assert.equal(g.estado().excecaoSemRotaPrivada, true);
+    assert.equal(g.estado().viaExcecaoDoDono, 2);
+  });
+
+  await test('8. TUDO é leitura e o arquivo ficou restrito do começo ao fim do fluxo', () => {
+    assert.ok(fake.estado.pedidos.every((p) => p.metodo === 'GET' || p.caminho === '/token'));
+    aclRestrita(fluxo.saida);
+    assert.deepEqual(fs.readdirSync(path.dirname(fluxo.saida)), ['google-token.json'], 'nenhum temporário sobrou');
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════════════════
+  section('N. Fechamento');
   // ═════════════════════════════════════════════════════════════════════════════════════
   await test('nenhum segredo apareceu no log de todo o teste e nenhum pedido ao Google (fora do falso) aconteceu; tudo foi leitura', () => {
     semSegredos(logs);

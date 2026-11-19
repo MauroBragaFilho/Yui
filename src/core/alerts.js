@@ -210,6 +210,15 @@ export function alertOwner(key, title, detail = '', options = {}) {
   current.alert(key, title, detail, options).catch(() => {});
 }
 
+/**
+ * Como `alertOwner`, mas devolve a Promise<boolean>: `true` SÓ se a mensagem foi de fato enviada (`false` = desligado, no intervalo, no teto por hora ou a DM falhou). Nunca lança.
+ * Para quem precisa saber se o aviso chegou (o aviso de autorização expirada do Google repete até a entrega ser confirmada). Atenção: o intervalo do `key` é consumido
+ * antes do envio (veja o topo), então quem repete deve usar um `cooldownMinutes` menor que o seu próprio intervalo de repetição.
+ */
+export function alertOwnerConfirmado(key, title, detail = '', options = {}) {
+  return current.alert(key, title, detail, options).catch(() => false);
+}
+
 export function alertsEnabled() {
   return current.enabled();
 }

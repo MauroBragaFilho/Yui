@@ -423,7 +423,8 @@ export function createAdmin({
     async morningSend(ctx) {
       requireOwner(ctx);
       const r = await rem();
-      const text = await r.compose(new Date());
+      // `dm: true`: este texto vai por mensagem privada ao dono, então leva a seção do Google (Agenda e Tarefas) como o relatório das 08:00; a prévia no painel (acima) não leva.
+      const text = await r.compose(new Date(), { dm: true });
       const ok = (await r.send(text)) === true;
       audit('admin.morning.send', ctx, { ok });
       if (!ok) throw new AdminError(503, 'Não consegui enviar a mensagem privada (o Discord está desconectado?).');

@@ -30,7 +30,7 @@ export function gmailLigadoPelaChave(env = process.env) {
  * Sem YUI_GOOGLE ligado não vale nada.
  */
 export function semRotaPrivadaPelaChave(env = process.env) {
-  return googleLigado(env) && String(env?.YUI_GOOGLE_SEM_ROTA_PRIVADA ?? '').trim().toLowerCase() === 'true';
+  return googleLigado(env) && env?.YUI_GOOGLE_SEM_ROTA_PRIVADA === 'true';
 }
 
 /** O caminho do arquivo da autorização. */

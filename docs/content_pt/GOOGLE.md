@@ -35,7 +35,9 @@ A Yui pode **ler** a Agenda e as Tarefas do Google de quem a opera (o dono) e re
 
 Os dias são os do **fuso** configurado (`YUI_GOOGLE_FUSO`), não os do servidor. A Yui lê só o necessário: título, hora, local e dia inteiro dos eventos; título e prazo das tarefas. Notas, convidados e outras listas ficam de fora.
 
-**Resumo diário:** com a chave ligada, o portão aberto e conectado, o relatório matinal que a Yui manda ao dono **por mensagem privada** ganha a seção "Agenda e tarefas de hoje". Sem a chave, com o portão fechado ou sem conexão, o relatório é idêntico ao de sempre (e nada é consultado no Google). O "resumo do dia" pedido numa conversa (que pode aparecer num canal) nunca leva a agenda do Google.
+Ficam **fora** da agenda: os eventos cancelados, os **convites que o dono recusou** e os eventos de **dia inteiro de outro dia** (o Google decide o dia inteiro pelo fuso da agenda, então a Yui confere as datas por conta própria; o fim de um evento de dia inteiro é exclusivo). Quando há mais coisas do que cabe numa resposta do Google, a Yui **segue as páginas** (até 5 de eventos e 10 de tarefas) antes de ordenar e cortar a lista.
+
+**Resumo diário:** com a chave ligada, o portão aberto e conectado, o relatório matinal que a Yui manda ao dono **por mensagem privada** ganha a seção "Agenda e tarefas de hoje". Sem a chave, com o portão fechado ou sem conexão, o relatório é idêntico ao de sempre (e nada é consultado no Google). O botão "enviar relatório agora" do painel também leva a seção (ele manda por mensagem privada). A prévia do relatório na tela do painel e o "resumo do dia" pedido numa conversa (que pode aparecer num canal) nunca levam a agenda do Google.
 
 **Quando algo não dá certo**, a Yui diz uma frase curta, sem detalhe técnico:
 
@@ -108,7 +110,7 @@ Na tela do Google:
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
 | `YUI_GOOGLE` | Liga a leitura da Agenda e das Tarefas do dono. Desligado, nada muda e a Yui nunca fala com o Google | `false` |
-| `YUI_GOOGLE_SEM_ROTA_PRIVADA` | **Exceção explícita do dono.** Só o texto exato `true` dispensa o portão da rota privada de IA **para a Agenda e as Tarefas** (nunca para o Gmail): o texto da agenda passa pela IA em nuvem, sempre por provedor **não anônimo**. Só vale com `YUI_GOOGLE=true` | `false` |
+| `YUI_GOOGLE_SEM_ROTA_PRIVADA` | **Exceção explícita do dono.** Só o texto exato `true` (minúsculo e sem espaços: `True`, `TRUE`, ` true ` e `1` não valem) dispensa o portão da rota privada de IA **para a Agenda e as Tarefas** (nunca para o Gmail): o texto da agenda passa pela IA em nuvem, sempre por provedor **não anônimo**. Só vale com `YUI_GOOGLE=true` | `false` |
 | `YUI_GOOGLE_GMAIL` | Libera o código do Gmail (somente leitura). **Só funciona** com a rota privada de IA validada (hoje desligada); sem ela, nada é baixado | `false` |
 | `YUI_GOOGLE_TOKEN_ARQUIVO` | Caminho do arquivo da autorização | `secrets/google-token.json` |
 | `YUI_GOOGLE_FUSO` | Fuso (nome IANA, como `America/Cuiaba`) dos "hoje", "amanhã" e "semana" | `America/Sao_Paulo` |
@@ -119,12 +121,12 @@ Na tela do Google:
 
 O Google pode **invalidar** a autorização:
 
-- num projeto em modo **"Testing"** (o modo de teste do console do Google), a autorização de permissões sensíveis **expira em cerca de 7 dias**: nesse modo, conte com renovar a autorização toda semana (o que muda ao publicar o app **não foi confirmado**: confira na documentação do Google antes de decidir);
+- num projeto em modo **"Testing"** (o modo de teste do console do Google, tipo de usuário "Externo"), a autorização **expira em 7 dias** (documentação oficial do Google, consultada em 19/11/2026: ["Manage App Audience"](https://support.google.com/cloud/answer/15549945) e ["Using OAuth 2.0 to Access Google APIs"](https://developers.google.com/identity/protocols/oauth2)): nesse modo, conte com renovar a autorização toda semana. Para um app pessoal de um único usuário a documentação cita duas saídas: o tipo de usuário **"Pessoal"** (só a conta que criou o app; sem a expiração de 7 dias de teste, sem verificação e sem a tela de "app não verificado"; é uma escolha única na criação de um **projeto novo**) e **publicar** o app Externo ("In production"; sem verificação o Google mostra a tela de app não verificado e limita a 100 usuários novos). **Não foi confirmado** que um app Externo publicado e **não verificado** deixa de expirar em 7 dias (a documentação oficial não diz; fontes de terceiros divergem), nem que o modo Pessoal aceita os escopos da Agenda e das Tarefas: confira no seu console antes de decidir;
 - se ficar **6 meses sem uso**;
 - se a pessoa **revogar** o acesso (https://myaccount.google.com/permissions);
 - se a senha for alterada, para autorizações com permissões do Gmail.
 
-Quando o Google recusa (`invalid_grant`), a Yui marca a integração como "precisa autorizar de novo", **avisa o dono uma vez** por mensagem privada e **para de tentar**. A marca (com a hora do aviso) fica dentro do arquivo de token: **reiniciar a Yui não repete o aviso nem reinicia o intervalo** (um processo novo lê a marca, não chama o Google e não manda outra mensagem, nem 1 minuto, nem 48 horas depois), e um arquivo **novo** (de uma nova autorização) volta a funcionar sozinho. Se a pasta do arquivo não puder ser gravada, a marca fica só em memória e um reinício tenta uma vez e avisa de novo. Para renovar: rode o script de novo, copie o arquivo e reinicie.
+Quando o Google recusa (`invalid_grant`), a Yui marca a integração como "precisa autorizar de novo", **para de tentar** e **avisa o dono** por mensagem privada. O aviso só conta como **entregue depois que a mensagem de fato saiu**: se o Discord estiver fora do ar ou a mensagem falhar, a Yui tenta de novo no próximo uso (no mínimo a cada 15 minutos) até a entrega ser confirmada, uma entrega por vez. Confirmada, a hora do aviso fica dentro do arquivo de token e **nunca mais se repete**: um processo novo lê a marca, não chama o Google e não manda outra mensagem, nem 1 minuto, nem 48 horas depois. Um arquivo **novo** (de uma nova autorização) volta a funcionar sozinho. Se a pasta do arquivo não puder ser gravada, a marca fica só em memória e um reinício tenta uma vez e avisa de novo. Para renovar: rode o script de novo, copie o arquivo e reinicie.
 
 Falhas passageiras (rede, prazo, erro do servidor do Google) **não** contam como expiração: a Yui espera 30 segundos antes de tentar de novo.
 
@@ -171,7 +173,7 @@ Hoje o perfil privado está desligado, então o Gmail **nunca** funciona. Falha 
 Tudo contra um **Google falso** em `127.0.0.1`, aberto pelo próprio teste (nada do Google de verdade é tocado):
 
 ```bash
-npm run test:google           # a unidade: endereços, arquivo, renovação, expiração, Agenda, Tarefas, dados cercados, pré-rota, Gmail travado, relatório
+npm run test:google           # a unidade e o fluxo completo: endereços, arquivo, renovação, expiração, Agenda, Tarefas (páginas, dia inteiro, convite recusado), dados cercados, pré-rota, portão, exceção, Gmail travado, relatório; e do script de autorização à leitura, à renovação, à expiração e ao aviso
 npm run test:googleautorizar  # o script de autorização de verdade (PKCE, state, retorno local, arquivo restrito)
 ```
 
