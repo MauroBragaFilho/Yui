@@ -513,6 +513,14 @@ try {
       assert.equal(cat.ehPedidoDeLista(t), true, t);
     }
     for (const t of ['resumo do dia', 'escreva uma skill nova pra mim', 'oi', '', 'quais filmes você tem?', `quais skills você tem? ${'x'.repeat(200)}`]) assert.equal(cat.ehPedidoDeLista(t), false, t);
+    // "skill" é palavra de jogo: a frase INTEIRA precisa ser só sobre a lista (nada de "no Overwatch", "pro Jett", "nova", "patch")
+    for (const t of ['qual skill é melhor pro Jett?', 'que skill eu uso no Overwatch?', 'tem skill nova no patch?', 'quais skills você tem no Overwatch?', 'você sabe qual skill é melhor pro Jett?',
+      'qual skill você acha melhor?', 'mostra as skills do Jett no patch novo', 'quais skills você tem pra usar de suporte?', 'skill', 'skills', 'a skill', 'qual a skill ultimate do Sage', 'tem alguma skill boa de tank?']) {
+      assert.equal(cat.ehPedidoDeLista(t), false, t);
+    }
+    for (const t of ['quais skills?', 'oi Yui, quais skills você tem por favor?', 'você tem alguma skill instalada?', '<@123456789012345678> quais skills você tem?', 'lista de skills', 'liste as skills', 'quais as suas skills?']) {
+      assert.equal(cat.ehPedidoDeLista(t), true, t);
+    }
     const texto = cat.textoDaLista(todas, [{ pasta: 'quebrada', origem: 'yui', motivo: 'yaml_invalido' }]);
     assert.match(texto, /^Tenho 3 skills instaladas:/);
     for (const s of todas) assert.ok(texto.includes(`- ${s.nome}: ${s.descricao}`), s.nome);

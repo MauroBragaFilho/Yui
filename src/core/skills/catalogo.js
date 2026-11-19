@@ -84,21 +84,28 @@ export function filtrarPermitidas(skills, env = process.env) {
   return permitidos ? skills.filter((s) => permitidos.has(s.nome)) : skills;
 }
 
-// ── "quais skills você tem?": reconhecido por código (sem IA) ─────────────────────────────────────────────
-const PEDIDOS_DE_LISTA = [
-  /\b(?:quais|que|qual)\b[^?.!\n]{0,40}\bskills?\b/,
-  /\b(?:lista|liste|listar|mostra|mostre|mostrar|exibe|exiba|diga|fale|fala)\b[^?.!\n]{0,40}\bskills?\b/,
-  /\b(?:me\s+diz|me\s+fala|me\s+mostra)\b[^?.!\n]{0,40}\bskills?\b/,
-  /\b(?:tem|tens|possui|existe|ha|instalou|instalei)\b[^?.!\n]{0,30}\bskills?\b/,
-  /\bskills?\b[^?.!\n]{0,30}\b(?:tem|tens|possui|instaladas?|disponiveis|conhece|sabe)\b/,
-];
+// ── "quais skills você tem?": reconhecido por código (sem IA) ──────────────────────────────────────────
+// "skill" é palavra comum de jogo ("qual skill é melhor pro Jett?", "tem skill nova no patch?"): a mensagem INTEIRA precisa ser só sobre a lista de skills. Todas as
+// palavras (menos o cumprimento e o "por favor") têm de ser do vocabulário de pedir a lista, tem de haver a palavra "skill" e uma palavra de pedir ou de ter. Qualquer
+// outra palavra ("no Overwatch", "pro Jett", "nova", "patch") faz a mensagem ir para a IA, como qualquer conversa.
+const PALAVRAS_DA_LISTA = new Set((
+  'quais que qual lista liste listar mostra mostre mostrar exibe exiba diga fale fala diz me tem tens possui existem existe ha instalou instalaste instalei instalada instaladas '
+  + 'instalado instalados disponivel disponiveis sao e as os a o suas seus tuas teus minhas meus de da do dos das voce vc tu yui skill skills alguma algumas algum oi ola ei opa por favor pfv pf ai'
+).split(' '));
+const GATILHOS_DA_LISTA = new Set((
+  'quais que qual lista liste listar mostra mostre mostrar exibe exiba diga fale fala diz tem tens possui existem existe ha instalou instalaste instalei instalada instaladas instalado '
+  + 'instalados disponivel disponiveis minhas meus suas seus tuas teus'
+).split(' '));
 
-/** A mensagem pede a lista das skills? Só mensagem curta (até 160 caracteres) com a palavra "skill" e um verbo de pedir ou de ter. */
+/** A mensagem pede a lista das skills? Só a frase inteira, curta (até 9 palavras), feita só do vocabulário de pedir a lista. */
 export function ehPedidoDeLista(texto) {
-  const t = String(texto ?? '');
-  if (!t.trim() || t.length > 160) return false;
-  const n = normalizar(t);
-  return PEDIDOS_DE_LISTA.some((re) => re.test(n));
+  const t = String(texto ?? '').replace(/<(?:@[!&]?|#)\d+>/g, ' ');
+  if (!t.trim() || t.length > 120) return false;
+  const palavras = normalizar(t).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  if (palavras.length < 2 || palavras.length > 9) return false;
+  if (!palavras.some((p) => p === 'skill' || p === 'skills')) return false;
+  if (!palavras.every((p) => PALAVRAS_DA_LISTA.has(p))) return false;
+  return palavras.some((p) => GATILHOS_DA_LISTA.has(p));
 }
 
 const ROTULOS = {

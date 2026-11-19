@@ -452,8 +452,9 @@ export function createChatBrain(deps = {}) {
     if (google?.prompt) { marcarPesquisado(f.turnId); prompt = google.prompt; o = { ...o, ...google.opcoes }; }
     // Skills (YUI_SKILLS, padrão desligado): null = não se aplica; { resposta } = a lista, por código; { bloco } = instruções do dono, sem ferramentas.
     const skill = skillDoPasso({ f, o, env, logger });
-    if (skill?.resposta) return { text: skill.resposta, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 };
-    if (skill?.bloco) o = { ...o, noTools: true };
+    // O texto da lista (as descrições vêm de arquivo) e a resposta que seguiu uma skill são derivados de arquivo: nunca entram no contexto por horas (como a web e o Google).
+    if (skill?.resposta) { marcarPesquisado(f.turnId); return { text: skill.resposta, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 }; }
+    if (skill?.bloco) { o = { ...o, noTools: true }; marcarPesquisado(f.turnId); }
     const { target, ramKey } = f.decision;
     if (target) { try { await context.init(); } catch { /* o contexto fica só em RAM */ } }
     const history = o.noHistory ? [] : readHistory(target, ramKey, sensitive);
@@ -565,12 +566,13 @@ export function createChatBrain(deps = {}) {
           const again = buildConversationSystemPrompt({
             serverPrompt: channel.serverPrompt, radioBlock: channel.radioBlock, noToolRule: true, channelSettings: channel.channelSettings, voice: o.voicePersona,
           });
-          const retry = String(await callAi({ prompt: `(responda de forma diferente, com outras palavras): ${f.ownText || prompt}`, system: again.withMemory, history, ctx, sensitive: noAnonymous, channel, perfil }) ?? '');
+          const retry = String(await callAi({ prompt: `(responda de forma diferente, com outras palavras): ${f.ownText || prompt}`, system: again.withMemory + (skill?.bloco ?? ''), history, ctx, sensitive: noAnonymous, channel, perfil }) ?? '');
           if (retry.trim()) text = retry;
         } catch { /* fica a primeira */ }
       }
     }
     if (google?.revisar) text = google.revisar(text); // com dados do Google, uma "chamada de ferramenta" na resposta nunca é legítima
+    if (skill?.revisar) text = skill.revisar(text); // idem com uma skill (texto de arquivo): o bot executaria o JSON com a permissão do dono
     // A pesquisa por intenção NÃO saiu porque a pesquisa está temporariamente indisponível (sem o dono da cota ou sem o registro em disco): o texto ÚNICO de sempre,
     // uma vez só, sem detalhe interno (a mesma regra do /yui).
     if (porIntencao && searchFailure === 'unavailable') text = comAvisoDeIndisponivel(text);

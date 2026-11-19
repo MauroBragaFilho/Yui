@@ -151,9 +151,9 @@ Para qualquer outra pessoa ou situação, a conversa é exatamente a de sempre.
 
 **A escolha** é por pontuação de palavras, sem IA: a mensagem e cada skill são reduzidas a palavras (minúsculas, sem acento, sem artigos e verbos genéricos, com plural e variações próximas tratados como a mesma palavra). Cada palavra da mensagem que aparece no **nome** da skill vale 3 pontos e cada uma que só aparece na **descrição** vale 1. A skill precisa de **4 pontos** ou mais. Mensagens muito compridas (mais de 60 palavras) não escolhem skill. Em caso de empate, vence a de mais palavras no nome e, depois, a primeira em ordem alfabética: o resultado não depende da ordem das pastas.
 
-**O uso.** O texto da skill escolhida entra no prompt, depois do restante, entre `[INSTRUÇÕES DA SKILL <nome>, INSTALADA PELO DONO]` e `[FIM DAS INSTRUÇÕES DA SKILL <nome>]`. O bloco avisa o modelo de que aquilo só orienta a resposta. Nessa resposta a Yui fica **sem ferramentas**. Marcadores iguais aos do bloco dentro do texto da skill são neutralizados, para o texto não fechar o bloco nem abrir outro. A auditoria ganha uma linha `skill.usada` com o nome da skill.
+**O uso.** O texto da skill escolhida entra no prompt, depois do restante, entre `[INSTRUÇÕES DA SKILL <nome>, INSTALADA PELO DONO]` e `[FIM DAS INSTRUÇÕES DA SKILL <nome>]`. O bloco avisa o modelo de que aquilo só orienta a resposta. Nessa resposta a Yui fica **sem ferramentas**, e se a resposta do modelo **parecer uma chamada de ferramenta** (um JSON com `tool`, `function` ou `name` e argumentos, por exemplo), ela é trocada por uma resposta segura fixa: o texto de uma skill nunca consegue disparar uma ação. Marcadores iguais aos do bloco dentro do texto da skill (e das referências) são neutralizados, para o texto não fechar o bloco nem abrir outro, inclusive escritos com acento decomposto, letras e colchetes de largura total, espaços estranhos ou caracteres invisíveis. A auditoria ganha uma linha `skill.usada` com o nome da skill. A conversa que usou uma skill (como a que mostrou a lista) **não entra no contexto por horas**, porque o texto vem de um arquivo.
 
-**A lista.** Perguntas curtas como "quais skills você tem?" ou "lista as suas skills" são respondidas **por código**, com o nome e a descrição de cada skill válida (e as pastas ignoradas, se houver), sem chamar a IA.
+**A lista.** Pedidos curtos como "quais skills você tem?", "lista as suas skills" ou "você tem alguma skill instalada?" são respondidos **por código**, com o nome e a descrição de cada skill válida (e as pastas ignoradas, se houver), sem chamar a IA. "Skill" também é palavra de jogo: a mensagem **inteira** precisa ser só sobre a lista ("qual skill é melhor pro Jett?" ou "tem skill nova no patch?" vão para a IA, como qualquer conversa).
 
 ---
 
@@ -161,7 +161,7 @@ Para qualquer outra pessoa ou situação, a conversa é exatamente a de sempre.
 
 - Desligado por padrão; só o dono; só conversa privada e dirigida à Yui.
 - Nada de uma skill é executado, baixado ou instalado; `scripts/` e `allowed-tools` são ignorados.
-- A skill não ganha ferramenta, permissão nem rede: é texto de instrução.
+- A skill não ganha ferramenta, permissão nem rede: é texto de instrução. Uma resposta que pareça chamada de ferramenta é descartada.
 - Só leitura, só arquivos dentro da pasta da skill; link simbólico, junção, `..`, caminho absoluto e arquivo fora da pasta são recusados.
 - Arquivo grande, cabeçalho perigoso ou fora do padrão não carrega.
 - O texto da skill não aparece no log nem na auditoria; a conversa do dono também não.

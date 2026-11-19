@@ -16,6 +16,8 @@ import { ROLES, CHANNEL_KINDS } from '../permissions.js';
 import { audit as auditoriaReal } from '../audit.js';
 import { carregarCatalogo, lerSkill, ErroSkill } from './carregador.js';
 import { escolherSkill, ehPedidoDeLista, textoDaLista, filtrarPermitidas } from './catalogo.js';
+// A MESMA conferência do Google: com texto vindo de arquivo no prompt, uma resposta que PARECE chamada de ferramenta nunca é legítima (e quem a executaria seria o bot, com a permissão do dono).
+import { pareceChamadaDeFerramenta, RESPOSTA_SEGURA } from '../../integrations/google/dados.js';
 
 /** A chave YUI_SKILLS está ligada? Só "true" (ou 1, on, sim, yes) liga; qualquer outra coisa, ou nada, é desligada. */
 export function skillsLigadas(env = process.env) {
@@ -31,9 +33,13 @@ export function dirigidaAYui(call, ctx) {
   return Boolean(call.mentionsBot || call.hasBotName || call.repliesToBot);
 }
 
-// Os marcadores do próprio bloco: um arquivo de skill não pode fechar o bloco nem abrir outro (nem com acento, caixa ou espaços diferentes).
-const MARCADOR_RE = /\[\s*(?:fim\s+d[aoe]s?\s+)?(?:instru[cç][oõ]es\s+d[aoe]\s+skill|refer[eê]ncia)[^\]\r\n]{0,200}\]/gi;
-const neutralizar = (t) => String(t ?? '').replace(MARCADOR_RE, '(marcador removido)');
+// Os marcadores do próprio bloco: um arquivo de skill não pode fechar o bloco nem abrir outro. O texto é NORMALIZADO (NFKC: acento decomposto, letras e colchetes de largura
+// total, espaços estranhos) e o ZWJ entre letras é tirado ANTES de procurar o marcador; caixa, espaços, "_", "." e travessões entre as palavras também não escapam.
+const SEP = '[\\s_.\\-–—]+';
+const MARCADOR_RE = new RegExp(`\\[\\s*(?:fim${SEP}d[aoe]s?${SEP})?(?:instru[cç][oõ]es${SEP}d[aoe]${SEP}skill|refer[eê]ncia)[^\\]\\r\\n]{0,200}\\]`, 'gi');
+const ZWJ = String.fromCharCode(0x200d);
+const ZWJ_ENTRE_LETRAS = new RegExp(`(?<=\\p{L})${ZWJ}|${ZWJ}(?=\\p{L})`, 'gu');
+const neutralizar = (t) => String(t ?? '').normalize('NFKC').replace(ZWJ_ENTRE_LETRAS, '').replace(MARCADOR_RE, '(marcador removido)');
 
 /**
  * O bloco de prompt de uma skill lida (carregador.lerSkill): delimitado, rotulado e sem poder de nada.
@@ -81,7 +87,8 @@ const auditados = new Map();
 
 /**
  * Chamada do passo da conversa do cérebro. `f`: os fatos do turno (ctx, call, ownText, turnId); `o`: as opções do passo.
- * @returns {null | { resposta: string } | { bloco: string, nome: string }}
+ * @returns {null | { resposta: string } | { bloco: string, nome: string, revisar: (texto: string) => string }}
+ *   `revisar`: confere a resposta do modelo (uma "chamada de ferramenta" vira a resposta segura fixa: a skill nunca consegue disparar uma ação pelo texto)
  */
 export function skillDoPasso({ f, o = {}, env = process.env, logger = null, deps = {} } = {}) {
   if (!skillsLigadas(env)) return null;
@@ -111,7 +118,7 @@ export function skillDoPasso({ f, o = {}, env = process.env, logger = null, deps
       auditados.set(chave, true);
       (deps.audit ?? auditoriaReal)('skill.usada', ctx, { skill: lida.nome });
     }
-    return { bloco, nome: lida.nome };
+    return { bloco, nome: lida.nome, revisar: (texto) => (pareceChamadaDeFerramenta(texto) ? RESPOSTA_SEGURA : texto) };
   } catch (err) {
     // Só a palavra do motivo ou o código do erro: nunca o texto da conversa nem o conteúdo do arquivo.
     const motivo = err instanceof ErroSkill ? err.motivo : String(err?.code ?? 'erro').slice(0, 40);
