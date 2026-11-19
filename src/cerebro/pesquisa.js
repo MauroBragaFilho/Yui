@@ -51,9 +51,11 @@ import { acabamentoSemFerramentas, isSystemReply, stripThinking } from '../core/
 import { buildSearchToolPrompt, webSearchGate, describeSearchOutcome } from '../core/ai/llmSafety.js';
 import { VOICE_REFUSAL, precisaDeFonteExterna } from '../core/ai/searchIntent.js';
 import { buildSearchContext, fetchPageContent, searchForAgent } from '../core/ai/searchManager.js';
-import { searchWeb, activeProviders } from '../search/providers.js';
-import { getDefaultBudget, userLimitPerHour, globalLimitPerHour, monthlyCap } from '../search/budget.js';
+import { searchWeb } from '../search/providers.js';
 import { limitesDoCanal } from '../core/ai/limitesTokens.js';
+// A reserva da cota de busca mora em cotaDaBusca.js (a conversa e a pesquisa usam a mesma conta); aqui continua exportada, como sempre.
+import { reservaDaCota, cotaDaBusca } from './cotaDaBusca.js';
+export { reservaDaCota, cotaDaBusca };
 import { TEXTO_PRIVADA_REENVIAR } from './pesquisaRetomada.js';
 import { TEXTO_PESQUISA_INDISPONIVEL, comAvisoDeIndisponivel } from '../search/indisponivel.js';
 import { isOwnerId } from '../core/permissions.js';
@@ -68,44 +70,6 @@ const RESEARCH_FAILED_TEXT = 'Deu um problema aqui na pesquisa. Tente de novo em
 /** O aviso do /yui quando a cota de busca está perto do fim e a pergunta não PEDIU pesquisa (decidirBusca, modo "cota"). */
 export const AVISO_COTA = '-# ⚠️ A cota de pesquisa na web está quase no fim, então respondi sem buscar. Se precisar mesmo de fonte, pede "pesquise ..." que eu busco.';
 
-/** Reserva da cota (YUI_CEREBRO_BUSCA_RESERVA, em %, padrão 20; 0 desliga o aviso): abaixo disto do que sobra, a cota está "perto do fim". */
-export function reservaDaCota(env = process.env) {
-  const n = Number.parseInt(String(env.YUI_CEREBRO_BUSCA_RESERVA ?? '').trim(), 10);
-  return Number.isInteger(n) && n >= 0 ? Math.min(n, 90) : 20;
-}
-
-/**
- * A cota de busca está perto do fim para esta pessoa? Só LÊ os contadores (não gasta nada): o limite por hora da pessoa
- * (YUI_SEARCH_USER_PER_HOUR), o teto global por hora (YUI_SEARCH_GLOBAL_PER_HOUR) e, se TODOS os buscadores ativos tiverem teto mensal, a cota
- * do mês. "Perto do fim" = sobram até YUI_CEREBRO_BUSCA_RESERVA % (no mínimo 1 busca). Só números no resultado.
- * @returns {{ perto: boolean, motivo: string, restantes: { usuario: number|null, global: number|null, mensal: number|null } }}
- */
-export function cotaDaBusca(userId, { budget = getDefaultBudget(), env = process.env } = {}) {
-  const pct = reservaDaCota(env);
-  const out = { perto: false, motivo: '', restantes: { usuario: null, global: null, mensal: null } };
-  if (!pct) return out;
-  const reserva = (limite) => Math.max(1, Math.ceil((limite * pct) / 100));
-  try {
-    const u = budget.userStatus?.(userId, env);
-    if (u && userLimitPerHour(env) > 0 && userId) {
-      out.restantes.usuario = Math.max(0, u.limit - u.used);
-      if (out.restantes.usuario <= reserva(u.limit)) { out.perto = true; out.motivo = 'usuario'; }
-    }
-    const g = budget.globalStatus?.(env);
-    if (g && globalLimitPerHour(env) > 0) {
-      out.restantes.global = Math.max(0, g.limit - g.used);
-      if (!out.perto && out.restantes.global <= reserva(g.limit)) { out.perto = true; out.motivo = 'global'; }
-    }
-    const ativos = activeProviders(env);
-    const comTeto = ativos.filter((p) => monthlyCap(p, env) > 0);
-    if (ativos.length && comTeto.length === ativos.length && typeof budget.used === 'function') {
-      const sobras = comTeto.map((p) => ({ sobra: Math.max(0, monthlyCap(p, env) - budget.used(p)), cap: monthlyCap(p, env) }));
-      out.restantes.mensal = sobras.reduce((s, x) => s + x.sobra, 0);
-      if (!out.perto && sobras.every((x) => x.sobra <= reserva(x.cap))) { out.perto = true; out.motivo = 'mensal'; }
-    }
-  } catch { /* sem como ler a cota: segue sem o aviso (a cota de verdade continua valendo no buscador) */ }
-  return out;
-}
 const MAX_LINE = 200;
 
 const bad = (message) => new ChannelError('BAD_PARAMS', message);
@@ -172,7 +136,7 @@ export function createResearchBrain(deps = {}) {
   // Uma pesquisa por pessoa por vez, POR CÉREBRO (no processo é o mesmo que a trava do adaptador; nos testes, dois "processos" não dividem a trava).
   const userGuard = createUserGuard();
   // `indisponiveis`: quantas respostas foram o aviso de pesquisa temporariamente indisponível (a busca não saiu: sem o dono da cota ou sem o registro em disco).
-  const counters = { pesquisas: 0, yui: 0, antigas: 0, recusadas: 0, progresso: 0, retomadas: 0, respostasReaproveitadas: 0, interrompidas: 0, privadasReenviar: 0, indisponiveis: 0, yuiDecisoes: { pesquisar: 0, sem_fonte: 0, cota: 0, privada: 0, desligada: 0 } };
+  const counters = { pesquisas: 0, yui: 0, antigas: 0, recusadas: 0, progresso: 0, retomadas: 0, respostasReaproveitadas: 0, interrompidas: 0, privadasReenviar: 0, indisponiveis: 0, yuiDecisoes: { pesquisar: 0, sem_fonte: 0, cota: 0, privada: 0, desligada: 0, clima: 0 } };
   /** O pedido de limite por provedor da IA, com os ajustes do painel do Discord que o bot mandou como fato do canal. */
   const limiteDoCanal = (channel) => {
     const canal = limitesDoCanal(channel?.maxTokens);
@@ -253,7 +217,19 @@ export function createResearchBrain(deps = {}) {
    *  - pede fonte (pedido explícito, assunto atual, documentação/fonte): 'pesquisar'.
    */
   function decidirBusca(f, conv, pergunta) {
-    if (conv.privateChat) return { modo: 'privada', motivo: 'conversa privada', explicito: false };
+    // Etapa 11: o clima é ferramenta própria (o passo consulta o Open-Meteo): nunca vira pesquisa na web nem promessa de pesquisa.
+    if (chat.pedidoDeClima?.(f, pergunta)) return { modo: 'clima', motivo: 'ferramenta própria', explicito: false };
+    if (conv.privateChat) {
+      // Etapa 11: a pesquisa por intenção na conversa PRIVADA (só com YUI_PESQUISA_POR_INTENCAO, YUI_PRIVATE_SEARCH liberando a pessoa e a consulta limpa pelo
+      // scrubQuery). Sem isso, as regras de antes: sem busca automática; o agente só com YUI_PRIVATE_SEARCH e pedido explícito, com o texto literal.
+      const i = autoSearchEnabled(env) ? chat.intencaoDeBuscaPrivada?.(f, pergunta) : null;
+      if (i?.buscar && i.privado) {
+        const cota = cotaDaBusca(f.ctx.userId, { ...(budget ? { budget } : {}), env });
+        if (cota.perto) return { modo: 'cota', motivo: `intencao-privada/${cota.motivo}`, explicito: false };
+        return { modo: 'pesquisar', motivo: 'intencao-privada', explicito: false, privado: true };
+      }
+      return { modo: 'privada', motivo: 'conversa privada', explicito: false };
+    }
     if (!autoSearchEnabled(env)) return { modo: 'desligada', motivo: 'YUI_CEREBRO_BUSCA_AUTOMATICA', explicito: false };
     const precisa = precisaDeFonteExterna(pergunta);
     if (!precisa.precisa) return { modo: 'sem_fonte', motivo: precisa.motivo, explicito: false };
@@ -379,7 +355,8 @@ export function createResearchBrain(deps = {}) {
     // A resposta do modelo, sem ferramentas. A busca automática só com a decisão "pesquisar" (nunca na conversa privada: a pesquisa privada é
     // do agente); com ela, o gatilho de palavras do otimizador não é exigido (`searchDecided`: o contexto já decidiu).
     const buscaAutomatica = decisao.modo === 'pesquisar';
-    const gen = await chat.passo(f, channel, { noTools: true, allowSearch: buscaAutomatica, searchDecided: buscaAutomatica, searchPrompt: pergunta }, contexto ? `${contexto}\n\nPergunta do usuário: ${pergunta}` : pergunta, { diario });
+    // Etapa 11: `textoDoAutor` (o clima olha só a pergunta do próprio autor) e `privadaPorIntencao` (a busca do /yui privado que a política já aprovou).
+    const gen = await chat.passo(f, channel, { noTools: true, allowSearch: buscaAutomatica, searchDecided: buscaAutomatica, searchPrompt: pergunta }, contexto ? `${contexto}\n\nPergunta do usuário: ${pergunta}` : pergunta, { diario, textoDoAutor: pergunta, privadaPorIntencao: decisao.privado === true });
     let resposta = gen.failed ? gen.text : acabamentoSemFerramentas(gen.text);
     if (gen.usedSearch && !gen.failed) resposta += '\n-# 🔎 Search';
     // Portas C e D: promessa vazia vira pesquisa de verdade, recusa honesta ou a resposta final; o que ainda for só promessa não chega à pessoa.

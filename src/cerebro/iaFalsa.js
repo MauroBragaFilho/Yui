@@ -76,7 +76,7 @@ export function createFakeAiBackend() {
       const tokens = tokensIn(String(prompt ?? ''));
       const sim = (b) => (b ? 'sim' : 'nao');
       const pergunta = String(prompt ?? '').replace(/\s+/g, ' ').trim().slice(-120);
-      return `IA-FALSA persona=${persona} persona_hash=${hash} memoria=${memoria} historico=${list.length} vistos=[${vistos.join(',')}] tokens=[${tokens.join(',')}] identidade=${sim(sys.includes('[IDENTIDADE'))} ferramentas=${sim(sys.includes('--- FERRAMENTAS DISPONÍVEIS ---'))} voz=${sim(sys.includes('[MODO VOZ]'))} sensivel=${sim(sensitive === true)} pergunta="${pergunta}"`;
+      return `IA-FALSA persona=${persona} persona_hash=${hash} memoria=${memoria} historico=${list.length} vistos=[${vistos.join(',')}] tokens=[${tokens.join(',')}] identidade=${sim(sys.includes('[IDENTIDADE'))} ferramentas=${sim(sys.includes('--- FERRAMENTAS DISPONÍVEIS ---'))} voz=${sim(sys.includes('[MODO VOZ]'))} sensivel=${sim(sensitive === true)} clima=${sim(String(prompt ?? '').includes('[DADOS DO CLIMA'))} web=${sim(String(prompt ?? '').includes('[CONTEXTO OBTIDO NA WEB]'))} pergunta="${pergunta}"`;
     },
   };
 }

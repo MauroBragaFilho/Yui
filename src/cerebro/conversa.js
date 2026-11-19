@@ -33,6 +33,14 @@
 //    depois de um reinício do cérebro, a repetição do mesmo passo reaproveita a web já achada, sem buscar de novo;
 //  - `searchDecided` (o /yui do cérebro já decidiu pelo contexto que a pergunta pede fonte): a busca não exige a palavra-gatilho;
 //  - o limite de tokens leva o ajuste do PAINEL do Discord (o fato do canal `maxTokens` que o bot manda).
+// Etapa 11 (docs/RELATORIO_ETAPA11_CLIMA_E_INTENCAO.md): duas decisões por CÓDIGO sobre a fala do PRÓPRIO autor, só na chamada principal do turno e só em
+// chamada dirigida à Yui (nunca espontânea, voz nem log de terceiros):
+//  - o CLIMA é ferramenta própria (src/core/tools/clima.js): o pedido de clima consulta o Open-Meteo AQUI (só o cérebro chama a rede; só o NOME do local
+//    sai), injeta os dados num bloco CERCADO como dado externo não confiável e o modelo responde na persona da Yui. Falha, cota ou local não achado:
+//    UMA frase fixa da Yui, sem chamar a IA (o modelo nunca inventa o tempo). Sem cidade: a padrão (YUI_CLIMA_CIDADE_PADRAO) ou "De qual cidade?";
+//  - a PESQUISA POR INTENÇÃO (src/cerebro/intencaoBusca.js): a pergunta que pede dado externo atual ("quem ganhou o jogo ontem?") passa pela MESMA busca
+//    automática de sempre (autoSearch: cota, porta de saída, dono da cota, diário da retomada e falha fechada), com o contexto "já decidiu"
+//    (searchDecided). Na conversa PRIVADA só com a chave, o YUI_PRIVATE_SEARCH liberando a pessoa e a consulta limpa pelo scrubQuery; sai com `privado: true`.
 // O log nunca recebe o texto da conversa: só o passo, contagens e códigos.
 import { setTimeout as delay } from 'node:timers/promises';
 import { buildPersonaPrompt } from '../core/persona.js';
@@ -59,6 +67,11 @@ import { selecionarPerfil, campoPerfil, MARCADOR_DE_IMAGEM } from './seletorPerf
 import { TEXTO_PRIVADA_REENVIAR } from './pesquisaRetomada.js';
 // Google (etapa 15, somente leitura, desligado): a pré-rota por código só do dono (agenda, tarefas e e-mails travado). Sem YUI_GOOGLE devolve null e nada muda.
 import { preRotaGoogle } from '../integrations/google/index.js';
+// Etapa 11: o clima como ferramenta própria e a pesquisa por intenção.
+import { createClimaService, climaConfig, detectarPedidoDeClima, interpretarRespostaDeCidade, montarPromptDeClima, textoDeFalhaDoClima, TEXTO_CLIMA_SEM_CIDADE } from '../core/tools/clima.js';
+import { avaliarPesquisaPorIntencao } from './intencaoBusca.js';
+import { cotaDaBusca } from './cotaDaBusca.js';
+import { comAvisoDeIndisponivel } from '../search/indisponivel.js';
 
 const TURN_ID_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 const TOOL_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -186,6 +199,12 @@ export function createChatBrain(deps = {}) {
   const env = deps.env ?? process.env;
   const logger = deps.logger ?? defaultLogger;
   const now = deps.now ?? Date.now;
+  // O clima (etapa 11): só o cérebro chama a rede. Injetável para teste (`deps.clima`: o serviço, com o fetch e o servidor falsos).
+  const clima = deps.clima ?? createClimaService({ env, logger });
+  // A cota de busca só é LIDA (a reserva da pesquisa por intenção); injetável para teste.
+  const budgetDaBusca = deps.budget ?? null;
+  // A política da pesquisa por intenção (injetável só para teste: a falha fechada com uma política que lança).
+  const avaliarIntencao = deps.avaliarIntencao ?? avaliarPesquisaPorIntencao;
   // O seletor de perfil (etapa 9): injetável para teste. Sem perfil configurado devolve null e a chamada de IA fica idêntica à de antes.
   const escolherPerfil = deps.selecionarPerfil ?? ((t) => selecionarPerfil(t, { env }));
   // A pré-rota do Google (etapa 15): injetável para teste. Sem YUI_GOOGLE devolve null.
@@ -209,7 +228,9 @@ export function createChatBrain(deps = {}) {
   const open = new Map();
   /** Fila por conversa: os pedidos de uma conversa são atendidos um por vez, na ordem em que chegam. */
   const queues = new Map();
-  const counters = { steps: 0, commits: 0, repeatedCommits: 0, duplicatesBlocked: 0, aiFailures: 0, regenerated: 0, contextRecorded: 0, historyRecorded: 0, autoSearches: 0, autoSearchUsed: 0, researchedContextBlocked: 0 };
+  const counters = { steps: 0, commits: 0, repeatedCommits: 0, duplicatesBlocked: 0, aiFailures: 0, regenerated: 0, contextRecorded: 0, historyRecorded: 0, autoSearches: 0, autoSearchUsed: 0, researchedContextBlocked: 0,
+    // etapa 11 (só números): a pesquisa por intenção (decidida, sem cota para uma busca que ninguém pediu) e o clima (pedidos, respondidos, falhas)
+    intencaoBusca: 0, intencaoSemCota: 0, intencaoErro: 0, climaPedidos: 0, climaRespondidos: 0, climaFalhas: 0, climaPerguntouCidade: 0 };
   /** Turnos que pesquisaram (por id): a troca deles nunca entra no contexto por horas. */
   const researched = new Map();
   /** A web achada pela busca automática de cada turno (só em RAM, por WEB_TTL_MS): a nova resposta "com a mesma web" não pesquisa de novo. */
@@ -300,18 +321,89 @@ export function createChatBrain(deps = {}) {
   }
 
   /**
+   * A chamada é DIRIGIDA à Yui? As mesmas regras do isDirectToYui do bot, só com os fatos do turno: o /yui e o comando, a DM, ou a menção, o nome dela
+   * e a resposta a ela num servidor. Conversa espontânea, voz e o log de terceiros (/chat_resumo) nunca.
+   */
+  function chamadaDireta(f, o = {}) {
+    const c = f.call;
+    if (c.chatter || c.thirdParty || c.voice || c.voiceItem || c.voiceInteraction || o.thirdParty || o.chatter) return false;
+    if (c.entry === 'yui' || c.type !== 'mention' || !f.ctx.guildId) return true;
+    return Boolean(c.mentionsBot || c.hasBotName || c.repliesToBot);
+  }
+
+  const semRodape = (t) => String(t ?? '').replace(/^-# .*$/gm, '').trim();
+  /** A última fala da Yui no histórico foi o "De qual cidade?" do clima? (então a resposta curta da pessoa é o local). */
+  function ultimaFoiPerguntaDeCidade(history) {
+    const last = [...(Array.isArray(history) ? history : [])].reverse().find((h) => h?.role === 'assistant');
+    return Boolean(last) && semRodape(last.content) === TEXTO_CLIMA_SEM_CIDADE;
+  }
+
+  /**
+   * O pedido de clima deste turno (ou null): decidido por CÓDIGO sobre a fala do próprio autor, só em chamada dirigida à Yui. Vale na DM do dono, na DM de
+   * outras pessoas e nos servidores. A resposta curta a "De qual cidade?" também vale (o local é a própria fala).
+   */
+  function pedidoDeClimaDoTurno(f, o, texto, history = []) {
+    if (!texto || !climaConfig(env).ligado || !chamadaDireta(f, o)) return null;
+    const d = detectarPedidoDeClima(texto);
+    if (d.clima) return { local: d.local, quando: d.quando, origem: 'pedido' };
+    if (ultimaFoiPerguntaDeCidade(history)) {
+      const local = interpretarRespostaDeCidade(texto);
+      if (local) return { local, quando: { tipo: 'hoje', rotulo: 'hoje' }, origem: 'resposta' };
+    }
+    return null;
+  }
+
+  /**
+   * A pesquisa por intenção deste turno (ou null): a política do intencaoBusca.js (chave, chamada direta, conversa privada) mais as travas daqui: a busca
+   * automática ligada, search_web ligada no servidor e a RESERVA da cota (a busca que ninguém pediu não gasta o fim da cota: só o pedido explícito gasta).
+   */
+  /**
+   * A política (intencaoBusca.js), com FALHA FECHADA (revisão da Liz): nunca lança; qualquer erro, resposta estranha ou resposta que não bate com os fatos da conversa
+   * (busca privada fora da DM do proprietário, consulta privada vazia) vira "não pesquisa". Os fatos vêm do contexto que o CÉREBRO remontou, nunca do texto.
+   */
+  function avaliarIntencaoFechado(f, o, texto) {
+    const nao = (motivo) => ({ buscar: false, privado: false, motivo, categoria: null, consultaPrivada: null });
+    try {
+      const contexto = { channelKind: f.ctx.channelKind, guildId: f.ctx.guildId ?? null, role: f.ctx.role, memoryScope: f.ctx.memoryScope };
+      const r = avaliarIntencao({ texto, chamadaDireta: chamadaDireta(f, o), contexto, env, forbiddenKeywords: keywords });
+      if (!r || typeof r !== 'object' || r.buscar !== true) return nao(String(r?.motivo ?? 'sem_decisao').slice(0, 60));
+      const privadaPorFato = !f.ctx.guildId;
+      if ((r.privado === true) !== privadaPorFato) return nao('classificacao_incerta');
+      if (r.privado === true && (f.ctx.role !== 'OWNER' || f.ctx.memoryScope !== 'personal' || typeof r.consultaPrivada !== 'string' || !r.consultaPrivada.trim())) return nao('classificacao_incerta');
+      return r;
+    } catch {
+      counters.intencaoErro += 1;
+      logger.warn?.('[Conversa] a decisão da pesquisa por intenção falhou: segue sem a web.');
+      return nao('erro_fechado');
+    }
+  }
+
+  function decidirIntencao(f, o, texto, channel) {
+    if (!texto || !autoSearchEnabled(env) || channel.toolsDisabled.includes('search_web')) return null;
+    if (climaConfig(env).ligado && detectarPedidoDeClima(texto).clima) return null; // o clima é ferramenta própria: nunca vira pesquisa
+    const r = avaliarIntencaoFechado(f, o, texto);
+    if (!r.buscar) return null;
+    if (cotaDaBusca(f.ctx.userId, { ...(budgetDaBusca ? { budget: budgetDaBusca } : {}), env }).perto) { counters.intencaoSemCota += 1; return null; }
+    counters.intencaoBusca += 1;
+    return r;
+  }
+
+  /**
    * A busca automática do passo (a do generateResponse do bot, com allowSearch): só a fala do PRÓPRIO autor vai à porta e ao buscador;
    * nunca em conversa sensível (webSearchGate) nem com search_web desligada no servidor. O otimizador é uma chamada à IA sem histórico,
    * sem memória e sem provedor anônimo. Devolve o resultado do smartSearchDetailed (nunca lança) ou null quando nem se aplica.
    */
-  async function autoSearch(f, channel, o, prompt, sensitive, diario = null) {
+  async function autoSearch(f, channel, o, prompt, sensitive, diario = null, opcoes = {}) {
     if (!autoSearchEnabled(env)) return null;
-    if (!webSearchGate({ sensitive, allowSearch: true }).allowed) return null;
+    // Etapa 11: a pesquisa por intenção na conversa PRIVADA (já aprovada pela política: chave, YUI_PRIVATE_SEARCH e scrubQuery) é a ÚNICA exceção ao portão da
+    // conversa sensível; vai com `privado: true`, sem o otimizador (nenhuma chamada à IA com o texto privado) e com a leitura de páginas sem log do host.
+    const privadaPorIntencao = opcoes.privadaPorIntencao === true;
+    if (!privadaPorIntencao && !webSearchGate({ sensitive, allowSearch: true }).allowed) return null;
     if (channel.toolsDisabled.includes('search_web')) return null;
     counters.autoSearches += 1;
     const optimizerCtx = { userId: f.ctx.userId, platform: 'api', memoryScope: 'public' };
     const tokensPorProvedor = pedidoDeLimiteDoCanal(channel);
-    const optimizer = async (p, system) => {
+    const optimizer = privadaPorIntencao ? async () => ({ text: 'NAO' }) : async (p, system) => {
       // etapa 9: o otimizador é uma chamada sensível por desenho (nunca provedor anônimo): com o perfil privado declarado, ela segue por ele
       const perfil = campoPerfil(escolherPerfil({ ponto: 'otimizador-busca', privada: true }));
       const call = typeof ai.isolatedChat === 'function'
@@ -322,13 +414,14 @@ export function createChatBrain(deps = {}) {
     // Os buscadores e o leitor de páginas (de verdade ou os dublês do teste); com o diário da retomada, cada busca e cada página ficam
     // guardadas pela chave do pedido (a repetição depois de um reinício reaproveita a web sem buscar de novo).
     const baseSearch = typeof busca.searchWeb === 'function' ? busca.searchWeb : searchWeb;
-    const baseRead = typeof busca.readPage === 'function' ? busca.readPage : fetchPageContent;
+    const baseReadPublica = typeof busca.readPage === 'function' ? busca.readPage : fetchPageContent;
+    const baseRead = privadaPorIntencao ? (url, opts = {}) => baseReadPublica(url, { ...opts, quiet: true }) : baseReadPublica;
     // Conversa privada (a sensível e a DM de qualquer pessoa): a busca dela nunca é compartilhada nem reaproveitada entre pessoas (revisão da Liz, §12).
     const privado = sensitive || (!f.ctx.guildId && !f.call?.voiceItem);
     const comPrivado = (fn) => (q, opts = {}) => fn(q, privado ? { ...opts, privado: true } : opts);
     try {
       return await smartSearchDetailed(o.searchPrompt || prompt, optimizer, {
-        userId: f.ctx.userId, sensitive, forbiddenKeywords: keywords, memo: createWebContextMemo(),
+        userId: f.ctx.userId, sensitive: privadaPorIntencao ? false : sensitive, forbiddenKeywords: keywords, memo: createWebContextMemo(),
         searchImpl: comPrivado(diario ? diario.busca('rapida', baseSearch) : baseSearch),
         readPage: diario ? diario.pagina(baseRead) : baseRead,
         ...(o.searchDecided ? { decidido: true } : {}),
@@ -356,6 +449,23 @@ export function createChatBrain(deps = {}) {
     const { target, ramKey } = f.decision;
     if (target) { try { await context.init(); } catch { /* o contexto fica só em RAM */ } }
     const history = o.noHistory ? [] : readHistory(target, ramKey, sensitive);
+    // O CLIMA (etapa 11): ferramenta própria, decidida por código sobre a fala do próprio autor (a chamada principal da fila ou a resposta do /yui). Sai só o
+    // nome do local. Sem os dados (falha, cota, local não achado, sem cidade) a Yui responde UMA frase fixa, sem chamar a IA: o modelo nunca inventa o tempo.
+    let dadosDoClima = null;
+    const textoDoAutor = extra.textoDoAutor ?? (o.main && !o.noTools ? f.ownText : null);
+    const pedidoClima = pedidoDeClimaDoTurno(f, o, textoDoAutor, history);
+    if (pedidoClima) {
+      counters.climaPedidos += 1;
+      const r = await clima.obter({ local: pedidoClima.local, quando: pedidoClima.quando, userId: ctx.userId });
+      if (r.ok) {
+        counters.climaRespondidos += 1;
+        dadosDoClima = r.dados;
+      } else {
+        if (r.motivo === 'sem_local') counters.climaPerguntouCidade += 1; else counters.climaFalhas += 1;
+        logger.info?.(`[Conversa] clima sem dados no passo ${f.step} (${String(r.motivo).slice(0, 30)}): resposta fixa, sem chamar a IA.`);
+        return { text: textoDeFalhaDoClima(r.motivo), model: 'cérebro (clima)', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0, usedClima: true };
+      }
+    }
     let memoryBlock = '';
     if (o.memory && !call.thirdParty && !o.thirdParty) {
       try { memoryBlock = String((await memoryBlockFor(ctx, f.memoryQuery || prompt)) ?? ''); } catch { memoryBlock = ''; }
@@ -375,11 +485,25 @@ export function createChatBrain(deps = {}) {
     let usedSearch = false;
     let searchFailure = '';
     let searchRetryAfterMs = 0;
-    if (o.reuseWeb) {
+    // A pesquisa por intenção do passo principal (decidida em turn()) ou do /yui privado (decidida em pesquisa.js): a mesma busca automática, com o contexto "já decidiu".
+    const porIntencao = !o.allowSearch && extra.intencao?.buscar === true;
+    const privadaPorIntencao = (porIntencao && extra.intencao.privado === true) || extra.privadaPorIntencao === true;
+    if (dadosDoClima) {
+      finalPrompt = montarPromptDeClima({ dados: dadosDoClima, userPrompt: prompt });
+    } else if (o.reuseWeb) {
       const web = webDoTurno(f.turnId);
       if (web) { finalPrompt = buildWebContextPrompt({ context: web, userPrompt: prompt }); usedSearch = true; }
-    } else if (o.allowSearch) {
-      const out = await autoSearch(f, channel, o, prompt, sensitive, extra.diario ?? null);
+    } else if (o.allowSearch || porIntencao) {
+      let opcoesDaBusca = o;
+      if (porIntencao) {
+        // só a fala do próprio autor vai ao buscador (nunca o prompt com o CONTEXTO); na conversa privada, só a consulta limpa, tirada do pedido
+        opcoesDaBusca = { ...o, allowSearch: true, searchDecided: true, searchPrompt: extra.intencao.privado ? extra.intencao.consultaPrivada : f.ownText };
+      } else if (privadaPorIntencao) {
+        // o /yui privado: a consulta limpa é recalculada aqui (nunca guardada em disco com o diário)
+        const again = avaliarIntencaoFechado(f, o, textoDoAutor);
+        opcoesDaBusca = again.buscar && again.privado ? { ...o, searchPrompt: again.consultaPrivada, searchDecided: true } : { ...o, allowSearch: false };
+      }
+      const out = opcoesDaBusca.allowSearch === false ? null : await autoSearch(f, channel, opcoesDaBusca, prompt, sensitive, extra.diario ?? null, { privadaPorIntencao });
       if (out?.context) {
         usedSearch = true;
         counters.autoSearchUsed += 1;
@@ -392,7 +516,9 @@ export function createChatBrain(deps = {}) {
     }
     if (usedSearch) marcarPesquisado(f.turnId);
     let system = withMemory;
-    if (!o.noTools && !usedSearch) system += toolsDefinitionFromNames({ allTools: allTools(), active: channel.toolsActive, disabled: channel.toolsDisabled, offerSearch });
+    // Com a web ou o clima no prompt as ferramentas saem desta chamada: a resposta é o texto, nunca o JSON de uma ferramenta. Na pesquisa por intenção as
+    // ferramentas saem também quando a busca NÃO deu certo: o modelo não pode chamar search_web depois (o bot recusaria na conversa privada).
+    if (!o.noTools && !usedSearch && !dadosDoClima && !porIntencao) system += toolsDefinitionFromNames({ allTools: allTools(), active: channel.toolsActive, disabled: channel.toolsDisabled, offerSearch });
     // Nunca provedor anônimo: conversa sensível, texto de anexo (dado de terceiros) e qualquer memória no prompt (como na cadeia do bot).
     const noAnonymous = sensitive || o.attachment || Boolean(memoryBlock);
     const backend = (ai.listBackends?.() ?? []).find((b) => b.active)?.name ?? 'cérebro';
@@ -419,7 +545,8 @@ export function createChatBrain(deps = {}) {
       return { text: LIMITS_REACHED_TEXT, model: backend, failed: true, usedSearch, searchFailure, searchRetryAfterMs };
     }
     // Resposta idêntica à anterior (a chamada principal): pede UMA vez outra resposta, como a fila do bot fazia com o histórico dele.
-    if (o.main && history.length) {
+    // Com o clima (ou a web da pesquisa por intenção) a resposta pode legitimamente se repetir, e o novo pedido iria SEM os dados (o modelo inventaria): não repete.
+    if (o.main && history.length && !dadosDoClima && !(porIntencao && usedSearch)) {
       const last = [...history].reverse().find((h) => h.role === 'assistant');
       const lastClean = footerless(last?.content);
       if (lastClean.length > 15 && footerless(text) === lastClean) {
@@ -435,7 +562,10 @@ export function createChatBrain(deps = {}) {
       }
     }
     if (google?.revisar) text = google.revisar(text); // com dados do Google, uma "chamada de ferramenta" na resposta nunca é legítima
-    return { text, model: `cérebro (${backend})`, failed: false, usedSearch, searchFailure, searchRetryAfterMs };
+    // A pesquisa por intenção NÃO saiu porque a pesquisa está temporariamente indisponível (sem o dono da cota ou sem o registro em disco): o texto ÚNICO de sempre,
+    // uma vez só, sem detalhe interno (a mesma regra do /yui).
+    if (porIntencao && searchFailure === 'unavailable') text = comAvisoDeIndisponivel(text);
+    return { text, model: `cérebro (${backend})`, failed: false, usedSearch, searchFailure, searchRetryAfterMs, ...(dadosDoClima ? { usedClima: true } : {}) };
   }
 
   /** chat.commit: grava o que o turno deixou, UMA vez, onde o cérebro decide. */
@@ -493,8 +623,11 @@ export function createChatBrain(deps = {}) {
       open.get(f.turnId).steps = stepNo;
       // A busca automática deste passo (o "jogo não encontrado" da fila) grava no diário da retomada pela chave do passo: a repetição do
       // MESMO passo depois de um reinício do cérebro reaproveita a web já achada, sem buscar de novo.
+      // A pesquisa por intenção (etapa 11): só na chamada principal da fila, sobre a fala do próprio autor; decidida ANTES de abrir o diário (a busca dela
+      // também grava no diário da retomada, como a busca automática de sempre).
+      const intencao = o.main && !o.noTools && !o.allowSearch && !o.reuseWeb ? decidirIntencao(f, o, f.ownText, channel) : null;
       let diario = null;
-      if (o.allowSearch && retomada && typeof meta.idem === 'string') {
+      if ((o.allowSearch || intencao) && retomada && typeof meta.idem === 'string') {
         // privada para a pesquisa: a conversa sensível e a DM de qualquer pessoa (a mesma regra do research.turn): sem conteúdo em disco
         const privado = f.ctx.memoryScope === 'personal' || (!f.ctx.guildId && !f.call.voiceItem);
         try { diario = retomada.abrir(meta.idem, { userId: f.ctx.userId, privado, tipo: 'chat.turn' }); } catch { diario = null; }
@@ -506,7 +639,7 @@ export function createChatBrain(deps = {}) {
           marcarPesquisado(f.turnId); // o aviso não entra no contexto por horas
           return { text: TEXTO_PRIVADA_REENVIAR, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 };
         }
-        const out = await step(f, channel, o, prompt, { diario });
+        const out = await step(f, channel, o, prompt, { diario, intencao });
         try { if (diario) { if (out.usedSearch || out.searchFailure) diario.concluir(); else diario.descartar(); } } catch { /* */ }
         return out;
       });
@@ -530,7 +663,15 @@ export function createChatBrain(deps = {}) {
       for (const key of [...ramHistory.keys()]) if (key.startsWith(`voice:${guildId}:`)) { ramHistory.delete(key); removed += 1; }
       return { removed };
     },
-    stats: () => ({ ...counters, open: open.size, ramKeys: ramHistory.size, committed: committed.size, queues: queues.size, researched: researched.size, webTurns: webByTurn.size }),
+    stats: () => ({ ...counters, open: open.size, ramKeys: ramHistory.size, committed: committed.size, queues: queues.size, researched: researched.size, webTurns: webByTurn.size, clima: clima.stats() }),
+    // ── Para o /yui do cérebro (src/cerebro/pesquisa.js) ──
+    /** O pedido de clima da fala (ou null): decidido por código, só em chamada dirigida à Yui. */
+    pedidoDeClima: (f, texto) => pedidoDeClimaDoTurno(f, {}, String(texto ?? ''), []),
+    /** A política da pesquisa por intenção para a conversa PRIVADA do /yui (a pública segue a decisão do contexto): { buscar, privado, motivo }. */
+    intencaoDeBuscaPrivada: (f, texto) => {
+      const r = avaliarIntencaoFechado(f, {}, String(texto ?? ''));
+      return { buscar: r.buscar, privado: r.privado, motivo: r.motivo };
+    },
     // ── Para a pesquisa do cérebro (src/cerebro/pesquisa.js) ──
     /** Os fatos de um pedido do bot já conferidos e a decisão do cérebro (alvo do contexto, histórico, fila da conversa). */
     preparar(p, meta = {}) {
@@ -544,6 +685,7 @@ export function createChatBrain(deps = {}) {
       const opts = stepOptionsFromWire(o);
       f.step = (f.step ?? 0) + 1;
       const g = { ...f };
+      // `extra.textoDoAutor` (o /yui): a pergunta do próprio autor, para o clima; `extra.privadaPorIntencao`: a busca do /yui privado já aprovada pela política.
       return inOrder(f.decision.lockKey, () => step(g, channel, opts, String(prompt ?? ''), extra));
     },
     marcarPesquisado,

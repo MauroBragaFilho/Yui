@@ -109,6 +109,13 @@ export const SUITES = [
   'test:devtarefas',
   'test:sondahardware',
   'test:ialocal',
+  // Etapa 11 (clima como ferramenta própria e pesquisa por intenção no chat, só no cérebro): o detector do clima; o cliente e o serviço do Open-Meteo contra um servidor FALSO em
+  // loopback (a cota por hora, o cache, as falhas); o detector e a política da pesquisa por intenção (chave x dono/membro x DM/servidor x YUI_PRIVATE_SEARCH); e o chat.turn, a fila do
+  // llmHandler e o /yui de ponta a ponta com a IA, o buscador e o Open-Meteo falsos. Todos num processo só, sob o bloqueio de integração externa.
+  'test:climadeteccao',
+  'test:climacliente',
+  'test:intencaobusca',
+  'test:climaintencao',
 ];
 
 function argvOf(command) {

@@ -71,7 +71,8 @@ export function createFakeSearch({ env = process.env, budget = null, pausa = nul
       if (!turn.ok && turn.scope === 'registro') return resultadoIndisponivel('registro-da-cota');
       if (!turn.ok) return { provider: null, results: [], errors: ['limite de buscas por usuário atingido'], limited: 'user', retryAfterMs: turn.retryAfterMs };
     }
-    registrar(env, { tipo, consulta: String(query ?? '').slice(0, 300), userId: o.userId ?? null, privado: o.private === true });
+    // `private` é o nome do agente de pesquisa; `privado`, o da busca automática (etapa 11: a pesquisa por intenção na conversa privada)
+    registrar(env, { tipo, consulta: String(query ?? '').slice(0, 300), userId: o.userId ?? null, privado: o.private === true || o.privado === true });
     if (typeof pausa === 'function') await pausa({ tipo, consulta: String(query ?? '') });
     await sleep(c.atrasoMs, o.signal);
     if (c.falhar) return { provider: null, results: [], errors: ['busca-falsa: erro de teste'] };
@@ -83,7 +84,7 @@ export function createFakeSearch({ env = process.env, budget = null, pausa = nul
     search: (query, o) => base('agente', query, o),
     searchWeb: (query, o) => base('rapida', query, o),
     async readPage(url, o = {}) {
-      registrar(env, { tipo: 'pagina', url: String(url).slice(0, 200), privado: o.private === true });
+      registrar(env, { tipo: 'pagina', url: String(url).slice(0, 200), privado: o.private === true || o.quiet === true });
       const n = /fonte(\d)/.exec(String(url))?.[1] ?? '0';
       return `Conteúdo da página ${n} (tok-PAGINA${n}). ${'Texto de teste com informação sobre o assunto. '.repeat(6)}`;
     },

@@ -689,6 +689,10 @@ try {
     for (let i = 0; i < 16; i += 1) c.budget.takeUser(null); // 16 de 20 no teto global
     assert.equal(pesquisa.cotaDaBusca(MEMBER, { budget: c.budget }).motivo, 'global');
     process.env.YUI_PRIVATE_SEARCH = 'owner';
+    // Etapa 11: o padrão novo (YUI_PESQUISA_POR_INTENCAO=dono) deixa o DONO em DM pesquisar sem a palavra "pesquise" (com a reserva da cota); "as regras de antes"
+    // é a chave `off` (a política nova está provada em tests/test-clima-intencao-cerebro.js e tests/test-intencao-busca.js).
+    const intencaoAntes = process.env.YUI_PESQUISA_POR_INTENCAO;
+    process.env.YUI_PESQUISA_POR_INTENCAO = 'off';
     try {
       const atual = await yuiDe(c, OWNER, 'qual o preço do PS5 hoje? tok-C6', { guild: null, channel: DMCH });
       assert.equal(atual.decisao.modo, 'privada');
@@ -699,6 +703,7 @@ try {
       assert.ok(agente('tok-C7').every((r) => r.privado === true) && agente('tok-C7').length === 1, 'privada: o pedido explícito pesquisa com o texto literal');
     } finally {
       process.env.YUI_PRIVATE_SEARCH = 'off';
+      if (intencaoAntes === undefined) delete process.env.YUI_PESQUISA_POR_INTENCAO; else process.env.YUI_PESQUISA_POR_INTENCAO = intencaoAntes;
     }
     const off = await yuiDe(c, OWNER, 'pesquise o preço do PS5 tok-C8', { guild: null, channel: DMCH });
     assert.equal(off.researched, false);
