@@ -533,7 +533,7 @@ A tabela em uso aparece na saúde do cérebro (`limitesTokens`).
 
 ### Perfis de IA e o OmniRoute (etapa 9, só local, só com provedores falsos nos testes)
 
-Detalhes, provas e pendências no [relatório da etapa 9](../RELATORIO_ETAPA9_PERFIS_IA.md); o contrato está no §12 de [ETAPA3_DONOS_E_CONTRATO.md](../ETAPA3_DONOS_E_CONTRATO.md). **Nada disto está ligado, e nenhum perfil aponta para o OmniRoute real nem para o combo `yui-gemini`.** Só vale com `YUI_CEREBRO_EXTERNO=true` (o cérebro escolhe o perfil de cada chamada); sem nenhum perfil configurado, o que vai ao provedor é idêntico ao de hoje.
+Guia completo (configuração, rota privada, verificação e teste do cabeçalho): [Perfis de IA e a rota privada](PERFIS_IA.md). Detalhes, provas e pendências no [relatório da etapa 9](../RELATORIO_ETAPA9_PERFIS_IA.md); o contrato está no §12 de [ETAPA3_DONOS_E_CONTRATO.md](../ETAPA3_DONOS_E_CONTRATO.md). **Nada disto está ligado, e nenhum perfil aponta para o OmniRoute real nem para o combo `yui-gemini`.** Só vale com `YUI_CEREBRO_EXTERNO=true` (o cérebro escolhe o perfil de cada chamada); sem nenhum perfil configurado, o que vai ao provedor é idêntico ao de hoje.
 
 - **O que é um perfil:** uma modalidade de execução da IA, não um agente. Ele diz só o `modelo` (o combo), o `maxTokens`, a `privacidade` e o `provedor` cadastrado na Yui. Não tem persona, memória, ferramentas nem permissão (um campo desses é recusado). O modelo escolhido **não concede permissão nenhuma**: o motor de políticas e o `guardToolCall` valem igual para qualquer perfil.
 - **Quem escolhe o quê:** o cérebro escolhe o **perfil** (regras simples, sem chamar IA); o **OmniRoute** escolhe o provedor dentro do combo. A Yui não tem um segundo roteador: cada chamada por perfil é UMA só ao OmniRoute.

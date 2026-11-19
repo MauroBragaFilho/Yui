@@ -13,6 +13,7 @@ import { listRadio, RADIO_ACTIONS, defaultRadioDeps } from './radioAdmin.js';
 import { readLogs } from './panelLogs.js';
 import { buildIntegrations, loadGuildDetail, loadIntegrationData } from './integrations.js';
 import { montarDiagnostico } from '../diagnostico.js';
+import { criarPedidoDeVerificacao } from '../ai/verificacaoRotaPrivada.js';
 import { addCustom, addCustomKey, setCustomOptions, addKey, AiSettingsError, describeAi, isEditEnabled, removeCustom, removeKey, setCloudflareAccount, setEnabled } from '../aiSettings.js';
 
 /**
@@ -284,6 +285,9 @@ export function createAdmin({
   const guildList = () => (client?.guilds?.cache ? [...client.guilds.cache.values()] : []);
   let radioCache = null;
   const radioDeps = async () => deps?.radio ?? (radioCache ??= await defaultRadioDeps());
+  // Pedido de nova verificação da rota privada de IA (etapa 13): o limite de repetição vive aqui (em memória). `deps.rotaPrivada` só existe para teste.
+  let pedirVerificacao = null;
+  const verificacaoDaRota = () => (pedirVerificacao ??= criarPedidoDeVerificacao(deps?.rotaPrivada ?? {}));
   const findGuild = (guildId) => {
     const id = requireId(guildId, 'ID do servidor');
     const g = guildList().find((x) => x.id === id);
@@ -712,6 +716,23 @@ export function createAdmin({
     async diagnostico(ctx) {
       requireOwner(ctx);
       return montarDiagnostico({ modo: deps?.modoDiagnostico ?? 'unico', fontes: deps?.diagnostico ?? {} });
+    },
+
+    /**
+     * PEDE a nova verificação da rota privada de IA (etapa 13; o perfil privado continua desligado até uma sonda válida). Só o dono, só com `confirm: true`,
+     * auditada e com limite de repetição (3 pedidos a cada 10 minutos: a sonda é uma chamada paga). Só PEDE: nunca desbloqueia direto; uma rota bloqueada só
+     * volta com uma sonda VÁLIDA (src/core/ai/rotaPerfil.js). A resposta tem só palavras fixas: o estado, o motivo e uma mensagem curta, nunca conteúdo.
+     */
+    async verificarRotaPrivada(ctx, confirm) {
+      requireOwner(ctx);
+      if (confirm !== true) throw new AdminError(400, 'Confirmação necessária para pedir a verificação da rota privada.');
+      const r = await verificacaoDaRota()();
+      if (r.limitado) {
+        audit('admin.ia.rota_privada.recusado', ctx, { motivo: 'limite' });
+        throw new AdminError(429, `Pedido repetido cedo demais: no máximo ${r.max} pedidos a cada ${r.janelaMin} minutos. Tente de novo em ${Math.max(1, Math.ceil(r.esperaSegundos / 60))} min.`);
+      }
+      audit('admin.ia.rota_privada.verificar', ctx, { estado: r.estado, motivo: r.motivo, sondaEnviada: r.sondaEnviada });
+      return r;
     },
 
     /** Saúde do Yui Gateway: provedores, modelos, descansos e contadores (sem chaves). */

@@ -40,6 +40,7 @@ const ROUTES = [
   ['POST', /^\/v1\/admin\/ai\/test\/[\w-]+$/, 'admin.ai_configure'],
   ['POST', /^\/v1\/admin\/gateway\/reset$/, 'admin.gateway_reset'],
   ['POST', /^\/v1\/admin\/restart$/, 'admin.restart'],
+  ['POST', /^\/v1\/admin\/ia\/rota-privada\/verificar$/, 'admin.ia_rota_privada'],
   ['POST', /^\/v1\/admin\/discord\/dm$/, 'admin.discord_dm'],
   // arquivos do BDS
   ['PUT', /^\/v1\/admin\/bds\/upload$/, 'bds.write'],

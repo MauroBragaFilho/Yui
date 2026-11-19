@@ -370,6 +370,11 @@ export function createApiServer({
       const body = await readJson(req);
       return admin.restart(ctx, body.confirm === true);
     }
+    // Etapa 13: PEDE a nova verificação da rota privada de IA (só o dono, só com `confirm: true`, auditada, com limite de repetição; nunca desbloqueia direto).
+    if (m === 'POST' && p === '/v1/admin/ia/rota-privada/verificar') {
+      const body = await readJson(req);
+      return admin.verificarRotaPrivada(ctx, body.confirm === true);
+    }
     if (m === 'POST' && p === '/v1/admin/discord/dm') {
       if (ctx.role !== 'OWNER') return { __status: 403, error: 'Apenas o dono pode usar o painel de administração.' };
       if (!notify || !ownerId) return { __status: 503, error: 'A Yui não está conectada ao Discord para enviar mensagens.' };

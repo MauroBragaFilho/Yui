@@ -61,6 +61,7 @@ const ROWS = [
   ['memory.write_own', false, 'AAAAA', true],
   ['admin.ai_configure', true, 'SCDDD', true],     // chaves, provedores e baseUrl de IA: no PC pede confirmação; remoto (app) é crítico = negado
   ['admin.restart', true, 'SSDDD', true],
+  ['admin.ia_rota_privada', true, 'SSDDD', true],  // pedir a nova verificação da rota privada de IA (uma sonda paga, sem conteúdo): só o dono; nunca desbloqueia direto
   ['admin.reminders_edit', false, 'AAADD', true],
   ['admin.discord_dm', false, 'AADDD', true],
   ['admin.gateway_reset', false, 'AADDD', true],

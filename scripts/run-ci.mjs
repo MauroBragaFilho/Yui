@@ -116,6 +116,11 @@ export const SUITES = [
   'test:climacliente',
   'test:intencaobusca',
   'test:climaintencao',
+  // Etapa 13 (preparar o perfil privado de IA para ser ligado depois; continua DESLIGADO): a rota de administração que só PEDE a nova verificação da rota privada (só o dono, com a confirmação,
+  // auditada, com limite de repetição; nunca desbloqueia direto; num processo só, com o OmniRoute falso) e o script do dono que testa o cabeçalho X-OmniRoute-Decision (processos de verdade
+  // contra o servidor falso, com o bloqueio de integração externa e a prova de que a chave nunca é impressa).
+  'test:rotaprivadaadmin',
+  'test:scriptcabecalho',
 ];
 
 function argvOf(command) {
