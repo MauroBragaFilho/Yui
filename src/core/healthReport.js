@@ -5,9 +5,10 @@ import { interactionSeries } from './interactionStats.js';
 import * as database from '../database/db.js';
 import { getReminderStore, isRemindersRemote } from '../reminders/assistant.js';
 import { diagnosticoDosLimites } from './ai/limitesTokens.js';
+import { fusoDoDono } from './fuso.js';
 
 /**
- * Relatório diário de saúde da Yui para o dono (uma mensagem por dia, 08:00 de Brasília por padrão).
+ * Relatório diário de saúde da Yui para o dono (uma mensagem por dia, 08:00 no fuso do dono, YUI_FUSO; padrão Brasília).
  * Só lê números que já existem (memória, disco, uptime, logs, contador de respostas, log do atualizador, estatísticas
  * dos bancos): nada de conteúdo de conversa, nada de SQL.
  *
@@ -289,5 +290,5 @@ export function healthReportSchedule(env = process.env) {
   if (String(env.YUI_HEALTH_REPORT ?? 'true').toLowerCase() === 'false') return null;
   const h = Number(env.YUI_HEALTH_REPORT_HOUR);
   const hour = Number.isInteger(h) && h >= 0 && h <= 23 ? h : 8;
-  return { cron: `0 ${hour} * * *`, timezone: 'America/Sao_Paulo', hour };
+  return { cron: `0 ${hour} * * *`, timezone: fusoDoDono(env), hour };
 }

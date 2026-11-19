@@ -14,7 +14,11 @@ let n = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); n += 1; };
 const eq = (a, b, msg) => { assert.deepEqual(a, b, msg); n += 1; };
 
-// Quarta-feira, 11/11/2026, 14:30 (hora local: o teste vale em qualquer fuso, pois tudo é montado com o mesmo relógio local)
+// O fuso do dono (YUI_FUSO) e o do processo valem o MESMO aqui: o teste monta as horas com o relógio local do processo (new Date(2026, 10, 11, 14, 30)) e confere
+// contra o relógio do dono. A prova de que o processo não importa (e de Cuiabá x Brasília) está em tests/test-fuso-dono.js. YUI_TEST_FUSO troca o fuso desta suíte.
+process.env.YUI_FUSO = process.env.TZ = process.env.YUI_TEST_FUSO || 'America/Sao_Paulo';
+
+// Quarta-feira, 11/11/2026, 14:30 (hora local do fuso acima)
 const NOW = new Date(2026, 10, 11, 14, 30, 0);
 const L = (y, mo, d, h = 0, mi = 0) => new Date(y, mo - 1, d, h, mi, 0, 0);
 const when = (text, now = NOW) => parseWhen(text, now);
@@ -312,7 +316,7 @@ eq(morningSchedule({}), { cron: '0 8 * * *', timezone: 'America/Sao_Paulo', hour
 eq(morningSchedule({ YUI_MORNING_REPORT_HOUR: '7' }).cron, '0 7 * * *');
 eq(morningSchedule({ YUI_HEALTH_REPORT_HOUR: '6' }).hour, 6, 'herda a hora do relatório de saúde');
 eq(morningSchedule({ YUI_MORNING_REPORT: 'false' }), null);
-const sched = morningSchedule({});
+const sched = morningSchedule({ YUI_FUSO: process.env.YUI_FUSO });
 const stateFile = path.join(dir, 'matinal.json');
 eq(readLastMorning(stateFile), '');
 ok(shouldCatchUp(new Date(2026, 10, 12, 8, 30), sched, ''), 'Yui voltou às 8:30 e hoje não saiu: manda');

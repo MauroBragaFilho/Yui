@@ -247,7 +247,7 @@ Antes das regras de cada contexto vem a **personalidade comum** (`persona/yui-pe
 
 | Contexto | Perfil |
 |----------|--------|
-| Dono em **DM, canal privado ou no app** | **Pessoal:** assistente calorosa, direta, concisa e honesta. Chama você pelo nome (`YUI_OWNER_NAME`), admite que é uma IA, sabe a data e a hora de Brasília, dá **uma** recomendação clara, não termina com perguntas genéricas e não usa gírias |
+| Dono em **DM, canal privado ou no app** | **Pessoal:** assistente calorosa, direta, concisa e honesta. Chama você pelo nome (`YUI_OWNER_NAME`), admite que é uma IA, sabe a data e a hora no fuso do dono (`YUI_FUSO`; padrão Brasília), dá **uma** recomendação clara, não termina com perguntas genéricas e não usa gírias |
 | Outros usuários da **API** | **Assistente neutra:** sem o nome do dono e sem dados pessoais |
 | **Discord público** (qualquer usuário, e o dono em canal público) | **Pública:** texto em `persona/yui-publica.md` (gamer da turma, humor leve, curte jogos em geral e só fala de GTA quando o assunto é GTA) |
 

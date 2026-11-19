@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getBans, BAN_REASON_MAX } from './banHandler.js';
 import { clampText } from '../discord/embedLimits.js';
+import { fusoDoDono } from '../core/fuso.js';
 
 async function buildBanListPayload(client, category, page = 0) {
     const currentBans = getBans();
@@ -90,7 +91,7 @@ async function buildBanListPayload(client, category, page = 0) {
                     mentionText = `<#${shownId}> | **#${channelObj.name}** | ID: \`${shownId}\``;
                 }
             }
-            const dateStr = info.timestamp ? new Date(info.timestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'N/A';
+            const dateStr = info.timestamp ? new Date(info.timestamp).toLocaleString('pt-BR', { timeZone: fusoDoDono() }) : 'N/A';
             // Motivo cortado (TG-19): um motivo longo derrubava a página inteira da lista (campo acima de 1024).
             const reasonText = clampText(info.reason || 'Sem motivo informado', BAN_REASON_MAX);
             embed.addFields({
@@ -176,7 +177,7 @@ async function buildBanDetailPayload(client, category, targetId) {
          .setDescription(`Informações completas e de sistema para o ID \`${targetId}\`.`);
 
     embed.addFields(
-        { name: '📋 Registro Interno (Banco)', value: `**ID:** \`${clampText(String(targetId), 100)}\`\n**Motivo:** ${clampText(banDb.reason || 'Sem motivo informado', BAN_REASON_MAX)}\n**Data:** ${banDb.timestamp ? new Date(banDb.timestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'N/A'}` }
+        { name: '📋 Registro Interno (Banco)', value: `**ID:** \`${clampText(String(targetId), 100)}\`\n**Motivo:** ${clampText(banDb.reason || 'Sem motivo informado', BAN_REASON_MAX)}\n**Data:** ${banDb.timestamp ? new Date(banDb.timestamp).toLocaleString('pt-BR', { timeZone: fusoDoDono() }) : 'N/A'}` }
     );
 
     let discordInfoStr = '';
@@ -188,7 +189,7 @@ async function buildBanDetailPayload(client, category, targetId) {
             if (userObj) {
                 discordInfoStr += `**Tag:** ${userObj.tag}\n`;
                 discordInfoStr += `**Menção:** <@${userObj.id}>\n`;
-                discordInfoStr += `**Criado em:** ${new Date(userObj.createdTimestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`;
+                discordInfoStr += `**Criado em:** ${new Date(userObj.createdTimestamp).toLocaleString('pt-BR', { timeZone: fusoDoDono() })}\n`;
                 discordInfoStr += `**Bot?:** ${userObj.bot ? 'Sim 🤖' : 'Não 👤'}\n`;
                 discordInfoStr += `**Perfil:** [Abrir Link](https://discord.com/users/${userObj.id})`;
                 thumbnail = userObj.displayAvatarURL({ dynamic: true });
@@ -198,7 +199,7 @@ async function buildBanDetailPayload(client, category, targetId) {
             if (guildObj) {
                 discordInfoStr += `**Nome:** ${guildObj.name}\n`;
                 discordInfoStr += `**Membros:** ${guildObj.memberCount}\n`;
-                discordInfoStr += `**Criado em:** ${new Date(guildObj.createdTimestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`;
+                discordInfoStr += `**Criado em:** ${new Date(guildObj.createdTimestamp).toLocaleString('pt-BR', { timeZone: fusoDoDono() })}\n`;
                 discordInfoStr += `**Canais:** ${guildObj.channels?.cache?.size || 'N/A'}\n`;
                 discordInfoStr += `**Cargos:** ${guildObj.roles?.cache?.size || 'N/A'}\n`;
                 thumbnail = guildObj.iconURL({ dynamic: true });
@@ -217,7 +218,7 @@ async function buildBanDetailPayload(client, category, targetId) {
                 discordInfoStr += `**Nome:** #${channelObj.name || channelObj.id}\n`;
                 discordInfoStr += `**Menção:** <#${channelObj.id}>\n`;
                 discordInfoStr += `**Tipo:** ${channelObj.type}\n`;
-                discordInfoStr += `**Criado em:** ${new Date(channelObj.createdTimestamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`;
+                discordInfoStr += `**Criado em:** ${new Date(channelObj.createdTimestamp).toLocaleString('pt-BR', { timeZone: fusoDoDono() })}\n`;
                 if (channelObj.guild) {
                     discordInfoStr += `**Servidor:** ${channelObj.guild.name} (ID: \`${channelObj.guild.id}\`)\n`;
                 }

@@ -27,7 +27,7 @@ export const SUITES = [
   'test:core', 'test:core-api', 'test:core-agent', 'test:readonly', 'test:permgaps', 'test:panel', 'test:alerts',
   'test:persona', 'test:mentions', 'test:search', 'test:gateway', 'test:config', 'test:memperm', 'test:hybrid',
   'test:audit', 'test:backup', 'test:dmowner', 'test:chatintents', 'test:imageintent', 'test:library',
-  'test:reminders', 'test:remindersapi', 'test:llmsafety', 'test:context', 'test:safefetch', 'test:netdefaults',
+  'test:reminders', 'test:remindersapi', 'test:fusodono','test:llmsafety', 'test:context', 'test:safefetch', 'test:netdefaults',
   'test:healthreport', 'test:guilddelete', 'test:redditguard', 'test:chromeprofile', 'test:interactionstats',
   'test:dev', 'test:security', 'test:approvals', 'test:routes', 'test:discordguard', 'test:jobguard', 'test:binverify', 'test:aibaseurl', 'test:lockverify',
   'test:importgraph', 'test:dbnative', 'test:backupwal', 'test:contextnative',

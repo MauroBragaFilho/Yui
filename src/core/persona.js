@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { MEMORY_SCOPES } from './permissions.js';
+import { fusoDoDono, dataEHoraNoFuso, rotuloDoFuso } from './fuso.js';
 
 /**
  * Personalidade da Yui por CONTEXTO.
@@ -33,15 +34,9 @@ export function resolvePersonaId(ctx) {
   return null;
 }
 
-/** Data e hora atuais em Brasília, para a Yui saber "hoje". */
-export function brasiliaNow(date = new Date()) {
-  const day = new Intl.DateTimeFormat('pt-BR', {
-    timeZone: 'America/Sao_Paulo', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  }).format(date);
-  const time = new Intl.DateTimeFormat('pt-BR', {
-    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit',
-  }).format(date);
-  return { day, time };
+/** Data e hora atuais no fuso do dono (YUI_FUSO; padrão Brasília), para a Yui saber "hoje". */
+export function brasiliaNow(date = new Date(), fuso = fusoDoDono()) {
+  return dataEHoraNoFuso(date, fuso);
 }
 
 /** Personalidade pública mínima, usada só se o arquivo persona/yui-publica.md não existir. */
@@ -279,7 +274,7 @@ function assistantPrompt() {
 
 /**
  * Texto de personalidade para o contexto, ou '' quando não há override
- * (Discord público). Inclui a data/hora de Brasília.
+ * (Discord público). Inclui a data e a hora no fuso do dono (YUI_FUSO; padrão Brasília).
  *
  * YUI_PERSONA_PERSONAL_FILE (opcional) substitui o texto do perfil pessoal por
  * um arquivo seu; {nome} e {dono} viram o nome do dono.
@@ -306,8 +301,9 @@ export function buildPersonaPrompt(ctx, { now = new Date() } = {}) {
     body = withCorePersona(assistantPrompt());
   }
 
-  const { day, time } = brasiliaNow(now);
-  return `${body}\n\nHoje é ${day}, ${time} (horário de Brasília).`;
+  const fuso = fusoDoDono();
+  const { day, time } = brasiliaNow(now, fuso);
+  return `${body}\n\nHoje é ${day}, ${time} (${rotuloDoFuso(fuso)}).`;
 }
 
 /**

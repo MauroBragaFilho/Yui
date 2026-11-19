@@ -12,6 +12,7 @@
  */
 import { createReminderStore, ReminderError, cleanReminderText } from './store.js';
 import { parseWhen, normChars, describeWhen, describeRepeat } from './when.js';
+import { fusoDoDono, partesNoFuso, inicioDoDia, somarDias } from '../core/fuso.js';
 
 const MAX_HEAD = 400;
 
@@ -130,9 +131,11 @@ function line(r, now) {
 export function formatReminderList(items, now = new Date(), scope = null) {
   let list = items;
   if (scope === 'hoje' || scope === 'amanha') {
-    const base = new Date(now); base.setHours(0, 0, 0, 0);
-    const from = scope === 'hoje' ? base : new Date(base.getTime() + 86400000);
-    const to = new Date(from.getTime() + 86400000);
+    const fuso = fusoDoDono();
+    const hoje = partesNoFuso(now, fuso); // os dias são os do relógio do dono (um dia pode ter 23 ou 25 h se o fuso tiver horário de verão)
+    const dia = (n) => { const d = somarDias(hoje, n); return inicioDoDia(d.ano, d.mes, d.dia, fuso); };
+    const from = scope === 'hoje' ? dia(0) : dia(1);
+    const to = scope === 'hoje' ? dia(1) : dia(2);
     list = items.filter((r) => { const t = Date.parse(r.at); return t >= (scope === 'hoje' ? 0 : from.getTime()) && t < to.getTime(); });
   }
   if (list.length === 0) return scope === 'hoje' ? 'Você não tem lembretes para hoje.' : scope === 'amanha' ? 'Você não tem lembretes para amanhã.' : 'Você não tem lembretes marcados.';

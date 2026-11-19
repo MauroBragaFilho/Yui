@@ -33,7 +33,7 @@ A Yui pode **ler** a Agenda e as Tarefas do Google de quem a opera (o dono) e re
 | "minhas tarefas", "o que tenho pra fazer?" | as tarefas **pendentes** da lista padrão (com "de hoje" ou "de amanhã": só as que vencem até lá, incluindo as atrasadas) |
 | "tenho e-mails novos?" | o Gmail, que está **travado** (veja a [seção 9](#-9-gmail-travado)) |
 
-Os dias são os do **fuso** configurado (`YUI_GOOGLE_FUSO`), não os do servidor. A Yui lê só o necessário: título, hora, local e dia inteiro dos eventos; título e prazo das tarefas. Notas, convidados e outras listas ficam de fora.
+Os dias são os do **fuso** configurado (`YUI_GOOGLE_FUSO`, ou o do dono, `YUI_FUSO`, se a primeira não existir), não os do servidor. A Yui lê só o necessário: título, hora, local e dia inteiro dos eventos; título e prazo das tarefas. Notas, convidados e outras listas ficam de fora.
 
 Ficam **fora** da agenda: os eventos cancelados, os **convites que o dono recusou** e os eventos de **dia inteiro de outro dia** (o Google decide o dia inteiro pelo fuso da agenda, então a Yui confere as datas por conta própria; o fim de um evento de dia inteiro é exclusivo). Quando há mais coisas do que cabe numa resposta do Google, a Yui **segue as páginas** (até 5 de eventos e 10 de tarefas) antes de ordenar e cortar a lista.
 
@@ -100,7 +100,7 @@ Na tela do Google:
 ## 🔌 4. Ligar na Yui
 
 1. **Copie** o arquivo de token para o servidor da Yui, no caminho de `YUI_GOOGLE_TOKEN_ARQUIVO` (padrão: `secrets/google-token.json`, dentro da pasta da Yui), por um meio seguro (cabo, pen drive, `scp` por uma rede privada). Nunca por Discord, e-mail ou uma nuvem aberta. Depois **apague a cópia do PC** ou guarde-a num lugar seguro.
-2. No `.env` do servidor: `YUI_GOOGLE=true` (e `YUI_GOOGLE_FUSO=<seu fuso>` se não for `America/Sao_Paulo`). **Atenção:** sem a rota privada de IA validada a Yui não lê nada (veja o [portão](#-7-o-portão-da-rota-privada-de-ia)); a exceção `YUI_GOOGLE_SEM_ROTA_PRIVADA=true` é uma decisão sua, com o que ela implica.
+2. No `.env` do servidor: `YUI_GOOGLE=true` (o fuso vem de `YUI_FUSO`, o do dono, padrão `America/Sao_Paulo`; ponha `YUI_GOOGLE_FUSO=<seu fuso>` só se o da agenda for outro). **Atenção:** sem a rota privada de IA validada a Yui não lê nada (veja o [portão](#-7-o-portão-da-rota-privada-de-ia)); a exceção `YUI_GOOGLE_SEM_ROTA_PRIVADA=true` é uma decisão sua, com o que ela implica.
 3. **Reinicie** a Yui.
 
 ---
@@ -113,7 +113,7 @@ Na tela do Google:
 | `YUI_GOOGLE_SEM_ROTA_PRIVADA` | **Exceção explícita do dono.** Só o texto exato `true` (minúsculo e sem espaços: `True`, `TRUE`, ` true ` e `1` não valem) dispensa o portão da rota privada de IA **para a Agenda e as Tarefas** (nunca para o Gmail): o texto da agenda passa pela IA em nuvem, sempre por provedor **não anônimo**. Só vale com `YUI_GOOGLE=true` | `false` |
 | `YUI_GOOGLE_GMAIL` | Libera o código do Gmail (somente leitura). **Só funciona** com a rota privada de IA validada (hoje desligada); sem ela, nada é baixado | `false` |
 | `YUI_GOOGLE_TOKEN_ARQUIVO` | Caminho do arquivo da autorização | `secrets/google-token.json` |
-| `YUI_GOOGLE_FUSO` | Fuso (nome IANA, como `America/Cuiaba`) dos "hoje", "amanhã" e "semana" | `America/Sao_Paulo` |
+| `YUI_GOOGLE_FUSO` | Fuso (nome IANA, como `America/Cuiaba`) dos "hoje", "amanhã" e "semana". Se não existir, vale `YUI_FUSO` | o valor de `YUI_FUSO` (`America/Sao_Paulo` se também faltar) |
 
 ---
 

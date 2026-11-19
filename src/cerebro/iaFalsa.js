@@ -68,7 +68,7 @@ export function createFakeAiBackend() {
         return `SIM: ${m ? m[1] : 'consulta de teste'}`;
       }
       if (ctl.ferramentaJson && sys.includes('--- FERRAMENTAS DISPONÍVEIS ---')) return ctl.ferramentaJson;
-      const persona = /horário de Brasília/.test(sys) ? 'sim' : 'nao';
+      const persona = /Hoje é [^\n]+ \((?:horário de|fuso) [^)]+\)\./.test(sys) ? 'sim' : 'nao';
       const hash = crypto.createHash('sha256').update(sys).digest('hex').slice(0, 12);
       const memoria = String(memoryBlock || '').trim() || sys.includes('[MEMÓRIA SOBRE ESTE USUÁRIO') ? 'sim' : 'nao';
       const list = Array.isArray(history) ? history : [];

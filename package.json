@@ -123,6 +123,7 @@
     "test:atualizarpainel": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-atualizar-painel.ps1",
     "test:reminders": "node tests/test-reminders.js",
     "test:remindersapi": "node tests/test-reminders-api.js",
+    "test:fusodono": "node tests/test-fuso-dono.js",
     "test:bdsproxy": "node tests/test-bds-proxy.js",
     "test:supervisor": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-supervisor.ps1",
     "test:gtacars": "node tests/test-gtacars.js",

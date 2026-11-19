@@ -7,6 +7,7 @@
  * - O texto do lembrete NÃO vai para a auditoria (só o número e o resultado).
  */
 import { describeRepeat } from './when.js';
+import { fusoDoDono, partesNoFuso } from '../core/fuso.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const LATE_MS = 5 * 60 * 1000;
@@ -21,7 +22,8 @@ export function formatReminderMessage(r, now = Date.now()) {
   if (late > LATE_MS) {
     const mins = Math.round(late / 60000);
     const quando = mins >= 1440 ? `${Math.round(mins / 1440)} dia(s) atrás` : mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min atrás` : `${mins} min atrás`;
-    lines.push(`-# Era para as ${pad(at.getHours())}:${pad(at.getMinutes())} (${quando}); a Yui estava fora do ar ou sem conexão.`);
+    const hora = partesNoFuso(at, fusoDoDono()); // a hora do relógio do dono, não a do processo
+    lines.push(`-# Era para as ${pad(hora.hora)}:${pad(hora.minuto)} (${quando}); a Yui estava fora do ar ou sem conexão.`);
   }
   if (r.repeat) lines.push(`-# Repete: ${describeRepeat(r.repeat)}. Para parar: "cancela o lembrete ${r.id}".`);
   else lines.push(`-# Para adiar: "adia o lembrete ${r.id} por 30 minutos".`);

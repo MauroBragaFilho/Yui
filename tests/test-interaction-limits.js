@@ -635,6 +635,14 @@ await test('toLogEntries: formato { time, user, content } com a hora de Brasíli
   assert.strictEqual(rows.length, 3);
   assert.strictEqual(rows[0].user, 'ana');
   assert.ok(rows[0].time.includes('12:30'), rows[0].time);
+  // a hora segue o fuso do dono (YUI_FUSO): em Cuiabá (UTC-4) o mesmo instante é 11:30
+  const antes = process.env.YUI_FUSO;
+  try {
+    process.env.YUI_FUSO = 'America/Cuiaba';
+    assert.ok(ic.toLogEntries([{ content: 'oi', createdAt: new Date(Date.UTC(2026, 9, 14, 15, 30, 0)), author: { username: 'ana' } }])[0].time.includes('11:30'));
+  } finally {
+    if (antes === undefined) delete process.env.YUI_FUSO; else process.env.YUI_FUSO = antes;
+  }
   assert.strictEqual(rows[1].content, '');
   assert.strictEqual(rows[2].user, '');
   assert.deepStrictEqual(ic.toLogEntries(undefined), []);

@@ -886,6 +886,7 @@ function stripThinking(text) {
 }
 
 import { guardToolCall } from '../core/security/discordGuard.js';
+import { fusoDoDono } from '../core/fuso.js';
 import { checkBan, addBan, removeBan, getBans, checkAutoBan, getAutoBlock, getAutoBlockMode, forbiddenKeywords } from './banHandler.js';
 async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interaction) {
     const webhookUrl = config.avisosWebhookUrl;
@@ -904,7 +905,7 @@ async function checkAndReportNSFW(prompt, userTag, userId, aiResponse, interacti
         const guildId = interaction?.guild?.id || interaction?.guildId || "N/A";
         const channelName = interaction?.channel?.name || "Chat";
         const channelId = interaction?.channel?.id || "N/A";
-        const timestamp = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+        const timestamp = new Date().toLocaleString('pt-BR', { timeZone: fusoDoDono() });
         const embed = {
             title: '🚨 Alerta de Conteúdo Suspeito',
             color: 0xff0000,
@@ -977,7 +978,7 @@ async function reportAutoBanViolation(violation, interaction, prompt, userTag, u
     const guildId = interaction?.guild?.id || interaction?.guildId || "N/A";
     const channelName = interaction?.channel?.name || "Chat";
     const channelId = interaction?.channel?.id || "N/A";
-    const timestamp = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const timestamp = new Date().toLocaleString('pt-BR', { timeZone: fusoDoDono() });
     const embed = {
         title: '⚠️ Violação Detectada (Auto-Block OFF)',
         color: 0xF1C40F,

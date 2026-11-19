@@ -11,6 +11,7 @@ import { safeFetchText } from '../search/safeFetch.js';
 import { clipHeadTail } from '../utils/promptBudget.js';
 import { logger } from '../utils/logger.js';
 import { isOwnerId } from '../core/permissions.js';
+import { fusoDoDono } from '../core/fuso.js';
 import { describeImages } from '../services/vision.js';
 
 // ---------------------------------------------------------------------------------------------
@@ -483,7 +484,7 @@ export default {
                 const hasText = currentUserPrompt.trim().length > 0;
                 const visionBlock = applyVisionToAttachments(attachments, vision);
                 const attachmentPrompt = [buildAttachmentPrompt(attachments, { hasText }), visionBlock].filter(Boolean).join('\n');
-                const currentDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const currentDate = new Date().toLocaleString('pt-BR', { timeZone: fusoDoDono(), weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 let envInfo = '';
                 if (config.sendEnvironmentInfo) {
                     envInfo = `Servidor: ${message.guild?.name || 'DM'} | Canal: #${message.channel?.name || 'Chat'}\n`;
@@ -553,7 +554,7 @@ export default {
 
                         });
                         const contextLines = capContextLines(history);
-                        const currentDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        const currentDate = new Date().toLocaleString('pt-BR', { timeZone: fusoDoDono(), weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
                         let envInfo = '';
                         if (config.sendEnvironmentInfo) {
                             envInfo = `Servidor: ${message.guild?.name || 'DM'} | Canal: #${message.channel?.name || 'Chat'}\n`;

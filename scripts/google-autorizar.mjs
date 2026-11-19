@@ -220,7 +220,7 @@ export async function autorizar({
     }
     io.out('\nPróximos passos:');
     io.out(`  1. Copie esse arquivo para o servidor da Yui, no caminho de YUI_GOOGLE_TOKEN_ARQUIVO (padrão: secrets/google-token.json, dentro da pasta da Yui), por um meio seguro (cabo, pen drive ou scp pela rede privada). Nunca por Discord, e-mail ou nuvem aberta.`);
-    io.out('  2. No .env do servidor: YUI_GOOGLE=true (e YUI_GOOGLE_FUSO=<seu fuso>, se não for America/Sao_Paulo). Para o Gmail existe a chave YUI_GOOGLE_GMAIL, mas ele só funciona com a rota privada de IA validada.');
+    io.out('  2. No .env do servidor: YUI_GOOGLE=true (o fuso da agenda é o do dono, YUI_FUSO, padrão America/Sao_Paulo; só ponha YUI_GOOGLE_FUSO=<seu fuso> se o da agenda for outro). Para o Gmail existe a chave YUI_GOOGLE_GMAIL, mas ele só funciona com a rota privada de IA validada.');
     io.out('  3. Reinicie a Yui.');
     io.out('  4. Depois de copiar, APAGUE o arquivo deste PC (ou guarde num lugar seguro): quem o tiver lê a sua agenda e as suas tarefas.');
     io.out('\nSe o projeto do Google estiver em modo de teste, o Google pode expirar a autorização depois de cerca de 7 dias. Quando isso acontecer a Yui te avisa uma vez, e você roda este script de novo.');

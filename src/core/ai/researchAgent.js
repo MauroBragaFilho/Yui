@@ -27,6 +27,7 @@
  */
 import { fenceUntrustedWeb, sanitizeUntrusted } from './llmSafety.js';
 import { TEXTO_PESQUISA_INDISPONIVEL, ehIndisponivel } from '../../search/indisponivel.js';
+import { fusoDoDono } from '../fuso.js';
 import {
     SENSITIVE_SEARCH_REFUSAL, SEARCH_DISABLED_REPLY, VOICE_REFUSAL, buildSearchQuery, detectUnfulfilledPromise, keywordsOf, saneQuery,
     norm, oneLine, preRouteDecision, privateDirectDecision, stripTrailingPromise,
@@ -762,7 +763,8 @@ export function createUserGuard({ ttlMs = 5 * 60_000, now = Date.now } = {}) {
 // 6. O AGENTE
 // ---------------------------------------------------------------------------------------------
 
-const todayBR = (date) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+/** A data de hoje na pesquisa ("dd/mm/aaaa"), no fuso do dono (YUI_FUSO). */
+export const todayBR = (date) => new Intl.DateTimeFormat('pt-BR', { timeZone: fusoDoDono(), day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
 
 const REFUSED_CODES = new Set(['sensitive', 'disabled', 'busy', 'no_query', 'sensitive_data', 'forbidden', 'private_explicit', 'private_unavailable']);
 

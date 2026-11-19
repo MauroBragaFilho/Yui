@@ -1,7 +1,7 @@
 /**
  * Liga os lembretes e o relatório matinal ao agendador da Yui:
  *   - a cada minuto: avisa o dono (DM) dos lembretes que chegaram na hora;
- *   - todo dia (08:00 de Brasília por padrão): relatório matinal, e se a Yui estava fora do ar nessa hora, assim que voltar (até 12h);
+ *   - todo dia (08:00 no fuso do dono, YUI_FUSO; padrão Brasília): relatório matinal, e se a Yui estava fora do ar nessa hora, assim que voltar (até 12h);
  *   - com YUI_MORNING_REPORT=false, só o relatório de saúde de antes (YUI_HEALTH_REPORT).
  */
 import { sendOwnerMessage, sendUserMessage } from '../core/alerts.js';

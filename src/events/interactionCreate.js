@@ -76,6 +76,7 @@ import { buildChatLog } from '../utils/promptBudget.js';
 import { clampText, makeEmbed } from '../discord/embedLimits.js';
 import { neutralizeMassMentions } from '../discord/mentions.js';
 import { logger } from '../utils/logger.js';
+import { fusoDoDono } from '../core/fuso.js';
 
 // Títulos, artistas e descrições vêm de sites externos: nunca marcam ninguém.
 const NO_MENTIONS = { parse: [] };
@@ -171,7 +172,7 @@ export function extractAiComment(rawComment) {
 /** Mensagens do Discord (em ordem cronológica) no formato do buildChatLog: { time, user, content }. */
 export function toLogEntries(messages) {
     return (Array.isArray(messages) ? messages : []).map((msg) => ({
-        time: msg && msg.createdAt ? msg.createdAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '',
+        time: msg && msg.createdAt ? msg.createdAt.toLocaleString('pt-BR', { timeZone: fusoDoDono() }) : '',
         user: msg && msg.author ? msg.author.username : '',
         content: msg ? msg.content : ''
     }));

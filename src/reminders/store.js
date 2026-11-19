@@ -9,7 +9,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { nextOccurrence } from './when.js';
+import { nextAfterFire } from './when.js';
 
 export const REMINDER_LIMITS = Object.freeze({ maxItems: 200, maxPerUser: 20, maxTextChars: 300, maxFileBytes: 512 * 1024 });
 
@@ -140,7 +140,7 @@ export function createReminderStore({ file = defaultReminderFile(), now = () => 
       r.tries = 0;
       delete r.entrega; // a ocorrência foi resolvida: a próxima começa do zero
       if (r.repeat) {
-        const next = nextOccurrence(r.repeat, new Date(Math.max(at, Date.parse(r.at))));
+        const next = nextAfterFire(r.repeat, new Date(r.at), new Date(Math.max(at, Date.parse(r.at))));
         if (next) { r.at = toIso(next); save(); return { removed: false, next: r.at }; }
       }
       s.items = s.items.filter((x) => x.id !== r.id);
