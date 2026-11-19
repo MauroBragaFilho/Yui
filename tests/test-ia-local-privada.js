@@ -184,7 +184,7 @@ await test('aceita só IP privado, loopback, CGNAT do Tailscale, nome .ts.net e 
   const bons = [
     ['http://127.0.0.1:1234/v1', 'loopback'], ['http://localhost:1234/v1', 'loopback'], ['http://[::1]:1234/v1', 'loopback'], ['http://127.5.5.5/v1', 'loopback'],
     ['http://10.0.0.7:1234/v1', 'rede-privada'], ['http://172.16.0.1:1234/v1', 'rede-privada'], ['http://172.31.255.1:1234/v1', 'rede-privada'], ['http://192.168.1.50:1234/v1', 'rede-privada'],
-    ['http://100.64.0.1:1234/v1', 'tailscale'], ['http://100.126.122.60:1234/v1', 'tailscale'], ['http://100.127.255.255:1234/v1', 'tailscale'],
+    ['http://100.64.0.1:1234/v1', 'tailscale'], ['http://100.101.102.103:1234/v1', 'tailscale'], ['http://100.127.255.255:1234/v1', 'tailscale'],
     ['http://meu-pc.tailnet-1234.ts.net:1234/v1', 'tailscale'], ['http://meu-pc.local:1234/v1', 'nome-local'], ['https://meu-pc.local/v1', 'nome-local'],
   ];
   for (const [url, tipo] of bons) {
