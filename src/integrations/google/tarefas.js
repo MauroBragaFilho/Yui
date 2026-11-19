@@ -2,6 +2,8 @@
 // tasks/v1/lists/@default/tasks, sem as concluídas nem as escondidas.
 import { hostsDoGoogle } from './endpoints.js';
 import { lerDoGoogle } from './cliente.js';
+import { portaoDoRecurso } from './portao.js';
+import { estadoDaRotaPrivada } from '../../core/ai/rotaPerfil.js';
 
 export const MAX_TAREFAS = 25;
 const MAX_TEXTO = 300;
@@ -28,14 +30,17 @@ export function ordenarPorPrazo(tarefas) {
 
 /**
  * As tarefas pendentes. `ate` ("AAAA-MM-DD"): só as que vencem até essa data (inclusive; as atrasadas entram); sem `ate`, todas.
- * @returns {Promise<{ ok: true, tarefas: object[], truncado: boolean } | { ok: false, motivo: string }>}
+ * @returns {Promise<{ ok: true, tarefas: object[], truncado: boolean, portao: string } | { ok: false, motivo: string }>}
  */
-export async function listarTarefas({ autenticador, ate = null, fetchImpl, hosts = hostsDoGoogle, maxTarefas = MAX_TAREFAS, timeoutMs }) {
+export async function listarTarefas({ autenticador, ate = null, fetchImpl, hosts = hostsDoGoogle, maxTarefas = MAX_TAREFAS, env = process.env, estadoDaRota = estadoDaRotaPrivada, timeoutMs }) {
+  // O PORTÃO da rota privada (portao.js) ANTES de qualquer chamada ao Google, inclusive a renovação do token: sem ele, nada é baixado.
+  const portao = portaoDoRecurso({ recurso: 'tarefas', env, estadoDaRota });
+  if (!portao.liberado) return { ok: false, motivo: portao.motivo };
   const q = new URLSearchParams({ showCompleted: 'false', showHidden: 'false', maxResults: '100', fields: 'items(title,due,status)' });
   const r = await lerDoGoogle({ autenticador, recurso: 'tarefas', url: `${hosts().tarefas}/lists/@default/tasks?${q}`, fetchImpl, timeoutMs });
   if (!r.ok) return r;
   const itens = Array.isArray(r.json?.items) ? r.json.items : [];
   let todas = ordenarPorPrazo(itens.map(tarefaEnxuta).filter(Boolean));
   if (ate) todas = todas.filter((t) => t.vence && t.vence <= ate);
-  return { ok: true, tarefas: todas.slice(0, maxTarefas), truncado: todas.length > maxTarefas };
+  return { ok: true, tarefas: todas.slice(0, maxTarefas), truncado: todas.length > maxTarefas, portao: portao.motivo };
 }

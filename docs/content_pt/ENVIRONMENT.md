@@ -579,11 +579,12 @@ Duas funções do chat decididas por código (não pelo modelo), no passo princi
 
 ## 📅 12. Google: Agenda e Tarefas (somente leitura)
 
-**Nada disto está ligado por padrão.** Sem `YUI_GOOGLE=true`, a Yui nunca fala com o Google e se comporta exatamente como antes. Só leitura, só o dono, só em conversa privada. O passo a passo da autorização (`node scripts/google-autorizar.mjs`), as permissões pedidas, a expiração e a segurança estão em [Google](GOOGLE.md).
+**Nada disto está ligado por padrão.** Sem `YUI_GOOGLE=true`, a Yui nunca fala com o Google e se comporta exatamente como antes. Só leitura, só o dono, só em conversa privada. **Mesmo ligada, a Yui só lê o Google com a rota privada de IA validada** (o portão, consultado a cada uso e antes de qualquer consulta ao Google); sem ela, nada é baixado, nenhuma IA é chamada e a Yui diz que ainda não lê. A exceção explícita do dono, abaixo, dispensa o portão só para a Agenda e as Tarefas, nunca para o Gmail. O passo a passo da autorização (`node scripts/google-autorizar.mjs`), as permissões pedidas, o portão, a expiração (em modo de teste do Google a autorização expira em cerca de 7 dias) e a segurança estão em [Google](GOOGLE.md).
 
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
 | `YUI_GOOGLE` | Liga a leitura da Agenda e das Tarefas do dono (perguntas por conversa, com o cérebro separado, e a seção "Agenda e tarefas de hoje" do relatório matinal por DM) | `false` |
+| `YUI_GOOGLE_SEM_ROTA_PRIVADA` | **Exceção explícita do dono, desligada por padrão.** Só o texto exato `true` dispensa o portão da rota privada de IA **para a Agenda e as Tarefas** (inclusive a seção do relatório matinal): o texto da agenda e das tarefas passa pela IA em nuvem, sempre por provedor **não anônimo** (a conversa continua sensível). **Atenção:** os planos gratuitos de alguns provedores podem usar o conteúdo das conversas para melhorar os produtos deles. **Nunca vale para o Gmail.** Só vale com `YUI_GOOGLE=true` | `false` |
 | `YUI_GOOGLE_GMAIL` | Libera o código do Gmail (somente leitura). **Só funciona** com a rota privada de IA validada (hoje desligada); sem ela, nada é baixado e a Yui responde que ainda não lê e-mails | `false` |
 | `YUI_GOOGLE_TOKEN_ARQUIVO` | Caminho do arquivo da autorização (o cliente e o refresh token: um segredo, com permissão restrita ao dono) | `secrets/google-token.json` |
 | `YUI_GOOGLE_FUSO` | Fuso (nome IANA, ex.: `America/Cuiaba`) dos "hoje", "amanhã" e "semana" das consultas. Um nome inválido volta ao padrão | `America/Sao_Paulo` |

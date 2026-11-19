@@ -6,17 +6,20 @@
 //  3. quem pede NÃO é o dono: null (o membro, o convidado e o confiável seguem o fluxo de sempre e nunca veem nada do Google);
 //  4. conversa espontânea ou de terceiros: null; o dono fora de uma conversa privada (canal público, voz): uma frase curta, sem consultar o Google
 //     (a agenda dele nunca aparece onde outras pessoas leem);
-//  5. e-mail: só com o Gmail liberado (chave + rota privada de IA validada); senão uma frase curta e NADA é baixado (gmail.js);
-//  6. agenda e tarefas: consulta o Google (somente leitura). Falha (não conectado, expirou, rede, 403): UMA frase curta na voz da Yui, sem erro técnico.
+//  5. e-mail: só com o Gmail liberado (chave + rota privada de IA validada, SEM exceção); senão uma frase curta e NADA é baixado (gmail.js, portao.js);
+//  6. agenda e tarefas: o PORTÃO da rota privada de IA (portao.js: `validada`, consultada a cada uso; ou, só para elas, a exceção explícita do dono YUI_GOOGLE_SEM_ROTA_PRIVADA=true)
+//     vem ANTES de qualquer chamada ao Google (nem o token é renovado): fechado = uma frase curta e fixa ("Ainda não leio a sua agenda: falta a rota privada de IA."), sem a IA.
+//     Aberto: consulta o Google (somente leitura). Falha (não conectado, expirou, rede, 403): UMA frase curta na voz da Yui, sem erro técnico.
 //  Com os dados: devolve o prompt com eles CERCADOS como dado não confiável e as opções que o passo do cérebro aplica (sem ferramentas, sem busca, sem provedor
 //  anônimo, fora do contexto por horas); a resposta do modelo é conferida (chamada de ferramenta vira uma frase segura).
 import { ROLES, MEMORY_SCOPES } from '../../core/permissions.js';
 import { logger as loggerPadrao } from '../../utils/logger.js';
 import { criarAutenticador } from './auth.js';
-import { googleLigado, fusoDoGoogle } from './config.js';
+import { googleLigado, fusoDoGoogle, semRotaPrivadaPelaChave } from './config.js';
 import { listarEventos } from './agenda.js';
 import { listarTarefas } from './tarefas.js';
-import { listarMensagens, fraseDoGmailFechado } from './gmail.js';
+import { listarMensagens, FRASE_GMAIL_DESLIGADO } from './gmail.js';
+import { fraseDoPortaoFechado } from './portao.js';
 import { classificarPedido } from './intencao.js';
 import { blocoDeAgenda, blocoDeTarefas, blocoDeEmails, montarPromptComDados, pareceChamadaDeFerramenta, RESPOSTA_SEGURA, limparTexto } from './dados.js';
 import { dataDeHoje, partesNoFuso, somarDias, formatarHora } from './fuso.js';
@@ -39,7 +42,9 @@ export function fraseDaFalha(motivo, tipo) {
   if (motivo === 'nao-conectado') return tarefas ? FRASES.tarefasNaoConectadas : FRASES.agendaNaoConectada;
   if (motivo === 'precisa-autorizar' || motivo === 'arquivo-invalido') return FRASES.autorizarDeNovo;
   if (motivo === 'negado') return FRASES.negado;
-  if (motivo === 'chave-desligada' || motivo === 'sem-rota-privada') return fraseDoGmailFechado(motivo);
+  // O portão da rota privada (portao.js): a frase é do recurso (Agenda, Tarefas ou Gmail); "Gmail desligado pela chave" só existe para o e-mail.
+  if (motivo === 'sem-rota-privada') return fraseDoPortaoFechado(tipo === 'email' ? 'gmail' : tipo);
+  if (motivo === 'chave-desligada') return FRASE_GMAIL_DESLIGADO;
   if (tipo === 'email') return FRASES.emailIndisponivel;
   return tarefas ? FRASES.tarefasIndisponiveis : FRASES.agendaIndisponivel;
 }
@@ -62,8 +67,17 @@ export function criarGoogle(deps = {}) {
   const agora = deps.agora ?? Date.now;
   const log = deps.log ?? loggerPadrao;
   const autenticador = deps.autenticador ?? criarAutenticador({ env, fetchImpl: deps.fetchImpl, agora, alertar: deps.alertar, log, timeoutMs: deps.timeoutMs, restringir: deps.restringir });
-  const comum = { autenticador, fetchImpl: deps.fetchImpl, env, timeoutMs: deps.timeoutMs };
-  const contadores = { consultas: 0, respondidasPorCodigo: 0, comDados: 0, falhas: 0, recusasPrivacidade: 0 };
+  const comum = { autenticador, fetchImpl: deps.fetchImpl, env, estadoDaRota: deps.estadoDaRota, timeoutMs: deps.timeoutMs };
+  const contadores = { consultas: 0, respondidasPorCodigo: 0, comDados: 0, falhas: 0, recusasPrivacidade: 0, portaoFechado: 0, viaExcecaoDoDono: 0 };
+  let avisouExcecao = false;
+  /** A exceção explícita do dono foi usada (a rota privada NÃO estava validada): conta e deixa UM aviso no log por processo (sem nenhum conteúdo). */
+  function notarExcecao(r) {
+    if (r?.portao !== 'excecao-do-dono') return;
+    contadores.viaExcecaoDoDono += 1;
+    if (avisouExcecao) return;
+    avisouExcecao = true;
+    try { log.warn?.('[Google] YUI_GOOGLE_SEM_ROTA_PRIVADA está ligada e a rota privada de IA não está validada: o texto da agenda e das tarefas pode passar pela IA em nuvem (nunca por provedor anônimo).'); } catch { /* */ }
+  }
 
   /** A pré-rota de um passo do cérebro. Devolve null | { resposta } | { prompt, opcoes, revisar, tipo }. */
   async function rotear({ ctx, call = {}, texto, prompt }) {
@@ -82,18 +96,20 @@ export function criarGoogle(deps = {}) {
     let bloco;
     let fonte = 'agenda e das tarefas';
     if (pedido.tipo === 'email') {
-      const r = await listarMensagens({ ...comum, estadoDaRota: deps.estadoDaRota });
-      if (!r.ok) { contadores.falhas += 1; return { resposta: fraseDaFalha(r.motivo, 'email') }; }
+      const r = await listarMensagens(comum);
+      if (!r.ok) { contadores.falhas += 1; if (r.motivo === 'sem-rota-privada') contadores.portaoFechado += 1; return { resposta: fraseDaFalha(r.motivo, 'email') }; }
       bloco = blocoDeEmails({ mensagens: r.mensagens, truncado: r.truncado });
       fonte = 'caixa de e-mail';
     } else if (pedido.tipo === 'agenda') {
       const r = await listarEventos({ ...comum, periodo: pedido.periodo, agora, fuso });
-      if (!r.ok) { contadores.falhas += 1; return { resposta: fraseDaFalha(r.motivo, 'agenda') }; }
+      if (!r.ok) { contadores.falhas += 1; if (r.motivo === 'sem-rota-privada') contadores.portaoFechado += 1; return { resposta: fraseDaFalha(r.motivo, 'agenda') }; }
+      notarExcecao(r);
       bloco = blocoDeAgenda({ eventos: r.eventos, janela: r.janela, fuso: r.fuso, truncado: r.truncado });
       fonte = 'agenda';
     } else {
       const r = await listarTarefas({ ...comum, ate: dataLimiteDasTarefas(pedido.periodo, agora(), fuso) });
-      if (!r.ok) { contadores.falhas += 1; return { resposta: fraseDaFalha(r.motivo, 'tarefas') }; }
+      if (!r.ok) { contadores.falhas += 1; if (r.motivo === 'sem-rota-privada') contadores.portaoFechado += 1; return { resposta: fraseDaFalha(r.motivo, 'tarefas') }; }
+      notarExcecao(r);
       bloco = blocoDeTarefas({ tarefas: r.tarefas, hoje: dataDeHoje(agora(), fuso), truncado: r.truncado });
       fonte = 'lista de tarefas';
     }
@@ -109,8 +125,8 @@ export function criarGoogle(deps = {}) {
   }
 
   /**
-   * As linhas da seção "Agenda e tarefas de hoje" do relatório matinal, ou null (chave desligada, sem conexão ou falha: o relatório fica IDÊNTICO ao de sempre).
-   * Só o texto do relatório do dono, que sai por DM.
+   * As linhas da seção "Agenda e tarefas de hoje" do relatório matinal, ou null (chave desligada, portão da rota privada fechado, sem conexão ou falha: o relatório fica IDÊNTICO ao
+   * de sempre). Só o texto do relatório do dono, que sai por DM. O MESMO portão da pré-rota vale aqui (nada é baixado sem a rota privada validada ou a exceção do dono).
    */
   async function linhasDoRelatorio(now = new Date()) {
     if (!googleLigado(env)) return null;
@@ -120,7 +136,8 @@ export function criarGoogle(deps = {}) {
       listarEventos({ ...comum, periodo: 'hoje', agora: () => t, fuso }),
       listarTarefas({ ...comum, ate: dataLimiteDasTarefas('hoje', t, fuso) }),
     ]);
-    if (!ag.ok && !ta.ok) return null;
+    if (!ag.ok && !ta.ok) { if (ag.motivo === 'sem-rota-privada') contadores.portaoFechado += 1; return null; }
+    notarExcecao(ag.ok ? ag : ta);
     const hoje = dataDeHoje(t, fuso);
     const linhas = [];
     if (ag.ok) {
@@ -138,5 +155,5 @@ export function criarGoogle(deps = {}) {
     return linhas;
   }
 
-  return { rotear, linhasDoRelatorio, autenticador, estado: () => ({ ...autenticador.estado(), ...contadores }) };
+  return { rotear, linhasDoRelatorio, autenticador, estado: () => ({ ...autenticador.estado(), ...contadores, excecaoSemRotaPrivada: semRotaPrivadaPelaChave(env) }) };
 }

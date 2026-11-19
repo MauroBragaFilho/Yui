@@ -6,21 +6,21 @@
 // O texto de um e-mail é DADO não confiável (veja dados.js).
 import { estadoDaRotaPrivada } from '../../core/ai/rotaPerfil.js';
 import { hostsDoGoogle } from './endpoints.js';
-import { gmailLigadoPelaChave } from './config.js';
 import { lerDoGoogle } from './cliente.js';
+import { portaoDoRecurso, FRASE_GMAIL_SEM_ROTA } from './portao.js';
 
-export const FRASE_SEM_ROTA = 'Ainda não leio e-mails: falta a rota privada de IA.';
+export const FRASE_SEM_ROTA = FRASE_GMAIL_SEM_ROTA; // 'Ainda não leio e-mails: falta a rota privada de IA.'
 export const FRASE_GMAIL_DESLIGADO = 'Ainda não leio e-mails: essa parte está desligada.';
 export const MAX_MENSAGENS = 10;
 const MAX_CORPO = 4000;
 const ID_RE = /^[0-9a-f]{8,32}$/i;
 
-/** O Gmail está liberado agora? { liberado, motivo: 'ok' | 'chave-desligada' | 'sem-rota-privada' }. A rota privada é consultada AQUI, a cada uso (ela pode ser bloqueada a qualquer momento). */
+/**
+ * O Gmail está liberado agora? { liberado, motivo: 'ok' | 'chave-desligada' | 'sem-rota-privada' }. A rota privada é consultada AQUI, a cada uso (ela pode ser bloqueada a qualquer momento).
+ * O Gmail NUNCA tem exceção: nem a YUI_GOOGLE_SEM_ROTA_PRIVADA (que vale só para a Agenda e as Tarefas) o dispensa (portao.js).
+ */
 export function gmailLiberado({ env = process.env, estadoDaRota = estadoDaRotaPrivada } = {}) {
-  if (!gmailLigadoPelaChave(env)) return { liberado: false, motivo: 'chave-desligada' };
-  let estado = null;
-  try { estado = estadoDaRota(env)?.estado ?? null; } catch { estado = null; }
-  return estado === 'validada' ? { liberado: true, motivo: 'ok' } : { liberado: false, motivo: 'sem-rota-privada' };
+  return portaoDoRecurso({ recurso: 'gmail', env, estadoDaRota });
 }
 
 /** A frase curta para cada motivo de o Gmail estar fechado. */

@@ -3,6 +3,8 @@
 import { hostsDoGoogle } from './endpoints.js';
 import { fusoDoGoogle } from './config.js';
 import { lerDoGoogle } from './cliente.js';
+import { portaoDoRecurso } from './portao.js';
+import { estadoDaRotaPrivada } from '../../core/ai/rotaPerfil.js';
 import { janelaDeConsulta } from './fuso.js';
 
 export const MAX_EVENTOS = 25;
@@ -27,10 +29,13 @@ export function eventoEnxuto(e) {
 
 /**
  * Os eventos de hoje, de amanhã ou da semana (os próximos 7 dias), no fuso configurado.
- * @param {{ autenticador: object, periodo?: 'hoje'|'amanha'|'semana', agora?: () => number, fuso?: string, fetchImpl?: Function, hosts?: () => object, maxEventos?: number, env?: object }} p
- * @returns {Promise<{ ok: true, eventos: object[], janela: object, fuso: string, truncado: boolean } | { ok: false, motivo: string }>}
+ * @param {{ autenticador: object, periodo?: 'hoje'|'amanha'|'semana', agora?: () => number, fuso?: string, fetchImpl?: Function, hosts?: () => object, maxEventos?: number, env?: object, estadoDaRota?: Function }} p
+ * @returns {Promise<{ ok: true, eventos: object[], janela: object, fuso: string, truncado: boolean, portao: string } | { ok: false, motivo: string }>}
  */
-export async function listarEventos({ autenticador, periodo = 'hoje', agora = Date.now, fuso = null, fetchImpl, hosts = hostsDoGoogle, maxEventos = MAX_EVENTOS, env = process.env, timeoutMs }) {
+export async function listarEventos({ autenticador, periodo = 'hoje', agora = Date.now, fuso = null, fetchImpl, hosts = hostsDoGoogle, maxEventos = MAX_EVENTOS, env = process.env, estadoDaRota = estadoDaRotaPrivada, timeoutMs }) {
+  // O PORTÃO da rota privada (portao.js) ANTES de qualquer chamada ao Google, inclusive a renovação do token: sem ele, nada é baixado.
+  const portao = portaoDoRecurso({ recurso: 'agenda', env, estadoDaRota });
+  if (!portao.liberado) return { ok: false, motivo: portao.motivo };
   const tz = fuso ?? fusoDoGoogle(env);
   const janela = janelaDeConsulta(periodo, agora(), tz);
   const q = new URLSearchParams({
@@ -41,5 +46,5 @@ export async function listarEventos({ autenticador, periodo = 'hoje', agora = Da
   if (!r.ok) return r;
   const itens = Array.isArray(r.json?.items) ? r.json.items : [];
   const todos = itens.map(eventoEnxuto).filter(Boolean);
-  return { ok: true, eventos: todos.slice(0, maxEventos), janela, fuso: tz, truncado: todos.length > maxEventos };
+  return { ok: true, eventos: todos.slice(0, maxEventos), janela, fuso: tz, truncado: todos.length > maxEventos, portao: portao.motivo };
 }

@@ -1,8 +1,8 @@
 # 📅 Google: Agenda e Tarefas (somente leitura)
 
-A Yui pode **ler** a Agenda e as Tarefas do Google de quem a opera (o dono) e responder perguntas como "o que tenho hoje na agenda?". O código do Gmail também existe, mas fica **travado**: só funciona com a rota privada de IA validada, e hoje isso não está ligado.
+A Yui pode **ler** a Agenda e as Tarefas do Google de quem a opera (o dono) e responder perguntas como "o que tenho hoje na agenda?". Tudo isso exige a **rota privada de IA validada** (o [portão](#-7-o-portão-da-rota-privada-de-ia)): sem ela a Yui não lê nada do Google. O código do Gmail também existe, mas fica **travado** do mesmo jeito, **sem exceção possível**, e hoje a rota privada não está ligada.
 
-> **Resumo:** tudo **desligado por padrão** (`YUI_GOOGLE=false`). Só **leitura** (os escopos são todos `readonly`). Só o **dono**, e só em **conversa privada** (DM ou canal privado configurado). Sem a chave, a Yui se comporta exatamente como antes e nunca fala com o Google.
+> **Resumo:** tudo **desligado por padrão** (`YUI_GOOGLE=false`). Só **leitura** (os escopos são todos `readonly`). Só o **dono**, e só em **conversa privada** (DM ou canal privado configurado). Sem a chave, a Yui se comporta exatamente como antes e nunca fala com o Google. Com a chave, ainda é preciso a **rota privada de IA validada**: os dados pessoais do Google não vão a um provedor de IA público ou gratuito só porque a conversa é privada. Uma **exceção explícita do dono** (`YUI_GOOGLE_SEM_ROTA_PRIVADA=true`, desligada por padrão) dispensa essa exigência só para a Agenda e as Tarefas, nunca para o Gmail.
 
 ---
 
@@ -14,9 +14,10 @@ A Yui pode **ler** a Agenda e as Tarefas do Google de quem a opera (o dono) e re
 4. [Ligar na Yui](#-4-ligar-na-yui)
 5. [Variáveis](#-5-variáveis)
 6. [Expiração da autorização](#-6-expiração-da-autorização)
-7. [Segurança e privacidade](#-7-segurança-e-privacidade)
-8. [Gmail (travado)](#-8-gmail-travado)
-9. [Testes](#-9-testes)
+7. [O portão da rota privada de IA](#-7-o-portão-da-rota-privada-de-ia)
+8. [Segurança e privacidade](#-8-segurança-e-privacidade)
+9. [Gmail (travado)](#-9-gmail-travado)
+10. [Testes e o que ainda não foi testado](#-10-testes-e-o-que-ainda-não-foi-testado)
 
 ---
 
@@ -30,14 +31,15 @@ A Yui pode **ler** a Agenda e as Tarefas do Google de quem a opera (o dono) e re
 | "o que tenho amanhã?", "minha agenda de amanhã" | os eventos de **amanhã** |
 | "compromissos da semana", "o que tenho essa semana?" | os eventos dos **próximos 7 dias**, a partir de hoje |
 | "minhas tarefas", "o que tenho pra fazer?" | as tarefas **pendentes** da lista padrão (com "de hoje" ou "de amanhã": só as que vencem até lá, incluindo as atrasadas) |
-| "tenho e-mails novos?" | o Gmail, que está **travado** (veja a [seção 8](#-8-gmail-travado)) |
+| "tenho e-mails novos?" | o Gmail, que está **travado** (veja a [seção 9](#-9-gmail-travado)) |
 
 Os dias são os do **fuso** configurado (`YUI_GOOGLE_FUSO`), não os do servidor. A Yui lê só o necessário: título, hora, local e dia inteiro dos eventos; título e prazo das tarefas. Notas, convidados e outras listas ficam de fora.
 
-**Resumo diário:** com a chave ligada e conectado, o relatório matinal que a Yui manda ao dono **por mensagem privada** ganha a seção "Agenda e tarefas de hoje". Sem a chave, ou sem conexão, o relatório é idêntico ao de sempre. O "resumo do dia" pedido numa conversa (que pode aparecer num canal) nunca leva a agenda do Google.
+**Resumo diário:** com a chave ligada, o portão aberto e conectado, o relatório matinal que a Yui manda ao dono **por mensagem privada** ganha a seção "Agenda e tarefas de hoje". Sem a chave, com o portão fechado ou sem conexão, o relatório é idêntico ao de sempre (e nada é consultado no Google). O "resumo do dia" pedido numa conversa (que pode aparecer num canal) nunca leva a agenda do Google.
 
 **Quando algo não dá certo**, a Yui diz uma frase curta, sem detalhe técnico:
 
+- sem a rota privada de IA validada (e sem a exceção do dono): "Ainda não leio a sua agenda: falta a rota privada de IA." (ou "Ainda não leio as suas tarefas: falta a rota privada de IA."), e **nada** é consultado no Google;
 - ainda não autorizado: "Ainda não conectei a sua agenda do Google: falta fazer a autorização uma vez.";
 - autorização expirada ou revogada: "Preciso que você autorize o Google de novo...";
 - o Google recusou a leitura (403): pede para autorizar de novo com todas as permissões;
@@ -96,7 +98,7 @@ Na tela do Google:
 ## 🔌 4. Ligar na Yui
 
 1. **Copie** o arquivo de token para o servidor da Yui, no caminho de `YUI_GOOGLE_TOKEN_ARQUIVO` (padrão: `secrets/google-token.json`, dentro da pasta da Yui), por um meio seguro (cabo, pen drive, `scp` por uma rede privada). Nunca por Discord, e-mail ou uma nuvem aberta. Depois **apague a cópia do PC** ou guarde-a num lugar seguro.
-2. No `.env` do servidor: `YUI_GOOGLE=true` (e `YUI_GOOGLE_FUSO=<seu fuso>` se não for `America/Sao_Paulo`).
+2. No `.env` do servidor: `YUI_GOOGLE=true` (e `YUI_GOOGLE_FUSO=<seu fuso>` se não for `America/Sao_Paulo`). **Atenção:** sem a rota privada de IA validada a Yui não lê nada (veja o [portão](#-7-o-portão-da-rota-privada-de-ia)); a exceção `YUI_GOOGLE_SEM_ROTA_PRIVADA=true` é uma decisão sua, com o que ela implica.
 3. **Reinicie** a Yui.
 
 ---
@@ -106,6 +108,7 @@ Na tela do Google:
 | Variável | Descrição | Padrão |
 |----------|-----------|--------|
 | `YUI_GOOGLE` | Liga a leitura da Agenda e das Tarefas do dono. Desligado, nada muda e a Yui nunca fala com o Google | `false` |
+| `YUI_GOOGLE_SEM_ROTA_PRIVADA` | **Exceção explícita do dono.** Só o texto exato `true` dispensa o portão da rota privada de IA **para a Agenda e as Tarefas** (nunca para o Gmail): o texto da agenda passa pela IA em nuvem, sempre por provedor **não anônimo**. Só vale com `YUI_GOOGLE=true` | `false` |
 | `YUI_GOOGLE_GMAIL` | Libera o código do Gmail (somente leitura). **Só funciona** com a rota privada de IA validada (hoje desligada); sem ela, nada é baixado | `false` |
 | `YUI_GOOGLE_TOKEN_ARQUIVO` | Caminho do arquivo da autorização | `secrets/google-token.json` |
 | `YUI_GOOGLE_FUSO` | Fuso (nome IANA, como `America/Cuiaba`) dos "hoje", "amanhã" e "semana" | `America/Sao_Paulo` |
@@ -116,40 +119,54 @@ Na tela do Google:
 
 O Google pode **invalidar** a autorização:
 
-- num projeto em modo **"Testing"**, a autorização de permissões sensíveis **expira em cerca de 7 dias** (o que muda ao publicar o app **não foi confirmado**: confira na documentação do Google antes de decidir);
+- num projeto em modo **"Testing"** (o modo de teste do console do Google), a autorização de permissões sensíveis **expira em cerca de 7 dias**: nesse modo, conte com renovar a autorização toda semana (o que muda ao publicar o app **não foi confirmado**: confira na documentação do Google antes de decidir);
 - se ficar **6 meses sem uso**;
 - se a pessoa **revogar** o acesso (https://myaccount.google.com/permissions);
 - se a senha for alterada, para autorizações com permissões do Gmail.
 
-Quando o Google recusa (`invalid_grant`), a Yui marca a integração como "precisa autorizar de novo", **avisa o dono uma vez** por mensagem privada e **para de tentar**. A marca fica dentro do arquivo de token: reiniciar a Yui não repete o aviso, e um arquivo **novo** (de uma nova autorização) volta a funcionar sozinho. Para renovar: rode o script de novo, copie o arquivo e reinicie.
+Quando o Google recusa (`invalid_grant`), a Yui marca a integração como "precisa autorizar de novo", **avisa o dono uma vez** por mensagem privada e **para de tentar**. A marca (com a hora do aviso) fica dentro do arquivo de token: **reiniciar a Yui não repete o aviso nem reinicia o intervalo** (um processo novo lê a marca, não chama o Google e não manda outra mensagem, nem 1 minuto, nem 48 horas depois), e um arquivo **novo** (de uma nova autorização) volta a funcionar sozinho. Se a pasta do arquivo não puder ser gravada, a marca fica só em memória e um reinício tenta uma vez e avisa de novo. Para renovar: rode o script de novo, copie o arquivo e reinicie.
 
 Falhas passageiras (rede, prazo, erro do servidor do Google) **não** contam como expiração: a Yui espera 30 segundos antes de tentar de novo.
 
 ---
 
-## 🛡️ 7. Segurança e privacidade
+## 🔒 7. O portão da rota privada de IA
+
+Os dados pessoais do Google (agenda, tarefas, e-mail) **não podem ir a um provedor de IA público ou gratuito só porque a conversa é privada**. Por isso, **antes de qualquer consulta ao Google** (inclusive a renovação do token de acesso) e antes de qualquer dado entrar num prompt, a Yui exige:
+
+- `estadoDaRotaPrivada().estado === 'validada'` (a rota privada de IA, verificada por uma sonda e lida pelo leitor estrito do cabeçalho de decisão do OmniRoute), **consultado a cada uso**: se a rota for bloqueada depois, o próximo pedido já fecha;
+- sem a rota validada: **falha fechada**. Nada é baixado do Google, nenhuma IA é chamada, **não há fallback** para provedor público e a Yui responde uma frase curta e fixa ("Ainda não leio a sua agenda: falta a rota privada de IA."). Qualquer estado que não seja `validada` (`desligada`, `incompleta`, `nao-verificada`, `nao-validada`, `bloqueada`, ou um estado desconhecido) fecha o portão;
+- o mesmo portão vale para a seção "Agenda e tarefas de hoje" do relatório matinal (sem a rota, a seção não existe e o relatório é o de sempre).
+
+**A exceção explícita do dono.** `YUI_GOOGLE_SEM_ROTA_PRIVADA=true` (padrão `false`; só o texto exato `true` vale, nada de `1`, `sim` ou `on`, e só com `YUI_GOOGLE=true`) dispensa o portão **somente para a Agenda e as Tarefas**. É uma decisão expressa de quem aceita que o texto da agenda e das tarefas passe pela IA em nuvem: a conversa continua sensível (**nunca** provedor anônimo, nunca no contexto por horas, sem ferramentas e sem busca), mas o provedor que responder pode ser um serviço de nuvem comum, e os planos gratuitos de alguns provedores podem usar o conteúdo das conversas para melhorar os produtos deles. Quando a rota privada está validada, vale a rota (a exceção nem é usada). Com a exceção em uso, a Yui deixa **uma** linha de aviso no log por processo, sem nenhum conteúdo.
+
+**O Gmail nunca é dispensado.** Nenhuma chave dispensa o portão do Gmail: só `YUI_GOOGLE_GMAIL=true` **e** a rota privada validada o abrem (veja a [seção 9](#-9-gmail-travado)).
+
+---
+
+## 🛡️ 8. Segurança e privacidade
 
 - O arquivo de token é um **segredo**: tem o cliente e o refresh token. É gravado de forma **atômica** e com a **permissão restrita** ao dono do processo (no Windows por SID, conferida; fora dele, `chmod 600`). A pasta `secrets/` é ignorada pelo git.
 - A Yui nunca escreve token, segredo, corpo de resposta ou texto de erro do Google no log, nos avisos ou nas mensagens.
 - Cada chamada ao Google tem prazo curto e **uma tentativa** só; só leitura (`GET`).
 - O que vem do Google (título de evento, local, título de tarefa) é **dado não confiável**: pode ter sido escrito por outra pessoa (um convite, por exemplo). Entra no prompt **cercado** como dado, sem colchetes nem quebras de linha que imitem um cabeçalho, **sem ferramentas** nessa chamada, e a resposta do modelo que parecer uma chamada de ferramenta é descartada.
-- A conversa que leva dados do Google é tratada como **sensível**, igual à do dono em DM: **nunca** vai a provedor anônimo. Se o perfil privado de IA estiver configurado, ela vai por ele; sem ele, segue o fluxo de sempre, que já nunca usa provedor anônimo. A troca **não entra** no contexto por horas.
+- A conversa que leva dados do Google é tratada como **sensível**, igual à do dono em DM: **nunca** vai a provedor anônimo. Com a rota privada validada, ela vai pelo perfil privado; só com a exceção do dono ela segue o fluxo de sempre (provedor não anônimo da cadeia). A troca **não entra** no contexto por horas.
 - Os endereços do Google ficam em **um único arquivo** (`src/integrations/google/endpoints.js`).
 
 ---
 
-## ✉️ 8. Gmail (travado)
+## ✉️ 9. Gmail (travado)
 
 O código mínimo de listar e ler mensagens (`gmail.readonly`) existe em `src/integrations/google/gmail.js`, mas só roda com **as duas** condições:
 
 1. `YUI_GOOGLE_GMAIL=true`;
-2. a **rota privada de IA validada** (`estadoDaRotaPrivada().estado === 'validada'`, consultada a cada uso).
+2. a **rota privada de IA validada** (`estadoDaRotaPrivada().estado === 'validada'`, consultada a cada uso), **sem exceção possível** (nem `YUI_GOOGLE_SEM_ROTA_PRIVADA` o dispensa).
 
 Hoje o perfil privado está desligado, então o Gmail **nunca** funciona. Falha **fechada**: sem as duas condições, nenhuma chamada ao Google é feita (o e-mail nem é baixado), nada entra no prompt, nenhuma IA é chamada, e a Yui responde "Ainda não leio e-mails: falta a rota privada de IA.". O conteúdo de um e-mail nunca vai a um provedor sem essa rota.
 
 ---
 
-## 🧪 9. Testes
+## 🧪 10. Testes e o que ainda não foi testado
 
 Tudo contra um **Google falso** em `127.0.0.1`, aberto pelo próprio teste (nada do Google de verdade é tocado):
 
@@ -157,5 +174,7 @@ Tudo contra um **Google falso** em `127.0.0.1`, aberto pelo próprio teste (nada
 npm run test:google           # a unidade: endereços, arquivo, renovação, expiração, Agenda, Tarefas, dados cercados, pré-rota, Gmail travado, relatório
 npm run test:googleautorizar  # o script de autorização de verdade (PKCE, state, retorno local, arquivo restrito)
 ```
+
+**O que ainda NÃO foi testado** (só existe o Google falso): a autorização feita no Google de verdade (a tela de consentimento, o aviso de "app não verificado" e as respostas reais), um `invalid_grant` real, a expiração real de cerca de 7 dias do modo "Testing", e a execução da Yui como SYSTEM no servidor. Os testes do portão usam a máquina de estados real da rota privada contra um OmniRoute falso, mas o cabeçalho de decisão do OmniRoute de verdade segue pendente de confirmação.
 
 [🏠 Voltar ao índice](../README.md)

@@ -24,6 +24,15 @@ export function gmailLigadoPelaChave(env = process.env) {
   return googleLigado(env) && ligada(env?.YUI_GOOGLE_GMAIL);
 }
 
+/**
+ * A EXCEÇÃO EXPLÍCITA DO DONO (YUI_GOOGLE_SEM_ROTA_PRIVADA, padrão false): só com o texto exato `true` (nada de "1", "sim" ou "on": é uma decisão expressa) a Agenda
+ * e as Tarefas dispensam o portão da rota privada de IA, e o texto delas passa pela IA em nuvem (nunca por provedor anônimo). NUNCA vale para o Gmail.
+ * Sem YUI_GOOGLE ligado não vale nada.
+ */
+export function semRotaPrivadaPelaChave(env = process.env) {
+  return googleLigado(env) && String(env?.YUI_GOOGLE_SEM_ROTA_PRIVADA ?? '').trim().toLowerCase() === 'true';
+}
+
 /** O caminho do arquivo da autorização. */
 export function arquivoDoToken(env = process.env) {
   const configurado = String(env?.YUI_GOOGLE_TOKEN_ARQUIVO ?? '').trim();
