@@ -14,6 +14,15 @@
 // em disco) = ADIA a passada, sem custo e sem erro: nada é gasto e o monitor continua devido para a próxima passada.
 //
 // Texto da web é DADO não confiável: do 1º resultado só o título (limpo, uma linha, sem menção nem link) e o domínio; nunca vira instrução.
+//
+// PRIVACIDADE (ajuste da revisão): a consulta vai a um buscador de terceiros a cada checagem, então, ANTES de cada busca:
+//  - a pesquisa privada tem de estar liberada ao dono (privada.js; a chave é relida AGORA, a cada busca): desligada, o monitor fica ADIADO (nada é buscado, nada é
+//    gasto da cota, nenhuma consulta sai; nada é encerrado nem apagado) e volta sozinho quando a chave voltar;
+//  - a consulta passa de novo pela limpeza de dados pessoais (limpeza.js, falha fechada) e o que vai ao buscador é SEMPRE a versão limpa; se não provar limpeza,
+//    o monitor é encerrado (motivo `barrado`) e o texto é apagado;
+//  - a busca é privada (`privado: true`: sem cache, sem compartilhamento), e nenhuma IA entra em ponto nenhum (só busca e compara hash).
+// Quando um monitor encerra (vence, é barrado ou cancelado), o texto do assunto é APAGADO do registro na mesma gravação; por isso o aviso do fim não cita o assunto
+// (ele pode ter de ser refeito depois de um reinício, quando o texto já não existe): diz só "monitor #N". Log e auditoria nunca levam a consulta.
 import { cotaDaBusca } from '../pesquisa.js';
 import { searchWeb } from '../../search/providers.js';
 import { getDefaultBudget } from '../../search/budget.js';
@@ -21,6 +30,8 @@ import { LIMITES, MONITOR_USER_ID, intervaloDoMonitorMs, reservaDosMonitores } f
 import { assinaturaDosResultados, consultaSegura, fonteDoResultado, tituloSeguro } from './assinatura.js';
 import { ESTADOS, ESTADOS_DO_AVISO, TIPOS_DE_AVISO } from './store.js';
 import { chaveDaNovidade, chaveDoFim, entregarAviso } from './entrega.js';
+import { limparConsulta } from './limpeza.js';
+import { pesquisaPrivadaLiberada } from './privada.js';
 
 const iso = (ms) => new Date(ms).toISOString();
 const MAX_TEXTOS_EM_RAM = 20;
@@ -41,9 +52,16 @@ export function textoGenericoDaNovidade(monitor) {
   ].join('\n');
 }
 
+/** O aviso do fim: SEM o assunto (o texto é apagado do registro ao encerrar, e este aviso pode ser refeito depois de um reinício). */
 export function textoDoFim(monitor) {
+  if (monitor?.motivoFim === 'barrado') {
+    return [
+      `O monitor #${monitor.id} foi encerrado: o assunto não passou na limpeza de dados pessoais e foi apagado.`,
+      '-# Para vigiar de novo, peça outra vez, reformulando sem dados pessoais.',
+    ].join('\n');
+  }
   return [
-    `O monitor #${monitor.id} (${consultaSegura(monitor.consulta, 80)}) chegou ao fim do prazo e foi encerrado.`,
+    `O monitor #${monitor.id} chegou ao fim do prazo e foi encerrado.`,
     '-# Para vigiar de novo, é só pedir outra vez.',
   ].join('\n');
 }
@@ -51,16 +69,19 @@ export function textoDoFim(monitor) {
 /**
  * @param {{ store: ReturnType<import('./store.js').criarStoreDeMonitores>, enviar: Function, ownerId: string|null, env?: object, now?: () => number,
  *           buscar?: Function|null, budget?: object|null, audit?: Function, logger?: object|null, canalPronto?: () => boolean,
- *           passadaPermitida?: () => boolean }} deps
+ *           passadaPermitida?: () => boolean, liberada?: () => boolean, scrub?: Function }} deps
  *   `enviar(texto, { chave, reconciliar, desde })`: pede a DM ao dono (rejeita com o erro do canal ou do bot);
  *   `buscar(consulta, opcoes)`: a porta de busca (o searchWeb);
+ *   `liberada()`: a pesquisa privada está liberada ao dono AGORA (padrão: a regra do cérebro, privada.js, relida a cada busca);
+ *   `scrub`: a limpeza de dados pessoais (padrão: o scrubQuery da pesquisa privada); injetável só para teste;
  *   `canalPronto()`: (pode ser assíncrona) o bot está conectado e com o Discord no ar (sem ele a passada nem começa, como a dos lembretes);
  *   `passadaPermitida()`: o guarda das tarefas automáticas (motor de políticas).
  */
 export function criarExecutor({
   store, enviar, ownerId, env = process.env, now = () => Date.now(), buscar = null, budget = null,
-  audit = () => {}, logger = null, canalPronto = () => true, passadaPermitida = () => true,
+  audit = () => {}, logger = null, canalPronto = () => true, passadaPermitida = () => true, liberada = undefined, scrub = undefined,
 } = {}) {
+  const pesquisaLiberada = typeof liberada === 'function' ? liberada : () => pesquisaPrivadaLiberada(ownerId);
   const orcamento = budget ?? getDefaultBudget();
   // A porta central (searchWeb), com o MESMO orçamento que a decisão de cota desta passada consulta.
   const porta = buscar ?? ((consulta, opcoes) => searchWeb(consulta, { ...opcoes, budget: orcamento }));
@@ -69,7 +90,7 @@ export function criarExecutor({
   let ocupado = false;
   const contadores = {
     passadas: 0, buscas: 0, referencias: 0, iguais: 0, novidades: 0, falhas: 0, avisosEnviados: 0, avisosReconciliados: 0, avisosIncertos: 0, encerrados: 0,
-    adiadasPorta: 0, adiadasCota: 0, adiadasLimite: 0, pulouOffline: 0, pulouPolitica: 0, ignorados: 0, errosDeDisco: 0,
+    adiadasPorta: 0, adiadasCota: 0, adiadasLimite: 0, adiadasPrivada: 0, barrados: 0, pulouOffline: 0, pulouPolitica: 0, ignorados: 0, errosDeDisco: 0,
   };
   const avisadosForaDoDono = new Set();
 
@@ -87,6 +108,8 @@ export function criarExecutor({
   /** Pode gastar UMA busca agora? (a reserva própria, a porta de saída, os limites da cota). Nunca gasta nada para perguntar. */
   function podeBuscar() {
     try {
+      // A pesquisa privada liberada ao dono, lida AGORA (a chave pode ter sido desligada depois da subida): sem ela nada é buscado nem gasto.
+      if (pesquisaLiberada() !== true) return { ok: false, motivo: 'privada' };
       const saida = orcamento.despacho?.();
       if (saida && saida.permitido === false) return { ok: false, motivo: 'porta' };
       // A mesma conta da decisão do /yui (cotaDaBusca), com a reserva DOS MONITORES: abaixo dela, só a conversa busca.
@@ -107,7 +130,13 @@ export function criarExecutor({
 
   /** Uma checagem: busca, compara a assinatura e, se mudou, abre o aviso e entrega. Devolve uma palavra fixa. */
   async function checar(monitor) {
-    const resposta = await porta(monitor.consulta, { userId: MONITOR_USER_ID, privado: true, max: LIMITES.resultadosPedidos });
+    // A consulta é limpa DE NOVO antes de sair (falha fechada) e o que vai ao buscador é a versão limpa, nunca a gravada tal e qual. Sem prova de limpeza o
+    // monitor não busca: é encerrado e o texto apagado.
+    const limpa = limparConsulta(monitor.consulta, scrub ? { scrub } : {});
+    if (!limpa.ok) { await encerrarBarrado(monitor, limpa.motivo); return 'barrada'; }
+    // O que fica gravado é a MESMA versão limpa que vai ao buscador (um registro antigo ou mexido à mão é corrigido aqui).
+    if (limpa.consulta !== monitor.consulta) { try { store.atualizar(monitor.id, { consulta: limpa.consulta }); } catch { /* segue com a versão limpa em memória; grava na próxima mudança */ } }
+    const resposta = await porta(limpa.consulta, { userId: MONITOR_USER_ID, privado: true, max: LIMITES.resultadosPedidos });
     const t = now();
     // A busca NÃO saiu (sem o dono da cota, sem o registro em disco, limite estourado): adia sem custo e sem erro; o monitor segue devido.
     if (resposta?.indisponivel === true) { contadores.adiadasPorta += 1; return 'adiada'; }
@@ -139,7 +168,7 @@ export function criarExecutor({
     // Mudou: a nova assinatura e o aviso pendente vão para o disco JUNTOS e ANTES de qualquer envio. Uma queda daqui em diante não perde
     // o aviso (o "enviando" é reconciliado) e não o repete (a assinatura já é a nova: a mesma mudança não é detectada de novo).
     const chave = chaveDaNovidade(m.id, assinatura);
-    guardarTexto(chave, textoDaNovidade(m, resultados[0]));
+    guardarTexto(chave, textoDaNovidade({ ...m, consulta: limpa.consulta }, resultados[0]));
     store.atualizar(m.id, {
       ultimaAssinatura: assinatura, ultimaChecagem: iso(t), proximaChecagem: proxima, falhas: 0,
       aviso: { tipo: TIPOS_DE_AVISO.NOVIDADE, estado: ESTADOS_DO_AVISO.PENDENTE, chave, assinatura, tentativas: 0 },
@@ -149,14 +178,26 @@ export function criarExecutor({
     return 'novidade';
   }
 
-  /** O prazo acabou: encerra e abre o aviso do fim (uma vez só: a chave é fixa). */
+  /** O prazo acabou: encerra, APAGA o assunto do registro (na mesma gravação) e abre o aviso do fim (uma vez só: a chave é fixa). */
   async function encerrarPorPrazo(m) {
     store.atualizar(m.id, {
-      estado: ESTADOS.ENCERRADO, motivoFim: 'vencido', encerradoEm: iso(now()),
+      estado: ESTADOS.ENCERRADO, motivoFim: 'vencido', encerradoEm: iso(now()), consulta: undefined,
       aviso: { tipo: TIPOS_DE_AVISO.FIM, estado: ESTADOS_DO_AVISO.PENDENTE, chave: chaveDoFim(m.id), tentativas: 0 },
     });
     contadores.encerrados += 1;
     registrar('monitor.vencido', { id: m.id });
+    await entregar(m);
+  }
+
+  /** A consulta não provou limpeza (dado pessoal, segredo, palavra proibida ou limpeza que falhou): nada é buscado, o monitor encerra e o assunto é apagado. */
+  async function encerrarBarrado(m, motivo) {
+    store.atualizar(m.id, {
+      estado: ESTADOS.ENCERRADO, motivoFim: 'barrado', encerradoEm: iso(now()), consulta: undefined,
+      aviso: { tipo: TIPOS_DE_AVISO.FIM, estado: ESTADOS_DO_AVISO.PENDENTE, chave: chaveDoFim(m.id), tentativas: 0 },
+    });
+    contadores.barrados += 1;
+    registrar('monitor.consulta_barrada', { id: m.id, motivo });
+    logger?.warn?.(`[Monitores] o assunto do monitor #${m.id} não provou limpeza (${motivo}): nada foi buscado; o monitor foi encerrado e o assunto apagado.`);
     await entregar(m);
   }
 
@@ -192,12 +233,12 @@ export function criarExecutor({
         if (Date.parse(m.proximaChecagem) > now()) continue;
         if (feitas >= LIMITES.porPassada) break;
         const pode = podeBuscar();
-        if (!pode.ok) { if (pode.motivo === 'cota') contadores.adiadasCota += 1; else contadores.adiadasPorta += 1; saida.adiadas += 1; break; }
+        if (!pode.ok) { if (pode.motivo === 'cota') contadores.adiadasCota += 1; else if (pode.motivo === 'privada') contadores.adiadasPrivada += 1; else contadores.adiadasPorta += 1; saida.adiadas += 1; break; }
         feitas += 1;
         try {
           const r = await checar(m);
           if (r === 'adiada') { saida.adiadas += 1; break; }
-          if (r === 'descartada') continue;
+          if (r === 'descartada' || r === 'barrada') continue;
           saida.buscas += 1;
           if (r === 'referencia') saida.referencias += 1;
           else if (r === 'igual') saida.iguais += 1;

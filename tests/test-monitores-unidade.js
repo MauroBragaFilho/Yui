@@ -30,8 +30,10 @@ const BOT = '900000000000000001';
 Object.assign(process.env, {
   DATABASE_DIR: path.join(tmp, 'db'), YUI_AUDIT_FILE: path.join(tmp, 'audit.jsonl'), YUI_OWNER_ID: OWNER, YUI_MEMORY_ENABLED: 'false', YUI_ALERTS: 'false',
   LOG_LEVEL: 'error', YUI_POLICY_MODE: 'observe', YUI_CONTEXT_ENABLED: 'false', YUI_SEARCH_BUDGET_FILE: path.join(tmp, 'search-budget.json'),
+  // os monitores só existem com a pesquisa privada LIBERADA ao dono (a regra do cérebro, relida a cada pedido e a cada busca): ligada para os testes de sempre
+  YUI_PRIVATE_SEARCH: 'owner',
 });
-for (const k of ['YUI_READ_ONLY', 'YUI_MONITORES', 'YUI_ALERTAS_EVENTOS', 'YUI_CEREBRO_EXTERNO', 'YUI_DB_OWNER_ROLE', 'POLICY_JOB_AUTONOMY']) delete process.env[k];
+for (const k of ['YUI_READ_ONLY', 'YUI_MONITORES', 'YUI_ALERTAS_EVENTOS', 'YUI_CEREBRO_EXTERNO', 'YUI_DB_OWNER_ROLE', 'POLICY_JOB_AUTONOMY', 'YUI_RESEARCH_ENABLED']) delete process.env[k];
 fs.mkdirSync(path.join(tmp, 'db'), { recursive: true });
 fs.mkdirSync(path.join(tmp, 'persona'), { recursive: true });
 for (const f of ['yui-publica.md', 'yui-voz.md']) { try { fs.copyFileSync(path.join(repoRoot, 'persona', f), path.join(tmp, 'persona', f)); } catch { /* texto de reserva */ } }
@@ -45,7 +47,11 @@ const logSpy = { debug() {}, info: (m) => logs.push(`info: ${m}`), warn: (m) => 
 const { interpretarPedido } = await imp('src/cerebro/monitores/pedido.js');
 const { assinaturaDosResultados, normalizarUrl, normalizarTitulo, tituloSeguro, fonteDoResultado } = await imp('src/cerebro/monitores/assinatura.js');
 const { criarStoreDeMonitores, MonitorError } = await imp('src/cerebro/monitores/store.js');
-const { criarRoteador, dirigidaAYui, TEXTO_SEM_PERMISSAO } = await imp('src/cerebro/monitores/rota.js');
+const { criarRoteador, dirigidaAYui, TEXTO_SEM_PERMISSAO, TEXTO_ONDE_FICA_O_ASSUNTO, TEXTO_MONITORES_SUSPENSOS } = await imp('src/cerebro/monitores/rota.js');
+const { limparConsulta, TEXTO_CONSULTA_BARRADA } = await imp('src/cerebro/monitores/limpeza.js');
+const { pesquisaPrivadaLiberada, TEXTO_PESQUISA_PRIVADA_DESLIGADA } = await imp('src/cerebro/monitores/privada.js');
+const { scrubQuery } = await imp('src/core/ai/researchAgent.js');
+const { forbiddenKeywords: PALAVRAS_PROIBIDAS } = await imp('src/core/forbiddenKeywords.js');
 const { criarExecutor, textoDaNovidade, textoGenericoDaNovidade } = await imp('src/cerebro/monitores/executor.js');
 const { entregarAviso, chaveDaNovidade } = await imp('src/cerebro/monitores/entrega.js');
 const { LIMITES, monitoresLigados, tickDosMonitoresMs, reservaDosMonitores, intervaloDoMonitorMs, intervaloDeTesteMs } = await imp('src/cerebro/monitores/config.js');
@@ -332,8 +338,10 @@ await test('o dono em DM cria: a confirmação é UMA frase curta com o número,
   const auditados = [];
   const r = criarRoteador({ store, now: clock, audit: (e, c, d) => auditados.push({ e, uid: c?.userId, ...d }) }).rotear({ ctx: ctxDono(), call: chamada(), texto: FRASE });
   assert.equal(r.handled, true);
-  assert.match(r.text, /^Anotado: monitor #1 de “patch 1\.5 do jogo X” por 7 dias \(olho a cada 6 horas e aviso por mensagem privada se aparecer novidade\)\.$/);
-  assert.ok(r.text.length < 160 && !r.text.includes('\n'), 'curta, uma frase só');
+  const [confirmacao, ondeFica, ...resto] = r.text.split('\n');
+  assert.match(confirmacao, /^Anotado: monitor #1 de “patch 1\.5 do jogo X” por 7 dias \(olho a cada 6 horas e aviso por mensagem privada se aparecer novidade\)\.$/);
+  assert.ok(confirmacao.length < 160 && resto.length === 0, 'a confirmação é uma frase curta; a segunda linha é a frase FIXA de onde o assunto fica');
+  assert.equal(ondeFica, TEXTO_ONDE_FICA_O_ASSUNTO);
   const m = store.obter(1);
   assert.deepEqual([m.dono, m.consulta, m.estado, m.intervaloMin, Date.parse(m.ate) - Date.parse(m.criadoEm)], [OWNER, 'patch 1.5 do jogo X', 'ativo', 360, 7 * DIA]);
   assert.deepEqual(auditados, [{ e: 'monitor.criado', uid: OWNER, id: 1 }], 'a auditoria guarda só o número, nunca a consulta');
@@ -647,7 +655,8 @@ await test('VENCIMENTO: o monitor encerra sozinho, sem buscar, e avisa UMA vez (
   const buscasAntes = c.web.chamadas;
   const p = await c.exec.passada();
   assert.deepEqual([p.encerrados, c.web.chamadas - buscasAntes, c.bot.pedidos.length], [1, 0, 1]);
-  assert.match(c.bot.pedidos[0].texto, /^O monitor #1 \(assunto que vence\) chegou ao fim do prazo e foi encerrado\./);
+  assert.match(c.bot.pedidos[0].texto, /^O monitor #1 chegou ao fim do prazo e foi encerrado\./);
+  assert.ok(!c.bot.pedidos[0].texto.includes('assunto que vence'), 'o aviso do fim não cita o assunto (ele é apagado do registro ao encerrar)');
   assert.equal(c.bot.pedidos[0].chave, `monitor:${m.id}:fim`);
   assert.deepEqual([c.store.obter(m.id).estado, c.store.obter(m.id).motivoFim, c.store.obter(m.id).aviso], ['encerrado', 'vencido', null]);
   await c.exec.passada();
@@ -1105,7 +1114,7 @@ section('G. A API de administração e a ligação nas tarefas automáticas');
 await test('createAdmin: lista em palavras fixas (id, consulta curta, estado, próxima checagem), cancela, só o dono; sem monitores diz "desligado"', async () => {
   agora = T0;
   const store = criarStoreDeMonitores({ file: path.join(novaPasta('admin'), 'monitores.json'), now: clock, env: {} });
-  store.criar({ dono: OWNER, consulta: 'a'.repeat(100) });
+  store.criar({ dono: OWNER, consulta: 'novidades sobre o assunto muito comprido de teste do painel que passa de sessenta caracteres' });
   store.criar({ dono: OWNER, consulta: 'segundo assunto' });
   store.pausar(2);
   store.atualizar(1, { ultimaAssinatura: 'abcdef0123456789abcdef01', aviso: { tipo: 'novidade', estado: 'incerto', chave: 'monitor:1:abcdef0123456789abcdef01', tentativas: 0 } });
@@ -1161,6 +1170,321 @@ await test('os arquivos do cérebro não importam o Discord (o grafo de imports 
     const texto = semComentarios(fs.readFileSync(f, 'utf8'));
     assert.ok(!/from\s+['"][^'"]*(?:discord\.js|\/discord\/|\/handlers\/|\/events\/|\/music\/)/.test(texto), `${path.basename(f)} importa o Discord`);
     assert.ok(!/\bimport\(|\brequire\(/.test(texto), `${path.basename(f)} usa import dinâmico`);
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+section('H. Privacidade da consulta: a pesquisa privada liberada, a limpeza antes de gravar e de enviar, o texto apagado ao encerrar');
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+const lerSrc = (rel) => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
+const bytesDe = (arq) => (fs.existsSync(arq) ? fs.readFileSync(arq, 'utf8') : '');
+const diga = (rota, texto) => rota.rotear({ ctx: ctxDono(), call: chamada(), texto }).text;
+const iso = (ms) => new Date(ms).toISOString();
+/** Roda com YUI_PRIVATE_SEARCH no valor dado (undefined = sem a variável) e sempre devolve `owner` (o valor dos outros testes) no fim. */
+async function comPesquisaPrivada(valor, fn) {
+  if (valor === undefined) delete process.env.YUI_PRIVATE_SEARCH; else process.env.YUI_PRIVATE_SEARCH = valor;
+  try { return await fn(); } finally { process.env.YUI_PRIVATE_SEARCH = 'owner'; }
+}
+const registroAntigo = (extra) => ({ dono: OWNER, criadoEm: iso(T0), ate: iso(T0 + 14 * DIA), intervaloMin: 360, ultimaChecagem: null, ultimaAssinatura: null, avisos: 0, proximaChecagem: iso(T0), falhas: 0, aviso: null, ...extra });
+
+await test('criar BLOQUEADO com a pesquisa privada desligada (a regra do cérebro: `off`, vazio e valor estranho não liberam; `owner` e `all` liberam o dono) e permitido com as duas coisas em ordem; listar e cancelar continuam', async () => {
+  for (const [modo, libera] of [['off', false], [undefined, false], ['talvez', false], ['owner', true], ['all', true]]) {
+    await comPesquisaPrivada(modo, () => {
+      const file = path.join(novaPasta('privada'), 'monitores.json');
+      const store = criarStoreDeMonitores({ file, now: clock, env: {} });
+      const rota = roteadorDe(store);
+      assert.equal(pesquisaPrivadaLiberada(OWNER), libera, `${modo}`);
+      assert.equal(pesquisaPrivadaLiberada(MEMBER), modo === 'all', `${modo}: só o "all" libera quem não é o dono`);
+      const t = diga(rota, 'me avisa quando sair o patch do jogo W');
+      if (libera) assert.match(t, /^Anotado: monitor #1 de “patch do jogo W”/, `${modo}`);
+      else {
+        assert.equal(t, TEXTO_PESQUISA_PRIVADA_DESLIGADA, `${modo}`);
+        assert.equal(fs.existsSync(file), false, `${modo}: nada foi gravado`);
+        assert.ok(!t.includes('patch do jogo W'), 'a recusa não repete o assunto');
+      }
+    });
+  }
+  // o agente de pesquisa desligado também não libera (a MESMA regra do searchOfferedFor)
+  process.env.YUI_RESEARCH_ENABLED = 'false';
+  try { assert.equal(pesquisaPrivadaLiberada(OWNER), false); } finally { delete process.env.YUI_RESEARCH_ENABLED; }
+  // com a chave desligada DEPOIS, o que já existe segue listável e cancelável (e a lista avisa que está suspenso)
+  const store = criarStoreDeMonitores({ file: path.join(novaPasta('privada2'), 'monitores.json'), now: clock, env: {} });
+  const rota = roteadorDe(store);
+  assert.match(diga(rota, 'me avisa quando sair o patch do jogo W'), /^Anotado: monitor #1/);
+  await comPesquisaPrivada('off', () => {
+    const lista = diga(rota, 'meus monitores');
+    assert.match(lista, /^\*\*Seus monitores\*\* \(1\)/);
+    assert.ok(lista.endsWith(TEXTO_MONITORES_SUSPENSOS));
+    assert.match(diga(rota, 'pausa o monitor 1'), /^Pausei o monitor #1/);
+    assert.match(diga(rota, 'cancela o monitor 1'), /^Cancelei o monitor #1/);
+  });
+});
+
+await test('dado pessoal, segredo ou palavra proibida: a consulta é RECUSADA com a frase fixa (sem repetir o texto) e NADA é gravado; a pesquisa privada liberada NÃO substitui a limpeza (proteções independentes)', async () => {
+  const proibida = PALAVRAS_PROIBIDAS.find((w) => /^[a-z]{6,}$/i.test(w));
+  assert.ok(proibida, 'a lista de palavras proibidas tem uma palavra simples para o teste');
+  for (const modo of ['owner', 'all']) {
+    await comPesquisaPrivada(modo, () => {
+      const file = path.join(novaPasta('dados'), 'monitores.json');
+      const auditados = [];
+      const store = criarStoreDeMonitores({ file, now: clock, env: {} });
+      const rota = criarRoteador({ store, now: clock, audit: (e, c, d) => auditados.push({ e, ...d }) });
+      const frases = [
+        'me avisa quando sair novidade do cpf 123.456.789-09',
+        'me avisa se aparecer noticia sobre fulano@exemplo.com',
+        'monitora o telefone (65) 99999-1234 da loja',
+        'me avisa quando sair o preço do cartão 4111 1111 1111 1111',
+        'monitora ghp_abcdefghijklmnopqrstuvwxyz0123456789ab',
+        `monitora ${proibida}`,
+      ];
+      for (const f of frases) {
+        const t = diga(rota, f);
+        assert.equal(t, TEXTO_CONSULTA_BARRADA, `${modo}: ${f}`);
+        for (const parte of ['123.456', 'exemplo.com', '99999', '4111', 'ghp_', proibida]) assert.ok(!t.includes(parte), `a recusa repete "${parte}"`);
+      }
+      assert.equal(fs.existsSync(file), false, `${modo}: nada foi gravado`);
+      assert.deepEqual(store.todos(), []);
+      const barradas = auditados.filter((a) => a.e === 'monitor.consulta_barrada');
+      assert.equal(barradas.length, frases.length, 'cada recusa fica na auditoria, só com o tipo');
+      assert.ok(barradas.every((a) => ['dado_pessoal', 'palavra_proibida'].includes(a.motivo)), JSON.stringify(barradas));
+      assert.ok(!/123\.456|exemplo\.com|99999|4111|ghp_/.test(JSON.stringify(auditados)), 'a auditoria nunca leva o texto');
+    });
+  }
+});
+
+await test('limpeza que LANÇA, que não prova limpeza (texto que muda na 2ª passada, resposta sem texto, nula, incerta) ou que devolve vazio: FALHA FECHADA, o monitor NÃO é criado, nada é gravado e a resposta é a frase fixa', () => {
+  const casos = {
+    lanca: () => { throw new Error('boom'); },
+    nula: () => null,
+    semTexto: () => ({ ok: true }),
+    vazio: () => ({ ok: true, query: '   ' }),
+    naoTexto: () => ({ ok: true, query: 42 }),
+    mudaNaSegunda: (t) => ({ ok: true, query: `${String(t)}a` }), // cada passada acrescenta algo: a prova (limpar de novo e voltar igual) falha
+    barra: () => ({ ok: false, reason: 'sensitive_data', detail: 'cpf' }),
+    incerta: () => ({ ok: 'talvez', query: 'patch do jogo X' }),
+  };
+  for (const [nome, scrub] of Object.entries(casos)) {
+    const file = path.join(novaPasta('limpeza'), 'monitores.json');
+    const store = criarStoreDeMonitores({ file, now: clock, env: {}, scrub });
+    assert.throws(() => store.criar({ dono: OWNER, consulta: 'patch do jogo X' }), (e) => e instanceof MonitorError && e.codigo === 'dados', nome);
+    assert.equal(diga(criarRoteador({ store, now: clock, audit: () => {} }), 'me avisa quando sair o patch do jogo X'), TEXTO_CONSULTA_BARRADA, nome);
+    assert.equal(fs.existsSync(file), false, `${nome}: nada gravado`);
+    assert.deepEqual(store.todos(), []);
+  }
+  // o outro lado: a limpeza de verdade devolve a consulta limpa, e o motivo da recusa é sempre uma palavra fixa
+  assert.deepEqual(limparConsulta('patch 1.5 do jogo X'), { ok: true, consulta: 'patch 1.5 do jogo X' });
+  assert.deepEqual(limparConsulta('  preço   da RTX 5070 '), { ok: true, consulta: 'preço da RTX 5070' });
+  assert.equal(limparConsulta('meu cpf 123.456.789-09').motivo, 'dado_pessoal');
+  assert.equal(limparConsulta('x', { scrub: () => { throw new Error('boom'); } }).motivo, 'falhou');
+  assert.equal(limparConsulta('x', { scrub: casos.mudaNaSegunda }).motivo, 'incerta');
+  assert.ok(!JSON.stringify(limparConsulta('meu cpf 123.456.789-09')).includes('123'), 'o resultado nunca leva o texto nem o valor achado');
+});
+
+await test('o texto GRAVADO e o texto ENVIADO ao buscador são a mesma versão LIMPA (nunca a bruta); um registro antigo com texto sujo é corrigido antes de buscar', async () => {
+  agora = T0;
+  const c = cenario();
+  const rota = criarRoteador({ store: c.store, now: clock, audit: () => {} });
+  assert.match(diga(rota, 'monitora o preço do Hades https://loja.exemplo/x?a=1'), /^Anotado: monitor #1 de “preço do Hades” por 14 dias/);
+  assert.equal(c.store.obter(1).consulta, 'preço do Hades', 'o que fica gravado é a versão limpa');
+  assert.ok(!bytesDe(c.arquivo).includes('loja.exemplo'), 'o link bruto não vai ao disco');
+  await c.exec.passada();
+  assert.deepEqual(c.buscas.map((b) => b.consulta), ['preço do Hades'], 'o buscador recebeu a versão limpa, a mesma que está gravada');
+  // um registro antigo (ou mexido à mão) com texto sujo: limpo de novo ANTES de buscar, e a versão limpa passa a ser a gravada
+  const dir = novaPasta('antigo');
+  fs.writeFileSync(path.join(dir, 'monitores.json'), JSON.stringify({ versao: 1, proximoId: 2, itens: [registroAntigo({ id: 1, consulta: 'patch do Zeta https://suja.exemplo/a?b=1', estado: 'ativo' })] }));
+  const d = cenario({ pastaDados: dir });
+  await d.exec.passada();
+  assert.deepEqual(d.buscas.map((b) => b.consulta), ['patch do Zeta']);
+  assert.equal(d.store.obter(1).consulta, 'patch do Zeta');
+  assert.ok(!bytesDe(d.arquivo).includes('suja.exemplo'), 'a versão limpa substituiu a suja no disco');
+});
+
+await test('CANCELAR, VENCER, BARRAR e cancelar pela API APAGAM o assunto do arquivo (conferido nos BYTES): só sobram número, estado, motivo, data e contagens; os abertos seguem com o texto; reinício não recupera nada nem repete aviso', async () => {
+  agora = T0;
+  const c = cenario();
+  const rota = criarRoteador({ store: c.store, now: clock, audit: () => {} });
+  assert.match(diga(rota, 'me avisa quando sair o zorroaster alfa'), /^Anotado: monitor #1 de “zorroaster alfa”/);
+  assert.match(diga(rota, 'me avisa quando sair o quimerax beta por 3 dias'), /^Anotado: monitor #2 de “quimerax beta”/);
+  assert.match(diga(rota, 'me avisa quando sair o ptolomeu gama'), /^Anotado: monitor #3/);
+  assert.match(diga(rota, 'me avisa quando sair o nefertiti delta'), /^Anotado: monitor #4/);
+  assert.match(diga(rota, 'me avisa quando sair o osiris epsilon'), /^Anotado: monitor #5/);
+  for (const p of ['zorroaster', 'quimerax', 'ptolomeu', 'nefertiti', 'osiris']) assert.ok(bytesDe(c.arquivo).includes(p), `aberto: ${p} está no arquivo (texto puro, enquanto o monitor está aberto)`);
+  const registro = (id) => JSON.parse(bytesDe(c.arquivo)).itens.find((m) => m.id === id);
+  // 1. cancelar por conversa: a resposta usa a cópia em memória de antes, e o arquivo perde o texto na mesma gravação
+  assert.match(diga(rota, 'cancela o monitor 1'), /^Cancelei o monitor #1 \(“zorroaster alfa”\)\. O assunto foi apagado do arquivo\.$/);
+  assert.ok(!bytesDe(c.arquivo).includes('zorroaster'));
+  assert.deepEqual([registro(1).estado, registro(1).motivoFim, 'consulta' in registro(1)], ['encerrado', 'cancelado', false]);
+  // 2. vencer
+  await c.exec.passada(); // referências dos abertos
+  avancar(3 * DIA + MIN);
+  await c.exec.passada();
+  assert.ok(!bytesDe(c.arquivo).includes('quimerax'));
+  assert.deepEqual([registro(2).estado, registro(2).motivoFim, 'consulta' in registro(2)], ['encerrado', 'vencido', false]);
+  assert.ok(!c.bot.pedidos.some((p) => /quimerax/.test(p.texto)), 'o aviso do fim não cita o assunto');
+  // 3. barrar: o texto do registro deixa de provar limpeza (arquivo mexido à mão): nada é buscado, o monitor encerra e o texto some
+  c.store.atualizar(3, { consulta: 'ptolomeu fulano@exemplo.com' });
+  const buscasAntes = c.buscas.length;
+  avancar(7 * HORA);
+  await c.exec.passada();
+  assert.ok(!c.buscas.slice(buscasAntes).some((b) => /ptolomeu|fulano/.test(b.consulta)), 'a consulta suja NÃO chegou ao buscador');
+  assert.ok(!/ptolomeu|fulano/.test(bytesDe(c.arquivo)));
+  assert.deepEqual([registro(3).estado, registro(3).motivoFim, 'consulta' in registro(3)], ['encerrado', 'barrado', false]);
+  assert.equal(c.exec.status().barrados, 1);
+  assert.ok(c.bot.pedidos.some((p) => /^O monitor #3 foi encerrado: o assunto não passou na limpeza/.test(p.texto)));
+  assert.ok(!c.bot.pedidos.some((p) => /fulano|ptolomeu/.test(p.texto)));
+  assert.deepEqual(c.audits.filter((a) => a.e === 'monitor.consulta_barrada'), [{ e: 'monitor.consulta_barrada', id: 3, motivo: 'dado_pessoal' }]);
+  // 4. cancelar pela API (o painel): o mesmo store.cancelar
+  const mons = iniciarMonitores({ channel: { isConnected: () => false, request: async () => ({}) }, logger: quiet, ownerId: OWNER, env: ENV, store: c.store, now: clock, tickMs: 3_600_000 });
+  try {
+    assert.equal(mons.cancelar(4), true);
+    assert.deepEqual(mons.listar().find((m) => m.id === 4), { id: 4, consulta: null, estado: 'encerrado', proximaChecagem: null, ate: registro(4).ate, avisos: 0, fim: 'cancelado' });
+  } finally { mons.parar(); }
+  assert.ok(!bytesDe(c.arquivo).includes('nefertiti'));
+  // o aberto (5) continua com o texto; todos os encerrados guardam só o resto sem texto
+  assert.ok(bytesDe(c.arquivo).includes('osiris epsilon'));
+  for (const id of [1, 2, 3, 4]) assert.ok(!('consulta' in registro(id)), `#${id}`);
+  // a INVARIANTE: uma mudança que deixaria um encerrado com texto é recusada (nunca fica um encerrado com texto no disco)
+  assert.throws(() => c.store.atualizar(5, { estado: 'encerrado', motivoFim: 'cancelado' }), (e) => e instanceof MonitorError && e.codigo === 'estado');
+  assert.equal(c.store.obter(5).estado, 'ativo');
+  // REINÍCIO: outro processo, mesmos arquivos: nada de consulta encerrada de volta e nenhum aviso repetido
+  const dms = c.bot.entregues.size;
+  const depois = cenario({ pastaDados: c.dir });
+  depois.bot.entregues = c.bot.entregues;
+  await depois.exec.passada();
+  assert.equal(depois.bot.pedidos.length, 0, 'nenhum aviso repetido');
+  assert.equal(c.bot.entregues.size, dms);
+  for (const id of [1, 2, 3, 4]) assert.equal(depois.store.obter(id).consulta, undefined, `#${id} reiniciado`);
+});
+
+await test('arquivo ANTIGO com o assunto de monitores encerrados: é limpo e regravado ao CARREGAR (nos bytes), sem tocar nos abertos; um 2º carregamento não recupera nada', () => {
+  const arq = path.join(novaPasta('antigo-encerrado'), 'monitores.json');
+  fs.writeFileSync(arq, JSON.stringify({ versao: 1, proximoId: 4, itens: [
+    registroAntigo({ id: 1, consulta: 'assunto cancelado antigo de zeferino', estado: 'encerrado', motivoFim: 'cancelado', encerradoEm: iso(T0 - DIA) }),
+    registroAntigo({ id: 2, consulta: 'assunto vencido antigo de abelardo', estado: 'encerrado', motivoFim: 'vencido', encerradoEm: iso(T0 - 2 * DIA) }),
+    registroAntigo({ id: 3, consulta: 'assunto aberto de heloisa', estado: 'ativo' }),
+  ] }));
+  assert.ok(fs.readFileSync(arq, 'utf8').includes('zeferino'));
+  const avisos = [];
+  const s = criarStoreDeMonitores({ file: arq, now: clock, env: {}, logger: { ...quiet, info: (m) => avisos.push(m), warn: (m) => avisos.push(m) } });
+  assert.deepEqual(s.todos().map((m) => [m.id, m.estado, 'consulta' in m]), [[1, 'encerrado', false], [2, 'encerrado', false], [3, 'ativo', true]]);
+  const bytes = fs.readFileSync(arq, 'utf8');
+  assert.ok(!bytes.includes('zeferino') && !bytes.includes('abelardo'), 'o texto dos encerrados saiu do DISCO no carregamento, sem nenhuma outra gravação');
+  assert.ok(bytes.includes('heloisa'), 'o monitor aberto continua com o assunto');
+  assert.ok(avisos.some((m) => /2 monitor\(es\) encerrado\(s\) de uma versão anterior/.test(m)) && !avisos.join('').includes('zeferino'));
+  const outro = criarStoreDeMonitores({ file: arq, now: clock, env: {} });
+  assert.equal(outro.obter(1).consulta, undefined);
+  assert.equal(outro.obter(2).consulta, undefined);
+  assert.equal(outro.obter(3).consulta, 'assunto aberto de heloisa');
+});
+
+await test('a confirmação da criação diz, em frase FIXA: texto puro, no disco do notebook, enquanto o monitor estiver ativo ou pausado (some ao acabar ou cancelar) e enviado de tempos em tempos ao serviço de busca', () => {
+  const rota = roteadorDe(criarStoreDeMonitores({ file: path.join(novaPasta('confirma'), 'monitores.json'), now: clock, env: {} }));
+  const [, linha2, ...resto] = diga(rota, 'me avisa quando sair o patch do jogo W').split('\n');
+  assert.equal(resto.length, 0);
+  assert.equal(linha2, TEXTO_ONDE_FICA_O_ASSUNTO);
+  for (const parte of ['texto puro', 'disco do notebook', 'ativo ou pausado', 'some quando ele acabar ou for cancelado', 'serviço de busca', 'sem dados pessoais']) assert.ok(linha2.includes(parte), parte);
+  assert.ok(linha2.length < 260, 'frase curta');
+});
+
+await test('monitor JÁ existente NÃO pesquisa depois que a pesquisa privada é desligada: buscador falso com ZERO chamadas, nenhuma cota gasta, nenhuma consulta enviada; fica adiado (nada encerrado nem apagado) e VOLTA SOZINHO; a chave é relida a CADA busca', async () => {
+  agora = T0;
+  const c = cenario();
+  novoMonitor(c, 'assunto adiado alfa');
+  novoMonitor(c, 'assunto adiado beta');
+  const antes = JSON.stringify(c.store.todos());
+  await comPesquisaPrivada('off', async () => {
+    const p = await c.exec.passada();
+    assert.deepEqual([p.buscas, p.adiadas, c.web.chamadas, c.buscas.length], [0, 1, 0, 0], 'o buscador falso contou ZERO chamadas e nenhuma consulta foi enviada');
+    assert.equal(c.orcamento.globalStatus(ENV, agora).used, 0, 'nenhuma cota gasta');
+    assert.equal(JSON.stringify(c.store.todos()), antes, 'o monitor ficou exatamente como estava (nada encerrado, nada apagado)');
+    assert.equal(c.exec.status().adiadasPrivada, 1);
+    assert.ok(bytesDe(c.arquivo).includes('assunto adiado alfa'), 'o texto continua no arquivo: adiado não é apagado');
+    avancar(3 * DIA);
+    await c.exec.passada();
+    await c.exec.passada();
+    assert.equal(c.web.chamadas, 0, 'dias depois, ainda desligada: nenhuma busca');
+    assert.deepEqual(c.store.todos().map((m) => m.estado), ['ativo', 'ativo']);
+  });
+  const p2 = await c.exec.passada();
+  assert.deepEqual([p2.referencias, c.buscas.map((b) => b.consulta)], [2, ['assunto adiado alfa', 'assunto adiado beta']], 'a chave voltou: o monitor volta sozinho');
+  // a chave é lida a cada BUSCA (e não na subida nem uma vez por passada): desligada no meio da passada, a segunda busca nem sai
+  const d = cenario({ espiar: async (consulta, opcoes, real) => { const r = await real(); process.env.YUI_PRIVATE_SEARCH = 'off'; return r; } });
+  novoMonitor(d, 'assunto meio alfa');
+  novoMonitor(d, 'assunto meio beta');
+  try {
+    const p = await d.exec.passada();
+    assert.deepEqual([p.buscas, p.adiadas, d.web.chamadas, d.buscas.length], [1, 1, 1, 1]);
+  } finally { process.env.YUI_PRIVATE_SEARCH = 'owner'; }
+  // o PRAZO continua correndo com a pesquisa desligada: o vencido encerra (sem buscar) e o texto some
+  const e = cenario();
+  const m = novoMonitor(e, 'assunto vence suspenso', 2 * DIA);
+  await comPesquisaPrivada('off', async () => {
+    avancar(3 * DIA);
+    const p = await e.exec.passada();
+    assert.deepEqual([p.encerrados, e.web.chamadas], [1, 0]);
+    assert.equal(e.store.obter(m.id).consulta, undefined);
+    assert.ok(!bytesDe(e.arquivo).includes('suspenso'));
+  });
+});
+
+await test('NENHUMA consulta em texto puro nos logs, na auditoria (arquivo de verdade) nem no backup: nem a original nem a limpa (criar, buscar, avisar, cancelar, vencer, barrar); o monitores.json não está em nenhuma lista do backup', async () => {
+  const { audit: auditoriaReal } = await imp('src/core/audit.js');
+  agora = T0;
+  logs.length = 0;
+  const c = cenario();
+  const rota = criarRoteador({ store: c.store, now: clock, audit: auditoriaReal });
+  const marcas = ['bellerofonte', 'cassiopeia', 'andromeda', 'jupiterx'];
+  diga(rota, 'me avisa quando sair o bellerofonte https://suja.exemplo/bellerofonte');
+  diga(rota, 'me avisa quando sair o cassiopeia por 2 dias');
+  diga(rota, 'me avisa quando sair o andromeda');
+  diga(rota, 'me avisa quando sair novidade do cpf 123.456.789-09 jupiterx');
+  await c.exec.passada();
+  c.web.resultados = [resultado(9, 'B'), resultado(1), resultado(2)];
+  avancar(7 * HORA);
+  await c.exec.passada(); // novidade
+  diga(rota, 'pausa o monitor 3');
+  diga(rota, 'retoma o monitor 3');
+  diga(rota, 'cancela o monitor 1');
+  c.store.atualizar(3, { consulta: 'andromeda fulano@exemplo.com' });
+  avancar(2 * DIA);
+  await c.exec.passada(); // vence o 2 e barra o 3
+  assert.ok(c.exec.status().barrados >= 1 && c.exec.status().encerrados >= 1);
+  const logTodo = logs.join('\n');
+  const auditoriaDoTeste = JSON.stringify(c.audits);
+  const arquivoDeAuditoria = fs.readFileSync(process.env.YUI_AUDIT_FILE, 'utf8');
+  for (const marca of [...marcas, 'suja.exemplo', 'fulano', '123.456']) {
+    assert.ok(!logTodo.includes(marca), `o log tem "${marca}"`);
+    assert.ok(!auditoriaDoTeste.includes(marca), `a auditoria (executor) tem "${marca}"`);
+    assert.ok(!arquivoDeAuditoria.includes(marca), `o arquivo de auditoria tem "${marca}"`);
+  }
+  assert.ok(logTodo.includes('[Monitores]'), 'os logs dos monitores existem (só com número e palavras fixas)');
+  assert.match(arquivoDeAuditoria, /"monitor\.criado"/);
+  // o backup: as fontes são as listas explícitas (bancos de memória, bancos extras e arquivos de configuração), e o monitores.json não está em nenhuma
+  const backup = await imp('src/core/memory/backup.js');
+  for (const nome of [...backup.MEMORY_DATABASES, ...backup.EXTRA_DATABASES, ...backup.DATA_FILES]) assert.ok(!/monitor/i.test(nome), nome);
+  const fonteDoBackup = lerSrc('src/core/memory/backup.js');
+  assert.match(fonteDoBackup, /\[\.\.\.MEMORY_DATABASES, \.\.\.EXTRA_DATABASES\]\.map\(/, 'o que entra no backup vem de listas explícitas');
+  assert.ok(!/monitores/i.test(fonteDoBackup));
+  for (const rel of ['scripts/backup-offsite.mjs', 'scripts/backup-memory.mjs']) assert.ok(!/monitores/i.test(lerSrc(rel)), rel);
+});
+
+await test('privacidade da busca e nenhuma IA: a busca é sempre privada (sem cache nem compartilhamento), os módulos dos monitores nunca chamam um modelo, e o executor só busca e compara hash', async () => {
+  // sem cache: com o cache ligado (60 min), duas checagens seguidas da MESMA consulta fazem duas buscas de verdade
+  const envCache = { ...ENV, NODE_ENV: 'test', YUI_TESTE_MONITORES_INTERVALO_S: '1', YUI_SEARCH_CACHE_TTL_MIN: '60' };
+  agora = T0;
+  const c = cenario({ env: envCache });
+  novoMonitor(c, 'assunto sem cache alfa');
+  await c.exec.passada();
+  avancar(2000);
+  await c.exec.passada();
+  assert.deepEqual([c.web.chamadas, c.buscas.every((b) => b.privado === true && b.userId === 'monitores')], [2, true], 'a segunda busca NÃO veio do cache');
+  // nenhuma IA: nenhum módulo dos monitores nem dos alertas chama um modelo
+  const dir = path.join(repoRoot, 'src', 'cerebro', 'monitores');
+  const arquivos = [...fs.readdirSync(dir).map((f) => path.join(dir, f)), path.join(repoRoot, 'src', 'cerebro', 'eventos.js')];
+  const semComentarios = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  for (const f of arquivos) {
+    const texto = semComentarios(fs.readFileSync(f, 'utf8'));
+    assert.ok(!/\b(?:isolatedChat|callAi|generateResponse|routeExplicitResearch|runResearchFor|createCoreResearch)\b|\bai\.chat\b|core\/ai\/manager|core\/ai\/research\.js|llmHandler/.test(texto), `${path.basename(f)} chama um modelo`);
   }
 });
 

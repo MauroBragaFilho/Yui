@@ -108,7 +108,11 @@ const cerebroLigado = () => childEnv({
   YUI_CEREBRO_DM_TIMEOUT_MS: '8000', YUI_ALERTS: 'true', YUI_ALERTS_COOLDOWN_MINUTES: '30',
   YUI_MONITORES: 'true', YUI_MONITORES_MS: '300', YUI_TESTE_MONITORES_BUSCA_FALSA: 'true', YUI_TESTE_MONITORES_CONTROLE: BUSCA_CTRL, YUI_TESTE_MONITORES_REGISTRO: BUSCA_REG,
   YUI_TESTE_MONITORES_INTERVALO_S: '1', YUI_ALERTAS_EVENTOS: 'true', YUI_ALERTAS_EVENTOS_MS: '300', YUI_ALERTA_DISCO_GB: '0', YUI_ALERTA_RAM_MB: '0',
+  // os monitores dependem da pesquisa privada LIBERADA ao dono (a mesma regra do cérebro)
+  YUI_PRIVATE_SEARCH: 'owner',
 });
+/** O cérebro com os monitores LIGADOS, mas SEM a pesquisa privada liberada (YUI_PRIVATE_SEARCH=off): eles não criam nem buscam. */
+const cerebroSemPesquisaPrivada = () => ({ ...cerebroLigado(), YUI_PRIVATE_SEARCH: 'off' });
 /** O cérebro com as chaves DESLIGADAS (o padrão): nenhuma variável nova. */
 const cerebroDesligado = () => childEnv({
   YUI_API_ENABLED: 'true', YUI_API_HOST: '127.0.0.1', YUI_API_PORT: String(API_PORT), YUI_API_TOKENS: `${TOKEN_DONO}=${OWNER},${TOKEN_MEMBRO}=${MEMBER}`, YUI_ALERTS: 'true',
@@ -257,6 +261,7 @@ try {
     const dono = await say(A, PEDIDO);
     assert.match(dono, /Anotado: monitor #1 de “patch 1\.5 do Zeta” por 7 dias \(olho a cada 6 horas e aviso por mensagem privada se aparecer novidade\)\./);
     assert.doesNotMatch(dono, /IA-FALSA/, 'a IA nem foi chamada');
+    assert.match(dono, /texto puro no disco do notebook enquanto o monitor estiver ativo ou pausado .*enviado de tempos em tempos ao serviço de busca/, 'a confirmação diz onde o assunto fica e para onde vai');
     const l = await lista();
     assert.equal(l.ligado, true);
     assert.deepEqual(l.monitores.map((m) => [m.id, m.consulta, m.estado]), [[1, 'patch 1.5 do Zeta', 'ativo']]);
@@ -380,8 +385,9 @@ try {
     assert.match(novidades[3].text, /Reiniciei antes de avisar e não guardo o texto dos resultados/, 'o texto genérico: o título nunca foi guardado');
     assert.ok(!novidades[3].text.includes('Resultado 1'));
     assert.match(bot.out, /DM reconciliada \(motivo lembrete, nao-saiu\): 1 parte\(s\)/, 'provou, pelo histórico, que não saiu');
-    assert.match(readDms().find((d) => d.text.includes('chegou ao fim do prazo')).text, /^O monitor #2 \(preço do Hades\) chegou ao fim do prazo e foi encerrado\./);
-    assert.deepEqual([(await monitor(2)).estado, (await monitor(2)).fim], ['encerrado', 'vencido']);
+    assert.match(readDms().find((d) => d.text.includes('chegou ao fim do prazo')).text, /^O monitor #2 chegou ao fim do prazo e foi encerrado\./, 'o aviso do fim não cita o assunto (apagado ao encerrar)');
+    assert.deepEqual([(await monitor(2)).estado, (await monitor(2)).fim, (await monitor(2)).consulta], ['encerrado', 'vencido', null]);
+    assert.ok(!fs.readFileSync(ESTADO, 'utf8').includes('Hades'), 'o assunto do monitor vencido foi APAGADO do arquivo (o arquivo tinha o texto quando o cérebro caiu)');
     // reinício sem repetir: a mesma web (variante F) não vira outra novidade e nenhum aviso é repetido
     await waitUntil(async () => (await resumo()).iguais >= 1, 20_000, 'uma checagem com a mesma web depois do reinício');
     await passadas(4);
@@ -394,7 +400,8 @@ try {
     assert.equal((await monitor(1)).estado, 'ativo');
     const r = await api('DELETE', '/v1/admin/monitores/1');
     assert.deepEqual([r.status, r.json], [200, { ok: true }]);
-    assert.equal((await monitor(1)).estado, 'encerrado');
+    assert.deepEqual([(await monitor(1)).estado, (await monitor(1)).consulta], ['encerrado', null]);
+    assert.ok(!fs.readFileSync(ESTADO, 'utf8').includes('Zeta'), 'cancelado: o assunto foi APAGADO do arquivo na mesma gravação');
     assert.equal((await api('DELETE', '/v1/admin/monitores/1')).status, 404, 'já encerrado');
     assert.equal((await api('DELETE', '/v1/admin/monitores/99')).status, 404);
     const antes = buscas().length;
@@ -411,8 +418,38 @@ try {
     assert.match(audit, /"monitor\.vencido"/);
     for (const segredo of ['Zeta', 'Hades', 'assunto de teste']) assert.ok(!audit.includes(segredo), `a auditoria tem a consulta (${segredo})`);
     for (const p of allProcs.filter((x) => x.label.startsWith('cerebro'))) for (const segredo of ['Zeta', 'Hades', 'assunto de teste']) assert.ok(!p.out.includes(segredo), `o log do ${p.label} tem a consulta (${segredo})`);
+    // TODOS os arquivos de log (a auditoria, os logs de cada processo): a consulta em texto puro só existe no monitores.json, enquanto o monitor está aberto
+    const varrer = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? varrer(path.join(dir, d.name)) : [path.join(dir, d.name)]));
+    const arquivosDeLog = varrer(path.join(APP, 'logs'));
+    assert.ok(arquivosDeLog.length >= 2);
+    for (const f of arquivosDeLog) { const txt = fs.readFileSync(f, 'utf8'); for (const segredo of ['Zeta', 'Hades', 'assunto de teste']) assert.ok(!txt.includes(segredo), `${path.basename(f)} tem a consulta (${segredo})`); }
+    const noDisco = fs.readFileSync(ESTADO, 'utf8');
+    assert.ok(noDisco.includes('assunto de teste numero 1') && !noDisco.includes('Zeta') && !noDisco.includes('Hades'), 'aberto: o texto está no arquivo; encerrado: não');
     const b = buscas();
     assert.ok(b.every((x) => x.privado === true && x.userId === 'monitores'), 'toda busca dos monitores foi privada e com a identidade deles');
+  });
+
+  await test('8b. a PESQUISA PRIVADA desligada (YUI_PRIVATE_SEARCH=off), com os monitores ligados: não cria monitor (frase fixa); os que já existem NÃO buscam (o buscador falso conta ZERO), ficam adiados, intactos e com o texto; a lista diz que estão suspensos', async () => {
+    await desligar(cerebro);
+    const c8 = await subirCerebro(cerebroSemPesquisaPrivada());
+    cerebro = c8;
+    await botConectado(c8);
+    assert.match(c8.out, /\[Monitores\] a pesquisa privada não está liberada ao dono/);
+    const antesBuscas = buscas().length;
+    const antes = (await lista()).monitores.filter((m) => m.estado === 'ativo').map((m) => [m.id, m.consulta, m.ate]);
+    assert.equal(antes.length, 5);
+    assert.match(await say(A, 'me avisa quando sair o assunto de teste numero 9'), /^Não posso criar monitores agora: a pesquisa privada não está liberada para o dono \(YUI_PRIVATE_SEARCH\)\./);
+    assert.equal((await lista()).monitores.length, 7, 'nenhum monitor novo');
+    await waitUntil(async () => (await resumo()).adiadasPrivada >= 1, 20_000, 'a passada adiada por falta da pesquisa privada');
+    await passadas(5);
+    const r = await resumo();
+    assert.deepEqual([buscas().length, r.buscas, r.referencias, r.novidades], [antesBuscas, 0, 0, 0], 'o buscador falso contou ZERO chamadas: nenhuma consulta saiu');
+    assert.deepEqual((await lista()).monitores.filter((m) => m.estado === 'ativo').map((m) => [m.id, m.consulta, m.ate]), antes, 'os monitores ficaram intactos (nada encerrado nem apagado)');
+    assert.ok(fs.readFileSync(ESTADO, 'utf8').includes('assunto de teste numero 1'), 'o texto dos abertos continua no arquivo');
+    assert.match(await say(A, 'meus monitores'), /\*\*Seus monitores\*\* \(5\)[\s\S]*-# A pesquisa privada não está liberada: os monitores estão suspensos/);
+    assert.match(await say(A, 'pausa o monitor 7'), /^Pausei o monitor #7\./);
+    assert.match(await say(A, 'retoma o monitor 7'), /^Retomei o monitor #7\./);
+    assert.equal(contaDm(NOVIDADE), 4, 'nenhum aviso novo');
   });
 
   await test('9. as chaves DESLIGADAS (o padrão): o cérebro novo não abre nada dos monitores nem dos alertas; a frase do dono vai para a IA; a API diz "desligado"', async () => {

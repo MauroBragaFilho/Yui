@@ -1,7 +1,7 @@
 // O PEDIDO de monitor em português, interpretado por CÓDIGO (etapa 16, proatividade). Sem IA, sem rede, sem relógio.
 //
 //   interpretarPedido("me avisa quando sair o patch 1.5 do jogo X por 7 dias")
-//     -> { acao: 'criar', consulta: 'patch 1.5 do jogo X', prazoMs: 7 dias, prazoLimitado: false }
+//     -> { acao: 'criar', consulta: 'patch 1.5 do jogo X', consultaBruta: 'patch 1.5 do jogo X', prazoMs: 7 dias, prazoLimitado: false }
 //   interpretarPedido("lista meus monitores")  -> { acao: 'listar' }
 //   interpretarPedido("cancela o monitor 2")   -> { acao: 'cancelar', id: 2 }   (também 'pausar' e 'retomar')
 //   qualquer outra frase                       -> null (é conversa comum e segue para a IA)
@@ -100,7 +100,9 @@ function lerCorpo(corpoOriginal, corpoNorm, { tiraVerboDoEvento }) {
   if (solto) { orig = orig.slice(0, orig.length - solto[0].length); norm = norm.slice(0, norm.length - solto[0].length); }
   const consulta = tituloSeguro(orig.trim(), LIMITES.consultaMax);
   if (consulta === 'sem título' || !/[\p{L}\p{N}]/u.test(consulta) || Array.from(consulta.replace(/[^\p{L}\p{N}]/gu, '')).length < 2) return null;
-  return { consulta, prazoMs: prazo?.prazoMs ?? null, prazoLimitado: prazo?.limitado === true };
+  // `consultaBruta`: o assunto como a pessoa escreveu (só sem o verbo do pedido e o prazo): é ELA que a limpeza de dados pessoais (limpeza.js) examina, nunca a
+  // versão já mexida por `tituloSeguro` (que troca `_` e `*` por espaço e poderia esconder um segredo da limpeza).
+  return { consulta, consultaBruta: orig.trim(), prazoMs: prazo?.prazoMs ?? null, prazoLimitado: prazo?.limitado === true };
 }
 
 /**

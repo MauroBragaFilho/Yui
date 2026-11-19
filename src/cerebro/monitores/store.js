@@ -10,7 +10,10 @@
 //   { id, dono, consulta, criadoEm, ate, intervaloMin, ultimaChecagem, ultimaAssinatura, estado: ativo|pausado|encerrado, avisos,
 //     proximaChecagem, falhas, aviso, motivoFim, encerradoEm }
 // NUNCA o texto dos resultados da busca (nem título, nem trecho, nem endereço): só `ultimaAssinatura`, o hash dos 3 primeiros resultados.
-// `consulta` é o que a PESSOA pediu (texto dela, curto e já limpo). `aviso` é a entrega de UM aviso em andamento (veja entrega.js):
+// `consulta` é o que a PESSOA pediu, JÁ LIMPA de dado pessoal e segredo (limpeza.js: a mesma da pesquisa privada; falha fechada: sem prova de que está limpa, o
+// monitor nem é criado). Fica em TEXTO PURO enquanto o monitor está ativo ou pausado e é APAGADA, na mesma gravação, quando ele é cancelado, vence ou é
+// encerrado por qualquer motivo (do monitor encerrado sobram só o número, o estado, o motivo, a data e as contagens). Um arquivo antigo que ainda tenha o texto
+// de um encerrado é limpo e regravado ao carregar. `aviso` é a entrega de UM aviso em andamento (veja entrega.js):
 //   { tipo: 'novidade'|'fim', estado: 'pendente'|'enviando'|'incerto', chave, assinatura?, tentativas, desde?, proximaTentativa?, motivo? }
 // (a chave de idempotência, o estado e nada do conteúdo do aviso). Arquivo ilegível: a cópia vai para `monitores.json.corrompido` e o
 // estado recomeça vazio (nunca derruba a Yui).
@@ -19,11 +22,12 @@ import path from 'node:path';
 import { writeJsonAtomic } from '../../core/channel/idemPersistente.js';
 import { LIMITES } from './config.js';
 import { assinaturaValida, normalizarTitulo } from './assinatura.js';
+import { limparConsulta } from './limpeza.js';
 
 export const ESTADOS = Object.freeze({ ATIVO: 'ativo', PAUSADO: 'pausado', ENCERRADO: 'encerrado' });
 export const TIPOS_DE_AVISO = Object.freeze({ NOVIDADE: 'novidade', FIM: 'fim' });
 export const ESTADOS_DO_AVISO = Object.freeze({ PENDENTE: 'pendente', ENVIANDO: 'enviando', INCERTO: 'incerto' });
-export const MOTIVOS_DO_FIM = Object.freeze(['vencido', 'cancelado']);
+export const MOTIVOS_DO_FIM = Object.freeze(['vencido', 'cancelado', 'barrado']);
 
 const VERSAO = 1;
 const MAX_ABERTOS = 15; // ativos + pausados (o arquivo fica pequeno)
@@ -37,7 +41,7 @@ const TIPOS_VALIDOS = set(TIPOS_DE_AVISO);
 const ESTADOS_AVISO_VALIDOS = set(ESTADOS_DO_AVISO);
 
 export class MonitorError extends Error {
-  /** codigo: 'limite' | 'repetido' | 'consulta' | 'inexistente' | 'estado' */
+  /** codigo: 'limite' | 'repetido' | 'consulta' (vazia) | 'dados' (a limpeza barrou: `.motivo` é uma palavra fixa) | 'inexistente' | 'estado' */
   constructor(codigo, mensagem, extra = {}) {
     super(mensagem);
     this.name = 'MonitorError';
@@ -69,18 +73,25 @@ function avisoValido(a) {
   return out;
 }
 
-/** Um registro lido do disco, conferido campo a campo (campos desconhecidos somem: nada de texto de resultado entra por aqui). */
-function monitorValido(m) {
+/**
+ * Um registro lido do disco (ou a mudança que vai para o disco), conferido campo a campo (campos desconhecidos somem: nada de texto de resultado entra por aqui).
+ * INVARIANTE: um monitor ENCERRADO não tem `consulta`. Ao CARREGAR (`aoCarregar`), o texto de um encerrado (arquivo de uma versão anterior) é descartado; numa
+ * mudança (`atualizar`), um encerrado que ainda carrega o texto é RECUSADO: quem encerra tem de apagá-lo na mesma gravação (nunca fica um encerrado com texto no disco).
+ */
+function monitorValido(m, { aoCarregar = false } = {}) {
   if (!m || typeof m !== 'object') return null;
   if (!Number.isInteger(m.id) || m.id < 1) return null;
   if (typeof m.dono !== 'string' || !/^\d{5,25}$/.test(m.dono)) return null;
-  if (typeof m.consulta !== 'string' || !m.consulta.trim() || m.consulta.length > 400) return null;
-  if (!dataValida(m.criadoEm) || !dataValida(m.ate)) return null;
   if (!ESTADOS_VALIDOS.has(m.estado)) return null;
+  const encerrado = m.estado === ESTADOS.ENCERRADO;
+  if (encerrado) {
+    if (typeof m.consulta === 'string' && m.consulta !== '' && !aoCarregar) return null;
+  } else if (typeof m.consulta !== 'string' || !m.consulta.trim() || m.consulta.length > 400) return null;
+  if (!dataValida(m.criadoEm) || !dataValida(m.ate)) return null;
   const out = {
     id: m.id,
     dono: m.dono,
-    consulta: m.consulta,
+    ...(encerrado ? {} : { consulta: m.consulta }),
     criadoEm: m.criadoEm,
     ate: m.ate,
     intervaloMin: inteiro(m.intervaloMin, LIMITES.intervaloMinimoMin, LIMITES.intervaloMaximoMin, LIMITES.intervaloPadraoMin),
@@ -103,9 +114,10 @@ const copia = (m) => JSON.parse(JSON.stringify(m));
 export const chaveDaConsulta = (consulta) => normalizarTitulo(consulta);
 
 /**
- * @param {{ file?: string, now?: () => number, env?: object, logger?: object|null }} [opcoes]
+ * @param {{ file?: string, now?: () => number, env?: object, logger?: object|null, scrub?: Function }} [opcoes]
+ *   `scrub`: a limpeza da consulta ao criar (padrão: o scrubQuery da pesquisa privada); injetável só para teste
  */
-export function criarStoreDeMonitores({ file = arquivoDosMonitores(), now = () => Date.now(), env = process.env, logger = null } = {}) {
+export function criarStoreDeMonitores({ file = arquivoDosMonitores(), now = () => Date.now(), env = process.env, logger = null, scrub = undefined } = {}) {
   if (String(env?.YUI_DB_OWNER_ROLE ?? '').trim().toLowerCase() === 'bot') {
     throw Object.assign(new Error('Os monitores são do cérebro: o bot nunca abre o monitores.json.'), { code: 'YUI_MONITORES_DONO' });
   }
@@ -119,8 +131,18 @@ export function criarStoreDeMonitores({ file = arquivoDosMonitores(), now = () =
         if (fs.statSync(file).size > MAX_BYTES) throw new Error('arquivo grande demais');
         const bruto = JSON.parse(fs.readFileSync(file, 'utf8'));
         if (bruto && Array.isArray(bruto.itens)) {
-          estado.itens = bruto.itens.map(monitorValido).filter(Boolean);
+          estado.itens = bruto.itens.map((m) => monitorValido(m, { aoCarregar: true })).filter(Boolean);
           estado.proximoId = Math.max(inteiro(bruto.proximoId, 1, 1_000_000_000, 1), ...estado.itens.map((m) => m.id + 1), 1);
+          // Um arquivo de uma versão anterior pode ter o assunto de um monitor já ENCERRADO: sai da memória (acima) e do DISCO, agora.
+          const comTexto = bruto.itens.filter((m) => m && m.estado === ESTADOS.ENCERRADO && typeof m.consulta === 'string' && m.consulta !== '').length;
+          if (comTexto) {
+            try {
+              writeJsonAtomic(file, { versao: VERSAO, proximoId: estado.proximoId, itens: estado.itens });
+              logger?.info?.(`[Monitores] ${comTexto} monitor(es) encerrado(s) de uma versão anterior ainda tinham o assunto no arquivo: apagado.`);
+            } catch (err) {
+              logger?.warn?.(`[Monitores] não consegui apagar o assunto de ${comTexto} monitor(es) encerrado(s) do arquivo (${String(err?.code ?? err?.message ?? 'erro').slice(0, 60)}); sai na próxima gravação.`);
+            }
+          }
         }
       }
     } catch (err) {
@@ -162,13 +184,18 @@ export function criarStoreDeMonitores({ file = arquivoDosMonitores(), now = () =
     contarAtivos: (dono) => carregar().itens.filter((m) => m.dono === String(dono) && m.estado === ESTADOS.ATIVO).length,
 
     /**
-     * Cria um monitor. `prazoMs` (padrão 14 dias) fica entre 1 hora e 60 dias. Lança MonitorError: 'consulta' (vazia), 'limite' (já tem 5
-     * ativos, ou 15 abertos) ou 'repetido' (já existe um monitor aberto para a mesma consulta; `.id` diz qual).
+     * Cria um monitor. `prazoMs` (padrão 14 dias) fica entre 1 hora e 60 dias. `consulta` é o assunto COMO A PESSOA ESCREVEU: passa pela limpeza de dado pessoal e
+     * segredo (limpeza.js) ANTES de qualquer coisa, e o que fica gravado é só a versão limpa. Lança MonitorError: 'consulta' (vazia), 'dados' (a limpeza barrou,
+     * lançou ou não provou que está limpa: FALHA FECHADA, nada é gravado), 'limite' (já tem 5 ativos, ou 15 abertos) ou 'repetido' (já existe um monitor aberto
+     * para a mesma consulta; `.id` diz qual).
      */
     criar({ dono, consulta, prazoMs = null }) {
       const quem = String(dono ?? '');
-      const texto = String(consulta ?? '').replace(/\s+/g, ' ').trim().slice(0, 400);
-      if (!/^\d{5,25}$/.test(quem) || !chaveDaConsulta(texto)) throw new MonitorError('consulta', 'Sobre o que devo ficar de olho?');
+      if (!/^\d{5,25}$/.test(quem) || !String(consulta ?? '').trim()) throw new MonitorError('consulta', 'Sobre o que devo ficar de olho?');
+      const limpa = limparConsulta(consulta, scrub ? { scrub } : {});
+      if (!limpa.ok) throw new MonitorError('dados', 'O assunto não passou na limpeza de dados pessoais.', { motivo: limpa.motivo });
+      const texto = limpa.consulta;
+      if (!chaveDaConsulta(texto)) throw new MonitorError('consulta', 'Sobre o que devo ficar de olho?');
       return copia(efetivar((s) => {
         const meus = s.itens.filter((m) => m.dono === quem);
         const repetido = meus.find((m) => m.estado !== ESTADOS.ENCERRADO && chaveDaConsulta(m.consulta) === chaveDaConsulta(texto));
@@ -205,12 +232,12 @@ export function criarStoreDeMonitores({ file = arquivoDosMonitores(), now = () =
       }));
     },
 
-    /** Cancela (encerra a pedido da pessoa). O aviso de novidade que estava para sair é descartado. Devolve { ok, monitor, motivo? }. */
+    /** Cancela (encerra a pedido da pessoa). O aviso de novidade que estava para sair é descartado e o ASSUNTO é apagado do registro, na mesma gravação. Devolve { ok, monitor, motivo? }. */
     cancelar(id) {
       const atual = buscar(carregar().itens, id);
       if (!atual) return { ok: false, motivo: 'inexistente' };
       if (atual.estado === ESTADOS.ENCERRADO) return { ok: false, motivo: 'encerrado', monitor: copia(atual) };
-      const monitor = api.atualizar(id, { estado: ESTADOS.ENCERRADO, motivoFim: 'cancelado', encerradoEm: iso(now()), aviso: null });
+      const monitor = api.atualizar(id, { estado: ESTADOS.ENCERRADO, motivoFim: 'cancelado', encerradoEm: iso(now()), aviso: null, consulta: undefined });
       return { ok: true, monitor };
     },
 

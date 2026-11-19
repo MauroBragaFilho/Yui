@@ -15,6 +15,7 @@ import { consultaSegura } from './assinatura.js';
 import { criarExecutor } from './executor.js';
 import { criarRoteador } from './rota.js';
 import { ativarBuscaFalsaDosMonitores } from './buscaFalsa.js';
+import { pesquisaPrivadaLiberada } from './privada.js';
 
 function dmTimeoutMs(env) {
   const n = Number(String(env.YUI_CEREBRO_DM_TIMEOUT_MS ?? '').trim());
@@ -25,7 +26,8 @@ function dmTimeoutMs(env) {
 export function vistaDoMonitor(m) {
   return {
     id: m.id,
-    consulta: consultaSegura(m.consulta, 60),
+    // um monitor encerrado não guarda o assunto (apagado ao encerrar): `null`
+    consulta: typeof m.consulta === 'string' ? consultaSegura(m.consulta, 60) : null,
     estado: m.estado,
     proximaChecagem: m.estado === ESTADOS.ATIVO ? m.proximaChecagem : null,
     ate: m.ate,
@@ -39,14 +41,17 @@ export function vistaDoMonitor(m) {
  * Liga os monitores no cérebro. Devolve null com YUI_MONITORES desligada (o padrão).
  * @param {{ channel: {request: Function, isConnected: Function}, logger?: object, ownerId: string|null, env?: object,
  *           buscar?: Function|null, budget?: object|null, store?: object, now?: () => number, tickMs?: number, audit?: Function,
- *           permitido?: (nome: string) => boolean, engine?: () => object }} opcoes
+ *           permitido?: (nome: string) => boolean, engine?: () => object, liberada?: (userId: string) => boolean, scrub?: Function }} opcoes
+ *   `liberada`: a pesquisa privada está liberada ao dono agora (padrão: a regra do cérebro, relida a cada busca e a cada pedido: privada.js);
+ *   `scrub`: a limpeza de dados pessoais (padrão: o scrubQuery da pesquisa privada); os dois só são injetados em teste
  */
 export function iniciarMonitores({
   channel, logger = null, ownerId = null, env = process.env, buscar = null, budget = null, store = null, now = () => Date.now(),
-  tickMs = tickDosMonitoresMs(env), audit = auditoria, permitido = jobAllowed, engine = undefined,
+  tickMs = tickDosMonitoresMs(env), audit = auditoria, permitido = jobAllowed, engine = undefined, liberada = undefined, scrub = undefined,
 } = {}) {
   if (!monitoresLigados(env)) return null;
-  const estado = store ?? criarStoreDeMonitores({ env, now, logger });
+  const estado = store ?? criarStoreDeMonitores({ env, now, logger, ...(scrub ? { scrub } : {}) });
+  const aLiberada = typeof liberada === 'function' ? liberada : () => pesquisaPrivadaLiberada(ownerId);
   const timeoutDm = dmTimeoutMs(env);
 
   /** Pede UMA DM ao dono pelo bot (a mesma ação dos lembretes). Lança o erro do canal ou do bot: quem chama decide o estado do aviso. */
@@ -64,9 +69,9 @@ export function iniciarMonitores({
   const executor = criarExecutor({
     store: estado, enviar, ownerId, env, now, budget,
     buscar: buscar ?? ativarBuscaFalsaDosMonitores({ env, logger }),
-    audit, logger, canalPronto, passadaPermitida: () => permitido('monitores.tick'),
+    audit, logger, canalPronto, passadaPermitida: () => permitido('monitores.tick'), liberada: aLiberada, ...(scrub ? { scrub } : {}),
   });
-  const roteador = criarRoteador({ store: estado, now, audit, ...(engine ? { engine } : {}) });
+  const roteador = criarRoteador({ store: estado, now, audit, liberada: aLiberada, ...(engine ? { engine } : {}) });
 
   const rodar = (motivo) => executor.passada(motivo).catch(() => ({ erro: true }));
   const primeira = setTimeout(() => { rodar('subida'); }, Math.min(tickMs, 15_000));
@@ -74,6 +79,7 @@ export function iniciarMonitores({
   const timer = setInterval(() => { rodar('agenda'); }, tickMs);
   timer.unref?.();
   logger?.info?.(`[Monitores] Ligados: passada a cada ${tickMs >= 1000 ? `${Math.round(tickMs / 1000)} s` : `${tickMs} ms`}, reserva de ${reservaDosMonitores(env)}% da cota de busca para a conversa; aviso ao dono pelo bot (canal).`);
+  if (!aLiberada()) logger?.warn?.('[Monitores] a pesquisa privada não está liberada ao dono (YUI_PRIVATE_SEARCH): nenhum monitor é criado nem busca enquanto isso (a chave é relida a cada busca).');
 
   return {
     store: estado,
