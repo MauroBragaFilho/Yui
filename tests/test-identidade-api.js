@@ -26,7 +26,7 @@ process.on('exit', () => { try { process.chdir(raiz); fs.rmSync(tmp, { recursive
 
 const { createApiServer, parseTokens, startApi } = await import('../src/core/api/server.js');
 const { criarIdentidade, criarLimitadorPorOrigem, lerIdentidade, arquivoDaIdentidade, assinarIdentidade, PREFIXO_IDENTIDADE, LIMITE_IDENTIDADE } = await import('../src/core/api/identidade.js');
-const { gerarIdentidade, publicaDoArquivo, chavePublicaBase64 } = await import('../scripts/gerar-identidade-yui.mjs');
+const { gerarIdentidade, publicaDoArquivo, chavePublicaBase64, lerArgumentos } = await import('../scripts/gerar-identidade-yui.mjs');
 const { allowedSecretSids } = await import('../src/core/channel/secret.js');
 const { readWindowsAcl } = await import('../src/database/snapshot.js');
 const { logger } = await import('../src/utils/logger.js');
@@ -375,6 +375,26 @@ await test('o script de linha de comando: a saída padrão é SÓ a chave públi
   const nova = await roda(`--arquivo=${arquivo}`, '--forcar');
   assert.notEqual(nova.stdout, ok.stdout);
   await assert.rejects(roda(`--arquivo=${path.join(tmp, 'sem-nada.key')}`, '--publica'), (e) => e.code === 1 && e.stdout === '');
+});
+
+await test('o script lê os argumentos de forma ESTRITA: "--arquivo X --forcar" (com espaço) vale para X e NUNCA troca a identidade padrão; --forcar=false, argumento desconhecido, --arquivo sem valor ou repetido saem com erro de uso e não tocam em arquivo algum', async () => {
+  const padrao = path.join(tmp, 'padrao-cli.key');
+  const outro = path.join(tmp, 'outro-cli.key');
+  const roda = (...args) => run(process.execPath, [...process.execArgv, 'scripts/gerar-identidade-yui.mjs', ...args], { cwd: raiz, env: { ...process.env, YUI_API_IDENTIDADE_ARQUIVO: padrao } });
+  const primeira = await roda(); // sem --arquivo: a identidade PADRÃO (a da variável)
+  const hPadrao = sha(fs.readFileSync(padrao));
+  const comEspaco = await roda('--arquivo', outro, '--forcar');
+  assert.ok(fs.existsSync(outro), 'a identidade foi criada no arquivo informado com espaço');
+  assert.equal(sha(fs.readFileSync(padrao)), hPadrao, 'a identidade padrão NÃO foi tocada');
+  assert.notEqual(comEspaco.stdout, primeira.stdout);
+  for (const args of [[`--arquivo=${outro}`, '--forcar=false'], ['--forcar=false'], ['--xyz'], ['--arquivo'], ['--arquivo', '--forcar'], [`--arquivo=${outro}`, `--arquivo=${padrao}`], ['sobrando']]) {
+    const hOutro = sha(fs.readFileSync(outro));
+    await assert.rejects(roda(...args), (e) => e.code === 2 && e.stdout === '' && e.stderr.includes('Uso: node scripts/gerar-identidade-yui.mjs'), args.join(' '));
+    assert.equal(sha(fs.readFileSync(padrao)), hPadrao, `não tocou a padrão (${args.join(' ')})`);
+    assert.equal(sha(fs.readFileSync(outro)), hOutro, `não tocou a outra (${args.join(' ')})`);
+  }
+  assert.deepEqual(lerArgumentos(['--arquivo', 'x.key', '--publica']), { arquivo: 'x.key', forcar: false, publica: true });
+  assert.deepEqual(lerArgumentos([]), { arquivo: null, forcar: false, publica: false });
 });
 
 // ───────────────────────── a chave privada fora do repositório ─────────────────────────

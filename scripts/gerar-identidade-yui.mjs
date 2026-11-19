@@ -57,16 +57,38 @@ export function gerarIdentidade({ arquivo, forcar = false, restrict = restrictFi
   return { arquivo, publica: chavePublicaBase64(publicKey) };
 }
 
+/**
+ * Lê os argumentos de forma ESTRITA (nada é ignorado em silêncio, porque um `--arquivo X --forcar` mal lido já trocou a identidade PADRÃO):
+ * `--arquivo=X` ou `--arquivo X`; `--forcar` e `--publica` só na forma exata (`--forcar=false` é recusado, não vira "forçar"); qualquer outra coisa é erro de uso.
+ * @returns {{ arquivo: string|null, forcar: boolean, publica: boolean }}  lança Error com `codigo: 'USO'`
+ */
+export function lerArgumentos(argv) {
+  const uso = (msg) => Object.assign(new Error(`${msg}. Uso: node scripts/gerar-identidade-yui.mjs [--arquivo=X | --arquivo X] [--forcar] [--publica]`), { codigo: 'USO' });
+  const r = { arquivo: null, forcar: false, publica: false };
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = String(argv[i]);
+    if (a === '--forcar') r.forcar = true;
+    else if (a === '--publica') r.publica = true;
+    else if (a === '--arquivo' || a.startsWith('--arquivo=')) {
+      if (r.arquivo !== null) throw uso('--arquivo foi informado mais de uma vez');
+      const valor = a === '--arquivo' ? argv[i += 1] : a.slice('--arquivo='.length);
+      if (typeof valor !== 'string' || !valor.trim() || valor.startsWith('--')) throw uso('--arquivo precisa de um caminho');
+      r.arquivo = valor;
+    } else throw uso(`argumento não reconhecido (${a.slice(0, 40)})`);
+  }
+  return r;
+}
+
 function principal(argv) {
-  const opcao = (nome) => argv.find((a) => a === `--${nome}` || a.startsWith(`--${nome}=`));
-  const dado = opcao('arquivo');
-  const arquivo = dado && dado.includes('=') ? path.resolve(dado.slice(dado.indexOf('=') + 1)) : arquivoDaIdentidade();
+  let opcoes;
+  try { opcoes = lerArgumentos(argv); } catch (err) { process.stderr.write(`${err.message}\n`); return 2; }
+  const arquivo = opcoes.arquivo ? path.resolve(opcoes.arquivo) : arquivoDaIdentidade();
   try {
-    if (opcao('publica')) {
+    if (opcoes.publica) {
       process.stdout.write(`${publicaDoArquivo(arquivo)}\n`);
       return 0;
     }
-    const { publica } = gerarIdentidade({ arquivo, forcar: Boolean(opcao('forcar')) });
+    const { publica } = gerarIdentidade({ arquivo, forcar: opcoes.forcar });
     process.stdout.write(`${publica}\n`);
     process.stderr.write([
       'Identidade do servidor criada.',
