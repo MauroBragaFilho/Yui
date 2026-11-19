@@ -1941,7 +1941,7 @@ await test('configuração nova: padrões, limites e chaves lidas a cada uso', (
   const c = getTtsConfig({});
   assert.deepStrictEqual(
     [c.firstSentenceWaitMs, c.localReserveMs, c.cloudMinMs, c.omnirouteTimeoutMs, c.omnirouteColdTimeoutMs, c.omnirouteWarmMinutes, c.omnirouteKeepaliveMinutes],
-    [20_000, 7000, 1500, 10_000, 14_000, 5, 4],
+    [20_000, 7000, 1500, 10_000, 14_000, 5, 0],
   );
   const o = getTtsConfig({
     YUI_TTS_FIRST_SENTENCE_WAIT_MS: '25000', YUI_TTS_LOCAL_RESERVE_MS: '9000', YUI_TTS_CLOUD_MIN_MS: '2000',

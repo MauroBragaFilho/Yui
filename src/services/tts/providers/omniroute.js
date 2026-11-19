@@ -194,7 +194,7 @@ export function createOmnirouteProvider({ config = {}, env = process.env, logger
   // (sem isso o prazo curto do provedor venceria o prazo frio do motor). Quente = houve fala bem-sucedida pela rede há menos de `warmMs`.
   const coldMs = Number.isFinite(config.omnirouteColdTimeoutMs) && config.omnirouteColdTimeoutMs >= 100 ? Math.max(timeoutMs, config.omnirouteColdTimeoutMs) : timeoutMs;
   const warmMs = (Number.isFinite(config.omnirouteWarmMinutes) && config.omnirouteWarmMinutes >= 1 ? config.omnirouteWarmMinutes : 5) * 60_000;
-  const keepaliveMs = (Number.isFinite(config.omnirouteKeepaliveMinutes) && config.omnirouteKeepaliveMinutes >= 0 ? config.omnirouteKeepaliveMinutes : 4) * 60_000;
+  const keepaliveMs = (Number.isFinite(config.omnirouteKeepaliveMinutes) && config.omnirouteKeepaliveMinutes >= 0 ? config.omnirouteKeepaliveMinutes : 0) * 60_000;
   let lastOkAt = null; // fala bem-sucedida pela rede (o cache não conta)
   let lastTouchAt = null; // fala ou toque (GET /models) bem-sucedido
   const switchOn = () => config.omniroute === true;
@@ -296,6 +296,7 @@ export function createOmnirouteProvider({ config = {}, env = process.env, logger
   async function touch({ signal, force = false } = {}) {
     try {
       if (!switchOn() || signal?.aborted) return false;
+      if (keepaliveMs <= 0) return false; // YUI_TTS_OMNIROUTE_KEEPALIVE_MINUTES=0 (o padrão): nenhuma sondagem, nem a da entrada na call
       const route = resolveOmnirouteRoute(env);
       if (!route.ok) return false;
       const t = now();

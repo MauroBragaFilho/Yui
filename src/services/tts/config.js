@@ -174,7 +174,7 @@ export function getTtsConfig(env = process.env) {
     // Quantos minutos sem uma fala bem-sucedida até o OmniRoute voltar a ser considerado frio, e de quantos em quantos minutos (0 = nunca) um toque
     // leve (GET /models, mesma rota e mesma chave da IA) mantém o processo dele na memória enquanto a Yui está numa call com a voz ligada.
     omnirouteWarmMinutes: int(env, 'YUI_TTS_OMNIROUTE_WARM_MINUTES', 5, 1, 240),
-    omnirouteKeepaliveMinutes: int(env, 'YUI_TTS_OMNIROUTE_KEEPALIVE_MINUTES', 4, 0, 60),
+    omnirouteKeepaliveMinutes: int(env, 'YUI_TTS_OMNIROUTE_KEEPALIVE_MINUTES', 0, 0, 60),
 
     // Prazo da 1ª frase (quanto a fala espera pela síntese antes de desistir e ficar só em texto) e o ORÇAMENTO DE NUVEM do motor: os provedores de
     // nuvem dividem `firstSentenceWaitMs - localReserveMs`; o provedor local (SAPI) nunca é pulado por falta de tempo. Abaixo de `cloudMinMs` de orçamento
