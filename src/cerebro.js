@@ -39,6 +39,8 @@ import { tabelaDeLimites, tetoGlobal, ajustesDoCerebro, avisarConfigDosLimites, 
 import { loadProviders } from './gateway/providers.js';
 import { createCerebroAdmin } from './cerebro/painel.js';
 import { startCerebroReminders } from './cerebro/lembretes.js';
+import { iniciarMonitores } from './cerebro/monitores/index.js';
+import { iniciarEventos } from './cerebro/eventos.js';
 import { activateFakeAi } from './cerebro/iaFalsa.js';
 import { ligarAoSupervisor } from './operacao/filho.js';
 // Etapa 9: o motor do agente (só a interface: o Mastra não está implementado) e os perfis de IA (a rota privada precisa de uma verificação prévia).
@@ -57,6 +59,8 @@ let pesquisa = null;
 let retomada = null;
 let comentarios = null;
 let cotaHora = null;
+let monitores = null; // etapa 16 (proatividade, YUI_MONITORES): os monitores "me avisa quando..." do dono (null = desligados)
+let eventos = null; // etapa 16 (YUI_ALERTAS_EVENTOS): os alertas por evento (disco, memória, internet, religadas do supervisor)
 let shuttingDown = false;
 const startedAt = Date.now();
 
@@ -119,6 +123,9 @@ function cerebroHealth() {
     // Etapa 9: o motor do agente (nativo; o Mastra é recusado) e o estado dos perfis de IA (só contadores e palavras fixas: sem chave, cabeçalho, prompt nem conteúdo).
     motorAgente: estadoDoMotor(),
     perfisDeIa: ai.estadoDosPerfis(),
+    // Etapa 16 (proatividade): só aparecem com a chave ligada (sem ela a saúde é idêntica à de antes). Só números.
+    ...(monitores ? { monitores: monitores.status() } : {}),
+    ...(eventos ? { alertasPorEvento: eventos.status() } : {}),
     travas: databaseOwnerStats(),
     bancos: databaseStats().map((b) => ({ name: b.name, engine: b.engine, open: b.open, owner: b.owner ?? null, ownerLock: b.ownerLock ?? null, openFailures: b.openFailures })),
   };
@@ -210,6 +217,7 @@ async function bootstrap() {
       // O bot pode ter perdido uma troca de chaves de IA feita no painel enquanto estava fora: relê ao conectar.
       try { channel?.emit('ai.settingsChanged', { tipo: 'reconexao' }, { role: 'bot' }); } catch { /* */ }
       setTimeout(() => { reminders?.tick('bot conectou').catch(() => {}); }, 100).unref?.();
+      setTimeout(() => { monitores?.passada('bot conectou'); }, 300).unref?.();
     },
   });
   const methods = registerCerebroMethods(channel, { health: cerebroHealth, lembretesMudaram: () => { setTimeout(() => { reminders?.tick('pedido do dono').catch(() => {}); }, 50).unref?.(); } });
@@ -225,7 +233,11 @@ async function bootstrap() {
   // A retomada da pesquisa (ajustes da Liz na etapa 6): o diário em <DATABASE_DIR>/pesquisa-retomada (dono: o cérebro). Na subida, a busca que
   // ficou enviada sem resultado vira "incerta"; a mesma chave repetida pelo bot retoma de onde parou, sem repetição cega.
   retomada = createRetomadaDePesquisa({ logger, budget: getDefaultBudget() });
-  const conversa = registerChatMethods(channel, { busca, retomada });
+  // Os monitores (etapa 16, proatividade; YUI_MONITORES, padrão desligado = null): DEPOIS da cota por hora (as buscas deles passam pela mesma porta e
+  // pela reserva própria) e ANTES da conversa (a pré-rota do chat.turn os usa). O aviso sai pelo bot, como o dos lembretes.
+  // (uma função opcional que não sobe, por exemplo por um arquivo de estado que não abre, nunca derruba o cérebro: o erro vai para o log e o resto segue)
+  try { monitores = iniciarMonitores({ channel, logger, ownerId: ownerUserId(), budget: getDefaultBudget() }); } catch (err) { monitores = null; logger.error(`[Cérebro] os monitores não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
+  const conversa = registerChatMethods(channel, { busca, retomada, ...(monitores ? { monitores } : {}) });
   chat = conversa.brain;
   const pesquisas = registerResearchMethods(channel, { chat, busca, retomada });
   pesquisa = pesquisas.brain;
@@ -250,12 +262,14 @@ async function bootstrap() {
 
   // 5. Lembretes e relatório matinal (o cérebro é o dono do lembretes.json).
   reminders = startCerebroReminders({ channel, logger, ownerId });
+  // 5b. Alertas por evento (etapa 16; YUI_ALERTAS_EVENTOS, padrão desligado = null): disco, memória, internet e religadas do supervisor, pelo alertOwner.
+  try { eventos = iniciarEventos({ logger }); } catch (err) { eventos = null; logger.error(`[Cérebro] os alertas por evento não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
 
   // 6. Yui API sem o cliente do Discord: as telas do Discord viram pedidos ao bot; o aviso por DM vai pelo bot.
   api = startApi(null, {
     // `reinicio` (etapa 10, piloto do app): "Reiniciar a Yui" pede ao SUPERVISOR o reinício dos dois processos (bot e cérebro); sem supervisor o pedido é recusado
     // e nada reinicia (o `process.exit` de sempre nunca é usado aqui: ninguém religaria o cérebro, e o bot ficaria sem ele).
-    admin: createCerebroAdmin({ channel, diagnostico: cerebroParaDiagnostico, reinicio: (pedido) => supervisor.pedirReinicio(pedido) }),
+    admin: createCerebroAdmin({ channel, diagnostico: cerebroParaDiagnostico, reinicio: (pedido) => supervisor.pedirReinicio(pedido), monitores }),
     notify: (id, text) => dmThroughBot(id, text, 'painel'),
     // Etapa 10 (piloto do app): o chat do app escolhe o perfil de IA com o MESMO seletor determinístico do Discord (a conversa do dono vai pelo privado se ele estiver
     // declarado e verificado; a escalada para o raciocínio pelos sinais de sempre). Sem nenhum perfil configurado o seletor devolve null e a chamada fica idêntica à de antes.
@@ -293,6 +307,8 @@ async function shutdown(reason) {
   const hard = setTimeout(() => process.exit(1), 10_000);
   hard.unref?.();
   try { reminders?.stop(); } catch { /* */ }
+  try { monitores?.parar(); } catch { /* */ }
+  try { eventos?.parar(); } catch { /* */ }
   try { cotaHora?.parar(); } catch { /* */ }
   try { await channel?.close(); } catch (err) { logger.warn(`[Cérebro] canal: ${err.message}`); }
   await closeHttp(api);

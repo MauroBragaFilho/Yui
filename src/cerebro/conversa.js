@@ -193,6 +193,8 @@ export function pedidoDeLimiteDoCanal(channel) {
 export function createChatBrain(deps = {}) {
   const ai = deps.ai ?? defaultAi;
   const retomada = deps.retomada ?? null;
+  // Etapa 16 (proatividade): os monitores do dono ("me avisa quando..."), pré-rota por código em src/cerebro/monitores (null = desligados: nada muda).
+  const monitores = deps.monitores ?? null;
   // Busca automática: os buscadores e o leitor de páginas de verdade, ou os dublês do teste (src/cerebro/buscaFalsa.js).
   const busca = deps.busca ?? {};
   const keywords = Array.isArray(deps.forbiddenKeywords) ? deps.forbiddenKeywords : FORBIDDEN_KEYWORDS;
@@ -633,6 +635,12 @@ export function createChatBrain(deps = {}) {
         try { diario = retomada.abrir(meta.idem, { userId: f.ctx.userId, privado, tipo: 'chat.turn' }); } catch { diario = null; }
       }
       return inOrder(f.decision.lockKey, async () => {
+        // Monitores (etapa 16): o pedido do DONO ("me avisa quando sair o patch X", "meus monitores", "cancela o monitor 2") é tratado por código, sem a IA, só
+        // na chamada principal do turno e só para mensagem dirigida à Yui. A troca não entra no contexto por horas (como os lembretes).
+        if (monitores && stepNo === 1 && o.main) {
+          const mon = await monitores.rotear({ ctx: f.ctx, call: f.call, texto: f.ownText });
+          if (mon?.handled) { marcarPesquisado(f.turnId); return { text: mon.text, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 }; }
+        }
         // Passo com a busca automática numa conversa PRIVADA interrompido por um reinício: sem o conteúdo (nunca em disco), a Yui não busca de
         // novo sozinha e pede para mandar de novo (segunda revisão da Liz, §12).
         if (diario?.reenviar) {

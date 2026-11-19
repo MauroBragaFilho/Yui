@@ -321,6 +321,9 @@ export function createApiServer({
     if (m === 'POST' && p === '/v1/admin/reminders') return admin.addReminder(ctx, await readJson(req));
     if ((r = p.match(/^\/v1\/admin\/reminders\/(\d+)$/)) && m === 'DELETE') return admin.removeReminder(ctx, r[1]);
     if ((r = p.match(/^\/v1\/admin\/reminders\/(\d+)\/snooze$/)) && m === 'POST') return admin.snoozeReminder(ctx, r[1], await readJson(req));
+    // Monitores de busca (etapa 16, só o dono): lista e cancelamento; sem YUI_MONITORES a lista diz "ligado: false"
+    if (m === 'GET' && p === '/v1/admin/monitores') return admin.monitores(ctx);
+    if ((r = p.match(/^\/v1\/admin\/monitores\/(\d+)$/)) && m === 'DELETE') return admin.removeMonitor(ctx, r[1]);
     if (m === 'GET' && p === '/v1/admin/morning') return admin.morningPreview(ctx);
     if (m === 'POST' && p === '/v1/admin/morning/send') return admin.morningSend(ctx);
 

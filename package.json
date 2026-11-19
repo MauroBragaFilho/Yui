@@ -80,6 +80,8 @@
     "sonda:hardware": "node scripts/sonda-hardware.mjs",
     "test:rotaprivadaadmin": "node tests/test-rota-privada-admin.js",
     "test:scriptcabecalho": "node tests/test-script-cabecalho-omniroute.js",
+    "test:monitoresunidade": "node tests/test-monitores-unidade.js",
+    "test:monitores": "node tests/test-monitores.js",
     "test:importarmemoria": "node tests/test-importar-memoria.js",
     "test:diagnostico": "node tests/test-diagnostico.js",
     "test:atualizador": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-atualizador-dois.ps1",

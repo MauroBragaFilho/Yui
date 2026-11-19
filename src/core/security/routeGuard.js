@@ -33,6 +33,7 @@ const ROUTES = [
   ['POST', /^\/v1\/admin\/radio\/\d+$/, 'radio.play_control'],
   ['POST', /^\/v1\/admin\/reminders(\/\d+(\/snooze)?)?$/, 'admin.reminders_edit'],
   ['DELETE', /^\/v1\/admin\/reminders\/\d+$/, 'admin.reminders_edit'],
+  ['DELETE', /^\/v1\/admin\/monitores\/\d+$/, 'admin.reminders_edit'], // etapa 16: cancelar um monitor de busca (mesma família dos lembretes)
   ['POST', /^\/v1\/admin\/morning\/send$/, 'admin.reminders_edit'],
   ['POST', /^\/v1\/admin\/ai\/(keys|providers\/[\w-]+|custom(\/[\w-]+\/(keys|options))?)$/, 'admin.ai_configure'],
   ['PUT', /^\/v1\/admin\/ai\/cloudflare$/, 'admin.ai_configure'],

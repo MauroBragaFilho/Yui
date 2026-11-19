@@ -734,6 +734,7 @@ try {
       && /import\s*\{[^}]*\b(?:searchWeb|searchForAgent|smartSearchDetailed|smartSearch)\b[^}]*\}\s*from/.test(lerSrc(f)));
     assert.deepEqual(chamadores.sort(), [
       'src/cerebro/conversa.js', // a busca automática do passo do chat.turn
+      'src/cerebro/monitores/executor.js', // os monitores de busca do dono (etapa 16): a MESMA porta, só se a porta está aberta e sobra mais que a reserva da conversa, privada e com identidade própria
       'src/cerebro/pesquisa.js', // o agente da fila e do /yui no cérebro e o ramo antigo
       'src/core/ai/research.js', // o agente do app (o adaptador do Core)
       'src/core/ai/searchManager.js', // searchForAgent e a busca automática (smartSearchDetailed)

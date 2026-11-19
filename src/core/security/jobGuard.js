@@ -24,6 +24,8 @@ export const JOBS = Object.freeze({
   'reminders.morning': 'job.notify',
   'reminders.health': 'job.notify',
   'alerts.send': 'job.notify',
+  'monitores.tick': 'job.notify', // etapa 16 (proatividade): a passada dos monitores de busca do dono
+  'eventos.tick': 'job.notify', // etapa 16 (proatividade): a conferência dos alertas por evento (disco, memória, internet, supervisor)
   'cleanup.context': 'job.cleanup_files',
   'cleanup.radio_temp': 'job.cleanup_files',
   'maintenance.ytdlp_update': 'job.maintenance',

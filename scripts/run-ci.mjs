@@ -121,6 +121,10 @@ export const SUITES = [
   // contra o servidor falso, com o bloqueio de integração externa e a prova de que a chave nunca é impressa).
   'test:rotaprivadaadmin',
   'test:scriptcabecalho',
+  // Etapa 16 (proatividade, tudo desligado por padrão): os monitores de busca do dono e os alertas por evento. A unidade roda num processo só (o buscador é um dublê do fetch,
+  // a cota e o relógio são injetados); a de ponta a ponta usa processos de verdade (cérebro e bot, Discord, IA e busca falsos, sob o bloqueio de integração externa).
+  'test:monitoresunidade',
+  'test:monitores',
 ];
 
 function argvOf(command) {

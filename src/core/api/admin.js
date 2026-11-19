@@ -268,6 +268,8 @@ export function createAdmin({
   // Sem ela (processo único, testes) vale o `exit` de sempre: o processo sai e a tarefa/o supervisor o religa em ~15 s.
   reinicio = null,
   startedAt = Date.now(),
+  // Monitores do dono (etapa 16, YUI_MONITORES; só o cérebro separado passa): `{ listar(), cancelar(id) }`. Sem eles a rota diz "desligado" e não faz nada.
+  monitores = null,
 } = {}) {
   let cached = deps;
   const d = async () => (cached ??= await defaultDeps());
@@ -392,6 +394,22 @@ export function createAdmin({
       if (!upd) throw new AdminError(404, 'Lembrete não encontrado.');
       audit('admin.reminder.snooze', ctx, {});
       return { reminder: reminderView(upd, now) };
+    },
+
+    // ── Monitores de busca (etapa 16, só o dono): `GET` lista (id, consulta curta, estado, próxima checagem) e `DELETE /:id` cancela ──
+    async monitores(ctx) {
+      requireOwner(ctx);
+      if (!monitores) return { ligado: false, monitores: [] };
+      // `resumo`: só contadores (passadas, buscas, avisos, adiadas por cota ou porta...), nunca consulta nem texto de resultado.
+      return { ligado: true, monitores: monitores.listar(), ...(typeof monitores.status === 'function' ? { resumo: monitores.status() } : {}) };
+    },
+
+    async removeMonitor(ctx, id) {
+      requireOwner(ctx);
+      if (!monitores) throw new AdminError(404, 'Os monitores estão desligados.');
+      if (!monitores.cancelar(Number(id))) throw new AdminError(404, 'Monitor não encontrado (ou já encerrado).');
+      audit('admin.monitor.remove', ctx, {});
+      return { ok: true };
     },
 
     /** O texto do relatório matinal de agora (sem enviar). */

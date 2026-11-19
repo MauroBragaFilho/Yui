@@ -66,12 +66,14 @@ function requireOwner(ctx) {
  * `diagnostico`: função que devolve os números do cérebro para a aba Diagnóstico (a saúde dele: canal, conversa, pesquisa, comentários...);
  * `fontes`: fontes extras do diagnóstico (só teste);
  * `reinicio`: `({ motivo }) => Promise<{ aceito, motivo }>`, o pedido de reinício controlado ao SUPERVISOR (etapa 10; src/operacao/filho.js: pedirReinicio). O
- * cérebro passa sempre: sem supervisor ele responde "recusado" e o app mostra que nada foi reiniciado (o `exit` de sempre nunca é usado aqui).
- * @param {{ channel: {request: Function, isConnected: Function}, timeoutMs?: number, base?: object, diagnostico?: Function, fontes?: object, reinicio?: Function }} options
+ * cérebro passa sempre: sem supervisor ele responde "recusado" e o app mostra que nada foi reiniciado (o `exit` de sempre nunca é usado aqui);
+ * `monitores`: os monitores do cérebro (src/cerebro/monitores: `listar()` e `cancelar(id)`), ou null com a chave desligada.
+ * @param {{ channel: {request: Function, isConnected: Function}, timeoutMs?: number, base?: object, diagnostico?: Function, fontes?: object, reinicio?: Function, monitores?: object|null }} options
  */
-export function createCerebroAdmin({ channel, timeoutMs = 20_000, base = null, diagnostico = null, fontes = {}, reinicio = null } = {}) {
+export function createCerebroAdmin({ channel, timeoutMs = 20_000, base = null, diagnostico = null, fontes = {}, reinicio = null, monitores = null } = {}) {
   // Sem `reinicio` o cérebro NUNCA cai no `exit` do createAdmin (ninguém religaria o cérebro): o pedido é recusado como "sem supervisor".
-  const admin = base ?? createAdmin({ client: null, deps: CEREBRO_ADMIN_DEPS, reinicio: typeof reinicio === 'function' ? reinicio : async () => ({ aceito: false, motivo: 'sem-supervisor' }) });
+  // `monitores` (etapa 16, YUI_MONITORES): a lista e o cancelamento dos monitores do dono pela API (`GET` e `DELETE /v1/admin/monitores`); null = desligados.
+  const admin = base ?? createAdmin({ client: null, deps: CEREBRO_ADMIN_DEPS, reinicio: typeof reinicio === 'function' ? reinicio : async () => ({ aceito: false, motivo: 'sem-supervisor' }), monitores });
   let seq = 0;
 
   async function call(method, params, effect = false) {
