@@ -49,9 +49,20 @@ import { normalizeName } from '../../services/gta/vehicles/gtacars/parser.js';
  * (ou ser igual a ele). Isso mantém "10F" → Obey 10F e "sultan rs" →
  * Karin Sultan RS, mas descarta ruído lexical.
  */
-function isRelevantMatch(vehicle, term) {
+// Palavras comuns do português que também são nomes de veículos do jogo: sem um sinal de GTA na pergunta elas não valem como veículo.
+const VEICULO_PALAVRA_COMUM = new Set(['taxi', 'turismo', 'oracle', 'club']);
+
+function isRelevantMatch(vehicle, term, { allowPrefix = false } = {}) {
   const normTerm = normalizeName(term);
   if (!normTerm) return false;
+
+  // Sem sinal de GTA na pergunta (allowPrefix = false) o casamento é pelo nome INTEIRO de cada palavra: o começo de uma palavra comum ("bom", "para",
+  // "moto") casaria com Bombushka, Paragon etc. e puxaria o tema do jogo para uma conversa que não é sobre ele. Palavra solta curta ou que é palavra do
+  // português ("taxi", "turismo") também não vale (nem pelo id ou apelido do veículo); com 2+ palavras ("obey 10f", "banshee 900r") o nome já é inequívoco.
+  if (!allowPrefix) {
+    const soltas = normTerm.split(' ').filter((tk) => tk.length >= 2);
+    if (soltas.length === 1 && ((soltas[0].length < 4 && !/\d/.test(soltas[0])) || VEICULO_PALAVRA_COMUM.has(soltas[0]))) return false;
+  }
 
   // Campos do GTACars (normalizedName) ou do dump DurtyFree (name bruto).
   const rawName = vehicle.normalizedName || vehicle.name || '';
@@ -70,7 +81,7 @@ function isRelevantMatch(vehicle, term) {
 
   const nameTokens = name.split(' ');
   return termTokens.every((tk) =>
-    nameTokens.some((tok) => tok === tk || tok.startsWith(tk))
+    nameTokens.some((tok) => tok === tk || (allowPrefix && tok.startsWith(tk)))
   );
 }
 
@@ -123,7 +134,20 @@ function buildGtaDataContext() {
  * etc) em vez de "chutar" com conhecimento genérico de treinamento.
  */
 export function buildVehicleWeaponContext(pergunta) {
+  return analisarContextoGta(pergunta).data;
+}
+
+/**
+ * { data, strong }: o texto dos veículos/armas citados (ou null) e se a pergunta tem um veículo citado por 2+ palavras inteiras ("obey 10f", "banshee 900r"),
+ * o que basta como sinal de GTA. Veículo de uma palavra só ("banshee") traz os dados dele, mas não liga o contexto de GTA (os dados do dia e do semanal,
+ * a base de conhecimento do jogo): "qual um bom baixo para tocar?" nunca pode virar o semanal do GTA.
+ * Arma só entra quando a pergunta já fala de GTA (o nome PT-BR das armas é palavra comum: "faca", "pistola", "martelo").
+ */
+export function analisarContextoGta(pergunta) {
   const parts = [];
+  const gtaTopic = isGtaTopic(pergunta);
+  const opts = { allowPrefix: gtaTopic };
+  let strong = false;
 
   // Só as primeiras 40 palavras entram na busca: cada termo custa uma varredura nos dumps de veículos e armas
   // (cerca de 0,17 ms) e uma pergunta de 6000 caracteres travava o laço de eventos por mais de 1 s.
@@ -155,20 +179,21 @@ export function buildVehicleWeaponContext(pergunta) {
       // Fonte secundária: dump DurtyFree (fallback para itens ausentes no
       // GTACars, ex.: alguns veículos especiais).
       const primary = searchGtaCarsVehicles(term, 5)
-        .filter((v) => isRelevantMatch(v, term))
+        .filter((v) => isRelevantMatch(v, term, opts))
         .slice(0, 3);
       const used =
         primary.length > 0
           ? primary
-          : searchVehicles(term, 5).filter((v) => isRelevantMatch(v, term)).slice(0, 3);
+          : searchVehicles(term, 5).filter((v) => isRelevantMatch(v, term, opts)).slice(0, 3);
       for (const v of used) {
         if (!seenVehicles.has(v.name)) {
           seenVehicles.add(v.name);
           vehicleResults.push(v);
+          if (term.includes(' ')) strong = true;
         }
       }
     }
-    if (weaponResults.length < 2) {
+    if (gtaTopic && weaponResults.length < 2) {
       for (const w of searchWeapons(term, 2)) {
         if (!seenWeapons.has(w.name)) {
           seenWeapons.add(w.name);
@@ -215,7 +240,7 @@ export function buildVehicleWeaponContext(pergunta) {
     );
   }
 
-  return parts.length > 0 ? parts.join('\n\n') : null;
+  return { data: parts.length > 0 ? parts.join('\n\n') : null, strong };
 }
 
 // Assuntos de GTA Online: só nesses casos injetamos os dados do jogo e o conhecimento
@@ -236,10 +261,13 @@ export function buildSystemPrompt(pergunta) {
   const sections = [];
   if (config.ai.systemPrompt) sections.push(config.ai.systemPrompt);
 
-  const vehicleWeaponData = buildVehicleWeaponContext(pergunta);
-  const gta = isGtaTopic(pergunta) || Boolean(vehicleWeaponData);
+  const { data: vehicleWeaponData, strong: vehicleStrong } = analisarContextoGta(pergunta);
+  const gtaTopic = isGtaTopic(pergunta);
+  // O contexto de GTA (conhecimento do jogo) liga com palavra de GTA na pergunta ou com um veículo citado pelo nome inteiro (2+ palavras). Os dados do dia e do
+  // semanal só ligam com palavra de GTA: um veículo, sozinho, nunca basta para trazer o semanal para uma conversa que não é sobre o jogo.
+  const gta = gtaTopic || vehicleStrong;
 
-  if (gta) {
+  if (gtaTopic) {
     const gtaData = buildGtaDataContext();
     if (gtaData) {
       sections.push(

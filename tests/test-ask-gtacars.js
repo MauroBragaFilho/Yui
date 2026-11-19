@@ -14,8 +14,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   buildVehicleWeaponContext,
+  buildSystemPrompt,
+  isGtaTopic,
   askCommand,
 } from '../src/discord/commands/ask.js';
+import { hasWeaponDataLoaded } from '../src/utils/weaponData.js';
+import { config } from '../src/config/index.js';
+import os from 'os';
 import { getAllVehicles } from '../src/services/gta/vehicles/gtacars/service.js';
 import { normalizeName } from '../src/services/gta/vehicles/gtacars/parser.js';
 
@@ -81,6 +86,61 @@ console.log('5. Pergunta sem veículo → nenhuma seção de veículos (sem ruí
   const context = buildVehicleWeaponContext('qual a melhor comida do brasil?');
   assert(context === null || !context.includes('DADOS TÉCNICOS DE VEÍCULOS'), 'sem seção de veículos');
   console.log('   OK — nenhum dado técnico de veículo injetado para assunto não-veicular.\n');
+}
+
+console.log('6. Pergunta que NÃO é de GTA não leva dados do jogo (caso real de 19/11/2026: "qual um bom baixo para tocar?" respondeu o semanal do GTA):');
+{
+  // "bom" é o começo de "Bombushka" e "para" o de "Paragon": sem palavra de GTA na pergunta só vale o NOME INTEIRO da palavra
+  const SEM_GTA = [
+    'qual um bom baixo para tocar?',
+    'qual a melhor guitarra para tocar rock?',
+    'me indica um bom restaurante para jantar',
+    'qual a melhor moto para andar na cidade?',
+    'qual a melhor faca de cozinha?',
+    'qual o melhor destino de turismo no Brasil?',
+    'chama um taxi pra mim',
+  ];
+  const CONTEXTO_GTA = /Dados REAIS e atuais do GTA Online|DADOS DA SEMANA|DADOS DO SEMANAL|DADOS DE HOJE|DADOS TÉCNICOS DE VEÍCULOS|ARMAS ENCONTRADAS/;
+  for (const q of SEM_GTA) {
+    assert.equal(isGtaTopic(q), false, 'não é assunto de GTA: ' + q);
+    assert.equal(buildVehicleWeaponContext(q), null, 'sem dados de veículo/arma em: ' + q);
+    // (buildSystemPrompt só mexe no banco do GTA quando o assunto é GTA: aqui o banco nem está iniciado, e não pode ser tocado)
+    assert(!CONTEXTO_GTA.test(buildSystemPrompt(q)), 'o prompt não leva o contexto de GTA em: ' + q);
+  }
+  // o veículo citado pelo nome inteiro continua achado, com ou sem a palavra GTA...
+  const banshee = buildVehicleWeaponContext('qual a velocidade do banshee?');
+  assert(banshee && banshee.includes('Banshee'), 'veículo de uma palavra inteira continua achado');
+  // ...mas, sozinho, não liga os dados do dia e do semanal (o banco do GTA nem é tocado)
+  assert(!/Dados REAIS e atuais do GTA Online|DADOS DA SEMANA|DADOS DO SEMANAL/.test(buildSystemPrompt('qual a velocidade do banshee?')), 'veículo sozinho não traz o semanal');
+  // a base de conhecimento de GTA só entra com palavra de GTA ou com um veículo citado por 2+ palavras inteiras ("obey 10f"); veículo de uma palavra só não basta
+  {
+    const kb = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-conhecimento-'));
+    fs.writeFileSync(path.join(kb, 'regras-do-jogo-gta.md'), 'MARCADOR-CONHECIMENTO-GTA');
+    fs.writeFileSync(path.join(kb, 'geral.md'), 'MARCADOR-CONHECIMENTO-GERAL');
+    const antes = config.ai.knowledgeDir;
+    config.ai.knowledgeDir = kb;
+    try {
+      const um = buildSystemPrompt('qual a velocidade do banshee?');
+      assert(um.includes('MARCADOR-CONHECIMENTO-GERAL') && !um.includes('MARCADOR-CONHECIMENTO-GTA'), 'veículo de uma palavra só não liga o conhecimento de GTA');
+      const dois = buildSystemPrompt('o obey 10f vale a pena?');
+      assert(dois.includes('MARCADOR-CONHECIMENTO-GTA'), 'veículo citado por 2+ palavras inteiras liga o conhecimento de GTA');
+      const nenhum = buildSystemPrompt('qual um bom baixo para tocar?');
+      assert(!nenhum.includes('MARCADOR-CONHECIMENTO-GTA'), 'pergunta comum nunca leva o conhecimento de GTA');
+    } finally {
+      config.ai.knowledgeDir = antes;
+      try { fs.rmSync(kb, { recursive: true, force: true }); } catch { /* o Windows pode segurar o arquivo */ }
+    }
+  }
+  // arma: o nome em português é palavra comum; só entra quando a pergunta fala de GTA
+  if (hasWeaponDataLoaded()) {
+    assert.equal(buildVehicleWeaponContext('qual a melhor pistola para comprar?'), null, 'arma sem palavra de GTA não entra');
+    const comGta = buildVehicleWeaponContext('qual a melhor pistola do gta?');
+    assert(comGta && comGta.includes('ARMAS ENCONTRADAS'), 'com palavra de GTA a arma entra');
+  }
+  // e quando a pergunta É de GTA, o casamento por começo de palavra volta (quem digita "banshe" ou "sultan r")
+  assert.equal(isGtaTopic('qual a van de armas hoje?'), true);
+  assert.equal(isGtaTopic('qual o bônus semanal do gta?'), true);
+  console.log('   OK — nenhuma das ' + SEM_GTA.length + ' perguntas comuns recebeu dados de GTA; veículo e arma de GTA continuam funcionando.\n');
 }
 
 console.log('\n✅ test-ask-gtacars: todos os cenários passaram.');
