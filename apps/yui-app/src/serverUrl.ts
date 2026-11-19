@@ -8,9 +8,6 @@ import { normalizeBaseUrl } from './api/client.ts';
  *  1. EXPO_PUBLIC_YUI_SERVER_URL (definida na hora do build; é o caso do app Android);
  *  2. web: o mesmo computador que serviu a página, na porta da API (padrão 3939);
  *  3. nenhum: o app mostra que o servidor não foi configurado neste build.
- *
- * Este arquivo resolve UM endereço (o único do build, ou o da web). A lista de endereços (EXPO_PUBLIC_YUI_SERVER_URLS: rede local e Tailscale)
- * e a escolha do que responde ficam em servidores.ts.
  */
 export interface ServerUrlInput {
   /** Valor de EXPO_PUBLIC_YUI_SERVER_URL. */

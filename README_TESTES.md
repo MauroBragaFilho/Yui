@@ -175,7 +175,7 @@ node tests/test-weekly-embed-ptbr.js       # embed semanal (página 1 e detalhes
 node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 ```
 
-**App:** em `apps/yui-app`, `npm test` roda a lógica do app (157 testes: API real, lembretes, painel de lives, Visão Geral, saúde do computador, tela de Arquivos, diagnóstico, servidor do painel com repasse ao BDS, a lista de dois endereços do servidor com a escolha do que responde e a volta ao reserva, a **prova de identidade do servidor** (SHA-512 e Ed25519 em TypeScript puro com os vetores do FIPS 180-4 e do RFC 8032, e os cenários com servidor legítimo e impostores que não recebem credencial nenhuma) e o painel compilado em dia com o código-fonte) e `npx tsc --noEmit` confere os tipos.
+**App:** em `apps/yui-app`, `npm test` roda a lógica do app (57 testes: API real, lembretes, painel de lives, Visão Geral, saúde do computador, tela de Arquivos, servidor do painel com repasse ao BDS e o painel compilado em dia com o código-fonte) e `npx tsc --noEmit` confere os tipos.
 
 **Yui Desktop** (janela do computador, em `D:\Projetos\Projeto Jarvis\Yui Desktop`): `npm test` (14) e `npm run smoke` (abre a janela de verdade contra uma Yui falsa; nunca toca a Yui real).
 

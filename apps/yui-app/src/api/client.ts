@@ -226,22 +226,19 @@ export interface MemoryItem {
 
 export class ApiError extends Error {
   status: number;
-  /** Só nas falhas de rede (status 0): 'conexao' = não conectou/caiu; 'prazo' = o tempo máximo acabou sem resposta. */
-  rede?: 'conexao' | 'prazo';
-  constructor(status: number, message: string, rede?: 'conexao' | 'prazo') {
+  constructor(status: number, message: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-    if (rede) this.rede = rede;
   }
 }
 
 /**
- * Lê o endereço do servidor como URL (só http/https):
- *  - sem esquema: usa https para *.ts.net (Tailscale Serve) e http nos demais.
- * Devolve o objeto URL COMPLETO (com usuário/senha, se vieram): quem precisa recusar isso olha `username`/`password`.
+ * Normaliza o endereço do servidor digitado pelo usuário:
+ *  - sem esquema: usa https para *.ts.net (Tailscale Serve) e http nos demais;
+ *  - remove barras finais e um eventual "/v1".
  */
-export function parseServerUrl(input: string): URL {
+export function normalizeBaseUrl(input: string): string {
   let raw = String(input ?? '').trim();
   if (!raw) throw new ApiError(0, 'Informe o endereço do servidor.');
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
@@ -256,38 +253,12 @@ export function parseServerUrl(input: string): URL {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new ApiError(0, 'Use um endereço http:// ou https://.');
   }
-  return url;
-}
-
-/**
- * Normaliza o endereço do servidor:
- *  - sem esquema: usa https para *.ts.net (Tailscale Serve) e http nos demais;
- *  - remove barras finais e um eventual "/v1".
- */
-export function normalizeBaseUrl(input: string): string {
-  const url = parseServerUrl(input);
   const path = url.pathname.replace(/\/+$/, '').replace(/\/v1$/, '');
   return `${url.protocol}//${url.host}${path}`;
 }
 
-/**
- * De onde o cliente tira o endereço do servidor quando o app tem mais de um (rede local e Tailscale). Implementada em `servidores.ts`
- * (sem React). O cliente SÓ envia pedido (e, portanto, token ou senha) ao endereço que `baseUrl()` devolver: ele já passou pela sonda.
- */
-export interface FonteDeServidor {
-  /** O endereço a usar agora. Se ainda não há um escolhido, sonda os endereços (sem token) e devolve o primeiro que responde; senão, rejeita (ApiError 0). */
-  baseUrl(): Promise<string>;
-  /** Depois de uma falha de rede em `falhou`: refaz a escolha e devolve o novo endereço (pode ser o mesmo), ou null se nenhum responde. */
-  refazer(falhou: string): Promise<string | null>;
-  /** O endereço em uso (ou o preferido, se ainda não há escolha), só para mostrar na tela. Nunca faz rede. */
-  atual(): string;
-}
-
 export interface ClientOptions {
-  /** Endereço fixo (um só). Ignorado quando `servidor` vem. */
-  baseUrl?: string;
-  /** Vários endereços com escolha automática (rede local e Tailscale). */
-  servidor?: FonteDeServidor;
+  baseUrl: string;
   token: string;
   fetchImpl?: typeof fetch;
   /** Tempo máximo por requisição (respostas de IA podem demorar). */
@@ -305,24 +276,17 @@ function messageForStatus(status: number, serverMessage?: string): string {
 }
 
 export function createClient(options: ClientOptions) {
-  const fonte = options.servidor ?? null;
-  const fixa = fonte ? null : normalizeBaseUrl(options.baseUrl ?? '');
+  const baseUrl = normalizeBaseUrl(options.baseUrl);
   const token = String(options.token ?? '').trim();
   const doFetch: typeof fetch = options.fetchImpl ?? ((...args) => fetch(...args));
   const defaultTimeout = options.timeoutMs ?? 130_000;
 
-  /** O endereço a usar agora. Com vários endereços, só devolve um que já passou pela sonda (que não leva token). */
-  async function getBase(): Promise<string> {
-    return fonte ? fonte.baseUrl() : (fixa as string);
-  }
-
-  /** Uma tentativa de pedido a `base`. Falha de rede vira ApiError com status 0 e `rede` ('conexao' ou 'prazo'); resposta do servidor (mesmo erro HTTP) nunca é "falha de rede". */
-  async function uma<T>(base: string, method: string, path: string, body: unknown, timeoutMs: number): Promise<T> {
+  async function request<T>(method: string, path: string, body?: unknown, timeoutMs = defaultTimeout): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
     try {
-      res = await doFetch(`${base}${path}`, {
+      res = await doFetch(`${baseUrl}${path}`, {
         method,
         headers: {
           Accept: 'application/json',
@@ -338,8 +302,7 @@ export function createClient(options: ClientOptions) {
         0,
         aborted
           ? 'O servidor demorou demais para responder.'
-          : 'Não foi possível conectar ao servidor. Verifique o endereço, o Tailscale e se o PC está ligado.',
-        aborted ? 'prazo' : 'conexao'
+          : 'Não foi possível conectar ao servidor. Verifique o endereço, o Tailscale e se o PC está ligado.'
       );
     } finally {
       clearTimeout(timer);
@@ -359,29 +322,8 @@ export function createClient(options: ClientOptions) {
     return data as T;
   }
 
-  /**
-   * Faz o pedido. Com vários endereços: se a rede falhar no meio do uso (não um erro HTTP do servidor), refaz a escolha UMA vez e repete o pedido UMA vez
-   * (nunca em laço: a segunda falha sobe como está). Depois de uma espera esgotada no MESMO endereço (servidor lento, não caído), não repete: um pedido lento
-   * não pode ser executado em dobro.
-   */
-  async function request<T>(method: string, path: string, body?: unknown, timeoutMs = defaultTimeout): Promise<T> {
-    const base = await getBase();
-    try {
-      return await uma<T>(base, method, path, body, timeoutMs);
-    } catch (err) {
-      if (!fonte || !(err instanceof ApiError) || !err.rede) throw err;
-      const novo = await fonte.refazer(base);
-      if (!novo) throw err;
-      if (novo === base && err.rede === 'prazo') throw err;
-      return await uma<T>(novo, method, path, body, timeoutMs);
-    }
-  }
-
   return {
-    /** O endereço em uso agora (com vários endereços, pode mudar durante o uso). */
-    get baseUrl(): string {
-      return fonte ? fonte.atual() : (fixa as string);
-    },
+    baseUrl,
     health: () => request<Health>('GET', '/v1/health', undefined, 15_000),
     me: () => request<Me>('GET', '/v1/me', undefined, 15_000),
     /** Conversa pelo Agent: responde, executa ferramenta ou pede confirmação. */
@@ -431,26 +373,22 @@ export function createClient(options: ClientOptions) {
       /** Endereço curto (10 min) para abrir/baixar um arquivo no navegador sem cabeçalho de login. `inline` = tocar/mostrar em vez de baixar. */
       link: async (caminho: string, inline: boolean): Promise<string> => {
         const r = await request<{ url: string }>('POST', '/v1/admin/bds/link', { caminho, inline }, 20_000);
-        return `${await getBase()}${r.url}`; // o endereço que acabou de responder (pode ter mudado no pedido)
+        return `${baseUrl}${r.url}`;
       },
       /** Igual a `link`, mas devolve também por quantos minutos o endereço vale (o servidor informa; a tela não chuta). */
       linkInfo: async (caminho: string, inline: boolean): Promise<{ url: string; minutes: number | null }> => {
         const r = await request<{ url: string; expiresInSec?: number }>('POST', '/v1/admin/bds/link', { caminho, inline }, 20_000);
-        return { url: `${await getBase()}${r.url}`, minutes: typeof r.expiresInSec === 'number' ? Math.max(1, Math.round(r.expiresInSec / 60)) : null };
+        return { url: `${baseUrl}${r.url}`, minutes: typeof r.expiresInSec === 'number' ? Math.max(1, Math.round(r.expiresInSec / 60)) : null };
       },
-      /** Envia um arquivo (web): corpo em fluxo, com progresso. Devolve { bytes }. Se a conexão cair, refaz a escolha do endereço para a próxima tentativa, mas NÃO repete o envio sozinho. */
-      upload: async (caminho: string, file: Blob, onProgress?: (enviado: number, total: number) => void) => {
-        const base = await getBase();
-        return new Promise<{ bytes?: number }>((resolve, reject) => {
+      /** Envia um arquivo (web): corpo em fluxo, com progresso. Devolve { bytes }. */
+      upload: (caminho: string, file: Blob, onProgress?: (enviado: number, total: number) => void) =>
+        new Promise<{ bytes?: number }>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open('PUT', `${base}/v1/admin/bds/upload?caminho=${encodeURIComponent(caminho)}`);
+          xhr.open('PUT', `${baseUrl}/v1/admin/bds/upload?caminho=${encodeURIComponent(caminho)}`);
           if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
           xhr.setRequestHeader('Content-Type', 'application/octet-stream');
           xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total); };
-          xhr.onerror = () => {
-            if (fonte) fonte.refazer(base).catch(() => null);
-            reject(new ApiError(0, 'Não foi possível enviar: a conexão caiu.'));
-          };
+          xhr.onerror = () => reject(new ApiError(0, 'Não foi possível enviar: a conexão caiu.'));
           xhr.onabort = () => reject(new ApiError(0, 'Envio cancelado.'));
           xhr.onload = () => {
             let data: any = null;
@@ -460,8 +398,7 @@ export function createClient(options: ClientOptions) {
             else reject(new ApiError(xhr.status, messageForStatus(xhr.status, data?.error)));
           };
           xhr.send(file);
-        });
-      },
+        }),
     },
 
     // ── Painel de administração (somente o dono) ──
