@@ -2,7 +2,7 @@
 // Compila o painel web para a pasta VERSIONADA painel-web/ (é de lá que o atualizador do notebook leva o painel).
 //   npm run painel:build      (dentro de apps/yui-app)  -> rode e comite ANTES de dar push de qualquer mudança no app.
 // O build sai SEM endereço de servidor embutido: o painel usa o mesmo endereço em que a página foi aberta (porta 3939),
-// por isso a variável EXPO_PUBLIC_YUI_SERVER_URL é removida do ambiente aqui.
+// por isso as variáveis EXPO_PUBLIC_YUI_SERVER_URL e EXPO_PUBLIC_YUI_SERVER_URLS (a lista do app Android) são removidas do ambiente aqui.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -13,6 +13,7 @@ const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(appDir, 'painel-web');
 const env = { ...process.env };
 delete env.EXPO_PUBLIC_YUI_SERVER_URL;
+delete env.EXPO_PUBLIC_YUI_SERVER_URLS;
 
 console.log('Compilando o painel web (expo export)...');
 const r = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['expo', 'export', '--platform', 'web', '--clear', '--output-dir', 'painel-web'], {

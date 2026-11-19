@@ -3,10 +3,12 @@ import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ApiError, type Diagnostico, type Health, type Me, type YuiClient } from '../api/client.ts';
 import { Badge, Button, Card, PageHeader } from '../components/ui.tsx';
 import { DIAGNOSTICO_ATUALIZA_MS, podeVerDiagnostico, visaoDoDiagnostico, type Cartao, type Tom } from '../diagnosticoLogic.ts';
+import type { GerenciadorDeServidor } from '../servidores.ts';
 import { colors, spacing } from '../theme.ts';
+import { useTextoDoServidor } from '../useServidor.ts';
 import { getTheme, setTheme, type ThemeMode } from '../web.ts';
 
-type Props = { client: YuiClient; me: Me; onLogout: () => void };
+type Props = { client: YuiClient; me: Me; /** Os endereços do servidor (para mostrar qual está em uso). */ servidor?: GerenciadorDeServidor | null; onLogout: () => void };
 
 const ROLE_LABEL: Record<string, string> = {
   OWNER: 'Dono',
@@ -91,7 +93,8 @@ function DiagnosticoDoServidor({ client }: { client: YuiClient }) {
   );
 }
 
-export function StatusScreen({ client, me, onLogout }: Props) {
+export function StatusScreen({ client, me, servidor = null, onLogout }: Props) {
+  const textoServidor = useTextoDoServidor(servidor);
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -127,7 +130,7 @@ export function StatusScreen({ client, me, onLogout }: Props) {
           <Text style={styles.label}>Servidor</Text>
           <Badge label={online ? '● Online' : '● Offline'} color={online ? colors.success : colors.danger} />
         </View>
-        <Text selectable style={styles.value}>{client.baseUrl}</Text>
+        <Text testID="status-servidor" selectable style={styles.value}>{textoServidor ?? client.baseUrl}</Text>
         {error ? <Text testID="status-error" style={styles.error}>{error}</Text> : null}
         <Button label="Atualizar" variant="ghost" onPress={refresh} loading={loading} />
       </Card>

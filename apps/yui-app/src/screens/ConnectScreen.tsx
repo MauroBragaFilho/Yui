@@ -3,11 +3,15 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput
 import { ApiError, createClient, type LoginResult, type Me } from '../api/client.ts';
 import { Button, Card, Chip } from '../components/ui.tsx';
 import type { Settings } from '../storage.ts';
+import type { GerenciadorDeServidor } from '../servidores.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
+import { useTextoDoServidor } from '../useServidor.ts';
 
 type Props = {
-  /** Servidor desta instalação (vem da configuração do build; o usuário não digita). */
-  serverUrl: string | null;
+  /** Os endereços do servidor desta instalação (vêm da configuração do build; o usuário não digita). null = não configurado. */
+  servidor: GerenciadorDeServidor | null;
+  /** Aviso curto quando o build trouxe endereços e nenhum serve. */
+  aviso?: string | null;
   /** Aviso mostrado no topo (ex.: "Sua sessão expirou"). */
   notice?: string | null;
   onConnected: (settings: Settings, me: Me) => void;
@@ -18,7 +22,7 @@ type AuthStatus = { passwordLogin: boolean; discordKey: boolean };
 
 const RESEND_SECONDS = 30;
 
-export function ConnectScreen({ serverUrl, notice = null, onConnected }: Props) {
+export function ConnectScreen({ servidor, aviso = null, notice = null, onConnected }: Props) {
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('password');
@@ -33,17 +37,17 @@ export function ConnectScreen({ serverUrl, notice = null, onConnected }: Props) 
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadStatus = useCallback(async () => {
-    if (!serverUrl) return;
+    if (!servidor) return;
     setStatusError(null);
     try {
-      const st = await createClient({ baseUrl: serverUrl, token: '' }).authStatus();
+      const st = await createClient({ servidor, token: '' }).authStatus();
       setStatus(st);
       setMode(st.passwordLogin ? 'password' : 'discord');
     } catch (e) {
       setStatus(null);
       setStatusError(e instanceof ApiError ? e.message : 'Não foi possível falar com o servidor.');
     }
-  }, [serverUrl]);
+  }, [servidor]);
 
   useEffect(() => {
     loadStatus();
@@ -64,19 +68,20 @@ export function ConnectScreen({ serverUrl, notice = null, onConnected }: Props) 
     }, 1000);
   }
 
-  async function finish(baseUrl: string, session: LoginResult) {
-    const me = await createClient({ baseUrl, token: session.token }).me();
-    onConnected({ baseUrl, token: session.token, via: 'session', expiresAt: session.expiresAt }, me);
+  async function finish(session: LoginResult) {
+    if (!servidor) return;
+    const me = await createClient({ servidor, token: session.token }).me();
+    onConnected({ baseUrl: servidor.atual(), token: session.token, via: 'session', expiresAt: session.expiresAt }, me);
   }
 
   async function loginWithPassword() {
-    if (!serverUrl) return;
+    if (!servidor) return;
     setError(null);
     setBusy(true);
     try {
-      const session = await createClient({ baseUrl: serverUrl, token: '' }).login(user.trim(), password);
+      const session = await createClient({ servidor, token: '' }).login(user.trim(), password);
       setPassword(''); // a senha nunca fica guardada: só a sessão
-      await finish(serverUrl, session);
+      await finish(session);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Falha ao entrar.');
     } finally {
@@ -85,12 +90,12 @@ export function ConnectScreen({ serverUrl, notice = null, onConnected }: Props) 
   }
 
   async function requestKey() {
-    if (!serverUrl) return;
+    if (!servidor) return;
     setError(null);
     setInfo(null);
     setBusy(true);
     try {
-      const r = await createClient({ baseUrl: serverUrl, token: '' }).discordRequest();
+      const r = await createClient({ servidor, token: '' }).discordRequest();
       setSent(true);
       setCode('');
       setInfo(`Enviei uma mensagem privada no seu Discord com a chave. Ela vale por ${Math.max(1, Math.round(r.expiresInSeconds / 60))} minutos e só pode ser usada uma vez.`);
@@ -103,13 +108,13 @@ export function ConnectScreen({ serverUrl, notice = null, onConnected }: Props) 
   }
 
   async function loginWithKey() {
-    if (!serverUrl) return;
+    if (!servidor) return;
     setError(null);
     setBusy(true);
     try {
-      const session = await createClient({ baseUrl: serverUrl, token: '' }).discordVerify(code);
+      const session = await createClient({ servidor, token: '' }).discordVerify(code);
       setCode('');
-      await finish(serverUrl, session);
+      await finish(session);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Falha ao entrar.');
     } finally {
@@ -117,7 +122,7 @@ export function ConnectScreen({ serverUrl, notice = null, onConnected }: Props) 
     }
   }
 
-  const host = serverUrl ? serverUrl.replace(/^https?:\/\//, '') : null;
+  const textoServidor = useTextoDoServidor(servidor);
   const both = Boolean(status?.passwordLogin && status?.discordKey);
   const nothing = status && !status.passwordLogin && !status.discordKey;
 
@@ -129,14 +134,14 @@ export function ConnectScreen({ serverUrl, notice = null, onConnected }: Props) 
 
         {notice ? <Text testID="connect-notice" style={styles.notice}>{notice}</Text> : null}
 
-        {!serverUrl ? (
+        {!servidor ? (
           <Card style={styles.card}>
-            <Text testID="no-server" style={styles.error}>Servidor não configurado neste app.</Text>
-            <Text style={styles.hint}>Gere o app com a variável EXPO_PUBLIC_YUI_SERVER_URL apontando para o seu servidor da Yui (veja o README do app).</Text>
+            <Text testID="no-server" style={styles.error}>{aviso ?? 'Servidor não configurado neste app.'}</Text>
+            <Text style={styles.hint}>Gere o app com a variável EXPO_PUBLIC_YUI_SERVER_URLS (rede local e Tailscale, separados por vírgula) ou EXPO_PUBLIC_YUI_SERVER_URL apontando para o seu servidor da Yui (veja o README do app).</Text>
           </Card>
         ) : (
           <Card style={styles.card}>
-            <Text style={styles.hint} testID="server-host">Servidor: {host}</Text>
+            <Text style={styles.hint} testID="server-host">{textoServidor}</Text>
 
             {statusError ? (
               <>

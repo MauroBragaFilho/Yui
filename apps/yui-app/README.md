@@ -12,7 +12,7 @@ Cliente da **Yui** para **Android** e **web/desktop**, feito com **Expo (React N
 | 📁 **Arquivos** | *Só para o dono; precisa de `YUI_BDS_URL` no servidor.* O servidor de arquivos **BDS** dentro do painel: navegar pelas pastas (trilha clicável), buscar, ver recentes e o espaço do disco, **assistir/ouvir/ver** vídeo, áudio, foto e PDF pelo navegador (link curto de 10 min), baixar, **enviar** (botão ou arrastar e soltar, com progresso), criar pasta, renomear, apagar para a **lixeira** (com restaurar e apagar de vez, sempre com confirmação) e a aba *Servidor* (estado do computador e auditoria). Tudo passa pela API da Yui; o painel nunca fala direto com o BDS Server. |
 | 🧠 **Memória** | Lista, adiciona e apaga o que a Yui lembra de você. Mostra se é a memória **pessoal (permanente)** ou **temporária (30 dias)**. |
 | 🛠️ **Admin** | *Só para o dono.* Visão geral da Yui, integrações (o que está ligado ou falta configurar), sessões do rádio (pausar, retomar, parar, tirar da call), logs (com segredos mascarados), servidores (canais, YouTube/Twitch) e AutoMod, banimentos, memória dos usuários (só metadados), **IA** (chaves, provedores e teste), auditoria, ferramentas, mensagem no seu Discord e reinício. |
-| ⚙️ **Status** | Estado do servidor, seu papel, tipo de memória e backend de IA em uso. Botão para sair do dispositivo. |
+| ⚙️ **Status** | Estado do servidor e **qual endereço está em uso** (rede local ou reserva, quando o build tem mais de um), seu papel, tipo de memória e backend de IA em uso. Botão para sair do dispositivo. |
 
 ## Visual
 
@@ -51,8 +51,29 @@ npm run android        # abra o QR code no Expo Go (celular e PC na mesma rede o
 
 O app **não pede endereço do servidor**: ele vem da configuração do build.
 
-- **Android:** defina `EXPO_PUBLIC_YUI_SERVER_URL` ao gerar/rodar o app, por exemplo `EXPO_PUBLIC_YUI_SERVER_URL=https://seu-pc.tailnet.ts.net:3939 npm run android`. Sem ela, o app avisa que o servidor não foi configurado. Há um modelo em `.env.example`.
-- **Web:** usa o mesmo computador que serviu a página, na porta `3939` (mude com `EXPO_PUBLIC_YUI_API_PORT` ao gerar o build, ou aponte outro servidor com `EXPO_PUBLIC_YUI_SERVER_URL`).
+- **Android:** defina `EXPO_PUBLIC_YUI_SERVER_URLS` (a lista de endereços, veja [Dois endereços do servidor](#dois-endereços-do-servidor-rede-local-e-tailscale)) ou, para um endereço só, `EXPO_PUBLIC_YUI_SERVER_URL` ao gerar/rodar o app, por exemplo `EXPO_PUBLIC_YUI_SERVER_URL=https://seu-pc.tailnet.ts.net:3939 npm run android`. Sem nenhuma das duas, o app avisa que o servidor não foi configurado. Há um modelo em `.env.example`.
+- **Web:** usa o mesmo computador que serviu a página, na porta `3939` (mude com `EXPO_PUBLIC_YUI_API_PORT` ao gerar o build, ou aponte outro servidor com `EXPO_PUBLIC_YUI_SERVER_URL`). A lista de endereços não vale na web.
+
+### Dois endereços do servidor (rede local e Tailscale)
+
+Em casa, o computador da Yui costuma ser alcançado pelo endereço da **rede local**; fora de casa, só pelo do **Tailscale**. Para ter **uma versão só** do app que funcione nos dois lugares, o build aceita uma **lista de endereços**, em ordem de preferência, separados por vírgula:
+
+```bash
+EXPO_PUBLIC_YUI_SERVER_URLS=http://<ip-da-rede-local>:3939,http://<ip-do-tailscale>:3939 npm run android
+```
+
+Os endereços reais ficam **só na variável de ambiente do build** (ou no seu `.env` local, que não vai para o repositório); nada de endereço real em arquivo versionado.
+
+- **Ordem:** o primeiro é o **preferido** (use o da rede local) e os seguintes são **reserva**. No máximo **4** endereços. Cada item precisa ser `http` ou `https`, com host e porta válidos e **sem usuário nem senha** na URL; item inválido ou repetido é ignorado. Se **todos** forem inválidos, o app avisa ("Os endereços do servidor configurados neste app são inválidos.") e não conecta em lugar nenhum.
+- **Escolha:** ao abrir e depois de uma falha de rede, o app consulta `GET <endereço>/v1/health` (só leitura, **sem token**) na ordem de preferência, com prazo de 2,5 s para o primeiro e 4 s para os demais, e usa o **primeiro que responde `ok`**. Ele lembra o último que funcionou (só o endereço, no armazenamento do app) e tenta esse primeiro na próxima vez; um endereço lembrado que saiu da lista do build é esquecido.
+- **No meio do uso:** se a conexão cair (falha de rede, não erro HTTP do servidor), o app refaz a escolha **uma vez** e repete o pedido **uma vez**, sem laço. Uma espera esgotada no mesmo endereço (servidor lento, não caído) não é repetida, para um pedido lento não rodar em dobro, e o envio de arquivo não é repetido sozinho.
+- **Sessão e segurança:** a sessão (o token) é do servidor e vale nos dois endereços. O app **nunca envia token nem senha a um endereço que não passou pela consulta**.
+- **Status:** a aba mostra qual endereço está em uso: `Servidor: <host> (rede local)` quando é o primeiro da lista e `Servidor: <host> (reserva)` nos demais. O rótulo vem da **ordem** da lista; o app não tenta adivinhar a rede.
+- **Um endereço só** (`EXPO_PUBLIC_YUI_SERVER_URL`, ou uma lista de um item) e a **web** funcionam como sempre: sem consulta e sem reserva. O `npm run painel:build` remove as duas variáveis do ambiente.
+
+### Android e HTTP sem TLS
+
+O Android 9 ou mais novo **bloqueia `http://` em apps de produção** (APK/AAB). Como o endereço da rede local não tem certificado, o app inclui um plugin local (`plugins/withCleartextTraffic.js`, ligado em `plugins` no `app.json`, sem pacote novo) que marca `usesCleartextTraffic` no manifesto gerado pelo `expo prebuild`/EAS Build. Para voltar ao padrão do Android (só HTTPS), tire essa linha de `plugins`. Atenção: com `http://` na rede local, o login e o token passam **sem cifra** pelo Wi-Fi de casa; o caminho do Tailscale já é cifrado por ele mesmo.
 
 Na aba **Admin → IA** dá para colar chaves, ligar/desligar provedores, testar, ajustar a ordem na fila e cadastrar provedores próprios (como o OmniRoute). Em **Admin → Geral** há o botão **Enviar para o meu Discord**, que manda uma DM de teste.
 
@@ -95,14 +116,14 @@ Isso publica `https://<seu-pc>.<tailnet>.ts.net:3939` **somente na sua tailnet**
 
 ```bash
 npm run typecheck      # TypeScript
-npm test               # lógica do app contra a Yui API real (23 testes)
+npm test               # lógica do app: cliente contra a Yui API real, telas e os dois endereços do servidor
 ```
 
-Os testes sobem a API de verdade (com IA falsa) e exercitam o cliente: conexão, papel/escopo, chat, ferramenta, confirmação e cancelamento, memória (CRUD e isolamento) e histórico.
+Os testes sobem a API de verdade (com IA falsa) e exercitam o cliente: conexão, papel/escopo, chat, ferramenta, confirmação e cancelamento, memória (CRUD e isolamento) e histórico. A lista de endereços e a escolha do que responde (`src/servidores.ts`) têm testes próprios, com servidores falsos em `127.0.0.1` abertos pelo teste (`tests/servidores-logic.test.mjs`).
 
 ## Gerar um APK
 
-Opções: **EAS Build** (`npx eas build -p android --profile preview`, na nuvem da Expo) ou local com o Android SDK (`npx expo prebuild -p android` e depois `./gradlew assembleRelease` em `android/`). O identificador do app é `br.dev.braga.yui`. Para uso fora do Expo Go, prefira o endereço **HTTPS** do Tailscale: o Android bloqueia HTTP puro em apps de produção.
+Opções: **EAS Build** (`npx eas build -p android --profile preview`, na nuvem da Expo) ou local com o Android SDK (`npx expo prebuild -p android` e depois `./gradlew assembleRelease` em `android/`). O identificador do app é `br.dev.braga.yui`. Defina `EXPO_PUBLIC_YUI_SERVER_URLS` (ou `EXPO_PUBLIC_YUI_SERVER_URL`) no ambiente do build. Para endereços `http://` no APK, veja [Android e HTTP sem TLS](#android-e-http-sem-tls); o endereço **HTTPS** do Tailscale não precisa disso.
 
 ## Desktop
 

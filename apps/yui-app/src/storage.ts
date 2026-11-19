@@ -12,6 +12,7 @@ import { parseStoredHistory, trimHistory, type ChatMessage } from './chat/messag
 
 const KEY_SETTINGS = 'yui.settings.v1';
 const KEY_HISTORY = 'yui.history.v1';
+const KEY_SERVIDOR = 'yui.servidor.v1';
 
 export interface Settings {
   baseUrl: string;
@@ -49,6 +50,30 @@ export async function saveSettings(settings: Settings): Promise<void> {
     /* sem persistência: o app continua usando a sessão atual */
   }
 }
+
+/**
+ * O último endereço do servidor que funcionou (só o endereço; nada de token). O app tenta esse primeiro na próxima vez. Não é apagado ao sair do dispositivo:
+ * não é segredo, e só vale se ainda estiver na lista de endereços do build (quem confere é o servidores.ts).
+ */
+export async function loadServidorLembrado(): Promise<string | null> {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_SERVIDOR);
+    return typeof raw === 'string' && raw ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveServidorLembrado(url: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEY_SERVIDOR, url);
+  } catch {
+    /* sem persistência: o app só não lembra */
+  }
+}
+
+/** O armazém que o gerenciador de endereços (servidores.ts) usa. */
+export const armazemDoServidorLembrado = { carregar: loadServidorLembrado, salvar: saveServidorLembrado };
 
 export async function clearAll(): Promise<void> {
   try {

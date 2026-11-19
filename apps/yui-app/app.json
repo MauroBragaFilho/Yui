@@ -8,6 +8,9 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#08060e",
+    "plugins": [
+      "./plugins/withCleartextTraffic"
+    ],
     "ios": {
       "supportsTablet": true
     },
