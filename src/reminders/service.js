@@ -13,18 +13,22 @@ import { createListStore } from '../handlers/listStore.js';
 import { getReminderStore } from './assistant.js';
 import { runDueReminders } from './runner.js';
 import { composeMorningReport, morningSchedule, sendMorningReport, shouldCatchUp } from './morning.js';
+import { googleLigado } from '../integrations/google/config.js';
 
 let lists = null;
 const listStore = () => (lists ??= createListStore());
 
 /** Função que monta o relatório do dia (usada pelo agendador e pelo "resumo do dia" no chat/painel). */
 export function createMorningComposer({ client = null, env = process.env } = {}) {
-  return (now = new Date()) => composeMorningReport({
+  return (now = new Date(), { dm = false } = {}) => composeMorningReport({
     now,
     reminderStore: getReminderStore(),
     listStore: listStore(),
     ownerId: ownerUserId(env),
     health: () => buildHealthReport(collectHealth({ discordOnline: client?.isReady?.() ?? null })),
+    // Agenda e tarefas do Google (etapa 15): só no relatório que vai por DM ao dono (sendMorningReport passa dm: true) e só com YUI_GOOGLE=true; sem a chave, ou sem
+    // conexão, o relatório é idêntico ao de sempre. O "resumo do dia" pedido no chat (que pode aparecer num canal) nunca leva a agenda.
+    google: dm === true && googleLigado(env) ? async (n) => (await import('../integrations/google/index.js')).linhasDoRelatorioMatinal({ env, now: n }) : null,
   });
 }
 

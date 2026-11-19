@@ -3,7 +3,8 @@
  *   - os lembretes de hoje (e quantos há amanhã),
  *   - as pendências (itens ainda abertos nas listas pessoais),
  *   - a saúde da Yui (memória, disco, erros, atualizador, backup, religadas do watchdog).
- * Só lê o que já existe; não consulta agenda nem e-mail (ainda não estão ligados). Também sai sob pedido ("resumo do dia").
+ * Só lê o que já existe; com YUI_GOOGLE=true e conectado, o relatório por DM ganha a seção "Agenda e tarefas de hoje" (Google, somente leitura; nunca e-mail).
+ * Também sai sob pedido ("resumo do dia"), mas essa versão (que pode aparecer num canal) nunca leva a agenda do Google.
  *
  * YUI_MORNING_REPORT=false desliga (volta ao relatório de saúde sozinho); YUI_MORNING_REPORT_HOUR muda a hora (0 a 23).
  * Se a Yui estava fora do ar às 08:00, o relatório sai assim que ela volta (até o meio-dia), uma vez por dia.
@@ -35,7 +36,7 @@ function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMont
  * Texto do relatório. Tudo entra por parâmetro (puro):
  *  reminders: [{ id, text, at, repeat }]    lists: [{ name, open, items?: string[] }]    healthLines: string[]    healthIssues: string[]
  */
-export function buildMorningReport({ now = new Date(), reminders = [], lists = [], healthLines = [], healthIssues = [] } = {}) {
+export function buildMorningReport({ now = new Date(), reminders = [], lists = [], healthLines = [], healthIssues = [], googleLines = [] } = {}) {
   const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
   const today = reminders.filter((r) => sameDay(new Date(r.at), now)).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   const late = reminders.filter((r) => Date.parse(r.at) < new Date(now).setHours(0, 0, 0, 0)); // ficaram para trás (ex.: a DM falhou)
@@ -51,6 +52,9 @@ export function buildMorningReport({ now = new Date(), reminders = [], lists = [
   }
   if (today.length > MAX_REMINDER_LINES) out.push(`… e mais ${today.length - MAX_REMINDER_LINES}.`);
   if (nextDay.length) out.push(`-# Amanhã: ${nextDay.length} lembrete(s).`);
+
+  // Agenda e tarefas do Google (etapa 15, só com YUI_GOOGLE=true e conectado): sem as linhas o relatório é idêntico ao de sempre.
+  if (googleLines.length) out.push('', '**📅 Agenda e tarefas de hoje**', ...googleLines);
 
   const open = lists.filter((l) => l.open > 0);
   if (open.length) {
@@ -71,7 +75,7 @@ export function buildMorningReport({ now = new Date(), reminders = [], lists = [
 }
 
 /** Junta os dados reais (lembretes, listas do dono, saúde) e monta o texto. Tudo injetável para teste. */
-export async function composeMorningReport({ now = new Date(), reminderStore, listStore = null, ownerId = null, health = null } = {}) {
+export async function composeMorningReport({ now = new Date(), reminderStore, listStore = null, ownerId = null, health = null, google = null } = {}) {
   const reminders = reminderStore ? reminderStore.list().filter((r) => !r.userId) : []; // só os do dono (os de outras pessoas vão por DM para elas)
   let lists = [];
   if (listStore && ownerId) {
@@ -92,7 +96,12 @@ export async function composeMorningReport({ now = new Date(), reminderStore, li
       healthLines = String(r.body || '').split(String.fromCharCode(10)).filter(Boolean);
     } catch { /* sem saúde: o relatório sai sem essa parte */ }
   }
-  return buildMorningReport({ now, reminders, lists, healthLines, healthIssues });
+  // `google`: as linhas da agenda e tarefas de hoje (só o dono, só no relatório por DM; null = sem o Google). Falha = sem a seção.
+  let googleLines = [];
+  if (typeof google === 'function') {
+    try { const got = await google(now); googleLines = Array.isArray(got) ? got : []; } catch { googleLines = []; }
+  }
+  return buildMorningReport({ now, reminders, lists, healthLines, healthIssues, googleLines });
 }
 
 // ── Uma vez por dia, também depois de uma queda ──
@@ -130,7 +139,7 @@ export function shouldCatchUp(now = new Date(), schedule = morningSchedule(), la
 
 /** Monta e manda o relatório ao dono. `send` devolve true se saiu; só então marca o dia como enviado. */
 export async function sendMorningReport({ send, compose, now = new Date(), stateFile } = {}) {
-  const text = await compose(now);
+  const text = await compose(now, { dm: true }); // `dm`: este texto vai por mensagem privada ao dono (só nele entra a agenda do Google)
   const ok = (await send(text)) === true;
   if (ok) markMorningSent(now, stateFile);
   return { ok, text };

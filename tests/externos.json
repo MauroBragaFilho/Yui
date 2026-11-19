@@ -60,7 +60,11 @@
     { "teste": "test:bloqueioexterno", "excecao": "node:com-bloqueio", "recurso": "um Node filho que continua bloqueado", "justificativa": "é o teste do próprio bloqueio: a sonda confere que o neto abre e continua bloqueado" },
     { "teste": "test:bloqueioexterno", "excecao": "programa:node", "recurso": "o programa node.exe local, sem bloqueio", "justificativa": "é o teste do próprio bloqueio: a sonda confere a exceção programa:node" },
     { "teste": "test:bloqueioexterno", "excecao": "ip-da-maquina", "recurso": "o IP da própria máquina (mapeado em tempo de teste)", "justificativa": "é o teste do próprio bloqueio: a sonda confere a exceção ip-da-maquina" },
-    { "teste": "test:bloqueioexterno", "excecao": "nome-local:rebind.test", "recurso": "o nome falso rebind.test (mapeado para o loopback pelo teste)", "justificativa": "é o teste do próprio bloqueio: a sonda confere a exceção nome-local" }
+    { "teste": "test:bloqueioexterno", "excecao": "nome-local:rebind.test", "recurso": "o nome falso rebind.test (mapeado para o loopback pelo teste)", "justificativa": "é o teste do próprio bloqueio: a sonda confere a exceção nome-local" },
+    { "teste": "test:google", "excecao": "programa:icacls", "recurso": "icacls.exe (programa local do Windows)", "justificativa": "o arquivo da autorização do Google é gravado com a permissão restrita ao dono (src/integrations/google/arquivoToken.js usa o restrictFileToOwner do canal) e o teste confere a ACL de volta; só mexe numa pasta temporária, sem rede" },
+    { "teste": "test:google", "excecao": "programa:whoami", "recurso": "whoami.exe (programa local do Windows)", "justificativa": "a permissão restrita do arquivo da autorização descobre o usuário atual por SID (src/database/snapshot.js); sem rede" },
+    { "teste": "test:googleautorizar", "excecao": "programa:icacls", "recurso": "icacls.exe (programa local do Windows)", "justificativa": "o script de autorização (scripts/google-autorizar.mjs) grava o arquivo de token com a permissão restrita ao dono; só mexe numa pasta temporária, sem rede" },
+    { "teste": "test:googleautorizar", "excecao": "programa:whoami", "recurso": "whoami.exe (programa local do Windows)", "justificativa": "a permissão restrita do arquivo de token descobre o usuário atual por SID; sem rede" }
   ],
 
   "semBloqueio": [

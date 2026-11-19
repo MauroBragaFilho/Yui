@@ -17,6 +17,7 @@ Referência de todas as variáveis que a Yui lê. O arquivo `.env` fica na raiz 
 9. [Yui Core: Código](#-9-yui-core-código)
 10. [Chaves antigas ignoradas](#-10-chaves-antigas-ignoradas)
 11. [Cérebro separado e dois processos](#-11-cérebro-separado-e-dois-processos)
+12. [Google: Agenda e Tarefas (somente leitura)](#-12-google-agenda-e-tarefas-somente-leitura)
 
 ---
 
@@ -556,6 +557,19 @@ Detalhes, provas e pendências no [relatório da etapa 9](../RELATORIO_ETAPA9_PE
 - **O perfil privado (falha fechada, decisão da Liz):** só liga com a configuração **completa** (privacidade `privada`, `chaveVinculada`, `provedoresPermitidos`, o formato estrito `decisao` e o provedor da Yui cadastrado como **não anônimo** e com chave) **e** depois de uma **verificação prévia** (uma sonda sem conteúdo privado, pela mesma rota e chave, na subida do cérebro): o cabeçalho `X-OmniRoute-Decision`, lido por um leitor **estrito**, tem de nomear um provedor da lista. Em cada chamada privada real, cabeçalho ausente, inválido, em formato desconhecido ou com provedor fora da lista = a resposta **não é entregue**, a rota fica **bloqueada** (só volta por nova verificação pedida de propósito), o dono recebe um aviso (no máximo um por hora) e a auditoria registra. **O formato real do cabeçalho é desconhecido:** sem a definição do `decisao`, o perfil privado simplesmente não habilita, e o Braga precisa confirmar o formato no OmniRoute real antes de ligar. Os perfis gerais usam um leitor **tolerante**, só para o diagnóstico (cabeçalho ausente ou estranho vira "não confirmado" e a conversa segue).
 - **Limite de tokens:** o menor entre o `maxTokens` do perfil, a capacidade **conhecida** do provedor (a declarada no cadastro ou a da tabela da Yui; desconhecida não se inventa) e o teto global (`YUI_MAX_TOKENS_TETO`), e **nunca passa de 4096** nas chamadas por perfil.
 - **Diagnóstico:** `GET /v1/admin/diagnostico` ganhou `perfisDeIa` (perfis, contadores, as últimas chamadas com perfil, combo, provedor, estratégia, fallback, limite, latência e resultado, e o estado da rota privada: `desligada`, `incompleta`, `nao-verificada`, `validada`, `nao-validada` ou `bloqueada`) e `motorAgente`. Nunca leva chave, cabeçalho, prompt nem conteúdo privado.
+
+---
+
+## 📅 12. Google: Agenda e Tarefas (somente leitura)
+
+**Nada disto está ligado por padrão.** Sem `YUI_GOOGLE=true`, a Yui nunca fala com o Google e se comporta exatamente como antes. Só leitura, só o dono, só em conversa privada. O passo a passo da autorização (`node scripts/google-autorizar.mjs`), as permissões pedidas, a expiração e a segurança estão em [Google](GOOGLE.md).
+
+| Variável | Descrição | Padrão |
+|----------|-----------|--------|
+| `YUI_GOOGLE` | Liga a leitura da Agenda e das Tarefas do dono (perguntas por conversa, com o cérebro separado, e a seção "Agenda e tarefas de hoje" do relatório matinal por DM) | `false` |
+| `YUI_GOOGLE_GMAIL` | Libera o código do Gmail (somente leitura). **Só funciona** com a rota privada de IA validada (hoje desligada); sem ela, nada é baixado e a Yui responde que ainda não lê e-mails | `false` |
+| `YUI_GOOGLE_TOKEN_ARQUIVO` | Caminho do arquivo da autorização (o cliente e o refresh token: um segredo, com permissão restrita ao dono) | `secrets/google-token.json` |
+| `YUI_GOOGLE_FUSO` | Fuso (nome IANA, ex.: `America/Cuiaba`) dos "hoje", "amanhã" e "semana" das consultas. Um nome inválido volta ao padrão | `America/Sao_Paulo` |
 
 ---
 

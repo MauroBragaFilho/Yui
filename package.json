@@ -66,6 +66,8 @@
     "test:reinicioprocessos": "node tests/test-reinicio-processos.js",
     "test:ttsomniroute": "node tests/test-tts-omniroute.js",
     "test:ttsomnirouteint": "node tests/test-tts-omniroute-integracao.js",
+    "test:google": "node tests/test-google-unidade.js",
+    "test:googleautorizar": "node tests/test-google-autorizar.js",
     "test:importarmemoria": "node tests/test-importar-memoria.js",
     "test:diagnostico": "node tests/test-diagnostico.js",
     "test:atualizador": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-atualizador-dois.ps1",

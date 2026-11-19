@@ -57,6 +57,8 @@ import { contextFromWire } from './metodos.js';
 // Perfis de IA (etapa 9): o cérebro escolhe o perfil de cada chamada (seletor determinístico); o OmniRoute escolhe o provedor.
 import { selecionarPerfil, campoPerfil, MARCADOR_DE_IMAGEM } from './seletorPerfil.js';
 import { TEXTO_PRIVADA_REENVIAR } from './pesquisaRetomada.js';
+// Google (etapa 15, somente leitura, desligado): a pré-rota por código só do dono (agenda, tarefas e e-mails travado). Sem YUI_GOOGLE devolve null e nada muda.
+import { preRotaGoogle } from '../integrations/google/index.js';
 
 const TURN_ID_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 const TOOL_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -186,6 +188,8 @@ export function createChatBrain(deps = {}) {
   const now = deps.now ?? Date.now;
   // O seletor de perfil (etapa 9): injetável para teste. Sem perfil configurado devolve null e a chamada de IA fica idêntica à de antes.
   const escolherPerfil = deps.selecionarPerfil ?? ((t) => selecionarPerfil(t, { env }));
+  // A pré-rota do Google (etapa 15): injetável para teste. Sem YUI_GOOGLE devolve null.
+  const rotearGoogle = deps.google ?? ((a) => preRotaGoogle({ ...a, env }));
   const memoryBlockFor = deps.memoryBlock ?? ((ctx, query) => buildMemoryBlock(ctx, query));
   const personaFor = deps.persona ?? ((ctx) => buildPersonaPrompt(ctx));
   let toolsCache = null;
@@ -340,6 +344,15 @@ export function createChatBrain(deps = {}) {
     counters.steps += 1;
     const { ctx, call } = f;
     const sensitive = ctx.memoryScope === 'personal';
+    // Google (etapa 15): o pedido do dono à PRÓPRIA agenda/tarefas, reconhecido por código (sem YUI_GOOGLE: null, nada muda). Resposta curta (não conectado, expirou...)
+    // sai direto; com os dados, o prompt os leva CERCADOS e o passo roda sem ferramentas, sem busca e sem provedor anônimo, fora do contexto por horas.
+    const googlePendente = rotearGoogle({ ctx, call, texto: f.ownText || o.searchPrompt || '', prompt });
+    const google = googlePendente ? await googlePendente : null; // desligado: null na hora, sem esperar nada
+    if (google?.resposta) {
+      marcarPesquisado(f.turnId);
+      return { text: google.resposta, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 };
+    }
+    if (google?.prompt) { marcarPesquisado(f.turnId); prompt = google.prompt; o = { ...o, ...google.opcoes }; }
     const { target, ramKey } = f.decision;
     if (target) { try { await context.init(); } catch { /* o contexto fica só em RAM */ } }
     const history = o.noHistory ? [] : readHistory(target, ramKey, sensitive);
@@ -421,6 +434,7 @@ export function createChatBrain(deps = {}) {
         } catch { /* fica a primeira */ }
       }
     }
+    if (google?.revisar) text = google.revisar(text); // com dados do Google, uma "chamada de ferramenta" na resposta nunca é legítima
     return { text, model: `cérebro (${backend})`, failed: false, usedSearch, searchFailure, searchRetryAfterMs };
   }
 
