@@ -261,7 +261,7 @@ try {
     const dono = await say(A, PEDIDO);
     assert.match(dono, /Anotado: monitor #1 de “patch 1\.5 do Zeta” por 7 dias \(olho a cada 6 horas e aviso por mensagem privada se aparecer novidade\)\./);
     assert.doesNotMatch(dono, /IA-FALSA/, 'a IA nem foi chamada');
-    assert.match(dono, /texto puro no disco do notebook enquanto o monitor estiver ativo ou pausado .*enviado de tempos em tempos ao serviço de busca/, 'a confirmação diz onde o assunto fica e para onde vai');
+    assert.match(dono, /só assuntos públicos.*texto puro no disco da máquina onde a Yui está executando enquanto o monitor estiver ativo ou pausado .*enviado de tempos em tempos ao serviço de busca/, 'a confirmação recomenda assuntos públicos e diz onde o assunto fica e para onde vai');
     const l = await lista();
     assert.equal(l.ligado, true);
     assert.deepEqual(l.monitores.map((m) => [m.id, m.consulta, m.estado]), [[1, 'patch 1.5 do Zeta', 'ativo']]);

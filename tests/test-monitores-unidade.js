@@ -1377,13 +1377,14 @@ await test('arquivo ANTIGO com o assunto de monitores encerrados: é limpo e reg
   assert.equal(outro.obter(3).consulta, 'assunto aberto de heloisa');
 });
 
-await test('a confirmação da criação diz, em frase FIXA: texto puro, no disco do notebook, enquanto o monitor estiver ativo ou pausado (some ao acabar ou cancelar) e enviado de tempos em tempos ao serviço de busca', () => {
+await test('a confirmação da criação diz, em frase FIXA: só assuntos públicos, texto puro no disco da máquina onde a Yui está executando, enquanto o monitor estiver ativo ou pausado (some ao acabar ou cancelar) e enviado de tempos em tempos ao serviço de busca', () => {
   const rota = roteadorDe(criarStoreDeMonitores({ file: path.join(novaPasta('confirma'), 'monitores.json'), now: clock, env: {} }));
   const [, linha2, ...resto] = diga(rota, 'me avisa quando sair o patch do jogo W').split('\n');
   assert.equal(resto.length, 0);
   assert.equal(linha2, TEXTO_ONDE_FICA_O_ASSUNTO);
-  for (const parte of ['texto puro', 'disco do notebook', 'ativo ou pausado', 'some quando ele acabar ou for cancelado', 'serviço de busca', 'sem dados pessoais']) assert.ok(linha2.includes(parte), parte);
-  assert.ok(linha2.length < 260, 'frase curta');
+  for (const parte of ['só assuntos públicos', 'sem endereços, nomes de terceiros, dados pessoais ou assuntos confidenciais', 'texto puro', 'disco da máquina onde a Yui está executando', 'ativo ou pausado', 'some quando ele acabar ou for cancelado', 'serviço de busca']) assert.ok(linha2.includes(parte), parte);
+  assert.ok(!linha2.includes('notebook'), 'a frase não afirma onde a Yui roda');
+  assert.ok(linha2.length < 380, 'frase curta');
 });
 
 await test('monitor JÁ existente NÃO pesquisa depois que a pesquisa privada é desligada: buscador falso com ZERO chamadas, nenhuma cota gasta, nenhuma consulta enviada; fica adiado (nada encerrado nem apagado) e VOLTA SOZINHO; a chave é relida a CADA busca', async () => {

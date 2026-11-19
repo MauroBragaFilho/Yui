@@ -31,7 +31,7 @@ const HORA_MS = 60 * 60_000;
 export const TEXTO_PEDIR_CONSULTA = 'Sobre o que devo ficar de olho? Por exemplo: “me avisa quando sair o patch 1.5 do jogo X”.';
 export const TEXTO_SEM_PERMISSAO = 'Não posso mexer nos monitores por aqui agora (política de segurança). Peça em conversa privada comigo.';
 /** A linha FIXA da confirmação: onde o assunto fica guardado, por quanto tempo e para onde vai. */
-export const TEXTO_ONDE_FICA_O_ASSUNTO = '-# O assunto, já sem dados pessoais, fica em texto puro no disco do notebook enquanto o monitor estiver ativo ou pausado (some quando ele acabar ou for cancelado) e é enviado de tempos em tempos ao serviço de busca.';
+export const TEXTO_ONDE_FICA_O_ASSUNTO = '-# Use só assuntos públicos (sem endereços, nomes de terceiros, dados pessoais ou assuntos confidenciais): o assunto fica em texto puro no disco da máquina onde a Yui está executando enquanto o monitor estiver ativo ou pausado (some quando ele acabar ou for cancelado) e é enviado de tempos em tempos ao serviço de busca.';
 /** Acrescentada à lista quando a pesquisa privada está desligada: os monitores existem, mas estão suspensos. */
 export const TEXTO_MONITORES_SUSPENSOS = '-# A pesquisa privada não está liberada: os monitores estão suspensos (nada é buscado) até ela voltar.';
 
