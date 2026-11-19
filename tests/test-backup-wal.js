@@ -139,6 +139,8 @@ function aclOf(target) {
   const sddl = fs.readFileSync(out).toString('utf16le').split(/\r?\n/).find((l) => l.startsWith('D:')) || '';
   fs.rmSync(out, { force: true });
   const alias = { SY: 'S-1-5-18', BA: 'S-1-5-32-544' };
+  // LA = a conta Administrador embutida (RID 500): só vale como o USUÁRIO ATUAL quando o usuário atual é ela (o runner do GitHub Actions roda como essa conta); em qualquer outro caso fica sem mapa e a conferência falha
+  if (userSid && /^S-1-5-21(?:-\d+){3}-500$/.test(userSid)) alias.LA = userSid;
   const aces = [...sddl.matchAll(/\(([^;()]*);([^;()]*);([^;()]*);[^;()]*;[^;()]*;([^;()]*)\)/g)]
     .map(([, type, flags, rights, sid]) => ({ type, flags, rights, sid: alias[sid] || sid }));
   return { sddl, inheritanceOff: /^D:[A-Z]*P/.test(sddl), aces };
