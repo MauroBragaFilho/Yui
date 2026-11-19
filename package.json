@@ -88,6 +88,8 @@
     "test:atualizador": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/test-atualizador-dois.ps1",
     "test:ci": "node scripts/run-ci.mjs",
     "test:search": "node tests/test-search-skills.js",
+    "test:skillspadrao": "node tests/test-skills-padrao.js",
+    "test:skillscerebro": "node tests/test-skills-cerebro.js",
     "test:readonly": "node tests/test-readonly.js",
     "test:panel": "node tests/test-panel.js",
     "test:alerts": "node tests/test-alerts.js",

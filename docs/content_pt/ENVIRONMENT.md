@@ -401,6 +401,9 @@ Como entrar e as rotas: [Yui API](YUI_API.md).
 | `YUI_APPS` | Programas que podem ser abertos (bloqueado em somente leitura) |
 | `YUI_COMMANDS` | Comandos que a Yui pode rodar pelo **nome**: `NOME=executável args`, separados por `\|`; sem shell, com confirmação, bloqueado em somente leitura. [Comandos e skills](COMANDOS_E_SKILLS.md) |
 | `YUI_SKILLS_DIR` | Pasta das skills (receitas em texto do dono; padrão `skills/`) |
+| `YUI_SKILLS` | `true` liga as **skills no padrão aberto** ([agentskills.io](https://agentskills.io/specification)) na conversa do Discord quando a Yui roda com o cérebro separado (`YUI_CEREBRO_EXTERNO=true`): só para o dono, em DM ou canal privado, quando a mensagem é dirigida à Yui; o texto da skill escolhida orienta a resposta, sem ferramentas e sem executar nada. Padrão `false` (nada muda). [Skills](SKILLS.md) |
+| `YUI_SKILLS_PERMITIDAS` | Lista de nomes de skills liberadas (separadas por vírgula, espaço, `;` ou `\|`). Vazia = todas as skills válidas. Só vale com `YUI_SKILLS=true` |
+| `YUI_SKILLS_PASTAS` | Pastas extras de skills, além de `skills/` e `secrets/skills/` (separadas por `\|`; caminho absoluto, ou relativo à raiz da Yui). Só vale com `YUI_SKILLS=true` |
 | `YUI_FILE_ROOTS` | Pastas onde a busca de arquivos por nome é permitida |
 | `YUI_EDITOR_COMMAND` | Executável do editor usado ao abrir projetos |
 | `YUI_MCP_ALLOW` | Ferramentas MCP liberadas ao Agent (`servidor.ferramenta,...`) |

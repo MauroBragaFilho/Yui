@@ -72,6 +72,8 @@ import { createClimaService, climaConfig, detectarPedidoDeClima, interpretarResp
 import { avaliarPesquisaPorIntencao } from './intencaoBusca.js';
 import { cotaDaBusca } from './cotaDaBusca.js';
 import { comAvisoDeIndisponivel } from '../search/indisponivel.js';
+// Skills no padrão aberto (etapa 14, desligadas por padrão): só o dono, só dirigida à Yui, só texto, sem ferramentas (src/core/skills/integracao.js).
+import { skillDoPasso } from '../core/skills/integracao.js';
 
 const TURN_ID_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 const TOOL_NAME_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -448,6 +450,10 @@ export function createChatBrain(deps = {}) {
       return { text: google.resposta, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 };
     }
     if (google?.prompt) { marcarPesquisado(f.turnId); prompt = google.prompt; o = { ...o, ...google.opcoes }; }
+    // Skills (YUI_SKILLS, padrão desligado): null = não se aplica; { resposta } = a lista, por código; { bloco } = instruções do dono, sem ferramentas.
+    const skill = skillDoPasso({ f, o, env, logger });
+    if (skill?.resposta) return { text: skill.resposta, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 };
+    if (skill?.bloco) o = { ...o, noTools: true };
     const { target, ramKey } = f.decision;
     if (target) { try { await context.init(); } catch { /* o contexto fica só em RAM */ } }
     const history = o.noHistory ? [] : readHistory(target, ramKey, sensitive);
@@ -518,6 +524,7 @@ export function createChatBrain(deps = {}) {
     }
     if (usedSearch) marcarPesquisado(f.turnId);
     let system = withMemory;
+    if (skill?.bloco) system += skill.bloco;
     // Com a web ou o clima no prompt as ferramentas saem desta chamada: a resposta é o texto, nunca o JSON de uma ferramenta. Na pesquisa por intenção as
     // ferramentas saem também quando a busca NÃO deu certo: o modelo não pode chamar search_web depois (o bot recusaria na conversa privada).
     if (!o.noTools && !usedSearch && !dadosDoClima && !porIntencao) system += toolsDefinitionFromNames({ allTools: allTools(), active: channel.toolsActive, disabled: channel.toolsDisabled, offerSearch });

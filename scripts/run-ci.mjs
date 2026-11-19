@@ -32,6 +32,9 @@ export const SUITES = [
   'test:dev', 'test:security', 'test:approvals', 'test:routes', 'test:discordguard', 'test:jobguard', 'test:binverify', 'test:aibaseurl', 'test:lockverify',
   'test:importgraph', 'test:dbnative', 'test:backupwal', 'test:contextnative',
   'test:coreresearch', 'test:ownerlock', 'test:channel',
+  // Etapa 14 (item 4a): skills no padrão aberto (agentskills.io), DESLIGADAS por padrão (YUI_SKILLS). O carregador, a validação da especificação, a escolha determinística e a prova de que nada
+  // de uma skill é executado (num processo só, pasta temporária); e a conversa do cérebro com a IA falsa: só o dono, só dirigida à Yui, sem ferramentas, chave desligada = nada muda.
+  'test:skillspadrao', 'test:skillscerebro',
   // Etapa 3: cérebro e bot em processos de verdade (cópia do código e bancos em pasta temporária, IA falsa, token falso).
   'test:separacao',
   // Etapa 4: operação dos dois processos (supervisor de verdade, quedas, idempotência persistente, backup com o cérebro

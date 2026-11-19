@@ -38,7 +38,9 @@ function parseFile(text, fallbackName) {
     }
   }
   const name = String(meta.name || fallbackName).trim().toLowerCase();
-  return { name, description: String(meta.description || '').slice(0, 200), instructions: body.trim() };
+  // Skill no padrão aberto (agentskills.io; traz o campo `metadata`): é do carregador novo (src/core/skills/), que só vale com YUI_SKILLS=true.
+  // Este leitor simples (Agent do app) a ignora, para a pasta skills/ da Yui não mudar o Agent de quem não ligou a chave.
+  return { name, description: String(meta.description || '').slice(0, 200), instructions: body.trim(), padraoAberto: Object.prototype.hasOwnProperty.call(meta, 'metadata') };
 }
 
 /** Lê as skills válidas da pasta (arquivo grande, nome inválido ou vazio é ignorado). */
@@ -54,7 +56,7 @@ export function loadSkills(env = process.env) {
       const stat = fs.statSync(file);
       if (!stat.isFile() || stat.size > MAX_FILE_BYTES) continue;
       const skill = parseFile(fs.readFileSync(file, 'utf8'), e.isDirectory() ? e.name : e.name.replace(/\.md$/i, ''));
-      if (NAME_RE.test(skill.name) && skill.instructions && !skills.some((s) => s.name === skill.name)) skills.push(skill);
+      if (!skill.padraoAberto && NAME_RE.test(skill.name) && skill.instructions && !skills.some((s) => s.name === skill.name)) skills.push(skill);
     } catch { /* arquivo ilegível: ignora */ }
   }
   return skills.sort((a, b) => a.name.localeCompare(b.name));
