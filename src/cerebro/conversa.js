@@ -68,7 +68,7 @@ import { TEXTO_PRIVADA_REENVIAR } from './pesquisaRetomada.js';
 // Google (etapa 15, somente leitura, desligado): a pré-rota por código só do dono (agenda, tarefas e e-mails travado). Sem YUI_GOOGLE devolve null e nada muda.
 import { preRotaGoogle } from '../integrations/google/index.js';
 // Etapa 11: o clima como ferramenta própria e a pesquisa por intenção.
-import { createClimaService, climaConfig, detectarPedidoDeClima, interpretarRespostaDeCidade, montarPromptDeClima, textoDeFalhaDoClima } from '../core/tools/clima.js';
+import { createClimaService, climaConfig, detectarPedidoDeClima, interpretarContinuacaoDeClima, interpretarRespostaDeCidade, montarPromptDeClima, textoDeFalhaDoClima } from '../core/tools/clima.js';
 import { avaliarPesquisaPorIntencao } from './intencaoBusca.js';
 import { cotaDaBusca } from './cotaDaBusca.js';
 import { comAvisoDeIndisponivel } from '../search/indisponivel.js';
@@ -235,7 +235,7 @@ export function createChatBrain(deps = {}) {
   const queues = new Map();
   const counters = { steps: 0, commits: 0, repeatedCommits: 0, duplicatesBlocked: 0, aiFailures: 0, regenerated: 0, contextRecorded: 0, historyRecorded: 0, autoSearches: 0, autoSearchUsed: 0, researchedContextBlocked: 0,
     // etapa 11 (só números): a pesquisa por intenção (decidida, sem cota para uma busca que ninguém pediu) e o clima (pedidos, respondidos, falhas)
-    intencaoBusca: 0, intencaoSemCota: 0, intencaoErro: 0, climaPedidos: 0, climaRespondidos: 0, climaFalhas: 0, climaPerguntouCidade: 0 };
+    intencaoBusca: 0, intencaoSemCota: 0, intencaoErro: 0, climaPedidos: 0, climaRespondidos: 0, climaFalhas: 0, climaPerguntouCidade: 0, climaContinuacoes: 0, climaVariosLocais: 0 };
   /** Turnos que pesquisaram (por id): a troca deles nunca entra no contexto por horas. */
   const researched = new Map();
   /** A web achada pela busca automática de cada turno (só em RAM, por WEB_TTL_MS): a nova resposta "com a mesma web" não pesquisa de novo. */
@@ -341,6 +341,14 @@ export function createChatBrain(deps = {}) {
   const CIDADE_PENDENTE_MS = 10 * 60_000;
   const cidadePendente = new Map();
   const chaveDaCidade = (f) => `${f.ctx.userId}|${f.realChannelId ?? 'dm'}`;
+  // O último pedido de clima ATENDIDO (da mesma pessoa, na mesma conversa): só por ele "e de São Paulo?" é entendido como a continuação do pedido (10 min, só em RAM).
+  const ultimoClima = new Map();
+  function marcarUltimoClima(f, quando) {
+    const chave = chaveDaCidade(f);
+    ultimoClima.delete(chave);
+    ultimoClima.set(chave, { em: now(), quando });
+    while (ultimoClima.size > 500) ultimoClima.delete(ultimoClima.keys().next().value);
+  }
   function marcarCidadePendente(f) {
     const chave = chaveDaCidade(f);
     cidadePendente.delete(chave);
@@ -360,10 +368,16 @@ export function createChatBrain(deps = {}) {
     const desde = cidadePendente.get(chave);
     const valida = desde !== undefined && now() - desde <= CIDADE_PENDENTE_MS;
     if (consumir && desde !== undefined) cidadePendente.delete(chave);
-    if (d.clima) return { local: d.local, quando: d.quando, origem: 'pedido' };
+    if (d.clima) return { local: d.local, locais: d.locais ?? (d.local ? [d.local] : []), quando: d.quando, origem: 'pedido' };
     if (valida) {
       const local = interpretarRespostaDeCidade(texto);
-      if (local) return { local, quando: { tipo: 'hoje', rotulo: 'hoje' }, origem: 'resposta' };
+      if (local) return { local, locais: [local], quando: { tipo: 'hoje', rotulo: 'hoje' }, origem: 'resposta' };
+    }
+    // "e de São Paulo?" logo depois de um pedido de clima atendido: o mesmo pedido (o mesmo "quando") para o outro lugar
+    const ultimo = ultimoClima.get(chave);
+    if (ultimo && now() - ultimo.em <= CIDADE_PENDENTE_MS) {
+      const locais = interpretarContinuacaoDeClima(texto);
+      if (locais?.length) return { local: locais[0], locais, quando: ultimo.quando, origem: 'continuacao' };
     }
     return null;
   }
@@ -475,15 +489,27 @@ export function createChatBrain(deps = {}) {
     // O CLIMA (etapa 11): ferramenta própria, decidida por código sobre a fala do próprio autor (a chamada principal da fila ou a resposta do /yui). Sai só o
     // nome do local. Sem os dados (falha, cota, local não achado, sem cidade) a Yui responde UMA frase fixa, sem chamar a IA: o modelo nunca inventa o tempo.
     let dadosDoClima = null;
+    let semDadosDoClima = [];
     // (o `noTools` ORIGINAL: o Google e a skill o ligam depois, e o clima precisa continuar valendo com eles)
     const textoDoAutor = extra.textoDoAutor ?? (principalNaOrigem && !semFerramentasNaOrigem ? f.ownText : null);
     const pedidoClima = pedidoDeClimaDoTurno(f, o, textoDoAutor, true);
     if (pedidoClima) {
       counters.climaPedidos += 1;
-      const r = await clima.obter({ local: pedidoClima.local, quando: pedidoClima.quando, userId: ctx.userId });
-      if (r.ok) {
+      if (pedidoClima.origem === 'continuacao') counters.climaContinuacoes += 1;
+      const locaisPedidos = pedidoClima.locais?.length ? pedidoClima.locais.slice(0, 3) : [pedidoClima.local];
+      if (locaisPedidos.length > 1) counters.climaVariosLocais += 1;
+      const resultados = [];
+      for (const lugar of locaisPedidos) resultados.push({ lugar, r: await clima.obter({ local: lugar, quando: pedidoClima.quando, userId: ctx.userId }) });
+      const comDados = resultados.filter((x) => x.r.ok);
+      const semDadosNomes = resultados.filter((x) => !x.r.ok && x.lugar?.nome).map((x) => `${x.lugar.nome}${x.lugar.uf ? `-${x.lugar.uf}` : ''}`);
+      const r = comDados.length ? comDados[0].r : resultados[0].r;
+      logger.info?.(`[Conversa] clima: origem=${pedidoClima.origem} locais=${locaisPedidos.length} com_dados=${comDados.length}`);
+      if (comDados.length) {
         counters.climaRespondidos += 1;
-        dadosDoClima = r.dados;
+        dadosDoClima = comDados.length > 1 || semDadosNomes.length ? comDados.map((x) => x.r.dados) : comDados[0].r.dados;
+        if (semDadosNomes.length) dadosDoClima = Array.isArray(dadosDoClima) ? dadosDoClima : [dadosDoClima];
+        semDadosDoClima = semDadosNomes;
+        marcarUltimoClima(f, pedidoClima.quando);
       } else {
         if (r.motivo === 'sem_local') counters.climaPerguntouCidade += 1; else counters.climaFalhas += 1;
         // a Yui acabou de perguntar a cidade (ou de dizer que não achou): só a próxima fala desta pessoa, em até 10 min, pode ser a resposta
@@ -518,7 +544,7 @@ export function createChatBrain(deps = {}) {
     if (porIntencao && !dadosDoClima) counters.intencaoBusca += 1; // só conta a decisão que o passo de fato usou (não a que o Google, a skill ou o clima assumiram)
     const privadaPorIntencao = (porIntencao && intencaoDoPasso.privado === true) || extra.privadaPorIntencao === true;
     if (dadosDoClima) {
-      finalPrompt = montarPromptDeClima({ dados: dadosDoClima, userPrompt: prompt });
+      finalPrompt = montarPromptDeClima({ dados: dadosDoClima, userPrompt: prompt, semDados: semDadosDoClima });
     } else if (o.reuseWeb) {
       const web = webDoTurno(f.turnId);
       if (web) { finalPrompt = buildWebContextPrompt({ context: web, userPrompt: prompt }); usedSearch = true; }

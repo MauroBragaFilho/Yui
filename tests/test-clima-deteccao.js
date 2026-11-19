@@ -5,7 +5,7 @@
 // como "promessa vazia" pelas portas do bot); e todos os códigos WMO traduzidos.
 // Execução: npm run test:climadeteccao
 import assert from 'node:assert/strict';
-import { detectarPedidoDeClima, misturaComFerramenta, interpretarLocal, interpretarRespostaDeCidade, traduzirCodigoDoTempo, UF_PARA_ESTADO, TEXTO_CLIMA_FALHA, TEXTO_CLIMA_SEM_CIDADE, TEXTO_CLIMA_LOCAL_NAO_ACHADO, TEXTO_CLIMA_LIMITE, textoDeFalhaDoClima } from '../src/core/tools/clima.js';
+import { detectarPedidoDeClima, interpretarContinuacaoDeClima, misturaComFerramenta, interpretarLocal, interpretarRespostaDeCidade, traduzirCodigoDoTempo, UF_PARA_ESTADO, TEXTO_CLIMA_FALHA, TEXTO_CLIMA_SEM_CIDADE, TEXTO_CLIMA_LOCAL_NAO_ACHADO, TEXTO_CLIMA_LIMITE, textoDeFalhaDoClima } from '../src/core/tools/clima.js';
 import { detectUnfulfilledPromise, finalGuardDetailed } from '../src/core/ai/searchIntent.js';
 
 let passed = 0;
@@ -272,6 +272,41 @@ await test('A1: a resposta a "De qual cidade?" tem de PARECER o nome de um lugar
   assert.deepEqual(interpretarRespostaDeCidade('Cuiabá-MT'), { nome: 'Cuiabá', uf: 'MT' });
   assert.deepEqual(interpretarRespostaDeCidade('na cidade de Campinas, SP'), { nome: 'Campinas', uf: 'SP' });
   assert.deepEqual(interpretarRespostaDeCidade('SP'), { nome: 'São Paulo', uf: null });
+});
+
+await test('VÁRIOS LOCAIS: "o clima em cuiabá e o de curitiba" lê os dois, na ordem, até 3, sem repetir; o que não parece lugar encerra a lista', () => {
+  const nomes = (t) => detectarPedidoDeClima(t).locais.map((l) => `${l.nome}${l.uf ? `-${l.uf}` : ''}`);
+  assert.deepEqual(nomes('Tudo tranquilo como esquilo, poderia me informar o clima em cuiabá e o de curitiba para hoje?'), ['cuiabá', 'curitiba']);
+  assert.deepEqual(nomes('como está o tempo em Curitiba e em Porto Alegre?'), ['Curitiba', 'Porto Alegre']);
+  assert.deepEqual(nomes('clima em Cuiabá, Curitiba e Manaus hoje'), ['Cuiabá', 'Curitiba', 'Manaus']);
+  assert.deepEqual(nomes('clima em Cuiabá-MT e Curitiba-PR amanhã'), ['Cuiabá-MT', 'Curitiba-PR']);
+  assert.deepEqual(nomes('clima em Cuiabá, Curitiba, Manaus e Recife'), ['Cuiabá', 'Curitiba', 'Manaus'], 'no máximo 3 locais');
+  assert.deepEqual(nomes('clima em Cuiabá-MT e Cuiabá-MT'), ['Cuiabá-MT'], 'sem repetir');
+  assert.deepEqual(nomes('clima em Cuiabá e hoje vai chover?'), ['Cuiabá'], 'o que não é nome encerra a lista');
+  assert.deepEqual(nomes('qual o clima em Cuiabá e o meu pai tem câncer'), ['Cuiabá'], 'texto da conversa nunca vira o segundo local');
+  assert.deepEqual(nomes('clima em Cuiabá e o Pedro'), ['Cuiabá'], '"e o Pedro" nunca vira o segundo local (só cidade conhecida, Cidade-UF ou com preposição)');
+  assert.deepEqual(nomes('clima em Cuiabá e Pedro'), ['Cuiabá']);
+  assert.deepEqual(nomes('clima em Cuiabá e o de Curitiba'), ['Cuiabá', 'Curitiba']);
+  assert.equal(detectarPedidoDeClima('como está o clima hoje?').locais.length, 0, 'sem local: lista vazia (usa a cidade padrão)');
+  assert.equal(detectarPedidoDeClima('oi tudo bem?').clima, false);
+  assert.deepEqual(detectarPedidoDeClima('oi tudo bem?').locais, []);
+  assert.deepEqual(local('o clima em cuiabá e o de curitiba para hoje'), { nome: 'cuiabá', uf: null }, 'o campo `local` continua sendo o primeiro');
+});
+
+await test('CONTINUAÇÃO: "e de São Paulo?" só como a mensagem INTEIRA, com lugar de verdade (conhecido, Cidade-UF ou com a preposição), nunca nome de pessoa', () => {
+  const nomes = (t) => (interpretarContinuacaoDeClima(t) ?? []).map((l) => `${l.nome}${l.uf ? `-${l.uf}` : ''}`);
+  assert.deepEqual(nomes('e de São Paulo?'), ['São Paulo']);
+  assert.deepEqual(nomes('E em Curitiba?'), ['Curitiba']);
+  assert.deepEqual(nomes('e Curitiba?'), ['Curitiba']);
+  assert.deepEqual(nomes('e Manaus e Recife?'), ['Manaus', 'Recife']);
+  assert.deepEqual(nomes('e aí, Floripa?'), ['Florianópolis']);
+  assert.deepEqual(nomes('e no Rio de Janeiro?'), ['Rio de Janeiro']);
+  assert.deepEqual(nomes('e Cuiabá-MT?'), ['Cuiabá-MT']);
+  assert.deepEqual(nomes('e de Foz do Iguaçu?'), ['Foz do Iguaçu']);
+  for (const nao of ['e o João?', 'e você?', 'e lá?', 'e agora?', 'e o clima de Manaus', 'e de São Paulo? me lembra de ligar', 'e o Pedro, vai?', 'e vc', 'São Paulo?', 'e de', 'e ', '', 'e a Maria Clara?']) {
+    assert.equal(interpretarContinuacaoDeClima(nao), null, `não é continuação: "${nao}"`);
+  }
+  assert.equal(interpretarContinuacaoDeClima(`e de ${'São Paulo '.repeat(20)}?`), null, 'texto longo não vale');
 });
 
 await test('desempenho: entrada hostil (milhares de espaços e preposições) responde rápido', () => {

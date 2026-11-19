@@ -450,6 +450,89 @@ try {
     assert.equal(chat.stats().regenerated, 0);
   });
 
+
+  // ── Várias cidades na mesma mensagem e a continuação "e de São Paulo?" (a conversa real do Discord de 19/11/2026) ──
+  const NL = String.fromCharCode(10);
+  const locaisDoPrompt = (prompt) => String(prompt).split(NL).filter((l) => l.startsWith('Local: ')).map((l) => l.slice(7).split(' (')[0]);
+  const nomesGeocodificados = () => srv.pedidos.filter((p) => p.params && p.params.name).map((p) => p.params.name);
+
+  await test('VÁRIAS CIDADES: "o clima em cuiabá e o de curitiba para hoje" consulta as DUAS e a IA responde UMA vez com os dois locais cercados; só os nomes saem para o clima', async () => {
+    srv.limpar();
+    const { chat, ai } = brains();
+    const texto = 'Tudo tranquilo como esquilo, poderia me informar o clima em cuiabá e o de curitiba para hoje? tok-V1';
+    const { out } = await principal(chat, { user: OWNER, ...DM, text: texto });
+    assert.equal(out.usedClima, true);
+    assert.equal(conversaAi(ai).length, 1, 'a IA responde UMA vez');
+    const c = conversaAi(ai)[0];
+    assert.deepEqual(locaisDoPrompt(c.prompt), ['Cuiabá', 'Curitiba']);
+    assert.equal(c.prompt.split(UNTRUSTED_OPEN).length - 1, 1, 'um só cercado para os dois locais');
+    assert.match(c.prompt, /Há mais de um local: responda um por um/);
+    assert.deepEqual(nomesGeocodificados().map((n) => n.toLowerCase()), ['cuiabá', 'curitiba']);
+    const tudo = JSON.stringify(srv.pedidos);
+    for (const proibido of ['tok-V1', 'esquilo', 'tranquilo', 'poderia', OWNER]) assert.ok(!tudo.includes(proibido), `o servidor do clima NÃO pode ver "${proibido}"`);
+    assert.equal(chat.stats().climaVariosLocais, 1);
+  });
+
+  await test('VÁRIAS CIDADES: um local sem dados não derruba os outros (a IA recebe "Sem dados" para ele e responde uma vez); todos sem dados = a frase fixa, sem IA', async () => {
+    srv.limpar();
+    const { chat, ai } = brains();
+    const { out } = await principal(chat, { user: OWNER, ...DM, text: 'qual o clima em Curitiba e em Zzzville?' });
+    assert.equal(out.usedClima, true);
+    const c = conversaAi(ai)[0];
+    assert.deepEqual(locaisDoPrompt(c.prompt), ['Curitiba']);
+    assert.match(c.prompt, /Sem dados [^:]*: Zzzville\./);
+    assert.equal(conversaAi(ai).length, 1);
+    srv.limpar();
+    const b2 = brains();
+    const r2 = await principal(b2.chat, { user: OWNER, ...DM, text: 'qual o clima em Zzzville e em Yyyville?' });
+    assert.equal(conversaAi(b2.ai).length, 0, 'sem dado nenhum: a IA nem é chamada');
+    assert.equal(r2.out.text, TEXTO_CLIMA_LOCAL_NAO_ACHADO);
+  });
+
+  await test('CONTINUAÇÃO: "e de São Paulo?" logo depois de um pedido de clima atendido (mesma pessoa, mesma conversa) é o MESMO pedido para outro lugar; "e o João?" não vira cidade', async () => {
+    srv.limpar();
+    const { chat, ai } = brains();
+    await principal(chat, { user: OWNER, ...DM, text: 'qual o clima em Cuiabá amanhã?' });
+    srv.limpar();
+    const r = await principal(chat, { user: OWNER, ...DM, text: 'e de São Paulo?' });
+    assert.equal(r.out.usedClima, true, 'a continuação responde com o clima');
+    assert.equal(conversaAi(ai).length, 2);
+    const c = conversaAi(ai)[1];
+    assert.deepEqual(locaisDoPrompt(c.prompt), ['São Paulo']);
+    assert.match(c.prompt, /Pedido: amanhã/, 'o mesmo "quando" do pedido anterior');
+    assert.deepEqual(nomesGeocodificados(), ['São Paulo'], 'só o nome do lugar saiu');
+    assert.equal(chat.stats().climaContinuacoes, 1);
+    srv.limpar();
+    const joao = await principal(chat, { user: OWNER, ...DM, text: 'e o João?' });
+    assert.notEqual(joao.out.usedClima, true, 'nome de pessoa não vira cidade');
+    assert.deepEqual(nomesGeocodificados(), []);
+  });
+
+  await test('CONTINUAÇÃO: só vale para a MESMA pessoa na MESMA conversa, só depois de um clima atendido e só por 10 minutos', async () => {
+    srv.limpar();
+    let agora = 1_800_000_000_000;
+    const { chat } = brains({ extra: { now: () => agora } });
+    // sem pedido anterior: "e de São Paulo?" sozinho não é clima
+    const sozinho = await principal(chat, { user: OWNER, ...DM, text: 'e de São Paulo?' });
+    assert.notEqual(sozinho.out.usedClima, true);
+    await principal(chat, { user: OWNER, ...DM, text: 'clima em Manaus hoje' });
+    // outra pessoa, ou a mesma em outro canal: não
+    const outra = await principal(chat, { user: MEMBER, ...DM, text: 'e de São Paulo?' });
+    assert.notEqual(outra.out.usedClima, true, 'outra pessoa');
+    const outroCanal = await principal(chat, { user: OWNER, guild: null, channel: '777777777777777778', text: 'e de São Paulo?' });
+    assert.notEqual(outroCanal.out.usedClima, true, 'outra conversa');
+    // passados 11 minutos: não
+    agora += 11 * 60_000;
+    const tarde = await principal(chat, { user: OWNER, ...DM, text: 'e de São Paulo?' });
+    assert.notEqual(tarde.out.usedClima, true, 'depois de 10 minutos');
+    // dentro do prazo: sim
+    await principal(chat, { user: OWNER, ...DM, text: 'clima em Manaus hoje' });
+    agora += 9 * 60_000;
+    const dentro = await principal(chat, { user: OWNER, ...DM, text: 'e de São Paulo?' });
+    assert.equal(dentro.out.usedClima, true, 'dentro de 10 minutos');
+  });
+
+
   // ═════════════════════════════════════════════════════════════════════════════════════════════
   section('B. A pesquisa por intenção no chat.turn');
   // ═════════════════════════════════════════════════════════════════════════════════════════════
