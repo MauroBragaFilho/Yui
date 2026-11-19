@@ -286,7 +286,14 @@ await test('nenhuma requisição saiu do servidor falso deste teste, e o servido
   await servidor.close();
 });
 
-try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }); } catch { /* sobra em %TEMP%: inofensiva */ }
+// O logger (importado por perfis.js) deixa arquivos abertos em <tmp>/logs: fecha antes de apagar a pasta temporária (no Windows um arquivo aberto impede apagar).
 try { process.chdir(repoRoot); } catch { /* */ }
+try {
+  const { logger } = await imp('src/utils/logger.js');
+  await new Promise((resolve) => { const prazo = setTimeout(resolve, 1500); logger.on('finish', () => { clearTimeout(prazo); resolve(); }); logger.close(); });
+} catch { /* */ }
+for (let i = 0; i < 50 && fs.existsSync(tmp); i++) { // apaga assim que o sistema soltar os arquivos de log (o sinal real: a remoção funcionar)
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { await new Promise((resolve) => setTimeout(resolve, 100)); }
+}
 console.log(`\n${passed} testes OK${failures.length ? `; ${failures.length} FALHARAM: ${failures.join(' | ')}` : ''}`);
 process.exit(failures.length ? 1 : 0);
