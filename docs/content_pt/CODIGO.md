@@ -18,6 +18,7 @@ A aba **Código** do app era onde a Yui lê o código de um projeto seu, respond
 6. [Onde ficam os dados](#-6-onde-ficam-os-dados)
 7. [Limites](#-7-limites)
 8. [Problemas comuns](#-8-problemas-comuns)
+9. [Tarefas em segundo plano](#-9-tarefas-em-segundo-plano-preparado-desligado)
 
 ---
 
@@ -152,3 +153,18 @@ As três primeiras estão no `.gitignore` da Yui. **Limpar conversa** apaga o hi
 | "A Yui ainda está trabalhando em outro pedido." | Espere terminar ou clique em **Parar** |
 | Resposta estranha ou JSON na tela | O modelo não seguiu o formato de ferramentas; tente o modo **Yui**, uma pergunta mais direta ou um modelo maior |
 | Falha de IA | Veja o [Gateway](GATEWAY.md) e a aba **Admin → IA** (teste os provedores) |
+
+---
+
+## 🧪 9. Tarefas em segundo plano (preparado, desligado)
+
+Está sendo preparado o modo em que a Yui recebe uma **tarefa**, trabalha nela sozinha e entrega um **pacote de revisão** para o dono aprovar ou rejeitar. **Hoje isso não faz nada:** `YUI_DEV_TAREFAS` (padrão `false`) só vale junto com `YUI_DEV_ENABLED=true`, e o executor ainda não existe (pedir a execução devolve "não implementado"). O que já está definido e testado:
+
+- só o **dono** cria tarefas, pelo app, pelo PC ou pela DM, e só em projetos da **lista** (por nome, nunca por caminho);
+- o trabalho acontece **sempre numa branch própria** (`yui/<id>-<assunto>`) e num **worktree isolado** dentro do projeto (`.yui/worktrees/<id>`), **nunca na `main`**;
+- o `git push` só leva a branch da própria tarefa, sem força, sem apagar e sem outro destino; quem leva o trabalho para a `main` é o dono;
+- cada tarefa tem **tempo máximo** (30 minutos por padrão, de 1 minuto a 2 horas);
+- só valem os executáveis da lista do terminal (sem shell); instalar pacote, fazer push e descartar trabalho pedem a **aprovação do dono no computador**;
+- o **pacote de revisão** traz resumo, lista de arquivos, diff limitado (100 KB, sem segredos), resultado dos testes e a branch.
+
+Uma tarefa passa pelos estados `pendente`, `preparando`, `rodando`, `revisao`, `aprovada`, `rejeitada`, `falhou` e `cancelada`. As chaves estão em [Variáveis de ambiente](ENVIRONMENT.md#-13-canais-novos-e-agente-de-código).

@@ -18,6 +18,7 @@ Referência de todas as variáveis que a Yui lê. O arquivo `.env` fica na raiz 
 10. [Chaves antigas ignoradas](#-10-chaves-antigas-ignoradas)
 11. [Cérebro separado e dois processos](#-11-cérebro-separado-e-dois-processos)
 12. [Google: Agenda e Tarefas (somente leitura)](#-12-google-agenda-e-tarefas-somente-leitura)
+13. [Canais novos e agente de código](#-13-canais-novos-e-agente-de-código)
 
 ---
 
@@ -570,6 +571,15 @@ Detalhes, provas e pendências no [relatório da etapa 9](../RELATORIO_ETAPA9_PE
 | `YUI_GOOGLE_GMAIL` | Libera o código do Gmail (somente leitura). **Só funciona** com a rota privada de IA validada (hoje desligada); sem ela, nada é baixado e a Yui responde que ainda não lê e-mails | `false` |
 | `YUI_GOOGLE_TOKEN_ARQUIVO` | Caminho do arquivo da autorização (o cliente e o refresh token: um segredo, com permissão restrita ao dono) | `secrets/google-token.json` |
 | `YUI_GOOGLE_FUSO` | Fuso (nome IANA, ex.: `America/Cuiaba`) dos "hoje", "amanhã" e "semana" das consultas. Um nome inválido volta ao padrão | `America/Sao_Paulo` |
+## 🔌 13. Canais novos e agente de código
+
+**Nada disto está ligado, e nenhuma destas chaves liga uma função sozinha:** são pontos de ligação, preparados e desligados por padrão. Sem elas, a Yui se comporta exatamente como antes.
+
+| Variável | Descrição | Padrão |
+|----------|-----------|--------|
+| `YUI_YOUTUBE_LIVE` | Liga o adaptador de **YouTube Live**: um canal novo para a mesma Yui, que entra na live que o dono mandar (só o dono, só pelo Discord ou pelo app) e conversa no chat com mensagens de até 200 caracteres, sem lista nem link. Todo mundo no chat é tratado como público, inclusive o dono, e o chat nunca dá ordens à Yui. Só `true` liga. Preparado, mas ainda sem efeito: o adaptador precisa de uma conta própria no YouTube e respeita a cota diária da API | `false` |
+| `YUI_DEV_TAREFAS` | Libera as **tarefas do agente de código**: a Yui trabalha numa tarefa em segundo plano, numa branch isolada (nunca na `main`), e entrega um pacote de revisão para o dono aprovar ou rejeitar. Só vale com o módulo de código ligado (`YUI_DEV_ENABLED=true`) e só liga com `true`. Hoje existem as regras e o formato do pacote, mas não o executor: pedir a execução devolve "não implementado" (veja [Código](CODIGO.md#-9-tarefas-em-segundo-plano-preparado-desligado)) | `false` |
+| `YUI_IA_LOCAL_URL` | Endereço de um servidor de IA **local** compatível com a API da OpenAI (LM Studio, Ollama, llama.cpp...), por exemplo `http://127.0.0.1:1234/v1`. Vazio, nada é testado. Preenchido, a Yui só confere se ele responde e quantos modelos tem (para o diagnóstico) e **não usa o servidor para conversar**: o perfil de IA `local` continua reservado. Só aceita endereço da própria máquina ou da rede local, sem usuário, senha nem parâmetros | vazio (desligado) |
 
 ---
 

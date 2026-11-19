@@ -101,6 +101,14 @@ export const SUITES = [
   // matinal igual sem a chave) e o script de autorização única de verdade (PKCE, state, o retorno em 127.0.0.1, o arquivo restrito).
   'test:google',
   'test:googleautorizar',
+  // Etapa 17 (itens 6 e 7, só PREPARO, tudo desligado por chave e sem efeito): o contrato único canal <-> cérebro (pedido e resposta estritos, papel nunca vindo do pedido, tamanho e estilo por canal), o
+  // adaptador de YouTube Live contra um servidor FALSO em loopback (estados, quando falar, cota, 200 caracteres, o chat nunca manda), as tarefas do Yui Dev (máquina de estados, branch isolada, push só da branch,
+  // pacote de revisão), a sonda de hardware com saídas simuladas e o ponto de ligação da IA local (perfil `local` continua recusado). Nenhuma abre programa nem fala com serviço de verdade (~5 s no total).
+  'test:canais',
+  'test:canalyoutube',
+  'test:devtarefas',
+  'test:sondahardware',
+  'test:ialocal',
 ];
 
 function argvOf(command) {
