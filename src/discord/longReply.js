@@ -701,6 +701,57 @@ export function createProgressReporter(edit, {
  *   parte saiu, `ok` fica false e o aviso é editado na última parte entregue) e `firstReplaced` (true: a parte 1 não pôde editar o
  *   "Processando..." e saiu como mensagem NOVA em `firstMessage`; a mensagem de progresso antiga foi apagada ou trocada).
  */
+// ── Tabelas em Markdown ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+// O Discord não desenha tabela: "| Tipo | Modelo |" aparece como texto cru e desalinhado. Antes de enviar, cada tabela (cabeçalho + linha de
+// traços + linhas) fora de bloco de código vira uma lista: com 2 colunas, "- **primeira coluna**: segunda"; com 3 ou mais, o item em negrito
+// e uma sublinha "Coluna: valor" por célula preenchida. Texto sem tabela, tabela dentro de bloco de código e barras soltas ficam como estão.
+const TABELA_SEPARADOR_RE = /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+const TABELA_CERCA_RE = /^\s*(?:`{3}|~{3})/;
+const tabelaCelulas = (linha) => {
+    let t = String(linha).trim();
+    if (t.startsWith('|')) t = t.slice(1);
+    if (t.endsWith('|') && !t.endsWith('\\|')) t = t.slice(0, -1);
+    return t.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').replace(/<br\s*\/?>/gi, ' ').trim());
+};
+const pareceLinhaDeTabela = (linha) => /^\s*\|.*\|\s*$/.test(linha) && (linha.match(/\|/g) || []).length >= 2;
+const emNegrito = (v) => (v.length > 4 && v.startsWith('**') && v.endsWith('**') ? v : `**${v}**`);
+
+/** Converte as tabelas Markdown do texto em listas (veja acima). Idempotente; nunca lança. */
+export function tabelasEmLista(text) {
+    const entrada = String(text ?? '');
+    if (!entrada.includes('|')) return entrada;
+    try {
+        const linhas = entrada.split('\n');
+        const saida = [];
+        let cerca = false;
+        for (let i = 0; i < linhas.length; i++) {
+            const linha = linhas[i];
+            const limpa = linha.replace(/\r$/, '');
+            if (TABELA_CERCA_RE.test(limpa)) { cerca = !cerca; saida.push(linha); continue; }
+            if (cerca || !pareceLinhaDeTabela(limpa) || i + 1 >= linhas.length || !TABELA_SEPARADOR_RE.test(linhas[i + 1].replace(/\r$/, ''))) { saida.push(linha); continue; }
+            const cabecalho = tabelaCelulas(limpa);
+            let j = i + 2;
+            const corpo = [];
+            while (j < linhas.length && pareceLinhaDeTabela(linhas[j].replace(/\r$/, ''))) { corpo.push(tabelaCelulas(linhas[j].replace(/\r$/, ''))); j++; }
+            for (const celulas of corpo) {
+                const cheias = celulas.map((valor, k) => ({ nome: cabecalho[k] || '', valor })).filter((c) => c.valor);
+                if (!cheias.length) continue;
+                const [primeira, ...resto] = cheias;
+                if (cabecalho.length <= 2 || resto.length <= 1) {
+                    saida.push(resto.length ? `- ${emNegrito(primeira.valor)}: ${resto.map((c) => c.valor).join(' ')}` : `- ${primeira.valor}`);
+                } else {
+                    saida.push(`- ${emNegrito(primeira.valor)}`);
+                    for (const c of resto) saida.push(c.nome ? `  - ${c.nome}: ${c.valor}` : `  - ${c.valor}`);
+                }
+            }
+            i = j - 1;
+        }
+        return saida.join('\n');
+    } catch (_) {
+        return entrada;
+    }
+}
+
 export async function sendLongReply(options = {}) {
     const {
         kind = 'slash',
@@ -728,7 +779,7 @@ export async function sendLongReply(options = {}) {
     const ephemeral = options.ephemeral ?? (kind === 'slash' && interaction?.ephemeral === true);
 
     const started = now();
-    let safeText = neutralizeMassMentions(String(text ?? ''));
+    let safeText = neutralizeMassMentions(tabelasEmLista(String(text ?? '')));
     // Texto só de espaço, sem arquivo, embed nem botão: o Discord recusa mensagem vazia.
     if (!safeText.trim() && !hasExtras(files, components, embeds)) safeText = EMPTY_REPLY_TEXT;
     const { body, footer } = splitFooter(safeText);

@@ -1493,6 +1493,60 @@ await test('Q31: com só 2 partes e a 2ª perdida o aviso fala no singular; se a
   assert.ok(!/partes 2/.test(edits[1].content));
 });
 
+// ── Tabelas em Markdown viram lista ──
+const FENCE = '`' + '`' + '`';
+await test('tabelasEmLista: a tabela do caso real (3 colunas) vira lista com o item em negrito e uma sublinha por coluna', async () => {
+  const { tabelasEmLista } = lr;
+  const entrada = [
+    'Algumas opções:',
+    '',
+    '| Tipo | Modelo sugerido | Por que é legal |',
+    '|------|-----------------|-----------------|',
+    '| **Baixo clássico** | **Fender Precision Bass** | Som encorpado, ótimo para rock. |',
+    '| Baixo versátil | **Fender Jazz Bass** | Tensão mais fina. |',
+    '',
+    'Dicas rápidas:',
+  ].join('\n');
+  const saida = tabelasEmLista(entrada);
+  assert.equal(saida, [
+    'Algumas opções:',
+    '',
+    '- **Baixo clássico**',
+    '  - Modelo sugerido: **Fender Precision Bass**',
+    '  - Por que é legal: Som encorpado, ótimo para rock.',
+    '- **Baixo versátil**',
+    '  - Modelo sugerido: **Fender Jazz Bass**',
+    '  - Por que é legal: Tensão mais fina.',
+    '',
+    'Dicas rápidas:',
+  ].join('\n'));
+  assert.ok(!/\|/.test(saida), 'nenhuma barra de tabela sobra');
+  assert.equal(tabelasEmLista(saida), saida, 'idempotente');
+});
+await test('tabelasEmLista: 2 colunas viram uma linha só; célula vazia some; linha com menos células não quebra; barra escapada vira barra', async () => {
+  const { tabelasEmLista } = lr;
+  assert.equal(tabelasEmLista('| Item | Preço |\n|---|---|\n| Café | R$ 5 |\n| Pão | R$ 2 |'), '- **Café**: R$ 5\n- **Pão**: R$ 2');
+  assert.equal(tabelasEmLista('| A | B | C |\n|---|---|---|\n| x |  | z |\n| só |'), '- **x**: z\n- só');
+  assert.equal(tabelasEmLista('| A | B |\n|:--|--:|\n| 1 | 2 \\| 3 |'), '- **1**: 2 | 3');
+  assert.equal(tabelasEmLista('| A | B | C |\r\n|---|---|---|\r\n| 1 | 2 | 3 |\r\n'), '- **1**\n  - B: 2\n  - C: 3\n');
+});
+await test('tabelasEmLista: bloco de código, barras soltas, cabeçalho sem linha de traços e texto sem barra ficam como estão', async () => {
+  const { tabelasEmLista } = lr;
+  const codigo = [FENCE, '| a | b |', '|---|---|', '| 1 | 2 |', FENCE].join('\n');
+  assert.equal(tabelasEmLista(codigo), codigo);
+  for (const t of ['use a | b | c como opção', '| só um | cabeçalho |\nsem traços', 'comando: a || b', 'texto normal', '', '-# rodapé | com barra']) assert.equal(tabelasEmLista(t), t, t);
+  assert.equal(tabelasEmLista(null), '');
+  // depois do bloco de código a conversão volta
+  assert.equal(tabelasEmLista([codigo, '| A | B |', '|---|---|', '| 1 | 2 |'].join('\n')), [codigo, '- **1**: 2'].join('\n'));
+});
+await test('o envio (sendLongReply) converte a tabela antes de dividir e enviar', async () => {
+  const sent = [];
+  const interaction = { deferred: false, replied: false, reply: async (o) => { sent.push(o.content ?? o); return { id: 'm1', channel: { send: async () => ({}) } }; }, editReply: async (o) => { sent.push(o.content ?? o); return { id: 'm1' }; }, channel: null, createdTimestamp: Date.now() };
+  await sendLongReply({ kind: 'slash', interaction, text: 'Veja:\n\n| Tipo | Modelo |\n|---|---|\n| Baixo | Fender |\n' });
+  assert.ok(sent.length >= 1, 'enviou');
+  assert.ok(String(sent[0]).includes('- **Baixo**: Fender') && !String(sent[0]).includes('|---'), String(sent[0]));
+});
+
 // ── Resultado ───────────────────────────────────────────────────────────────────────────────────
 console.log(`\n${passed} teste(s) ok, ${failures.length} falha(s).`);
 if (failures.length) console.log(`Falharam: ${failures.join(' | ')}`);
