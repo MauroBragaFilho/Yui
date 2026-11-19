@@ -1,9 +1,10 @@
 // A ASSINATURA de uma busca e a limpeza dos textos que vêm da web (monitores, etapa 16).
 //
 // O monitor NUNCA guarda o texto dos resultados (os termos de alguns buscadores proíbem guardar os resultados, e o texto da web é dado
-// não confiável): do que a busca devolveu só fica um HASH dos 3 primeiros resultados (título e endereço normalizados). Se o hash mudou,
-// houve novidade. O aviso mostra só o título do 1º resultado e o domínio, passados por `tituloSeguro` (sem menção, sem link, sem
-// formatação, sem quebra de linha, curto), e nunca contém instrução para ninguém: é só um texto para a pessoa ler.
+// não confiável): do que a busca devolveu só ficam HASHES. Novidade = um endereço que o monitor ainda não tinha visto: ele guarda o CONJUNTO dos hashes curtos dos
+// endereços normalizados já vistos (`hashDoEndereco`, `resultadosComHash`), não uma assinatura em ordem (a ordem dos resultados oscila, e isso nunca é novidade).
+// `assinaturaDosResultados` (hash dos 3 primeiros em ordem) fica só como informação da última busca. O aviso mostra só o título do 1º resultado NOVO e o domínio,
+// passados por `tituloSeguro` (sem menção, sem link, sem formatação, sem quebra de linha, curto), e nunca contém instrução para ninguém: é só um texto para a pessoa ler.
 import crypto from 'node:crypto';
 
 const ASSINATURA_RE = /^[0-9a-f]{24}$/;
@@ -51,6 +52,39 @@ export function assinaturaDosResultados(resultados) {
 }
 
 export const assinaturaValida = (s) => typeof s === 'string' && ASSINATURA_RE.test(s);
+
+const VISTA_RE = /^[0-9a-f]{12}$/;
+export const vistaValida = (s) => typeof s === 'string' && VISTA_RE.test(s);
+
+/** O hash curto (12 hexadecimais) do endereço normalizado de um resultado: é só isto que o monitor guarda de cada resultado já visto (nunca o endereço, nem o título). */
+export function hashDoEndereco(url) {
+  const u = normalizarUrl(url);
+  return u ? crypto.createHash('sha256').update(`yui-monitor-url:${u}`).digest('hex').slice(0, 12) : '';
+}
+
+/**
+ * Os resultados utilizáveis (título e endereço), SEM repetir o mesmo endereço, com o hash de cada um. Os monitores comparam CONJUNTOS: a ordem dos resultados oscila de
+ * uma busca para outra (o buscador reordena, um deles sai do topo e volta), e isso nunca é novidade. Novidade é um endereço que o monitor ainda não tinha visto.
+ * @returns {{ resultado: object, hash: string }[]}
+ */
+export function resultadosComHash(resultados, max = 5) {
+  const vistos = new Set();
+  const saida = [];
+  for (const r of Array.isArray(resultados) ? resultados : []) {
+    if (!r || typeof r !== 'object' || !String(r.title ?? '').trim() || !String(r.url ?? '').trim()) continue;
+    const hash = hashDoEndereco(r.url);
+    if (!hash || vistos.has(hash)) continue;
+    vistos.add(hash);
+    saida.push({ resultado: r, hash });
+    if (saida.length >= max) break;
+  }
+  return saida;
+}
+
+/** A assinatura de UM aviso de novidade: o hash dos endereços novos (a chave de idempotência do aviso). */
+export function assinaturaDoConjunto(hashes) {
+  return crypto.createHash('sha256').update(`yui-monitor-novo:${[...hashes].sort().join('\n')}`).digest('hex').slice(0, 24);
+}
 
 /** O domínio de onde veio o resultado (sem "www."), curto; "fonte desconhecida" se o endereço não presta. */
 export function fonteDoResultado(resultado) {

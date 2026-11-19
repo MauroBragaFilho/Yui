@@ -6,7 +6,8 @@
 //
 // Regras de segurança (todas por código, nunca pelo modelo):
 //  - SÓ O DONO (o papel vem do contexto que o cérebro remontou, nunca do que o bot afirmou). Qualquer outra pessoa: a frase segue para a
-//    conversa de sempre (nada é criado, nada é dito sobre monitores);
+//    conversa de sempre (nada é criado, nada é dito sobre monitores). Com VÁRIOS donos (OWNER_IDS), o aviso sai para UM só, o `ownerUserId()` (o executor e o
+//    alertOwner usam o mesmo): um segundo dono que pedisse um monitor teria um monitor que nunca avisa, então recebe uma frase fixa dizendo isso (nada é criado);
 //  - SÓ MENSAGEM DIRIGIDA À YUI (DM, menção, nome dela ou resposta a ela; nunca conversa espontânea, voz ou prompt em nome de terceiro);
 //  - o que muda estado passa pelo motor de políticas (a mesma ação dos lembretes do painel): em `observe` só registra; em `enforce`
 //    DENY e CRITICAL recusam (o dono num canal público é "membro" na matriz: fica só a conversa privada);
@@ -32,6 +33,10 @@ export const TEXTO_PEDIR_CONSULTA = 'Sobre o que devo ficar de olho? Por exemplo
 export const TEXTO_SEM_PERMISSAO = 'Não posso mexer nos monitores por aqui agora (política de segurança). Peça em conversa privada comigo.';
 /** A linha FIXA da confirmação: onde o assunto fica guardado, por quanto tempo e para onde vai. */
 export const TEXTO_ONDE_FICA_O_ASSUNTO = '-# Use só assuntos públicos (sem endereços, nomes de terceiros, dados pessoais ou assuntos confidenciais): o assunto fica em texto puro no disco da máquina onde a Yui está executando enquanto o monitor estiver ativo ou pausado (some quando ele acabar ou for cancelado) e é enviado de tempos em tempos ao serviço de busca.';
+/** Um dono que NÃO é o dono principal (OWNER_IDS tem mais de um): os avisos saem só para o principal, então nenhum monitor é criado para ele. */
+export const TEXTO_SO_O_DONO_PRINCIPAL = 'Os monitores avisam só o dono principal da Yui (o primeiro configurado), então não crio monitores para você.';
+/** O arquivo dos monitores não pôde ser lido agora (falha fechada: nada é criado, mudado nem apagado). */
+export const TEXTO_ESTADO_INDISPONIVEL = 'Não consegui abrir o arquivo dos monitores agora, e por isso não mexo em nada. Tente de novo daqui a pouco.';
 /** Acrescentada à lista quando a pesquisa privada está desligada: os monitores existem, mas estão suspensos. */
 export const TEXTO_MONITORES_SUSPENSOS = '-# A pesquisa privada não está liberada: os monitores estão suspensos (nada é buscado) até ela voltar.';
 
@@ -75,11 +80,12 @@ export function formatarLista(monitores, now = new Date()) {
 /**
  * O roteador dos monitores. Tudo injetável para teste.
  * @param {{ store: ReturnType<import('./store.js').criarStoreDeMonitores>, now?: () => number, audit?: Function, engine?: () => object,
- *           liberada?: (userId: string) => boolean }} deps
- *   `liberada(userId)`: a pesquisa privada está liberada a esta pessoa AGORA (padrão: a regra do cérebro, relida a cada pedido)
+ *           liberada?: (userId: string) => boolean, ownerId?: string|null }} deps
+ *   `liberada(userId)`: a pesquisa privada está liberada a esta pessoa AGORA (padrão: a regra do cérebro, relida a cada pedido);
+ *   `ownerId`: o dono para quem os avisos saem (o `ownerUserId()`); só ele cria e mexe em monitores. Sem a opção (`undefined`), vale o papel de dono de quem pede (testes)
  * @returns {{ rotear: (p: {ctx: object, call: object, texto: string|null}) => {handled: boolean, text?: string} }}
  */
-export function criarRoteador({ store, now = () => Date.now(), audit = () => {}, engine = () => getPolicyEngine(), liberada = pesquisaPrivadaLiberada } = {}) {
+export function criarRoteador({ store, now = () => Date.now(), audit = () => {}, engine = () => getPolicyEngine(), liberada = pesquisaPrivadaLiberada, ownerId = undefined } = {}) {
   const NAO = Object.freeze({ handled: false });
   const registrar = (evento, ctx, dados) => { try { audit(evento, ctx, dados); } catch { /* a auditoria nunca derruba a resposta */ } };
 
@@ -101,6 +107,12 @@ export function criarRoteador({ store, now = () => Date.now(), audit = () => {},
 
   function aplicar(pedido, ctx) {
     const agora = new Date(now());
+    // Vários donos (OWNER_IDS): os avisos saem só para o `ownerUserId()`. Quem é dono mas não é esse não cria monitor (ele nunca avisaria) nem vê os de outro.
+    if (ownerId !== undefined && String(ctx.userId ?? '') !== String(ownerId ?? '')) return TEXTO_SO_O_DONO_PRINCIPAL;
+    if (pedido.acao !== 'criar-vazio') {
+      // O arquivo não pôde ser lido agora (erro passageiro do disco que persistiu): falha fechada, sem dizer "você não tem monitores" nem criar nada.
+      try { if (store.indisponivel?.() === true) return TEXTO_ESTADO_INDISPONIVEL; } catch { return TEXTO_ESTADO_INDISPONIVEL; }
+    }
     if (pedido.acao === 'listar') {
       const lista = formatarLista(store.todos().filter((m) => m.dono === ctx.userId), agora);
       return liberadaAgora(ctx) ? lista : `${lista}\n${TEXTO_MONITORES_SUSPENSOS}`;
@@ -147,6 +159,7 @@ export function criarRoteador({ store, now = () => Date.now(), audit = () => {},
         if (err.codigo === 'repetido') return `Já existe o monitor #${err.id} para essa consulta. Diga “meus monitores” para ver.`;
         if (err.codigo === 'consulta') return TEXTO_PEDIR_CONSULTA;
         if (err.codigo === 'dados') { registrar('monitor.consulta_barrada', ctx, { motivo: err.motivo }); return TEXTO_CONSULTA_BARRADA; }
+        if (err.codigo === 'indisponivel') return TEXTO_ESTADO_INDISPONIVEL;
         return 'Não consegui mexer nesse monitor agora.';
       }
       // o disco não gravou: nada foi criado, e a pessoa fica sabendo (sem detalhe técnico)

@@ -1,12 +1,15 @@
 // A EXECUÇÃO dos monitores: uma PASSADA do laço do cérebro (etapa 16, proatividade). Tudo injetável (relógio, busca, orçamento, envio).
 //
-// Para cada monitor ativo e devido: busca pela PORTA CENTRAL (searchWeb, com `privado: true`: nunca compartilhada nem reaproveitada),
-// calcula a ASSINATURA dos 3 primeiros resultados e compara com a última:
+// Para cada monitor ativo e devido: busca pela PORTA CENTRAL (searchWeb, com `privado: true`: nunca compartilhada nem reaproveitada) e compara o CONJUNTO dos
+// endereços dos resultados (os 5 primeiros, o hash curto de cada um) com o conjunto que o monitor já viu:
 //   - primeira checagem (ou a primeira depois de retomar): só guarda a referência, NUNCA avisa;
-//   - assinatura igual: nada;
-//   - assinatura diferente: UM aviso curto ao dono ("Achei novidade sobre <consulta>: <título do 1º resultado> (<fonte>)"), pelo caminho
-//     da entrega dos lembretes (entrega.js: chave por monitor + assinatura, estados e reconciliação).
-// Monitor vencido encerra sozinho e avisa UMA vez. O texto dos resultados nunca vai para o disco: só o hash.
+//   - nenhum endereço novo (a ordem mudou, um resultado saiu do topo e voltou): nada;
+//   - algum endereço novo: UM aviso curto ao dono ("Achei novidade sobre <consulta>: <título do 1º resultado NOVO> (<fonte>)"), pelo caminho
+//     da entrega dos lembretes (entrega.js: chave por monitor + hash dos endereços novos, estados e reconciliação).
+// (antes o aviso vinha do hash dos 3 primeiros resultados EM ORDEM: qualquer reordenação virava um aviso falso.)
+// Busca que falha ou volta vazia: nova tentativa com espera que DOBRA a cada falha seguida, até um teto; uma busca boa zera a conta.
+// Monitor vencido encerra sozinho e avisa UMA vez (se há um aviso de novidade aberto, o fim espera ele ser entregue: nunca o sobrescreve).
+// O texto dos resultados nunca vai para o disco: só os hashes.
 //
 // DISCIPLINA DE COTA (a mesma da pesquisa, uma reserva PRÓPRIA): os monitores buscam com uma identidade só deles (`MONITOR_USER_ID`, que não
 // gasta a cota por pessoa de ninguém) e só enquanto sobra mais que a reserva (YUI_MONITORES_RESERVA, padrão 10% do limite por hora): a conversa
@@ -27,14 +30,22 @@ import { cotaDaBusca } from '../pesquisa.js';
 import { searchWeb } from '../../search/providers.js';
 import { getDefaultBudget } from '../../search/budget.js';
 import { LIMITES, MONITOR_USER_ID, intervaloDoMonitorMs, reservaDosMonitores } from './config.js';
-import { assinaturaDosResultados, consultaSegura, fonteDoResultado, tituloSeguro } from './assinatura.js';
-import { ESTADOS, ESTADOS_DO_AVISO, TIPOS_DE_AVISO } from './store.js';
+import { assinaturaDoConjunto, assinaturaDosResultados, consultaSegura, fonteDoResultado, resultadosComHash, tituloSeguro } from './assinatura.js';
+import { ESTADOS, ESTADOS_DO_AVISO, MonitorError, TIPOS_DE_AVISO } from './store.js';
 import { chaveDaNovidade, chaveDoFim, entregarAviso } from './entrega.js';
 import { limparConsulta } from './limpeza.js';
 import { pesquisaPrivadaLiberada } from './privada.js';
 
 const iso = (ms) => new Date(ms).toISOString();
 const MAX_TEXTOS_EM_RAM = 20;
+
+/** A espera até a nova tentativa depois de `falhas` falhas seguidas (já contada a de agora): dobra a cada falha, até o teto (4x o intervalo do monitor, no máximo `falhaTetoMin`). */
+export function esperaDaFalhaMs(falhas, intervaloMs) {
+  const base = Math.min(LIMITES.falhaNovaTentativaMin * 60_000, intervaloMs);
+  const teto = Math.max(base, Math.min(LIMITES.falhaTetoMin * 60_000, intervaloMs * 4));
+  const n = Math.max(1, Math.min(30, Math.round(Number(falhas) || 1)));
+  return Math.min(teto, base * 2 ** (n - 1));
+}
 
 /** O texto do aviso de novidade: a consulta da pessoa, o título do 1º resultado (limpo) e o domínio. */
 export function textoDaNovidade(monitor, resultado) {
@@ -90,7 +101,7 @@ export function criarExecutor({
   let ocupado = false;
   const contadores = {
     passadas: 0, buscas: 0, referencias: 0, iguais: 0, novidades: 0, falhas: 0, avisosEnviados: 0, avisosReconciliados: 0, avisosIncertos: 0, encerrados: 0,
-    adiadasPorta: 0, adiadasCota: 0, adiadasLimite: 0, adiadasPrivada: 0, barrados: 0, pulouOffline: 0, pulouPolitica: 0, ignorados: 0, errosDeDisco: 0,
+    adiadasPorta: 0, adiadasCota: 0, adiadasLimite: 0, adiadasPrivada: 0, barrados: 0, pulouOffline: 0, pulouPolitica: 0, pulouIndisponivel: 0, ignorados: 0, errosDeDisco: 0,
   };
   const avisadosForaDoDono = new Set();
 
@@ -147,31 +158,42 @@ export function criarExecutor({
     const m = store.obter(monitor.id);
     if (!m || m.estado !== ESTADOS.ATIVO) return 'descartada';
     const resultados = Array.isArray(resposta?.results) ? resposta.results : [];
+    const atuais = resultadosComHash(resultados, LIMITES.resultadosPedidos);
     const assinatura = assinaturaDosResultados(resultados);
-    const proxima = iso(t + intervaloDoMonitorMs(m, env));
-    if (!assinatura) {
-      // Sem resultado utilizável (erro do buscador, nada achado): não muda a referência; tenta de novo mais cedo que o intervalo.
+    const intervalo = intervaloDoMonitorMs(m, env);
+    const proxima = iso(t + intervalo);
+    if (!atuais.length || !assinatura) {
+      // Sem resultado utilizável (erro do buscador, nada achado): não muda a referência; tenta de novo com espera crescente (dobra a cada falha, até o teto).
       contadores.falhas += 1;
-      store.atualizar(m.id, { falhas: (m.falhas ?? 0) + 1, ultimaTentativa: iso(t), proximaChecagem: iso(t + Math.min(LIMITES.falhaNovaTentativaMin * 60_000, intervaloDoMonitorMs(m, env))) });
+      const falhas = (m.falhas ?? 0) + 1;
+      store.atualizar(m.id, { falhas, ultimaTentativa: iso(t), proximaChecagem: iso(t + esperaDaFalhaMs(falhas, intervalo)) });
       return 'falha';
     }
-    if (!m.ultimaAssinatura) {
-      store.atualizar(m.id, { ultimaAssinatura: assinatura, ultimaChecagem: iso(t), proximaChecagem: proxima, falhas: 0 });
+    const hashes = atuais.map((x) => x.hash);
+    const vistas = Array.isArray(m.vistas) ? m.vistas : [];
+    if (!m.ultimaAssinatura || !vistas.length) {
+      // A referência (também a de um monitor de antes, que só tinha o hash em ordem): o conjunto de agora é o "já visto"; nunca avisa.
+      store.atualizar(m.id, { ultimaAssinatura: assinatura, vistas: hashes, ultimaChecagem: iso(t), proximaChecagem: proxima, falhas: 0 });
       contadores.referencias += 1;
       return 'referencia';
     }
-    if (assinatura === m.ultimaAssinatura) {
-      store.atualizar(m.id, { ultimaChecagem: iso(t), proximaChecagem: proxima, falhas: 0 });
+    const jaVistas = new Set(vistas);
+    const novos = atuais.filter((x) => !jaVistas.has(x.hash));
+    // O conjunto cresce (só os hashes; os mais antigos saem acima do limite): um endereço que sai do topo e volta depois NÃO é novidade.
+    const vistasNovas = [...vistas, ...novos.map((x) => x.hash)].slice(-LIMITES.vistasMax);
+    if (!novos.length) {
+      store.atualizar(m.id, { ultimaAssinatura: assinatura, ultimaChecagem: iso(t), proximaChecagem: proxima, falhas: 0 });
       contadores.iguais += 1;
       return 'igual';
     }
-    // Mudou: a nova assinatura e o aviso pendente vão para o disco JUNTOS e ANTES de qualquer envio. Uma queda daqui em diante não perde
-    // o aviso (o "enviando" é reconciliado) e não o repete (a assinatura já é a nova: a mesma mudança não é detectada de novo).
-    const chave = chaveDaNovidade(m.id, assinatura);
-    guardarTexto(chave, textoDaNovidade({ ...m, consulta: limpa.consulta }, resultados[0]));
+    // Apareceu endereço NOVO: o conjunto novo e o aviso pendente vão para o disco JUNTOS e ANTES de qualquer envio. Uma queda daqui em diante não perde
+    // o aviso (o "enviando" é reconciliado) e não o repete (os endereços já estão no conjunto: a mesma novidade não é detectada de novo).
+    const assinaturaDoAviso = assinaturaDoConjunto(novos.map((x) => x.hash));
+    const chave = chaveDaNovidade(m.id, assinaturaDoAviso);
+    guardarTexto(chave, textoDaNovidade({ ...m, consulta: limpa.consulta }, novos[0].resultado));
     store.atualizar(m.id, {
-      ultimaAssinatura: assinatura, ultimaChecagem: iso(t), proximaChecagem: proxima, falhas: 0,
-      aviso: { tipo: TIPOS_DE_AVISO.NOVIDADE, estado: ESTADOS_DO_AVISO.PENDENTE, chave, assinatura, tentativas: 0 },
+      ultimaAssinatura: assinatura, vistas: vistasNovas, ultimaChecagem: iso(t), proximaChecagem: proxima, falhas: 0,
+      aviso: { tipo: TIPOS_DE_AVISO.NOVIDADE, estado: ESTADOS_DO_AVISO.PENDENTE, chave, assinatura: assinaturaDoAviso, tentativas: 0 },
     });
     contadores.novidades += 1;
     await entregar(m);
@@ -179,7 +201,11 @@ export function criarExecutor({
   }
 
   /** O prazo acabou: encerra, APAGA o assunto do registro (na mesma gravação) e abre o aviso do fim (uma vez só: a chave é fixa). */
-  async function encerrarPorPrazo(m) {
+  async function encerrarPorPrazo(visto) {
+    // O estado de AGORA (a lista do laço é de antes: a pessoa pode ter cancelado, ou um aviso pode ter aberto, durante as esperas das entregas): só encerra o que
+    // continua aberto, vencido e SEM aviso em andamento (um aviso de novidade aberto nunca é sobrescrito pelo do fim: o fim espera a entrega dele).
+    const m = store.obter(visto.id);
+    if (!m || m.estado === ESTADOS.ENCERRADO || m.aviso || Date.parse(m.ate) > now()) return false;
     store.atualizar(m.id, {
       estado: ESTADOS.ENCERRADO, motivoFim: 'vencido', encerradoEm: iso(now()), consulta: undefined,
       aviso: { tipo: TIPOS_DE_AVISO.FIM, estado: ESTADOS_DO_AVISO.PENDENTE, chave: chaveDoFim(m.id), tentativas: 0 },
@@ -187,6 +213,7 @@ export function criarExecutor({
     contadores.encerrados += 1;
     registrar('monitor.vencido', { id: m.id });
     await entregar(m);
+    return true;
   }
 
   /** A consulta não provou limpeza (dado pessoal, segredo, palavra proibida ou limpeza que falhou): nada é buscado, o monitor encerra e o assunto é apagado. */
@@ -214,16 +241,17 @@ export function criarExecutor({
     try {
       contadores.passadas += 1;
       // 1. Os avisos que ficaram a meio caminho (um reinício, um erro do canal) e os que acabaram de abrir.
-      for (const m of store.todos()) {
-        if (!m.aviso) continue;
+      for (const visto of store.todos()) {
+        const m = store.obter(visto.id); // o estado de agora: a entrega anterior (esperas do canal) pode ter mudado este monitor
+        if (!m?.aviso) continue;
         if (m.dono !== ownerId) { if (!avisadosForaDoDono.has(m.id)) { avisadosForaDoDono.add(m.id); contadores.ignorados += 1; logger?.warn?.(`[Monitores] o monitor #${m.id} não é do dono atual: ignorado (nada é enviado).`); } continue; }
         const r = await entregar(m);
         if (r.resultado === 'enviado') saida.entregas += 1;
       }
       // 2. O prazo: o que venceu encerra sozinho e avisa uma vez.
-      for (const m of store.todos()) {
-        if (m.estado === ESTADOS.ENCERRADO || m.dono !== ownerId || Date.parse(m.ate) > now()) continue;
-        try { await encerrarPorPrazo(m); saida.encerrados += 1; } catch (err) { contadores.errosDeDisco += 1; logger?.warn?.(`[Monitores] não consegui encerrar o monitor #${m.id} (${String(err?.code ?? err?.message ?? 'erro').slice(0, 60)}); tento de novo na próxima passada.`); }
+      for (const visto of store.todos()) {
+        if (visto.estado === ESTADOS.ENCERRADO || visto.dono !== ownerId || visto.aviso || Date.parse(visto.ate) > now()) continue;
+        try { if (await encerrarPorPrazo(visto)) saida.encerrados += 1; } catch (err) { contadores.errosDeDisco += 1; logger?.warn?.(`[Monitores] não consegui encerrar o monitor #${m.id} (${String(err?.code ?? err?.message ?? 'erro').slice(0, 60)}); tento de novo na próxima passada.`); }
       }
       // 3. As checagens devidas. A cota é de todos: quando uma busca é adiada, as outras também seriam, então a passada para.
       let feitas = 0;
@@ -251,6 +279,8 @@ export function criarExecutor({
       }
       return saida;
     } catch (err) {
+      // O arquivo de estado não pôde ser lido agora: o store já avisou UMA vez no log e não grava nada; a passada só espera a próxima.
+      if (err instanceof MonitorError && err.codigo === 'indisponivel') { contadores.pulouIndisponivel += 1; return { ...saida, pulou: 'estado indisponível' }; }
       logger?.warn?.(`[Monitores] falha na passada: ${String(err?.message ?? err).slice(0, 120)}`);
       return { ...saida, erro: true };
     } finally {

@@ -10,6 +10,12 @@
 //    Padrão: DESLIGADA (sem alvo). Em teste (NODE_ENV=test) um alvo fora do computador NÃO é sondado (o bloqueio de integração externa dos
 //    testes); quando a internet volta depois de um aviso, sai um segundo aviso curto ("voltou");
 //  - SUPERVISOR: religadas do bot ou do cérebro (lê o logs/supervisor-estado.json em modo SÓ LEITURA; só contagens e o papel, nunca a saída do processo).
+//    Um REINÍCIO CONTROLADO (o pedido do dono pelo app, ou a parada limpa pelo logs/supervisor.parar e a subida do atualizador) NÃO é queda: na primeira leitura só
+//    vale o estado de um supervisor VIVO e deste cérebro (arquivo renovado há pouco, supervisor "rodando", o pid do cérebro é o deste processo) e uma saída que o
+//    próprio reinício controlado causou não conta como religada.
+// Cada tipo de evento tem o SEU intervalo de repetição (`COOLDOWN_EVENTOS_MIN`): a condição pode durar horas, e o aviso não repete a cada conferência (5 min) nem a cada
+// 30 min (o intervalo geral do alertOwner). O intervalo vale no próprio verificador e vai também ao alertOwner (`cooldownMinutes`); recomeça se o cérebro reinicia.
+// O aviso do supervisor não tem intervalo próprio: ele já é um fato novo a cada religada (a diferença das contagens), e o alertOwner o limita em 1 a cada 30 min.
 // Chave: YUI_ALERTAS_EVENTOS_MS (padrão 5 min) = de quanto em quanto tempo olha. Tudo injetável para teste.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,6 +31,12 @@ const GB = 1024 ** 3;
 const MB = 1024 ** 2;
 const MIN = 60_000;
 export const SONDAS_SEGUIDAS = 3;
+/** O intervalo mínimo (em minutos) entre dois avisos do MESMO tipo de evento. A volta da internet é um fato novo (um aviso curto, não repete a "fora"). */
+export const COOLDOWN_EVENTOS_MIN = Object.freeze({ 'evento:disco': 720, 'evento:ram': 180, 'evento:internet': 120, 'evento:internet-voltou': 5 });
+/** Quanto tempo o arquivo do supervisor pode ficar sem renovar (ele renova a cada 30 s) para ainda valer como "supervisor vivo". */
+const SUPERVISOR_VIVO_MS = 3 * MIN;
+/** A saída de um processo até este tempo depois do pedido de reinício controlado foi causada por ele (a parada limpa dos dois leva segundos). */
+const REINICIO_CONTROLADO_JANELA_MS = 3 * MIN;
 
 export function alertasPorEventoLigados(env = process.env) {
   return flag(env.YUI_ALERTAS_EVENTOS, false);
@@ -103,6 +115,25 @@ export function lerEstadoDoSupervisor(arquivo = path.join(RAIZ, 'logs', 'supervi
 const NOME_DO_PROCESSO = { cerebro: 'o cérebro', bot: 'o bot' };
 const fmt = (n, casas = 1) => Number(n).toFixed(casas).replace('.', ',');
 
+/** O arquivo descreve um supervisor VIVO e ESTE cérebro? (renovado há pouco, em "rodando" e, se traz o pid do cérebro, é o deste processo; sem o campo, vale) */
+function supervisorVivoDesteCerebro(e, c, t, pid = process.pid) {
+  if (typeof e.estado === 'string' && e.estado !== 'rodando') return false;
+  const atualizado = Date.parse(e.atualizadoEm);
+  if (Number.isFinite(atualizado) && t - atualizado > SUPERVISOR_VIVO_MS) return false;
+  if (Number.isFinite(Number(c?.pid)) && Number(c.pid) !== pid) return false;
+  return true;
+}
+
+/** A última saída do cérebro foi causada por um reinício controlado (em curso, ou pedido pouco antes dela)? Nunca é queda. */
+function saidaDoReinicioControlado(e, c) {
+  const rc = e.reinicioControlado;
+  if (!rc || typeof rc !== 'object') return false;
+  if (rc.emCurso === true) return true;
+  const pedido = Date.parse(rc.ultimo?.em);
+  const saida = Date.parse(c?.ultimaSaida?.em);
+  return Number.isFinite(pedido) && Number.isFinite(saida) && saida >= pedido - 1000 && saida - pedido <= REINICIO_CONTROLADO_JANELA_MS;
+}
+
 /**
  * O verificador (puro: as leituras, o relógio e o aviso são injetados). `passada()` olha as quatro coisas e pede os avisos.
  * @param {{ env?: object, now?: () => number, alertar?: Function, lerDisco?: () => number|null, lerRam?: () => number, sondar?: Function|null,
@@ -110,17 +141,23 @@ const fmt = (n, casas = 1) => Number(n).toFixed(casas).replace('.', ',');
  */
 export function criarVerificador({
   env = process.env, now = () => Date.now(), alertar = alertOwner, lerDisco = () => discoLivreGB(env), lerRam = ramLivreMB,
-  sondar = null, lerSupervisor = () => lerEstadoDoSupervisor(), logger = null,
+  sondar = null, lerSupervisor = () => lerEstadoDoSupervisor(), logger = null, pid = process.pid,
 } = {}) {
   const cfg = configDosEventos(env);
   const sonda = sondar ?? ((alvo) => sondaTcp(alvo, { env }));
   const estado = { ramBaixaDesde: null, internetFalhas: 0, internetForaDesde: null, internetAvisou: false, supervisorVisto: null, supervisorIdent: null, internetAlvoInvalido: false };
-  const contadores = { passadas: 0, alertasPedidos: 0, discoBaixo: 0, ramBaixa: 0, internetFora: 0, internetVoltou: 0, religadasVistas: 0, sondasBloqueadas: 0, erros: 0 };
+  const ultimoPedido = new Map(); // chave do evento -> quando foi pedido o último aviso (o intervalo de repetição por tipo)
+  const contadores = { passadas: 0, alertasPedidos: 0, alertasSuprimidos: 0, discoBaixo: 0, ramBaixa: 0, internetFora: 0, internetVoltou: 0, religadasVistas: 0, sondasBloqueadas: 0, erros: 0 };
   const ultimo = { discoLivreGB: null, ramLivreMB: null, internetFalhasSeguidas: 0, internetOk: null };
   const pedir = (saida, chave, titulo, detalhe, opcoes = {}) => {
+    // O intervalo de repetição DESTE tipo de evento: dentro dele a condição continua, mas o aviso não se repete.
+    const cooldownMinutes = COOLDOWN_EVENTOS_MIN[chave] ?? null;
+    const t = now();
+    if (cooldownMinutes && t - (ultimoPedido.get(chave) ?? -Infinity) < cooldownMinutes * MIN) { contadores.alertasSuprimidos += 1; return; }
+    ultimoPedido.set(chave, t);
     contadores.alertasPedidos += 1;
     saida.alertas.push(chave);
-    try { alertar(chave, titulo, detalhe, { level: 'warn', ...opcoes }); } catch { /* o aviso nunca derruba a passada */ }
+    try { alertar(chave, titulo, detalhe, { level: 'warn', ...(cooldownMinutes ? { cooldownMinutes } : {}), ...opcoes }); } catch { /* o aviso nunca derruba a passada */ }
   };
 
   function disco(saida) {
@@ -186,10 +223,12 @@ export function criarVerificador({
     const ident = `${e.pid ?? ''}:${e.iniciadoEm ?? ''}`;
     const delta = {};
     if (estado.supervisorVisto === null) {
-      // A primeira leitura. Se o supervisor religou ESTE cérebro há pouco, esta subida é a consequência de uma queda: avisa uma vez.
+      // A primeira leitura. Se o supervisor religou ESTE cérebro há pouco, esta subida é a consequência de uma queda: avisa uma vez. NÃO avisa quando o arquivo não é de
+      // um supervisor vivo que descreve este cérebro (a parada limpa pelo supervisor.parar deixa o arquivo do supervisor que saiu, parado ou sem renovar), nem quando a
+      // saída do cérebro foi causada por um REINÍCIO CONTROLADO (o contador de religadas pode vir de uma queda antiga e a subida de agora é recente de qualquer jeito).
       const c = e.processos.cerebro;
       const recente = c && Number(c.religadas) > 0 && Number.isFinite(Date.parse(c.iniciadoEm)) && t - Date.parse(c.iniciadoEm) < Math.max(15 * MIN, cfg.tickMs + 10 * MIN);
-      if (recente) delta.cerebro = 1;
+      if (recente && supervisorVivoDesteCerebro(e, c, t, pid) && !saidaDoReinicioControlado(e, c)) delta.cerebro = 1;
     } else if (ident !== estado.supervisorIdent) {
       // Outro supervisor (reiniciou o próprio): os contadores recomeçaram; só passa a olhar daqui para a frente.
     } else {

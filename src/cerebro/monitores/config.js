@@ -31,8 +31,14 @@ export const LIMITES = Object.freeze({
   /** Quantos registros o arquivo guarda (os encerrados mais antigos saem primeiro) e por quanto tempo um encerrado fica. */
   maxRegistros: 40,
   encerradoGuardadoMs: 7 * 24 * 60 * 60_000,
-  /** Depois de uma busca que falhou, quanto tempo até a nova tentativa (no máximo o intervalo do monitor). */
+  /**
+   * Depois de uma busca que falhou (ou que não trouxe resultado nenhum), quanto tempo até a nova tentativa (no máximo o intervalo do monitor). A espera DOBRA a cada
+   * falha seguida (30, 60, 120, 240 min...) até o teto: 4 vezes o intervalo do monitor, no máximo `falhaTetoMin`. Uma busca boa zera a conta (retomada).
+   */
   falhaNovaTentativaMin: 30,
+  falhaTetoMin: 720,
+  /** Quantos endereços já vistos (só o hash curto de cada um) o monitor guarda: o aviso é só do que NÃO está neste conjunto. */
+  vistasMax: 60,
   /** O aviso que o Discord recusa com certeza (DM fechada): quantas passadas antes de desistir (e registrar). */
   avisoMaxTentativas: 24,
   /** O aviso com a entrega incerta tenta reconciliar de novo a cada tanto, e depois deste tempo é descartado (com registro). */

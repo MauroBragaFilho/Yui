@@ -9,7 +9,7 @@
 // O laço é do CÉREBRO (YUI_MONITORES_MS, padrão 10 min): sem o cérebro separado (processo único) não há monitores.
 import { audit as auditoria } from '../../core/audit.js';
 import { jobAllowed } from '../../core/security/jobGuard.js';
-import { ESTADOS, criarStoreDeMonitores } from './store.js';
+import { ESTADOS, MonitorError, criarStoreDeMonitores } from './store.js';
 import { monitoresLigados, reservaDosMonitores, tickDosMonitoresMs } from './config.js';
 import { consultaSegura } from './assinatura.js';
 import { criarExecutor } from './executor.js';
@@ -71,7 +71,7 @@ export function iniciarMonitores({
     buscar: buscar ?? ativarBuscaFalsaDosMonitores({ env, logger }),
     audit, logger, canalPronto, passadaPermitida: () => permitido('monitores.tick'), liberada: aLiberada, ...(scrub ? { scrub } : {}),
   });
-  const roteador = criarRoteador({ store: estado, now, audit, liberada: aLiberada, ...(engine ? { engine } : {}) });
+  const roteador = criarRoteador({ store: estado, now, audit, liberada: aLiberada, ownerId, ...(engine ? { engine } : {}) });
 
   const rodar = (motivo) => executor.passada(motivo).catch(() => ({ erro: true }));
   const primeira = setTimeout(() => { rodar('subida'); }, Math.min(tickMs, 15_000));
@@ -88,7 +88,12 @@ export function iniciarMonitores({
     /** Uma passada agora (ex.: o bot acabou de conectar e pode haver aviso a confirmar). */
     passada: (motivo = 'pedido') => rodar(motivo),
     /** Os monitores para a rota de administração (só o que a vista mostra). */
-    listar: () => estado.todos().map(vistaDoMonitor),
+    listar: () => {
+      try { return estado.todos().map(vistaDoMonitor); } catch (err) {
+        if (err instanceof MonitorError && err.codigo === 'indisponivel') return []; // o arquivo não pôde ser lido agora: `status().indisponivel` diz isso (a lista não lança)
+        throw err;
+      }
+    },
     /** Cancela um monitor pelo painel/API (a pedido do dono). true se cancelou. */
     cancelar(id) {
       const r = estado.cancelar(id);

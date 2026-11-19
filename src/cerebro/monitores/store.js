@@ -7,22 +7,31 @@
 // Mesmo padrão do lembretes.json (src/reminders/store.js) e do diário da pesquisa (src/cerebro/pesquisaRetomada.js).
 //
 // O que cada monitor guarda:
-//   { id, dono, consulta, criadoEm, ate, intervaloMin, ultimaChecagem, ultimaAssinatura, estado: ativo|pausado|encerrado, avisos,
+//   { id, dono, consulta, criadoEm, ate, intervaloMin, ultimaChecagem, ultimaAssinatura, vistas, estado: ativo|pausado|encerrado, avisos,
 //     proximaChecagem, falhas, aviso, motivoFim, encerradoEm }
-// NUNCA o texto dos resultados da busca (nem título, nem trecho, nem endereço): só `ultimaAssinatura`, o hash dos 3 primeiros resultados.
+// NUNCA o texto dos resultados da busca (nem título, nem trecho, nem endereço): só `ultimaAssinatura` (o hash dos 3 primeiros resultados da última busca, só
+// informativo) e `vistas`, o CONJUNTO dos resultados já vistos (o hash curto de 12 caracteres do endereço de cada um, no máximo `LIMITES.vistasMax`): o aviso é só do que
+// NÃO está no conjunto (a ordem dos resultados oscila e isso nunca é novidade).
 // `consulta` é o que a PESSOA pediu, JÁ LIMPA de dado pessoal e segredo (limpeza.js: a mesma da pesquisa privada; falha fechada: sem prova de que está limpa, o
 // monitor nem é criado). Fica em TEXTO PURO enquanto o monitor está ativo ou pausado e é APAGADA, na mesma gravação, quando ele é cancelado, vence ou é
 // encerrado por qualquer motivo (do monitor encerrado sobram só o número, o estado, o motivo, a data e as contagens). Um arquivo antigo que ainda tenha o texto
 // de um encerrado é limpo e regravado ao carregar. `aviso` é a entrega de UM aviso em andamento (veja entrega.js):
 //   { tipo: 'novidade'|'fim', estado: 'pendente'|'enviando'|'incerto', chave, assinatura?, tentativas, desde?, proximaTentativa?, motivo? }
-// (a chave de idempotência, o estado e nada do conteúdo do aviso). Arquivo ilegível: a cópia vai para `monitores.json.corrompido` e o
-// estado recomeça vazio (nunca derruba a Yui).
+// (a chave de idempotência, o estado e nada do conteúdo do aviso).
+// LEITURA: só `ENOENT` (o arquivo não existe) significa "vazio". Um erro passageiro do disco (EBUSY, EPERM, EACCES: antivírus, indexador) repete a leitura; se persistir, o
+// estado fica INDISPONÍVEL (falha fechada: nada é lido, gravado nem apagado, com UM aviso no log, sem o assunto) e a leitura é tentada de novo na próxima chamada. Só um
+// arquivo que LEU mas não é um JSON válido (ou é grande demais) é "ilegível": uma cópia com o assunto MASCARADO vai para `monitores.json.corrompido` (some em 7 dias) e o
+// estado recomeça vazio (nunca derruba a Yui). Temporários órfãos (`monitores.json.<pid>.tmp`, que guardam o assunto em texto puro) são apagados ao carregar.
 import fs from 'node:fs';
 import path from 'node:path';
 import { writeJsonAtomic } from '../../core/channel/idemPersistente.js';
 import { LIMITES } from './config.js';
-import { assinaturaValida, normalizarTitulo } from './assinatura.js';
+import { assinaturaValida, normalizarTitulo, vistaValida } from './assinatura.js';
 import { limparConsulta } from './limpeza.js';
+
+function pausarSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* sem pausa */ }
+}
 
 export const ESTADOS = Object.freeze({ ATIVO: 'ativo', PAUSADO: 'pausado', ENCERRADO: 'encerrado' });
 export const TIPOS_DE_AVISO = Object.freeze({ NOVIDADE: 'novidade', FIM: 'fim' });
@@ -34,6 +43,10 @@ const MAX_ABERTOS = 15; // ativos + pausados (o arquivo fica pequeno)
 const MAX_BYTES = 256 * 1024;
 const DIA_MS = 24 * 60 * 60_000;
 const HORA_MS = 60 * 60_000;
+const LEITURAS = 4; // quantas vezes tenta ler o arquivo antes de desistir (erro passageiro do disco)
+const MAX_COPIA_BYTES = 64 * 1024; // a cópia do arquivo ilegível (sem o assunto) é curta
+const COPIA_VALE_MS = 7 * DIA_MS; // a cópia some depois disto
+const TMP_ORFAO_MS = 10 * 60_000; // um temporário de gravação mais velho que isto é de um processo que caiu: apagado
 const CHAVE_AVISO_RE = /^monitor:\d{1,6}:(?:[0-9a-f]{24}|fim)(?::r\d{1,3})?$/;
 const set = (obj) => new Set(Object.values(obj));
 const ESTADOS_VALIDOS = set(ESTADOS);
@@ -41,7 +54,7 @@ const TIPOS_VALIDOS = set(TIPOS_DE_AVISO);
 const ESTADOS_AVISO_VALIDOS = set(ESTADOS_DO_AVISO);
 
 export class MonitorError extends Error {
-  /** codigo: 'limite' | 'repetido' | 'consulta' (vazia) | 'dados' (a limpeza barrou: `.motivo` é uma palavra fixa) | 'inexistente' | 'estado' */
+  /** codigo: 'limite' | 'repetido' | 'consulta' (vazia) | 'dados' (a limpeza barrou: `.motivo` é uma palavra fixa) | 'inexistente' | 'estado' | 'indisponivel' (o arquivo não pôde ser lido agora) */
   constructor(codigo, mensagem, extra = {}) {
     super(mensagem);
     this.name = 'MonitorError';
@@ -103,6 +116,7 @@ function monitorValido(m, { aoCarregar = false } = {}) {
     falhas: inteiro(m.falhas, 0, 1_000_000, 0),
     aviso: avisoValido(m.aviso),
   };
+  if (Array.isArray(m.vistas)) out.vistas = [...new Set(m.vistas.filter(vistaValida))].slice(-LIMITES.vistasMax);
   if (dataValida(m.ultimaTentativa)) out.ultimaTentativa = m.ultimaTentativa;
   if (MOTIVOS_DO_FIM.includes(m.motivoFim)) out.motivoFim = m.motivoFim;
   if (dataValida(m.encerradoEm)) out.encerradoEm = m.encerradoEm;
@@ -122,34 +136,95 @@ export function criarStoreDeMonitores({ file = arquivoDosMonitores(), now = () =
     throw Object.assign(new Error('Os monitores são do cérebro: o bot nunca abre o monitores.json.'), { code: 'YUI_MONITORES_DONO' });
   }
   let estado = null;
+  let avisouIndisponivel = false;
+  let avisouEstadoAntigo = false;
 
+  /** O texto da cópia de um arquivo ilegível, SEM o assunto dos monitores (o campo `consulta` é mascarado, inclusive um cortado no meio) e curto: nunca guarda texto puro do assunto. */
+  const mascarar = (texto) => String(texto ?? '').replace(/("consulta"\s*:\s*)"(?:[^"\\]|\\.)*"/g, '$1"?"').replace(/("consulta"\s*:\s*)"(?:[^"\\]|\\.)*$/, '$1"?"').slice(0, MAX_COPIA_BYTES);
+
+  /** Apaga o que o próprio store deixa para trás com o assunto em texto puro: temporários órfãos (um processo que caiu no meio da gravação) e cópias `.corrompido` velhas. */
+  function limparRestos() {
+    try {
+      const dir = path.dirname(file);
+      const base = path.basename(file);
+      const t = now();
+      for (const nome of fs.readdirSync(dir)) {
+        const eTmp = nome.startsWith(`${base}.`) && nome.endsWith('.tmp');
+        const eCopia = nome === `${base}.corrompido`;
+        if (!eTmp && !eCopia) continue;
+        const alvo = path.join(dir, nome);
+        let idade = Infinity;
+        try { idade = t - fs.statSync(alvo).mtimeMs; } catch { continue; }
+        if ((eTmp && idade > TMP_ORFAO_MS) || (eCopia && idade > COPIA_VALE_MS)) { try { fs.rmSync(alvo, { force: true }); } catch { /* fica para a próxima */ } }
+      }
+    } catch { /* sem a pasta ou sem permissão: não impede nada */ }
+  }
+
+  /**
+   * Lê o arquivo: { bruto } (lido e válido como JSON), { vazio: true } (ENOENT: não existe) ou { transitorio: código } / { ilegivel: motivo }. A leitura passageira que falha
+   * (EBUSY, EPERM...) é repetida algumas vezes antes de desistir; só ENOENT significa "vazio".
+   */
+  function lerArquivo() {
+    let ultimo = null;
+    for (let tentativa = 1; tentativa <= LEITURAS; tentativa += 1) {
+      let texto;
+      try {
+        texto = fs.readFileSync(file, 'utf8');
+      } catch (err) {
+        if (err?.code === 'ENOENT') return { vazio: true };
+        ultimo = { transitorio: String(err?.code ?? 'ERRO').slice(0, 20) };
+        if (tentativa < LEITURAS) pausarSync(25 * tentativa);
+        continue;
+      }
+      if (Buffer.byteLength(texto) > MAX_BYTES) return { ilegivel: 'arquivo grande demais', texto };
+      try {
+        return { bruto: JSON.parse(texto) };
+      } catch (err) {
+        ultimo = { ilegivel: 'JSON inválido', texto };
+        if (tentativa < LEITURAS) pausarSync(25 * tentativa);
+      }
+    }
+    return ultimo ?? { transitorio: 'ERRO' };
+  }
+
+  /**
+   * O estado em memória. FALHA FECHADA: se o arquivo não pôde ser lido agora (erro passageiro que persistiu), LANÇA `MonitorError('indisponivel')` e NADA fica em memória (a
+   * próxima chamada lê de novo): quem grava não grava e ninguém apaga o que está no disco.
+   */
   function carregar() {
     if (estado) return estado;
-    estado = { proximoId: 1, itens: [] };
-    try {
-      if (fs.existsSync(file)) {
-        if (fs.statSync(file).size > MAX_BYTES) throw new Error('arquivo grande demais');
-        const bruto = JSON.parse(fs.readFileSync(file, 'utf8'));
-        if (bruto && Array.isArray(bruto.itens)) {
-          estado.itens = bruto.itens.map((m) => monitorValido(m, { aoCarregar: true })).filter(Boolean);
-          estado.proximoId = Math.max(inteiro(bruto.proximoId, 1, 1_000_000_000, 1), ...estado.itens.map((m) => m.id + 1), 1);
-          // Um arquivo de uma versão anterior pode ter o assunto de um monitor já ENCERRADO: sai da memória (acima) e do DISCO, agora.
-          const comTexto = bruto.itens.filter((m) => m && m.estado === ESTADOS.ENCERRADO && typeof m.consulta === 'string' && m.consulta !== '').length;
-          if (comTexto) {
-            try {
-              writeJsonAtomic(file, { versao: VERSAO, proximoId: estado.proximoId, itens: estado.itens });
-              logger?.info?.(`[Monitores] ${comTexto} monitor(es) encerrado(s) de uma versão anterior ainda tinham o assunto no arquivo: apagado.`);
-            } catch (err) {
-              logger?.warn?.(`[Monitores] não consegui apagar o assunto de ${comTexto} monitor(es) encerrado(s) do arquivo (${String(err?.code ?? err?.message ?? 'erro').slice(0, 60)}); sai na próxima gravação.`);
-            }
-          }
+    const lido = lerArquivo();
+    if (lido.transitorio) {
+      if (!avisouIndisponivel) {
+        avisouIndisponivel = true;
+        logger?.warn?.(`[Monitores] não consegui ler o arquivo de estado agora (${lido.transitorio}): nada é lido, gravado nem apagado até a leitura voltar a funcionar.`);
+      }
+      throw new MonitorError('indisponivel', 'O arquivo dos monitores não pôde ser lido agora.');
+    }
+    avisouIndisponivel = false;
+    const novo = { proximoId: 1, itens: [] };
+    let invalido = lido.ilegivel ?? null;
+    if (lido.bruto !== undefined && !invalido && !(lido.bruto && Array.isArray(lido.bruto.itens))) invalido = 'formato inesperado';
+    if (invalido) {
+      try { fs.writeFileSync(`${file}.corrompido`, mascarar(lido.texto ?? JSON.stringify(lido.bruto ?? null))); } catch { /* sem cópia */ }
+      logger?.warn?.(`[Monitores] o arquivo de estado estava ilegível (${invalido}); recomeçando vazio (guardei uma cópia sem o assunto, que some em 7 dias).`);
+    } else if (lido.bruto) {
+      const bruto = lido.bruto;
+      novo.itens = bruto.itens.map((m) => monitorValido(m, { aoCarregar: true })).filter(Boolean);
+      novo.proximoId = Math.max(inteiro(bruto.proximoId, 1, 1_000_000_000, 1), ...novo.itens.map((m) => m.id + 1), 1);
+      // Um arquivo de uma versão anterior pode ter o assunto de um monitor já ENCERRADO: sai da memória (acima) e do DISCO, agora.
+      const comTexto = bruto.itens.filter((m) => m && m.estado === ESTADOS.ENCERRADO && typeof m.consulta === 'string' && m.consulta !== '').length;
+      if (comTexto) {
+        try {
+          writeJsonAtomic(file, { versao: VERSAO, proximoId: novo.proximoId, itens: novo.itens });
+          logger?.info?.(`[Monitores] ${comTexto} monitor(es) encerrado(s) de uma versão anterior ainda tinham o assunto no arquivo: apagado.`);
+        } catch (err) {
+          logger?.warn?.(`[Monitores] não consegui apagar o assunto de ${comTexto} monitor(es) encerrado(s) do arquivo (${String(err?.code ?? err?.message ?? 'erro').slice(0, 60)}); sai na próxima gravação.`);
         }
       }
-    } catch (err) {
-      try { fs.copyFileSync(file, `${file}.corrompido`); } catch { /* sem cópia */ }
-      logger?.warn?.(`[Monitores] o arquivo de estado estava ilegível (${String(err?.code ?? err?.message ?? 'erro').slice(0, 60)}); recomeçando vazio.`);
-      estado = { proximoId: 1, itens: [] };
     }
+    limparRestos();
+    estado = novo;
     return estado;
   }
 
@@ -178,7 +253,11 @@ export function criarStoreDeMonitores({ file = arquivoDosMonitores(), now = () =
 
   const api = {
     file,
-    /** Todos os monitores (cópias), do id menor para o maior. */
+    /** O arquivo não pôde ser lido agora (falha fechada: nada é lido nem gravado)? Tenta ler de novo. */
+    indisponivel() {
+      try { carregar(); return false; } catch (err) { if (err instanceof MonitorError && err.codigo === 'indisponivel') return true; throw err; }
+    },
+    /** Todos os monitores (cópias), do id menor para o maior. Lança MonitorError('indisponivel') se o arquivo não pôde ser lido agora. */
     todos: () => carregar().itens.map(copia).sort((a, b) => a.id - b.id),
     obter: (id) => { const m = buscar(carregar().itens, id); return m ? copia(m) : null; },
     contarAtivos: (dono) => carregar().itens.filter((m) => m.dono === String(dono) && m.estado === ESTADOS.ATIVO).length,
@@ -254,12 +333,16 @@ export function criarStoreDeMonitores({ file = arquivoDosMonitores(), now = () =
       if (!atual) return { ok: false, motivo: 'inexistente' };
       if (atual.estado !== ESTADOS.PAUSADO) return { ok: false, motivo: atual.estado, monitor: copia(atual) };
       if (carregar().itens.filter((m) => m.dono === atual.dono && m.estado === ESTADOS.ATIVO).length >= LIMITES.maxAtivos) return { ok: false, motivo: 'limite', monitor: copia(atual) };
-      return { ok: true, monitor: api.atualizar(id, { estado: ESTADOS.ATIVO, ultimaAssinatura: null, proximaChecagem: iso(now()) }) };
+      return { ok: true, monitor: api.atualizar(id, { estado: ESTADOS.ATIVO, ultimaAssinatura: null, vistas: undefined, falhas: 0, proximaChecagem: iso(now()) }) };
     },
 
     /** Números para a saúde (sem consulta, sem id de pessoa). */
     resumo() {
-      const itens = carregar().itens;
+      let itens;
+      try { itens = carregar().itens; } catch (err) {
+        if (err instanceof MonitorError && err.codigo === 'indisponivel') return { ativos: 0, pausados: 0, encerrados: 0, avisosPendentes: [], avisosEnviando: [], avisosIncertos: [], indisponivel: true };
+        throw err;
+      }
       const conta = (e) => itens.filter((m) => m.estado === e).length;
       const avisoEm = (e) => itens.filter((m) => m.aviso?.estado === e).map((m) => m.id);
       return { ativos: conta(ESTADOS.ATIVO), pausados: conta(ESTADOS.PAUSADO), encerrados: conta(ESTADOS.ENCERRADO), avisosPendentes: avisoEm('pendente'), avisosEnviando: avisoEm('enviando'), avisosIncertos: avisoEm('incerto') };

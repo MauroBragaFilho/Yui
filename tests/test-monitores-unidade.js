@@ -8,7 +8,10 @@
 //     avisa, a reserva da cota (a conversa nunca perde), cota cheia e porta fechada adiam sem custo e sem erro, falha de busca, vencimento encerra e avisa uma
 //     vez, a entrega com estados e reconciliação (nunca em dobro, nunca perdida em silêncio), o reinício sem repetir, cancelamento no meio da busca;
 //  F. os alertas por evento (disco, memória por vários minutos, internet em 3 sondas, religadas do supervisor) e as chaves desligadas (nada nasce, nada muda);
-//  G. a API de administração (lista em palavras fixas, cancelar, só o dono) e a ligação nas tarefas automáticas.
+//  G. a API de administração (lista em palavras fixas, cancelar, só o dono) e a ligação nas tarefas automáticas;
+//  I. o endurecimento antes de ligar (revisão A2): o conjunto de endereços já vistos (M3), a espera crescente das falhas (M4), o intervalo por tipo de evento (M5), a leitura
+//     passageira que não apaga nada (M6), o reinício controlado (B1), o aviso aberto e o estado de agora no vencimento (B2, B3), os restos em disco (B4), vários donos (B5)
+//     e a limpeza do texto livre (B12).
 // SEM rede (o buscador é um dublê do fetch; nenhuma sonda sai do computador), SEM bancos reais (pasta temporária).
 // Execução: npm run test:monitoresunidade   (node tests/test-monitores-unidade.js)
 import assert from 'node:assert/strict';
@@ -45,7 +48,7 @@ const logs = [];
 const logSpy = { debug() {}, info: (m) => logs.push(`info: ${m}`), warn: (m) => logs.push(`warn: ${m}`), error: (m) => logs.push(`error: ${m}`) };
 
 const { interpretarPedido } = await imp('src/cerebro/monitores/pedido.js');
-const { assinaturaDosResultados, normalizarUrl, normalizarTitulo, tituloSeguro, fonteDoResultado } = await imp('src/cerebro/monitores/assinatura.js');
+const { assinaturaDosResultados, normalizarUrl, normalizarTitulo, tituloSeguro, fonteDoResultado, hashDoEndereco, assinaturaDoConjunto, resultadosComHash } = await imp('src/cerebro/monitores/assinatura.js');
 const { criarStoreDeMonitores, MonitorError } = await imp('src/cerebro/monitores/store.js');
 const { criarRoteador, dirigidaAYui, TEXTO_SEM_PERMISSAO, TEXTO_ONDE_FICA_O_ASSUNTO, TEXTO_MONITORES_SUSPENSOS } = await imp('src/cerebro/monitores/rota.js');
 const { limparConsulta, TEXTO_CONSULTA_BARRADA } = await imp('src/cerebro/monitores/limpeza.js');
@@ -56,7 +59,7 @@ const { criarExecutor, textoDaNovidade, textoGenericoDaNovidade } = await imp('s
 const { entregarAviso, chaveDaNovidade } = await imp('src/cerebro/monitores/entrega.js');
 const { LIMITES, monitoresLigados, tickDosMonitoresMs, reservaDosMonitores, intervaloDoMonitorMs, intervaloDeTesteMs } = await imp('src/cerebro/monitores/config.js');
 const { iniciarMonitores, vistaDoMonitor } = await imp('src/cerebro/monitores/index.js');
-const { criarVerificador, iniciarEventos, configDosEventos, sondaTcp, lerAlvoDeInternet, alvoBloqueadoEmTeste, lerEstadoDoSupervisor, SONDAS_SEGUIDAS } = await imp('src/cerebro/eventos.js');
+const { criarVerificador, iniciarEventos, configDosEventos, sondaTcp, lerAlvoDeInternet, alvoBloqueadoEmTeste, lerEstadoDoSupervisor, SONDAS_SEGUIDAS, COOLDOWN_EVENTOS_MIN } = await imp('src/cerebro/eventos.js');
 const { ativarBuscaFalsaDosMonitores } = await imp('src/cerebro/monitores/buscaFalsa.js');
 const { searchWeb, resetCooldowns } = await imp('src/search/providers.js');
 const { createBudget } = await imp('src/search/budget.js');
@@ -121,6 +124,7 @@ function cenario({ env = ENV, dono = OWNER, pastaDados = null, store = null, bud
   const bot = { modo: 'normal', entregues: new Map(), pedidos: [] };
   const enviar = async (texto, { chave, reconciliar, desde }) => {
     bot.pedidos.push({ texto, chave, reconciliar, desde, em: agora });
+    if (bot.aoEnviar) bot.aoEnviar(chave); // só teste: um efeito colateral no meio da entrega (ex.: a pessoa cancela outro monitor)
     if (bot.modo === 'cai') throw Object.assign(new Error('canal caiu'), { code: 'CONNECTION_LOST' });
     if (bot.modo === 'nao-saiu') throw Object.assign(new Error('DM fechada'), { code: 'DM_NAO_SAIU' });
     if (bot.modo === 'incerto' && reconciliar) return { sent: null, incerto: true, motivo: 'histórico da DM indisponível (teste)' };
@@ -522,7 +526,7 @@ await test('primeira checagem só guarda a referência (NUNCA avisa); com a mesm
   assert.deepEqual([p3.novidades, c.exec.status().avisosEnviados, c.bot.pedidos.length, c.bot.entregues.size], [1, 1, 1, 1]);
   const dm = c.bot.pedidos[0];
   assert.match(dm.texto.split('\n')[0], /^Achei novidade sobre patch 1\.5 do jogo X: Resultado 9 B \(fonte9\.exemplo-teste\.org\)$/);
-  assert.equal(dm.chave, chaveDaNovidade(m.id, c.store.obter(m.id).ultimaAssinatura));
+  assert.equal(dm.chave, chaveDaNovidade(m.id, assinaturaDoConjunto([hashDoEndereco(resultado(9, 'B').url)])), 'a chave vem do hash dos endereços NOVOS');
   assert.equal(dm.reconciliar, false);
   assert.deepEqual([c.store.obter(m.id).avisos, c.store.obter(m.id).aviso], [1, null]);
   assert.deepEqual(c.audits.filter((a) => a.e === 'monitor.aviso'), [{ e: 'monitor.aviso', id: m.id }], 'a auditoria só leva o número');
@@ -933,7 +937,7 @@ await test('disco: abaixo do limite (padrão 5 GB) avisa o dono com o texto curt
   assert.equal(x.alertas.length, 1);
   assert.deepEqual([x.alertas[0].chave, x.alertas[0].titulo], ['evento:disco', 'Pouco espaço em disco']);
   assert.match(x.alertas[0].detalhe, /^Restam 4,2 GB livres onde ficam os dados \(o limite é 5,0 GB\)\.$/);
-  assert.equal(x.alertas[0].opcoes.cooldownMinutes, undefined, 'o intervalo de repetição é o do alertOwner (nada novo)');
+  assert.equal(x.alertas[0].opcoes.cooldownMinutes, COOLDOWN_EVENTOS_MIN['evento:disco'], 'o intervalo de repetição é o do próprio tipo de evento (M5)');
   x.estado.disco = 5;
   await x.v.passada();
   assert.equal(x.alertas.length, 1, 'exatamente no limite não avisa');
@@ -1487,6 +1491,344 @@ await test('privacidade da busca e nenhuma IA: a busca é sempre privada (sem ca
     const texto = semComentarios(fs.readFileSync(f, 'utf8'));
     assert.ok(!/\b(?:isolatedChat|callAi|generateResponse|routeExplicitResearch|runResearchFor|createCoreResearch)\b|\bai\.chat\b|core\/ai\/manager|core\/ai\/research\.js|llmHandler/.test(texto), `${path.basename(f)} chama um modelo`);
   }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+section('I. Endurecimento antes de ligar (revisão A2): conjunto de endereços, falhas com espera crescente, cooldown por evento, leitura que falha, reinício controlado, aviso aberto, restos em disco, vários donos, limpeza de texto livre');
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+const { createAlerter } = await imp('src/core/alerts.js');
+const { TEXTO_ESTADO_INDISPONIVEL, TEXTO_SO_O_DONO_PRINCIPAL } = await imp('src/cerebro/monitores/rota.js');
+const { esperaDaFalhaMs } = await imp('src/cerebro/monitores/executor.js');
+const SEGUNDO_DONO = '666666666666666666';
+
+await test('M3: o monitor guarda o CONJUNTO dos endereços já vistos e avisa só do que é NOVO (reordenar, sair do topo e voltar, mesmo endereço com outro título ou com rastreio nunca é novidade)', async () => {
+  agora = T0;
+  const c = cenario();
+  const m = novoMonitor(c, 'assunto do conjunto');
+  c.web.resultados = [resultado(1), resultado(2), resultado(3), resultado(4), resultado(5)];
+  assert.equal((await c.exec.passada()).referencias, 1);
+  for (const ordem of [[3, 1, 2, 4, 5], [2, 3, 1, 5, 4], [1, 2, 3, 4, 5], [5, 4, 3, 2, 1], [1, 3, 2, 4, 5]]) {
+    c.web.resultados = ordem.map((n) => resultado(n));
+    avancar(7 * HORA);
+    const p = await c.exec.passada();
+    assert.deepEqual([p.iguais, p.novidades], [1, 0], `a ordem ${ordem} oscila e não é novidade`);
+  }
+  // um resultado sai do topo (a lista encolhe) e volta
+  c.web.resultados = [resultado(1), resultado(2), resultado(3)];
+  avancar(7 * HORA);
+  assert.deepEqual([(await c.exec.passada()).novidades], [0]);
+  c.web.resultados = [resultado(1), resultado(2), resultado(3), resultado(5), resultado(4)];
+  avancar(7 * HORA);
+  assert.deepEqual([(await c.exec.passada()).novidades], [0], 'um endereço que voltou ao topo já tinha sido visto');
+  // o mesmo endereço com outro título, ou com parâmetro de rastreio, é o mesmo endereço
+  c.web.resultados = [{ ...resultado(1), title: 'Outro título para o mesmo artigo' }, { ...resultado(2), url: `${resultado(2).url}?utm_source=x&fbclid=y` }, resultado(3)];
+  avancar(7 * HORA);
+  assert.deepEqual([(await c.exec.passada()).novidades, c.bot.pedidos.length], [0, 0]);
+  // um endereço NOVO, mesmo fora dos 3 primeiros, avisa UMA vez e com o título do novo
+  c.web.resultados = [resultado(1), resultado(2), resultado(3), resultado(7, 'N'), resultado(4)];
+  avancar(7 * HORA);
+  assert.deepEqual([(await c.exec.passada()).novidades, c.bot.pedidos.length], [1, 1]);
+  assert.match(c.bot.pedidos[0].texto.split('\n')[0], /^Achei novidade sobre assunto do conjunto: Resultado 7 N \(fonte7\.exemplo-teste\.org\)$/);
+  avancar(7 * HORA);
+  assert.deepEqual([(await c.exec.passada()).novidades, c.bot.pedidos.length], [0, 1], 'o mesmo conjunto de novo: não repete');
+  // só os hashes curtos dos endereços vão para o disco (nem endereço, nem título)
+  const bruto = bytesDe(c.arquivo);
+  assert.ok(!/exemplo-teste|Resultado \d|artigo/.test(bruto), 'nenhum texto de resultado no arquivo');
+  const vistas = c.store.obter(m.id).vistas;
+  assert.ok(vistas.length >= 6 && vistas.every((v) => /^[0-9a-f]{12}$/.test(v)) && new Set(vistas).size === vistas.length);
+  // o conjunto tem teto: cresce com endereços novos, mas guarda só os mais recentes
+  const cheio = c.store.obter(m.id).vistas;
+  assert.ok(cheio.length <= LIMITES.vistasMax);
+  // um monitor de ANTES (só a assinatura em ordem, sem o conjunto) refaz a referência sem avisar
+  c.store.atualizar(m.id, { vistas: undefined, ultimaAssinatura: 'abcdef0123456789abcdef01' });
+  avancar(7 * HORA);
+  c.web.resultados = [resultado(21), resultado(22), resultado(23)];
+  assert.deepEqual([(await c.exec.passada()).referencias, c.bot.pedidos.length], [1, 1]);
+  // a mesma lista, sem endereço repetido e sem resultado inútil
+  assert.deepEqual(resultadosComHash([resultado(1), resultado(1), { title: '', url: 'https://x.org/a' }, { title: 'sem url' }, resultado(2)]).length, 2);
+});
+
+await test('M4: busca que falha ou volta vazia tenta de novo com espera que DOBRA (30, 60, 120, 240, 480 min) até o teto (12 h) e NÃO repete a cada 30 min; uma busca boa retoma o ritmo normal', async () => {
+  agora = T0;
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 40].map((n) => esperaDaFalhaMs(n, 360 * MIN) / MIN), [30, 60, 120, 240, 480, 720, 720, 720]);
+  assert.equal(esperaDaFalhaMs(1, 10 * MIN), 10 * MIN, 'nunca mais que o intervalo na 1ª falha (intervalo curto de teste)');
+  const c = cenario();
+  const m = novoMonitor(c, 'assunto que falha');
+  c.web.falhar = true;
+  const esperas = [];
+  for (let i = 0; i < 8; i += 1) {
+    agora = Math.max(agora, Date.parse(c.store.obter(m.id).proximaChecagem));
+    assert.equal((await c.exec.passada()).falhas, 1, `falha ${i + 1}`);
+    esperas.push((Date.parse(c.store.obter(m.id).proximaChecagem) - agora) / MIN);
+  }
+  assert.deepEqual(esperas, [30, 60, 120, 240, 480, 720, 720, 720]);
+  assert.equal(c.store.obter(m.id).falhas, 8);
+  assert.equal(c.bot.pedidos.length, 0, 'falha nunca vira aviso');
+  // antes do prazo da espera não busca
+  agora = Date.parse(c.store.obter(m.id).proximaChecagem) - MIN;
+  const chamadas = c.web.chamadas;
+  assert.deepEqual([(await c.exec.passada()).buscas, c.web.chamadas - chamadas], [0, 0]);
+  // a busca VOLTA: a referência nasce, a conta zera e o ritmo é o normal (6 h)
+  c.web.falhar = false;
+  agora = Date.parse(c.store.obter(m.id).proximaChecagem);
+  assert.equal((await c.exec.passada()).referencias, 1);
+  assert.deepEqual([c.store.obter(m.id).falhas, (Date.parse(c.store.obter(m.id).proximaChecagem) - agora) / MIN], [0, 360]);
+  // "sem resultado" também conta (busca que vem vazia, sem nenhum erro)
+  c.web.resultados = [];
+  agora = Date.parse(c.store.obter(m.id).proximaChecagem);
+  await c.exec.passada();
+  agora = Date.parse(c.store.obter(m.id).proximaChecagem);
+  await c.exec.passada();
+  assert.deepEqual([c.store.obter(m.id).falhas, (Date.parse(c.store.obter(m.id).proximaChecagem) - agora) / MIN], [2, 60]);
+  assert.equal(c.bot.pedidos.length, 0);
+});
+
+await test('M5: cada TIPO de evento tem o seu intervalo de repetição (disco 12 h, memória 3 h, internet 2 h): a condição que dura horas não avisa a cada conferência nem a cada 30 min; a volta da internet é um fato novo', async () => {
+  const conta = (x, chave) => x.alertas.filter((a) => a.chave === chave).length;
+  const d = verificador();
+  d.estado.disco = 1;
+  for (let i = 0; i < 24; i += 1) { await d.v.passada(); d.avanca(5 * MIN); } // 2 horas de disco baixo
+  assert.equal(conta(d, 'evento:disco'), 1, '2 h de disco baixo = 1 aviso');
+  d.avanca(11 * HORA);
+  await d.v.passada();
+  assert.equal(conta(d, 'evento:disco'), 2, 'passadas 12 h, avisa de novo');
+  assert.equal(d.v.status().alertasSuprimidos >= 23, true);
+  const r = verificador();
+  r.estado.ram = 100;
+  for (let i = 0; i < 60; i += 1) { await r.v.passada(); r.avanca(5 * MIN); } // 5 horas
+  assert.equal(conta(r, 'evento:ram'), 2, '5 h de memória baixa = 2 avisos (no 5º minuto e 3 h depois)');
+  const n = verificador();
+  n.estado.sonda = false;
+  for (let i = 0; i < 60; i += 1) { await n.v.passada(); n.avanca(5 * MIN); } // 5 horas sem internet
+  assert.equal(conta(n, 'evento:internet'), 3, '5 h sem internet = 3 avisos');
+  n.estado.sonda = true;
+  await n.v.passada();
+  assert.equal(conta(n, 'evento:internet-voltou'), 1, 'a volta avisa na hora (outra chave)');
+  // o intervalo também vai ao alertOwner (vale se o cérebro reiniciar e o verificador recomeçar do zero)
+  agora = T0;
+  const enviados = [];
+  const alerter = createAlerter({ notify: async (id, texto) => { enviados.push(texto); }, ownerId: OWNER, env: { YUI_ALERTS: 'true' }, now: clock });
+  const novo = () => criarVerificador({ env: {}, now: clock, alertar: (k, t, det, o) => { alerter.alert(k, t, det, o); }, lerDisco: () => 1, lerRam: () => 2000, lerSupervisor: () => null, logger: quiet });
+  await novo().passada();
+  await new Promise((res) => setImmediate(res));
+  assert.equal(enviados.length, 1);
+  avancar(HORA);
+  await novo().passada(); // um verificador novo (reinício): o alertOwner segura pelo intervalo do tipo
+  await new Promise((res) => setImmediate(res));
+  assert.equal(enviados.length, 1, 'uma hora depois: o intervalo de 12 h do disco vale também no alertOwner');
+  avancar(12 * HORA);
+  await novo().passada();
+  await new Promise((res) => setImmediate(res));
+  assert.equal(enviados.length, 2);
+  assert.ok(!('evento:supervisor' in COOLDOWN_EVENTOS_MIN), 'o aviso do supervisor é um fato novo a cada religada: o intervalo é o geral do alertOwner');
+});
+
+await test('M6: leitura passageira do monitores.json (EBUSY, EPERM) NUNCA vira "vazio": repete a leitura; se persistir, FALHA FECHADA (nada é lido, gravado nem apagado, UM aviso no log sem o assunto) e volta sozinho; só ENOENT é vazio', async () => {
+  agora = T0;
+  const dir = novaPasta('m6');
+  const file = path.join(dir, 'monitores.json');
+  const base = criarStoreDeMonitores({ file, now: clock, env: {} });
+  base.criar({ dono: OWNER, consulta: 'assunto alfa do teste' });
+  base.criar({ dono: OWNER, consulta: 'assunto beta do teste' });
+  const antes = fs.readFileSync(file);
+  const lerOriginal = fs.readFileSync;
+  async function comLeituraQuebrada(codigo, vezes, fn) {
+    let restantes = vezes;
+    fs.readFileSync = function leituraQuebrada(p, ...resto) {
+      if (String(p) === file && restantes > 0) { restantes -= 1; throw Object.assign(new Error('arquivo em uso'), { code: codigo }); }
+      return lerOriginal.call(this, p, ...resto);
+    };
+    try { return await fn(); } finally { fs.readFileSync = lerOriginal; }
+  }
+  const avisos = [];
+  const logger = { debug() {}, info() {}, warn: (m) => avisos.push(m), error() {} };
+  const s = criarStoreDeMonitores({ file, now: clock, env: {}, logger });
+  const indisponivel = (e) => e instanceof MonitorError && e.codigo === 'indisponivel';
+  await comLeituraQuebrada('EBUSY', Infinity, async () => {
+    assert.throws(() => s.todos(), indisponivel);
+    assert.throws(() => s.criar({ dono: OWNER, consulta: 'assunto gama do teste' }), indisponivel);
+    assert.throws(() => s.cancelar(1), indisponivel);
+    assert.throws(() => s.atualizar(1, { falhas: 3 }), indisponivel);
+    assert.equal(s.indisponivel(), true);
+    assert.deepEqual([s.resumo().indisponivel, s.resumo().ativos], [true, 0], 'a saúde não lança');
+    // a passada do executor espera, sem buscar, sem enviar e sem encher o log
+    const enviados = [];
+    const exec = criarExecutor({ store: s, enviar: async (t) => { enviados.push(t); return { sent: true }; }, ownerId: OWNER, env: ENV, now: clock, buscar: async () => assert.fail('não devia buscar'), audit: () => {}, logger: logSpy, canalPronto: () => true });
+    const logsAntes = logs.length;
+    assert.deepEqual([(await exec.passada()).pulou, (await exec.passada()).pulou, enviados.length, exec.status().pulouIndisponivel], ['estado indisponível', 'estado indisponível', 0, 2]);
+    assert.equal(logs.length, logsAntes, 'o executor não repete o aviso: quem avisa é o store, uma vez');
+    // a conversa: nunca "você não tem monitores" nem criar por cima
+    const rota = roteadorDe(s);
+    for (const f of ['meus monitores', 'me avisa quando sair o patch do jogo W', 'cancela o monitor 1']) assert.equal(diga(rota, f), TEXTO_ESTADO_INDISPONIVEL, f);
+    // o painel e a saúde não lançam: a lista vem vazia e o resumo diz que o estado está indisponível
+    const mons = iniciarMonitores({ channel: { isConnected: () => false, request: async () => ({}) }, logger: quiet, ownerId: OWNER, env: ENV, store: s, now: clock, tickMs: 3_600_000 });
+    try { assert.deepEqual([mons.listar(), mons.status().indisponivel], [[], true]); } finally { mons.parar(); }
+  });
+  assert.equal(Buffer.compare(fs.readFileSync(file), antes), 0, 'o arquivo NÃO foi tocado (nada apagado nem regravado)');
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => f !== 'monitores.json'), [], 'sem cópia .corrompido e sem temporário');
+  assert.equal(avisos.length, 1, 'UM aviso no log (várias chamadas, uma queda)');
+  assert.ok(!/alfa|beta|assunto/.test(avisos.join(' ')) && /EBUSY/.test(avisos[0]), 'o aviso diz o código do erro e nunca o assunto');
+  // a leitura volta: os dois monitores seguem lá, e o próximo gravar os preserva
+  assert.deepEqual(s.todos().map((m) => m.consulta), ['assunto alfa do teste', 'assunto beta do teste']);
+  s.criar({ dono: OWNER, consulta: 'assunto gama do teste' });
+  assert.deepEqual(criarStoreDeMonitores({ file, now: clock, env: {} }).todos().map((m) => m.id), [1, 2, 3]);
+  // um erro que passa na 3ª tentativa não derruba nada
+  const t = criarStoreDeMonitores({ file, now: clock, env: {}, logger });
+  await comLeituraQuebrada('EPERM', 2, async () => { assert.equal(t.todos().length, 3); });
+  assert.equal(avisos.length, 1, 'leitura que se recuperou não avisa');
+  // ENOENT é o único "vazio": arquivo que não existe = começa vazio, sem aviso e sem cópia
+  const novoDir = novaPasta('m6-vazio');
+  const vazio = criarStoreDeMonitores({ file: path.join(novoDir, 'monitores.json'), now: clock, env: {}, logger });
+  assert.deepEqual([vazio.todos(), vazio.indisponivel(), fs.readdirSync(novoDir)], [[], false, []]);
+  assert.equal(avisos.length, 1);
+});
+
+await test('B1: depois de um REINÍCIO CONTROLADO (pedido do app ou parada limpa pelo logs/supervisor.parar) a primeira leitura NÃO avisa "o supervisor religou"; uma queda de verdade e o arquivo de outro cérebro seguem os critérios', async () => {
+  const cer = (extra = {}) => ({ estado: 'rodando', pid: process.pid, religadas: 2, inicios: 3, iniciadoEm: iso(T0 - 2 * MIN), ultimaSaida: { code: 0, em: iso(T0 - 3 * MIN) }, ...extra });
+  const arq = (cerebro, extra = {}) => ({ versao: 1, modo: 'dois', estado: 'rodando', pid: 100, iniciadoEm: iso(T0 - DIA), atualizadoEm: iso(T0 - 20_000), reinicioControlado: { emCurso: false, total: 0, ultimo: null }, processos: { cerebro, bot: { estado: 'rodando', religadas: 0 } }, ...extra });
+  const alertasDe = async (arquivo, pid = process.pid) => {
+    agora = T0;
+    const alertas = [];
+    const v = criarVerificador({ env: {}, now: clock, alertar: (k) => alertas.push(k), lerDisco: () => 100, lerRam: () => 2000, lerSupervisor: () => arquivo, logger: quiet, pid });
+    await v.passada();
+    return alertas;
+  };
+  // a queda de verdade (nada de reinício controlado): avisa
+  assert.deepEqual(await alertasDe(arq(cer())), ['evento:supervisor'], 'queda real: avisa');
+  // o reinício controlado pedido há pouco, e a saída do cérebro foi a dele
+  const controlado = { emCurso: false, total: 1, ultimo: { em: iso(T0 - 3 * MIN - 20_000), motivo: 'pedido-do-dono', origem: 'cerebro' } };
+  assert.deepEqual(await alertasDe(arq(cer(), { reinicioControlado: controlado })), [], 'o reinício controlado não é queda');
+  assert.deepEqual(await alertasDe(arq(cer(), { reinicioControlado: { ...controlado, emCurso: true } })), [], 'em curso');
+  // uma queda DEPOIS de um reinício controlado antigo continua avisando
+  assert.deepEqual(await alertasDe(arq(cer(), { reinicioControlado: { emCurso: false, total: 1, ultimo: { em: iso(T0 - 40 * MIN), motivo: 'x', origem: 'cerebro' } } })), ['evento:supervisor']);
+  // a parada limpa (supervisor.parar): o arquivo é de um supervisor que saiu (parando/parado) ou que parou de renovar
+  assert.deepEqual(await alertasDe(arq(cer(), { estado: 'parado' })), [], 'supervisor parado');
+  assert.deepEqual(await alertasDe(arq(cer(), { estado: 'parando' })), [], 'supervisor parando');
+  assert.deepEqual(await alertasDe(arq(cer(), { atualizadoEm: iso(T0 - 10 * MIN) })), [], 'arquivo sem renovar há 10 min');
+  // o arquivo descreve OUTRO cérebro (o pid não é o deste processo)
+  assert.deepEqual(await alertasDe(arq(cer({ pid: 999_991 }))), [], 'pid de outro processo');
+  assert.deepEqual(await alertasDe(arq(cer({ pid: 4242 })), 4242), ['evento:supervisor'], 'o pid do próprio cérebro vale');
+});
+
+await test('B2: o fim do prazo NUNCA sobrescreve um aviso de novidade aberto (a novidade é entregue primeiro e o fim vem depois, uma vez só)', async () => {
+  agora = T0;
+  const c = cenario();
+  const m = novoMonitor(c, 'assunto com aviso aberto', 3 * DIA);
+  await c.exec.passada();
+  c.web.resultados = [resultado(9, 'B'), resultado(1), resultado(2), resultado(3)];
+  avancar(7 * HORA);
+  c.bot.modo = 'cai';
+  await c.exec.passada();
+  const aberto = c.store.obter(m.id).aviso;
+  assert.equal(aberto.tipo, 'novidade');
+  // o prazo vence com o canal ainda fora: o aviso de novidade continua lá, intacto
+  avancar(3 * DIA);
+  const p = await c.exec.passada();
+  assert.deepEqual([p.encerrados, c.store.obter(m.id).estado, c.store.obter(m.id).aviso.chave, c.store.obter(m.id).aviso.tipo], [0, 'ativo', aberto.chave, 'novidade'], 'o fim espera');
+  assert.equal(c.web.chamadas, 2, 'vencido e com aviso aberto: também não busca mais');
+  // o canal volta: a novidade sai, e o fim sai em seguida (uma vez)
+  c.bot.modo = 'normal';
+  avancar(MIN);
+  const q = await c.exec.passada();
+  assert.deepEqual(c.bot.pedidos.filter((x) => x.em === agora).map((x) => x.chave.endsWith(':fim') ? 'fim' : 'novidade'), ['novidade', 'fim']);
+  assert.deepEqual([q.encerrados, c.store.obter(m.id).estado, c.store.obter(m.id).motivoFim, c.store.obter(m.id).avisos], [1, 'encerrado', 'vencido', 1]);
+  await c.exec.passada();
+  assert.equal(c.bot.pedidos.filter((x) => x.chave.endsWith(':fim')).length, 1, 'o fim não sai em dobro');
+});
+
+await test('B3: o laço do vencimento usa o estado de AGORA: um monitor cancelado durante as entregas da própria passada não é "vencido" por cima nem ganha aviso de fim', async () => {
+  agora = T0;
+  const c = cenario();
+  const a = novoMonitor(c, 'primeiro assunto que vence', 2 * DIA);
+  const b = novoMonitor(c, 'segundo assunto que vence', 2 * DIA);
+  await c.exec.passada();
+  avancar(2 * DIA + MIN);
+  // no meio da entrega do fim do #1 a pessoa cancela o #2 (o laço ainda tem o #2 na lista de antes)
+  c.bot.aoEnviar = (chave) => { if (chave === `monitor:${a.id}:fim`) c.store.cancelar(b.id); };
+  await c.exec.passada();
+  c.bot.aoEnviar = null;
+  const doB = c.store.obter(b.id);
+  assert.deepEqual([doB.estado, doB.motivoFim, doB.aviso], ['encerrado', 'cancelado', null], 'continua cancelado, sem aviso de fim');
+  assert.deepEqual(c.bot.pedidos.map((x) => x.chave), [`monitor:${a.id}:fim`]);
+  assert.ok(!('consulta' in doB), 'o assunto continua apagado');
+});
+
+await test('B4: os arquivos que guardam o assunto em texto puro não ficam para trás: a cópia .corrompido sai com o assunto MASCARADO e some em 7 dias; temporários órfãos são apagados', async () => {
+  agora = T0;
+  const dir = novaPasta('b4');
+  const file = path.join(dir, 'monitores.json');
+  // JSON cortado no meio de um assunto (a queda no meio de uma gravação de um programa antigo)
+  fs.writeFileSync(file, '{"versao":1,"proximoId":3,"itens":[{"id":1,"dono":"111111111111111111","consulta":"assunto SECRETO completo","estado":"ativo"},{"id":2,"consulta":"outro SEGREDO cortado ao me');
+  const tmpVelho = `${file}.4242.tmp`;
+  const tmpNovo = `${file}.4343.tmp`;
+  const copiaVelha = `${file}.corrompido`;
+  fs.writeFileSync(tmpVelho, '{"itens":[{"consulta":"assunto no temporario velho"}]}');
+  fs.writeFileSync(tmpNovo, '{"itens":[{"consulta":"assunto no temporario novo"}]}');
+  const quando = (ms) => new Date(ms);
+  fs.utimesSync(tmpVelho, quando(T0 - HORA), quando(T0 - HORA));
+  fs.utimesSync(tmpNovo, quando(T0 - MIN), quando(T0 - MIN));
+  const s = criarStoreDeMonitores({ file, now: clock, env: {}, logger: quiet });
+  assert.deepEqual(s.todos(), [], 'o arquivo ilegível recomeça vazio (o de sempre)');
+  const copia = fs.readFileSync(copiaVelha, 'utf8');
+  assert.ok(!/SECRETO|SEGREDO|completo|cortado/.test(copia), 'a cópia NÃO traz o assunto');
+  assert.ok(copia.includes('"consulta":"?"') && copia.length <= 64 * 1024);
+  assert.equal(fs.existsSync(tmpVelho), false, 'o temporário órfão velho foi apagado');
+  assert.equal(fs.existsSync(tmpNovo), true, 'o temporário recente (pode ser de uma gravação em curso) fica');
+  // a cópia some depois de 7 dias (na próxima subida; a gravação seguinte já trocou o arquivo ilegível por um bom)
+  s.criar({ dono: OWNER, consulta: 'assunto novo e valido' });
+  fs.utimesSync(copiaVelha, quando(T0 - 8 * DIA), quando(T0 - 8 * DIA));
+  criarStoreDeMonitores({ file, now: clock, env: {}, logger: quiet }).todos();
+  assert.equal(fs.existsSync(copiaVelha), false, 'cópia com mais de 7 dias apagada');
+  // e um arquivo que é JSON válido mas não é um estado também vira cópia mascarada, nunca "vazio" calado
+  const dir2 = novaPasta('b4-formato');
+  const file2 = path.join(dir2, 'monitores.json');
+  fs.writeFileSync(file2, JSON.stringify({ outro: 'formato', consulta: 'assunto num formato estranho' }));
+  assert.deepEqual(criarStoreDeMonitores({ file: file2, now: clock, env: {}, logger: quiet }).todos(), []);
+  assert.ok(!/assunto num formato/.test(fs.readFileSync(`${file2}.corrompido`, 'utf8')));
+});
+
+await test('B5: com vários OWNER_IDS os avisos saem só para o dono principal (ownerUserId): o segundo dono recebe uma frase fixa e nada é criado; o principal segue normal', async () => {
+  agora = T0;
+  process.env.OWNER_IDS = SEGUNDO_DONO;
+  try {
+    const segundo = buildContext({ platform: 'discord', userId: SEGUNDO_DONO, guildId: null, channelId: DMCH, isDM: true });
+    assert.equal(segundo.role, ROLES.OWNER, 'o segundo dono tem o papel de dono');
+    const store = criarStoreDeMonitores({ file: path.join(novaPasta('b5'), 'monitores.json'), now: clock, env: {} });
+    const rota = roteadorDe(store, { ownerId: OWNER });
+    for (const f of ['me avisa quando sair o patch do jogo W', 'meus monitores', 'cancela o monitor 1', 'pausa o monitor 1', 'retoma o monitor 1']) {
+      assert.equal(rota.rotear({ ctx: segundo, call: chamada({ mentionsBot: true }), texto: f }).text, TEXTO_SO_O_DONO_PRINCIPAL, f);
+    }
+    assert.deepEqual(store.todos(), []);
+    assert.match(diga(rota, 'me avisa quando sair o patch do jogo W'), /^Anotado: monitor #1/, 'o dono principal cria');
+    assert.deepEqual(rota.rotear({ ctx: segundo, call: chamada({ mentionsBot: true }), texto: 'bom dia, tudo bem?' }), { handled: false }, 'a conversa comum segue como sempre');
+    // ponta a ponta, pelo iniciarMonitores (o cérebro passa o ownerUserId())
+    const mons = iniciarMonitores({ channel: { isConnected: () => false, request: async () => ({}) }, logger: quiet, ownerId: OWNER, env: ENV, store, now: clock, tickMs: 3_600_000 });
+    try {
+      assert.equal(mons.rotear({ ctx: segundo, call: chamada({ mentionsBot: true }), texto: 'me avisa quando sair o patch do jogo Z' }).text, TEXTO_SO_O_DONO_PRINCIPAL);
+      assert.equal(store.todos().length, 1);
+    } finally { mons.parar(); }
+  } finally { delete process.env.OWNER_IDS; }
+});
+
+await test('B12: a limpeza dos monitores também barra texto LIVRE com dado pessoal ("senha do wifi: x", usuário, endereço com rua e número, CEP, "meu endereço") sem derrubar assuntos públicos; o que já estava gravado é barrado antes da próxima busca', async () => {
+  const ruins = ['senha do wifi: abc123', 'senha do banco = fulano', 'minha senha é abc123', 'a senha do wifi é casa1234', 'usuário: joao', 'login = joao.silva', 'rua das flores, 123', 'avenida brasil, n 1500',
+    'alameda santos nº 42', 'cep 78000-000', '78000-000', 'meu endereço é perto da praça', 'moro na rua tal', 'endereço: bairro centro', 'meu bairro novidades de obras'];
+  const bons = ['patch 1.5 do jogo X', 'senha do wifi', 'como trocar a senha do instagram', 'rodovia BR 116 interditada', 'avenida paulista show', 'minha casa minha vida', 'preço do token ethereum', 'GTA 6 trailer 3',
+    'notícias de Cuiabá 2026', 'rua sésamo', 'lançamento Hades 2 data', 'senha forte e segura', 'login do Steam fora do ar', 'cep e correios greve'];
+  for (const t of ruins) {
+    assert.equal(limparConsulta(t).ok, false, `devia barrar: ${t}`);
+    assert.throws(() => criarStoreDeMonitores({ file: path.join(novaPasta('b12'), 'monitores.json'), now: clock, env: {} }).criar({ dono: OWNER, consulta: t }), (e) => e instanceof MonitorError && e.codigo === 'dados', `criar: ${t}`);
+  }
+  for (const t of bons) assert.equal(limparConsulta(t).ok, true, `devia passar: ${t}`);
+  // um monitor que já estava gravado com texto livre pessoal é barrado, encerrado e apagado na próxima passada, sem buscar
+  agora = T0;
+  const dir = novaPasta('b12-antigo');
+  fs.writeFileSync(path.join(dir, 'monitores.json'), JSON.stringify({ versao: 1, proximoId: 2, itens: [{ id: 1, ...registroAntigo({ consulta: 'senha do wifi: abc123', estado: 'ativo' }) }] }));
+  const c = cenario({ pastaDados: dir });
+  const p = await c.exec.passada();
+  assert.deepEqual([c.web.chamadas, p.buscas, c.store.obter(1).estado, c.store.obter(1).motivoFim], [0, 0, 'encerrado', 'barrado']);
+  assert.ok(!/abc123|wifi/.test(bytesDe(path.join(dir, 'monitores.json'))), 'o assunto foi apagado do arquivo');
+  assert.ok(!c.bot.pedidos.map((x) => x.texto).join('\n').match(/abc123|wifi/), 'o aviso não repete o assunto');
 });
 
 section('');
