@@ -88,7 +88,15 @@ function parseListItems(body, now) {
     if (!clean) return null;
     items.push({ text: clean, at: w.at, repeat: w.repeat });
   }
-  return { items };
+  // A mesma linha repetida no pedido (mesmo texto, mesmo instante, mesma repetição) vira um lembrete só.
+  const vistos = new Set();
+  const unicos = items.filter((it) => {
+    const k = it.text.toLowerCase() + '|' + (it.at instanceof Date ? it.at.getTime() : String(it.at)) + '|' + JSON.stringify(it.repeat ?? null);
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
+  });
+  return { items: unicos };
 }
 
 export function parseReminderRequest(raw, now = new Date()) {
@@ -156,6 +164,10 @@ export function parseReminderRequest(raw, now = new Date()) {
   }
   if (listResult?.items && listResult.items.length > 1) {
     return T({ action: 'add-multiple', items: listResult.items });
+  }
+  if (listResult?.items && listResult.items.length === 1) {
+    const unico = listResult.items[0];
+    return T({ action: 'add', text: unico.text, at: unico.at, repeat: unico.repeat });
   }
 
   const w = parseWhen(body, now);

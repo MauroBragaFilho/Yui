@@ -310,6 +310,34 @@ eq((await gate('111111111111111111')).researched, true, 'a troca não vai ao his
     ok(rParcial.handled, 'trata falha parcial');
     ok(rParcial.text.includes('Criei 1 lembrete') && rParcial.text.includes('Não consegui criar 1 lembrete'), 'informa o que criou e o que não criou');
     ok(rParcial.text.includes('item que cabe') && rParcial.text.includes('item que estoura'), 'lista detalhes de sucesso e falha');
+
+    // Parecer da Liz: a mesma linha repetida no pedido vira UM lembrete; horário inválido recusa o pedido inteiro sem criar nada
+    const sdup = createReminderStore({ file: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rem-dup-')), 'l.json'), now: () => NOW.getTime() });
+    const asDup = (text) => routeReminders({ text, userId: O, authorName: 'oBraga' }, { store: sdup, now: NOW, isOwner: isOwn });
+    await asDup('colocar na agenda amanhã:\n08:00 regar as plantas\n08:00 regar as plantas');
+    eq(sdup.list().length, 1, 'linha repetida no mesmo pedido: um lembrete só');
+    await asDup('colocar na agenda amanhã:\n08:00 regar as plantas / 09:00 outra coisa');
+    eq(sdup.list().length, 3, 'o que é diferente continua sendo criado');
+    const rInvalido = await asDup('colocar na agenda amanhã:\n25:00 horario que nao existe\n14:00 este tambem nao pode ser criado');
+    ok(rInvalido.handled && /não existe/.test(rInvalido.text), 'horário inválido: avisa');
+    eq(sdup.list().length, 3, 'horário inválido: NADA foi criado (nem o item válido)');
+    // O mesmo pedido de um lembrete só (sem separador válido) segue o comportamento de sempre
+    const rUm = await asDup('me lembra amanhã às 9h de pagar a conta');
+    ok(rUm.handled && sdup.list().length === 4, 'sem lista: um lembrete, como antes');
+
+    // Fuso do dono (Cuiabá, UTC-4): a lista lê as horas no relógio dele e a virada de dia fica certa (00:30 e 23:30 do MESMO "amanhã")
+    const fusoAntes = process.env.YUI_FUSO;
+    process.env.YUI_FUSO = 'America/Cuiaba';
+    try {
+      const agoraCuiaba = new Date(Date.UTC(2026, 10, 21, 3, 50)); // 23:50 de 20/11 em Cuiabá
+      const lista = parseReminderRequest('colocar na agenda amanhã: 23:30 festa / 00:30 dormir', agoraCuiaba);
+      eq(lista.action, 'add-multiple', 'lista no fuso de Cuiabá');
+      const festa = lista.items.find((x) => x.text === 'festa'); const dormir = lista.items.find((x) => x.text === 'dormir');
+      eq(festa.at.toISOString(), '2026-11-22T03:30:00.000Z', '23:30 de amanhã (21/11) em Cuiabá = 03:30Z do dia 22');
+      eq(dormir.at.toISOString(), '2026-11-21T04:30:00.000Z', '00:30 de amanhã (21/11) em Cuiabá = 04:30Z do dia 21');
+    } finally {
+      if (fusoAntes === undefined) delete process.env.YUI_FUSO; else process.env.YUI_FUSO = fusoAntes;
+    }
   }
   const noOwner = await as(A, `lembra o <@${B}> de x amanhã às 9h`);
   ok(noOwner.handled && noOwner.text.includes('só crio lembrete para você') && !sp.list().some((x) => x.text === 'x'), 'quem não é dono NÃO cria para outros');

@@ -122,6 +122,59 @@ try {
     assert.equal(g.estado().naoEntendidos, 1);
   });
 
+  await test('A3 (parecer da Liz): negação, fala citada de outra pessoa e pedido misto com criar NÃO recebem a orientação', async () => {
+    for (const frase of ['Não quero consultar minha agenda', 'Meu amigo perguntou: qual é meu compromisso mais importante?', 'Qual meu compromisso e como faço para criar outro?', 'ele disse "qual é o meu compromisso mais importante?"', 'nunca olho a minha agenda, tenho algo hoje?']) {
+      assert.equal(intencao.pareceAgendaNaoReconhecida(frase), false, frase);
+      reset();
+      assert.equal(await perguntar(novo(), frase), null, `segue como conversa (sem orientação e sem Google): ${frase}`);
+      assert.equal(fake.pedidos.length, 0);
+    }
+  });
+  await test('A1 (parecer da Liz): a continuação depois de consulta VAZIA, de ERRO, de aniversários e de mudança de assunto; amarrada ao dono e ao canal', async () => {
+    reset();
+    const g = novo();
+    // depois de uma consulta vazia (agenda livre de verdade): continua e consulta de novo
+    assert.equal((await perguntar(g, 'o que tenho hoje na agenda?')).tipo, 'agenda');
+    const n1 = consultasDeEventos().length;
+    assert.equal((await perguntar(g, 'e amanhã?')).tipo, 'agenda');
+    assert.equal(consultasDeEventos().length, n1 + 1);
+    // depois de consulta com ERRO: nada foi guardado, então não continua
+    reset();
+    fake.estado.modoApi.agenda = '500';
+    const g2 = novo();
+    const erro = await perguntar(g2, 'o que tenho hoje na agenda?');
+    assert.ok(erro.resposta, 'respondeu a frase de falha');
+    fake.estado.modoApi.agenda = 'ok';
+    const n2 = fake.pedidos.length;
+    assert.equal(await perguntar(g2, 'e amanhã?'), null, 'a consulta com erro não vira assunto');
+    assert.equal(fake.pedidos.length, n2);
+    // depois de aniversários: o "e amanhã?" é de aniversários, não de agenda
+    reset();
+    fake.estado.aniversarios = [{ summary: 'Aniversário de Fulana', start: { date: '2026-11-21' }, end: { date: '2026-11-22' } }];
+    const g3 = novo();
+    assert.equal((await perguntar(g3, 'quando é o próximo aniversário?')).tipo, 'aniversarios');
+    const c = await perguntar(g3, 'e amanhã?');
+    assert.equal(c.tipo, 'aniversarios');
+    assert.equal(consultasDeEventos().length, 0, 'agenda principal não foi consultada');
+    assert.match(c.prompt, /Fulana/);
+    // mudança de assunto: uma conversa comum no meio apaga o assunto
+    reset();
+    const g4 = novo();
+    await perguntar(g4, 'minhas tarefas');
+    assert.equal(await perguntar(g4, 'me conta uma curiosidade sobre o espaço'), null);
+    const n4 = fake.pedidos.length;
+    assert.equal(await perguntar(g4, 'e amanhã?'), null, 'depois de outro assunto não continua');
+    assert.equal(fake.pedidos.length, n4);
+    // amarrada ao dono E ao canal: outro canal privado não herda a consulta
+    reset();
+    const g5 = novo();
+    const canalA = { ...dono, userId: 'dono', channelId: 'canal-A' };
+    const canalB = { ...dono, userId: 'dono', channelId: 'canal-B' };
+    await perguntar(g5, 'minha agenda de amanhã', canalA);
+    assert.equal(await perguntar(g5, 'e nesta semana?', canalB), null, 'outro canal não continua');
+    assert.equal((await perguntar(g5, 'e nesta semana?', canalA)).tipo, 'agenda', 'o mesmo canal continua');
+  });
+
   say('A4. aniversários');
   await test('classificador: pedidos de aniversário curtos; nome de pessoa fica de fora', () => {
     assert.deepEqual(intencao.classificarPedido('quando é o próximo aniversário?'), { tipo: 'aniversarios', periodo: 'ano' });

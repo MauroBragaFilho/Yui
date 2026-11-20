@@ -119,11 +119,11 @@ function montarLogBackend(backendName, meta, ms, extra = '') {
   if (backendName === 'gateway') {
     const prov = formatarIdentificador(meta?.provider);
     const modPedido = formatarIdentificador(meta?.modelPedido);
-    const modReal = formatarIdentificador(meta?.modelReal);
+    const modReal = formatarIdentificador(meta?.modelReportado);
     const tentativas = typeof meta?.attempts === 'number' && Number.isFinite(meta.attempts) && meta.attempts >= 1
       ? meta.attempts
       : (typeof meta?.attempts === 'string' && /^\d+$/.test(meta.attempts.trim()) && Number(meta.attempts.trim()) >= 1 ? Number(meta.attempts.trim()) : 'n/d');
-    return `${base} provedor=${prov} modelo_pedido=${modPedido} modelo_real=${modReal} tentativas=${tentativas} ${ms}ms${extraSuffix}`;
+    return `${base} provedor=${prov} modelo_pedido=${modPedido} modelo_reportado=${modReal} tentativas=${tentativas} ${ms}ms${extraSuffix}`;
   }
   return `${base} ${ms}ms${extraSuffix}`;
 }
@@ -689,7 +689,7 @@ function registerGateway() {
         const via = result?.x_gateway;
         meta.provider = via?.provider ?? null;
         meta.modelPedido = via?.model ?? null;
-        meta.modelReal = (result?.model && result.model !== via?.model) ? result.model : (via?.model ?? null);
+        meta.modelReportado = result?.model ?? null; // o campo model da resposta: o que o provedor DIZ ter usado (não prova qual modelo executou a inferência)
         meta.attempts = via?.attempts ?? null;
       }
       const text = result?.choices?.[0]?.message?.content;

@@ -91,6 +91,9 @@ export function classificarContinuacao(textoOriginal, ultimo, agora = Date.now()
 
 const CRIAR_OU_MEXER = /\b(coloca|colocar|coloque|anota|anotar|anote|adiciona|adicionar|adicione|cria|criar|crie|marca|marcar|marque|agende|agendar|lembra|lembre|lembrar|lembrete|apaga|apagar|cancela|cancelar|remove|remover|exclui|excluir)\b/;
 const FALA_DA_AGENDA = /\b(?:minha|meu|meus|minhas)\s+(?:agenda|calendario|compromissos?|tarefas?|aniversarios?)\b|\bna\s+minha\s+agenda\b|\b(?:tarefas|compromissos|aniversarios)\s+(?:minhas|meus)\b/;
+// Negação ("não quero consultar minha agenda") e fala de OUTRA pessoa citada ("meu amigo perguntou: qual é o meu compromisso...?") não são pedido do dono: ambiguidade = não orienta.
+const NEGACAO = /\b(?:nao|nunca|sem|jamais)\b/;
+const FALA_CITADA = /\b(?:perguntou|pergunta|disse|diz|falou|pediu|mandou|escreveu|respondeu|contou|quer saber)\b|["“”«»':]/;
 const COM_JEITO_DE_PERGUNTA = /\?|^(?:yui )?(?:o que|quais|qual|quando|tem|tenho|ha|existe|como esta|me (?:mostra|mostre|diz|diga|fala|fale|conta)|mostra|mostre|ver|veja)\b/;
 
 /**
@@ -101,7 +104,7 @@ export function pareceAgendaNaoReconhecida(textoOriginal) {
   const original = String(textoOriginal ?? '').trim();
   if (!original || original.length > 120 || /[\r\n]/.test(original) || /[<>]|https?:|www\./i.test(original.replace(/^(?:<@!?\d{5,25}>[\s,:;-]*)+/, ''))) return false;
   const norm = normalizar(original.replace(/^(?:<@!?\d{5,25}>[\s,:;-]*)+/, ''));
-  if (CRIAR_OU_MEXER.test(norm)) return false;
+  if (CRIAR_OU_MEXER.test(norm) || NEGACAO.test(norm) || FALA_CITADA.test(original.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''))) return false;
   return FALA_DA_AGENDA.test(norm) && COM_JEITO_DE_PERGUNTA.test(original.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim());
 }
 

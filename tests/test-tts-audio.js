@@ -372,6 +372,29 @@ await test('fim natural (voz que decai sozinha) mantém só o fade curto de 5 ms
   assert.ok(maxLonge > maxPerto * 3, `o decaimento natural segue o envelope (longe ${maxLonge}, perto ${maxPerto})`);
 });
 
+await test('fim cortado em mono e estéreo, 24 kHz e 48 kHz, e áudio MUITO curto: sem falha, sem duração negativa, termina em zero sem salto na última amostra', () => {
+  for (const sampleRate of [24000, 48000]) {
+    for (const channels of [1, 2]) {
+      const src = tonePcm({ sampleRate, ms: 400, freq: 700, amp: 0.8, channels });
+      const out = toDiscordPcm({ pcm: src, sampleRate, channels });
+      const s = i16(out);
+      assert.strictEqual(out.length % 3840, 0, `quadros fechados (${sampleRate} Hz, ${channels} canal)`);
+      let last = s.length / 2 - 1;
+      while (last > 0 && s[last * 2] === 0 && s[last * 2 + 1] === 0) last--;
+      // o último som já está perto de zero (o fade de 70 ms termina em zero): sem degrau entre as duas últimas amostras
+      assert.ok(Math.abs(s[last * 2]) < 400, `último som quase zero: ${s[last * 2]} (${sampleRate} Hz, ${channels} canal)`);
+      assert.ok(Math.abs(s[last * 2] - s[(last - 1) * 2]) < 1500, 'sem descontinuidade na última amostra');
+    }
+  }
+  // tons muito curtos que terminam altos: o fade-out nunca passa da metade do sinal e o resultado é válido
+  for (const ms of [2, 6, 12, 30]) {
+    const out = toDiscordPcm({ pcm: tonePcm({ sampleRate: 48000, ms, freq: 900, amp: 0.8 }), sampleRate: 48000, channels: 1 });
+    assert.ok(out.length >= 0 && out.length % 3840 === 0, `${ms} ms: formato válido`);
+    const s = i16(out);
+    for (let i = 0; i < s.length; i++) assert.ok(Number.isFinite(s[i]), 'amostra finita');
+  }
+});
+
 await test('silêncio inicial curto (10 ms) é preservado; o final é aparado', () => {
   const src = tonePcm({ sampleRate: 48000, ms: 300, amp: 0.6, leadMs: 10, trailMs: 800 });
   const s = i16(toDiscordPcm({ pcm: src, sampleRate: 48000, channels: 1 }));

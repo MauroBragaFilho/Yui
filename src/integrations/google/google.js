@@ -71,8 +71,9 @@ export function criarGoogle(deps = {}) {
   const autenticador = deps.autenticador ?? criarAutenticador({ env, fetchImpl: deps.fetchImpl, agora, alertar: deps.alertar, log, timeoutMs: deps.timeoutMs, restringir: deps.restringir });
   const comum = { autenticador, fetchImpl: deps.fetchImpl, env, estadoDaRota: deps.estadoDaRota, timeoutMs: deps.timeoutMs };
   const contadores = { consultas: 0, respondidasPorCodigo: 0, comDados: 0, falhas: 0, recusasPrivacidade: 0, portaoFechado: 0, viaExcecaoDoDono: 0, naoEntendidos: 0 };
-  /** A última consulta bem-sucedida do dono (tipo, período e quando): só para entender "e amanhã?". Só em memória; só o dono chega aqui. */
-  let ultimaConsulta = null;
+  /** A última consulta bem-sucedida de cada conversa privada do dono (tipo, período e quando): só para entender "e amanhã?". Só em memória; amarrada ao dono E ao canal (nunca um relógio global). */
+  const ultimasConsultas = new Map();
+  const chaveDaConversa = (ctx) => `${ctx?.userId ?? ''}|${ctx?.channelId ?? ''}`;
   let avisouExcecao = false;
   /** A exceção explícita do dono foi usada (a rota privada NÃO estava validada): conta e deixa UM aviso no log por processo (sem nenhum conteúdo). */
   function notarExcecao(r) {
@@ -89,8 +90,9 @@ export function criarGoogle(deps = {}) {
     let pedido = classificarPedido(texto);
     // "E nesta semana?" logo depois de uma consulta: só o dono (a Yui guarda só a última consulta dele) e só com consulta recente.
     const ehDono = Boolean(ctx) && ctx.role === ROLES.OWNER && !call.chatter && !call.thirdParty;
-    if (!pedido && ehDono && ctx.memoryScope === MEMORY_SCOPES.PERSONAL && !call.voice && !call.voiceItem) pedido = classificarContinuacao(texto, ultimaConsulta, agora());
+    if (!pedido && ehDono && ctx.memoryScope === MEMORY_SCOPES.PERSONAL && !call.voice && !call.voiceItem) pedido = classificarContinuacao(texto, ultimasConsultas.get(chaveDaConversa(ctx)) ?? null, agora());
     if (!pedido) {
+      if (ehDono) ultimasConsultas.delete(chaveDaConversa(ctx)); // mudança de assunto: o "e amanhã?" seguinte já não continua a consulta antiga
       // Parece pergunta sobre a própria agenda, mas não é um pedido que eu entendo: orienta, em vez de a IA inventar ou dizer "não tenho acesso".
       if (ehDono && ctx.memoryScope === MEMORY_SCOPES.PERSONAL && !call.voice && !call.voiceItem && pareceAgendaNaoReconhecida(texto)) {
         contadores.naoEntendidos += 1;
@@ -134,7 +136,14 @@ export function criarGoogle(deps = {}) {
       fonte = 'lista de tarefas';
     }
     contadores.comDados += 1;
-    if (pedido.tipo !== 'email') ultimaConsulta = { tipo: pedido.tipo, periodo: pedido.periodo ?? null, em: agora() };
+    if (pedido.tipo !== 'email') {
+      const chave = chaveDaConversa(ctx);
+      ultimasConsultas.delete(chave);
+      ultimasConsultas.set(chave, { tipo: pedido.tipo, periodo: pedido.periodo ?? null, em: agora() });
+      if (ultimasConsultas.size > 20) ultimasConsultas.delete(ultimasConsultas.keys().next().value);
+    } else {
+      ultimasConsultas.delete(chaveDaConversa(ctx)); // a pergunta de e-mail encerra o assunto anterior
+    }
     return {
       tipo: pedido.tipo,
       prompt: montarPromptComDados({ bloco, pedido: prompt, fonte }),
