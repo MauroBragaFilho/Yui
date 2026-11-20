@@ -272,6 +272,44 @@ eq((await gate('111111111111111111')).researched, true, 'a troca não vai ao his
     ok(items3.some((x) => x.text.includes('almoço com a equipe')), 'item almoço criado');
     ok(items3.some((x) => x.text.includes('reunião')), 'item reunião criado');
     ok(r3.text.includes('dentista') && r3.text.includes('almoço com a equipe') && r3.text.includes('reunião'), 'confirma os 3 na resposta');
+
+    // Regressões: frases com / que NÃO devem virar múltiplos lembretes (criam apenas 1 lembrete com add)
+    const countBefore = sl.list().length;
+    const rBoleto = await asList('me lembra amanhã às 9h de pagar o boleto 10/12');
+    ok(rBoleto.handled && !rBoleto.text.includes('Criei 2'), 'boleto 10/12 vira 1 lembrete');
+    eq(sl.list().length, countBefore + 1, 'adicionou apenas 1 lembrete para boleto');
+    ok(sl.list().some((x) => x.text.includes('pagar o boleto 10/12')), 'texto do boleto preservado');
+
+    const rPessoas = await asList('me lembra amanhã às 9h de ligar pro João / Maria');
+    ok(rPessoas.handled && !rPessoas.text.includes('Criei 2'), 'João / Maria vira 1 lembrete');
+    eq(sl.list().length, countBefore + 2, 'adicionou apenas 1 lembrete para João / Maria');
+    ok(sl.list().some((x) => x.text.includes('João / Maria')), 'texto com / preservado');
+
+    const rPao = await asList('me lembra hoje às 15h de comprar pão/leite');
+    ok(rPao.handled && !rPao.text.includes('Criei 2'), 'pão/leite vira 1 lembrete');
+    eq(sl.list().length, countBefore + 3, 'adicionou apenas 1 lembrete para pão/leite');
+    ok(sl.list().some((x) => x.text.includes('comprar pão/leite')), 'texto pão/leite preservado');
+
+    // Limite de 10 itens: pedido com 11 itens é recusado sem criar nada
+    const countBefore11 = sl.list().length;
+    const linhas11 = Array.from({ length: 11 }, (_, i) => `${i < 9 ? '0' + (i + 1) : (i + 1)}:00 item ${i + 1}`).join('\n');
+    const r11 = await asList(`colocar na agenda amanhã:\n${linhas11}`);
+    ok(r11.handled, '11 itens tratado pelo handler');
+    ok(r11.text.includes('limite') || r11.text.includes('divida em pedidos menores'), 'recusa informando o limite');
+    eq(sl.list().length, countBefore11, 'nenhum lembrete foi criado no excesso');
+
+    // Falha no meio (ex: limite do store atingido durante a lista)
+    const sfail = createReminderStore({ file: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rem-fail-')), 'l.json'), now: () => NOW.getTime() });
+    const UTESTE = '999999999999999999';
+    // Preenche até faltar apenas 1 espaço para atingir maxPerUser
+    for (let i = 0; i < REMINDER_LIMITS.maxPerUser - 1; i++) {
+      sfail.add({ text: `previo ${i}`, at: new Date(NOW.getTime() + 60000), userId: UTESTE });
+    }
+    const asListFail = (text) => routeReminders({ text, userId: UTESTE, authorName: 'Teste' }, { store: sfail, now: NOW, isOwner: () => false });
+    const rParcial = await asListFail('colocar na agenda amanhã:\n08:00 item que cabe\n09:00 item que estoura');
+    ok(rParcial.handled, 'trata falha parcial');
+    ok(rParcial.text.includes('Criei 1 lembrete') && rParcial.text.includes('Não consegui criar 1 lembrete'), 'informa o que criou e o que não criou');
+    ok(rParcial.text.includes('item que cabe') && rParcial.text.includes('item que estoura'), 'lista detalhes de sucesso e falha');
   }
   const noOwner = await as(A, `lembra o <@${B}> de x amanhã às 9h`);
   ok(noOwner.handled && noOwner.text.includes('só crio lembrete para você') && !sp.list().some((x) => x.text === 'x'), 'quem não é dono NÃO cria para outros');

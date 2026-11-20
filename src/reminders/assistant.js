@@ -45,14 +45,37 @@ function cleanBody(text) {
   return cleanReminderText(t);
 }
 
-/** Tenta extrair vários lembretes em lista (separados por barra '/' ou quebra de linha), com data no cabeçalho ou por item. */
+const RE_HORARIO_INICIO = /^(?:(?:as\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d|h(?:[0-5]\d)?|\s*horas?\b)|(?:as\s+(?:[01]?\d|2[0-3])\b)|meio[- ]dia\b|meia[- ]noite\b)/i;
+
+/** Tenta extrair vários lembretes em lista (separados por barra '/' com espaço nos dois lados ou quebra de linha), onde cada item começa com um horário próprio. */
 function parseListItems(body, now) {
   const norm = normChars(body);
   const m = /^(?:(?:para|pra|de)\s+)?(hoje|amanha|depois de amanha|segunda(?:-feira)?|terca(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sabado|domingo|dia\s+\d{1,2}(?:\/\d{1,2})?)\b[:\s]*/i.exec(norm);
   const headerDate = m ? m[1] : null;
   const rest = headerDate ? body.slice(m[0].length).trim() : body;
-  const parts = rest.split(/(?:\s*\/\s*|\r?\n)+/).map((s) => s.trim().replace(/^[-*•\s]*(?:\d+[\s.)\-]+)?/, '')).filter(Boolean);
+
+  let rawParts;
+  if (/\r?\n/.test(rest)) {
+    rawParts = rest.split(/\r?\n+/);
+  } else if (/\s+\/\s+/.test(rest)) {
+    rawParts = rest.split(/\s+\/\s+/);
+  } else {
+    return null;
+  }
+
+  const parts = rawParts.map((s) => s.trim().replace(/^[-*•\s]*(?:\d+[\s.)\-]+)?/, '')).filter(Boolean);
   if (parts.length <= 1) return null;
+
+  for (const p of parts) {
+    if (!RE_HORARIO_INICIO.test(normChars(p))) {
+      return null;
+    }
+  }
+
+  if (parts.length > 10) {
+    return { excesso: true, total: parts.length };
+  }
+
   const items = [];
   for (const p of parts) {
     let w = null;
@@ -65,7 +88,7 @@ function parseListItems(body, now) {
     if (!clean) return null;
     items.push({ text: clean, at: w.at, repeat: w.repeat });
   }
-  return items;
+  return { items };
 }
 
 export function parseReminderRequest(raw, now = new Date()) {
@@ -127,9 +150,12 @@ export function parseReminderRequest(raw, now = new Date()) {
   if (!body) return trigger === 'noun' ? { action: 'ask-text' } : (target ? { action: 'ask-text', target } : null);
 
   // Lembretes em lista (vários itens separados por quebra de linha ou '/')
-  const listItems = parseListItems(body, now);
-  if (listItems && listItems.length > 1) {
-    return T({ action: 'add-multiple', items: listItems });
+  const listResult = parseListItems(body, now);
+  if (listResult?.excesso) {
+    return T({ action: 'too-many-items', total: listResult.total });
+  }
+  if (listResult?.items && listResult.items.length > 1) {
+    return T({ action: 'add-multiple', items: listResult.items });
   }
 
   const w = parseWhen(body, now);
@@ -211,23 +237,41 @@ export async function runReminderRequest({ text, store, now = new Date(), report
     if (req.action === 'ask-when') return `Quando devo te lembrar${req.text ? ` de “${req.text}”` : ''}? Diga o horário, por exemplo: “me lembra amanhã às 9h ${req.text ? `de ${req.text}` : 'de pagar a conta'}” ou “daqui a 2 horas”.`;
     if (req.action === 'ask-text') return 'Do que devo te lembrar? Por exemplo: “me lembra amanhã às 9h de pagar a conta”.';
     if (req.action === 'error') return `Não consegui marcar: ${req.message}`;
+    if (req.action === 'too-many-items') return `São muitos lembretes de uma vez (${req.total}). O limite é de 10 por pedido: por favor, divida em pedidos menores.`;
     if (req.action === 'add-multiple') {
       const criados = [];
+      const falhas = [];
       for (const it of req.items) {
-        let r;
-        if (req.target && !isOwnerId(req.target)) {
-          if (!isOwner) return 'Eu só crio lembrete para você mesmo (quem me pede). Para você: “me lembra daqui 10 minutos de ...”.';
-          if (typeof store.addFor !== 'function') return 'Não consegui criar o lembrete para essa pessoa agora.';
-          r = store.addFor(req.target, { text: it.text, at: it.at, repeat: it.repeat });
-        } else {
-          r = store.add({ text: it.text, at: it.at, repeat: it.repeat });
+        try {
+          let r;
+          if (req.target && !isOwnerId(req.target)) {
+            if (!isOwner) return 'Eu só crio lembrete para você mesmo (quem me pede). Para você: “me lembra daqui 10 minutos de ...”.';
+            if (typeof store.addFor !== 'function') return 'Não consegui criar o lembrete para essa pessoa agora.';
+            r = store.addFor(req.target, { text: it.text, at: it.at, repeat: it.repeat });
+          } else {
+            r = store.add({ text: it.text, at: it.at, repeat: it.repeat });
+          }
+          criados.push(r);
+        } catch (err) {
+          falhas.push({ text: it.text, motivo: err instanceof ReminderError ? err.message : 'erro ao salvar' });
         }
-        criados.push(r);
       }
-      const linhas = [`Anotado! Criei ${criados.length} lembretes:`];
-      for (const r of criados) {
-        const quando = r.repeat ? `${describeRepeat(r.repeat)} (a primeira, ${describeWhen(r.at, now)})` : describeWhen(r.at, now);
-        linhas.push(`• **#${r.id}** · **${quando}**: ${r.text}`);
+      if (!criados.length && falhas.length) {
+        return `Não consegui criar os lembretes: ${falhas[0].motivo}`;
+      }
+      const linhas = [];
+      if (criados.length) {
+        linhas.push(`Anotado! Criei ${criados.length} lembrete(s):`);
+        for (const r of criados) {
+          const quando = r.repeat ? `${describeRepeat(r.repeat)} (a primeira, ${describeWhen(r.at, now)})` : describeWhen(r.at, now);
+          linhas.push(`• **#${r.id}** · **${quando}**: ${r.text}`);
+        }
+      }
+      if (falhas.length) {
+        linhas.push(`⚠️ Não consegui criar ${falhas.length} lembrete(s):`);
+        for (const f of falhas) {
+          linhas.push(`• ${f.text} (${f.motivo})`);
+        }
       }
       linhas.push('-# Para ver: “meus lembretes”. Para cancelar um: “cancela o lembrete <número>”.');
       return linhas.join('\n');
