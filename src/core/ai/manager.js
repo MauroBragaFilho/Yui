@@ -105,6 +105,29 @@ export function listBackends() {
  * como fato do canal. Sem ele (o app), vale o limite do app: o AI_MAX_TOKENS, cortado pela capacidade do provedor e pelo teto global
  * (ajustes da Liz, §11 do relatório da etapa 6).
  */
+function formatarIdentificador(val) {
+  if (typeof val !== 'string') return 'n/d';
+  const t = val.trim();
+  if (!t || t.length > 80) return 'n/d';
+  if (!/^[a-zA-Z0-9.:\/_-]+$/.test(t)) return 'n/d';
+  return t;
+}
+
+function montarLogBackend(backendName, meta, ms, extra = '') {
+  const base = `[AI] backend=${backendName}`;
+  const extraSuffix = extra ? ` ${extra}` : '';
+  if (backendName === 'gateway') {
+    const prov = formatarIdentificador(meta?.provider);
+    const modPedido = formatarIdentificador(meta?.modelPedido);
+    const modReal = formatarIdentificador(meta?.modelReal);
+    const tentativas = typeof meta?.attempts === 'number' && Number.isFinite(meta.attempts) && meta.attempts >= 1
+      ? meta.attempts
+      : (typeof meta?.attempts === 'string' && /^\d+$/.test(meta.attempts.trim()) && Number(meta.attempts.trim()) >= 1 ? Number(meta.attempts.trim()) : 'n/d');
+    return `${base} provedor=${prov} modelo_pedido=${modPedido} modelo_real=${modReal} tentativas=${tentativas} ${ms}ms${extraSuffix}`;
+  }
+  return `${base} ${ms}ms${extraSuffix}`;
+}
+
 export async function chat({ prompt, system = '', history = [], ctx, memoryBlock = '', deadlineAt = null, sensitive = false, tokensPorProvedor = false, perfil = null, localPrivada = null }) {
   const backend = activeBackendFor(ctx);
 
@@ -127,8 +150,9 @@ export async function chat({ prompt, system = '', history = [], ctx, memoryBlock
       return via.texto;
     }
   }
-  const text = await backend.chat({ prompt, system: persona, history, ctx, memoryBlock, ...(deadlineAt ? { deadlineAt } : {}), ...(sensitive === true ? { sensitive: true } : {}), ...pedidoDeLimite(tokensPorProvedor) });
-  logger.info(`[AI] backend=${backend.name} ${Date.now() - started}ms`);
+  const meta = {};
+  const text = await backend.chat({ prompt, system: persona, history, ctx, memoryBlock, ...(deadlineAt ? { deadlineAt } : {}), ...(sensitive === true ? { sensitive: true } : {}), ...pedidoDeLimite(tokensPorProvedor), meta });
+  logger.info(montarLogBackend(backend.name, meta, Date.now() - started));
   recordInteraction();
   return text;
 }
@@ -204,11 +228,12 @@ export async function isolatedChat({ prompt, system = '', ctx = null, sensitive 
       return via.texto;
     }
   }
+  const meta = {};
   const text = await backend.chat({
     prompt, system: system || buildPersonaPrompt(ctx), history: [], ctx, memoryBlock: '',
-    sensitive: sensitive === true, isolated: true, ...(deadlineAt ? { deadlineAt } : {}), ...pedidoDeLimite(tokensPorProvedor),
+    sensitive: sensitive === true, isolated: true, ...(deadlineAt ? { deadlineAt } : {}), ...pedidoDeLimite(tokensPorProvedor), meta,
   });
-  logger.info(`[AI] backend=${backend.name} ${Date.now() - started}ms (sem histórico nem memória)`);
+  logger.info(montarLogBackend(backend.name, meta, Date.now() - started, '(sem histórico nem memória)'));
   return text;
 }
 
@@ -643,7 +668,7 @@ function registerGateway() {
   registerBackend({
     name: 'gateway',
     local: false,
-    async chat({ prompt, system, history, ctx, memoryBlock, sensitive, tokensPorProvedor }) {
+    async chat({ prompt, system, history, ctx, memoryBlock, sensitive, tokensPorProvedor, meta }) {
       const { getGateway } = await import('../../gateway/index.js');
       // O cérebro (tokensPorProvedor, etapa 6): cada provedor recebe o limite DELE (a configuração do canal do Discord, com o ajuste do
       // painel; a capacidade; o teto global). O app (sem o pedido): o AI_MAX_TOKENS, cortado pela capacidade de cada provedor e pelo teto
@@ -660,6 +685,13 @@ function registerGateway() {
         ],
         max_tokens: porProvedor ? tetoGlobal(process.env) : Math.min(aiMaxTokens(process.env), tetoGlobal(process.env)),
       }, { sensitive: sensitive === true || ctx?.memoryScope === 'personal', maxTokensFor: porProvedor ? limitePorProvedor(process.env, { canal }) : limitePorProvedorNoApp(process.env) });
+      if (meta && typeof meta === 'object') {
+        const via = result?.x_gateway;
+        meta.provider = via?.provider ?? null;
+        meta.modelPedido = via?.model ?? null;
+        meta.modelReal = (result?.model && result.model !== via?.model) ? result.model : (via?.model ?? null);
+        meta.attempts = via?.attempts ?? null;
+      }
       const text = result?.choices?.[0]?.message?.content;
       if (!text || !String(text).trim()) throw new Error('Resposta vazia do gateway');
       return String(text).trim();

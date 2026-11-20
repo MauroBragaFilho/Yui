@@ -584,5 +584,107 @@ await test('AI Manager tem o backend "gateway" e marca contexto pessoal como sen
   assert.match(src, /sensitive: (?:sensitive === true \|\| )?ctx\?\.memoryScope === 'personal'/);
 });
 
+await test('C3: log de IA com backend=gateway registra provedor, modelo e tentativas sem vazar conversa', async () => {
+  const { registerBackend, setActiveBackend, chat, isolatedChat, initAiManager } = await import('../src/core/ai/manager.js');
+  const { logger } = await import('../src/utils/logger.js');
+
+  const logs = [];
+  const origInfo = logger.info;
+  logger.info = (msg) => { logs.push(String(msg)); };
+
+  try {
+    // 1. Chamada normal e isolada com metadados completos
+    registerBackend({
+      name: 'gateway',
+      local: false,
+      async chat({ meta }) {
+        if (meta) {
+          meta.provider = 'groq';
+          meta.modelPedido = 'auto';
+          meta.modelReal = 'llama-3.3-70b-versatile';
+          meta.attempts = 1;
+        }
+        return 'resposta secreta do modelo';
+      },
+    });
+    setActiveBackend('gateway');
+
+    const res1 = await chat({ prompt: 'mensagem de teste do usuario 12345' });
+    assert.equal(res1, 'resposta secreta do modelo', 'chat devolve string intacta');
+
+    const resIso = await isolatedChat({ prompt: 'mensagem isolada secreta' });
+    assert.equal(resIso, 'resposta secreta do modelo', 'isolatedChat devolve string intacta');
+
+    // 2. Chamada sem metadados preenchidos (deve cair em n/d) e com valores inválidos (com espaços/injetados)
+    registerBackend({
+      name: 'gateway',
+      local: false,
+      async chat({ meta, prompt }) {
+        if (prompt === 'sem-meta') {
+          // não preenche meta
+        } else if (prompt === 'invalido') {
+          if (meta) {
+            meta.provider = 'provedor com espacos inválido!';
+            meta.modelPedido = '';
+            meta.modelReal = 'modelo com quebra\nlinha';
+            meta.attempts = -5;
+          }
+        }
+        return 'ok';
+      },
+    });
+    await chat({ prompt: 'sem-meta' });
+    await chat({ prompt: 'invalido' });
+
+    // 3. Duas chamadas simultâneas conferindo que cada log tem seus metadados sem colisão
+    registerBackend({
+      name: 'gateway',
+      local: false,
+      async chat({ meta, prompt }) {
+        if (prompt === 'chamada-A') {
+          await new Promise((r) => setTimeout(r, 25));
+          if (meta) { meta.provider = 'gemini'; meta.modelPedido = 'smart'; meta.modelReal = 'gemini-2.5-flash'; meta.attempts = 1; }
+        } else {
+          await new Promise((r) => setTimeout(r, 10));
+          if (meta) { meta.provider = 'cloudflare'; meta.modelPedido = 'fast'; meta.modelReal = 'llama-3-8b'; meta.attempts = 2; }
+        }
+        return `resp-${prompt}`;
+      },
+    });
+
+    await Promise.all([
+      chat({ prompt: 'chamada-A' }),
+      chat({ prompt: 'chamada-B' }),
+    ]);
+
+    // Validações
+    const log1 = logs.find((l) => l.includes('provedor=groq') && !l.includes('(sem histórico'));
+    assert.ok(log1, 'log1 encontrado');
+    assert.match(log1, /^\[AI\] backend=gateway provedor=groq modelo_pedido=auto modelo_real=llama-3.3-70b-versatile tentativas=1 \d+ms$/);
+    assert.ok(!log1.includes('12345') && !log1.includes('resposta secreta'), 'sem texto de prompt nem resposta no log');
+
+    const logIso = logs.find((l) => l.includes('provedor=groq') && l.includes('(sem histórico'));
+    assert.ok(logIso, 'logIso encontrado');
+    assert.match(logIso, /^\[AI\] backend=gateway provedor=groq modelo_pedido=auto modelo_real=llama-3.3-70b-versatile tentativas=1 \d+ms \(sem histórico nem memória\)$/);
+    assert.ok(!logIso.includes('isolada secreta'), 'sem texto de prompt isolado');
+
+    const logsNd = logs.filter((l) => l.includes('provedor=n/d') && l.includes('tentativas=n/d'));
+    assert.equal(logsNd.length, 2, 'duas chamadas geraram logs com n/d (sem meta e com campos inválidos)');
+    for (const l of logsNd) {
+      assert.match(l, /^\[AI\] backend=gateway provedor=n\/d modelo_pedido=n\/d modelo_real=n\/d tentativas=n\/d \d+ms$/);
+    }
+
+    // Simultâneas: ambas registradas corretamente
+    const logA = logs.find((l) => l.includes('provedor=gemini'));
+    const logB = logs.find((l) => l.includes('provedor=cloudflare'));
+    assert.ok(logA && logB, 'ambos os logs simultâneos foram gerados');
+    assert.match(logA, /provedor=gemini modelo_pedido=smart modelo_real=gemini-2.5-flash tentativas=1/);
+    assert.match(logB, /provedor=cloudflare modelo_pedido=fast modelo_real=llama-3-8b tentativas=2/);
+  } finally {
+    logger.info = origInfo;
+    initAiManager();
+  }
+});
+
 console.log(`\n${passed} testes OK`);
 process.exit(0);
