@@ -30,6 +30,8 @@ const FRAME_SAMPLES = DISCORD_FRAME_BYTES / (DISCORD_CHANNELS * 2); // 960 por c
 const LEAD_KEEP_MS = 30;
 const TRAIL_KEEP_MS = 20;
 const FADE_MS = 5;
+const ABRUPT_FADE_MS = 70; // fade-out quando o áudio termina cortado, com a voz ainda alta
+const ABRUPT_END_RATIO = 0.1; // "ainda alta" = o nível dos últimos 10 ms passa de 10% do pico (-20 dB)
 const TAIL_MS = 60;
 const PEAK_TARGET = 0.85;
 const GAIN_MIN = 0.5;
@@ -255,14 +257,23 @@ export function toDiscordPcm({ pcm, sampleRate, channels } = {}) {
   const L = left.slice(start, end);
   const R = right === left ? L : right.slice(start, end);
   const fade = Math.min(Math.round((FADE_MS / 1000) * DISCORD_SAMPLE_RATE), n >> 1);
+  // Fim CORTADO (o provedor encerra o áudio com a voz ainda alta, sem a queda natural; medido no Gemini via OmniRoute em 20/11/2026: os últimos 20 ms ficavam
+  // a ~-3 dBFS): um fade de 5 ms vira um corte seco, que soa como um rádio "desligando" (walkie-talkie). Nesse caso a saída desce em ABRUPT_FADE_MS.
+  const endWin = Math.min(n, Math.round(0.01 * DISCORD_SAMPLE_RATE));
+  let endSq = 0;
+  for (let i = n - endWin; i < n; i++) endSq += L[i] * L[i];
+  const endRms = endWin ? Math.sqrt(endSq / endWin) : 0;
+  const cutEnd = endRms > peak * ABRUPT_END_RATIO;
+  const fadeOut = cutEnd ? Math.min(Math.round((ABRUPT_FADE_MS / 1000) * DISCORD_SAMPLE_RATE), n >> 1) : fade;
   for (let i = 0; i < fade; i++) {
     const g = i / fade;
     L[i] *= g;
+    if (R !== L) R[i] *= g;
+  }
+  for (let i = 0; i < fadeOut; i++) {
+    const g = i / fadeOut;
     L[n - 1 - i] *= g;
-    if (R !== L) {
-      R[i] *= g;
-      R[n - 1 - i] *= g;
-    }
+    if (R !== L) R[n - 1 - i] *= g;
   }
 
   // 5. Ganho para o pico (já com os fades, que podem tirar o pico do lugar).

@@ -338,8 +338,8 @@ await test('estéreo mantém os canais separados', () => {
   assert.ok(Math.abs(pl - 0.85 * 32768) <= 3);
 });
 
-await test('fade de 5 ms nas duas pontas do sinal (sem estalo)', () => {
-  const src = tonePcm({ sampleRate: 48000, ms: 500, freq: 1000, amp: 0.8, square: true }); // soa desde a 1ª amostra
+await test('fade de 5 ms na entrada e fade-out LONGO (70 ms) quando o áudio termina cortado, com a voz ainda alta (sem estalo nem "walkie-talkie")', () => {
+  const src = tonePcm({ sampleRate: 48000, ms: 500, freq: 1000, amp: 0.8, square: true }); // soa desde a 1ª amostra e termina alto: fim cortado
   const s = i16(toDiscordPcm({ pcm: src, sampleRate: 48000, channels: 1 }));
   const peak = 0.85 * 32768;
   const n = 24000; // amostras do sinal
@@ -348,7 +348,28 @@ await test('fade de 5 ms nas duas pontas do sinal (sem estalo)', () => {
   assert.ok(Math.abs(Math.abs(s[120 * 2]) / peak - 0.5) < 0.06, `fade-in ${Math.abs(s[240])}`);
   assert.ok(Math.abs(s[240 * 2]) / peak > 0.95);
   assert.strictEqual(s[(n - 1) * 2], 0, 'termina em zero');
-  assert.ok(Math.abs(Math.abs(s[(n - 1 - 120) * 2]) / peak - 0.5) < 0.06, 'fade-out');
+  // Fim cortado: a saída desce em 70 ms (3360 amostras); a meio caminho (35 ms = 1680 amostras) a amplitude é ~metade e a 70 ms já é plena.
+  assert.ok(Math.abs(Math.abs(s[(n - 1 - 1680) * 2]) / peak - 0.5) < 0.06, 'fade-out longo');
+  assert.ok(Math.abs(s[(n - 1 - 3400) * 2]) / peak > 0.95, 'plena a 70 ms do fim');
+});
+
+await test('fim natural (voz que decai sozinha) mantém só o fade curto de 5 ms', () => {
+  // 400 ms de tom e depois um decaimento exponencial (constante de 25 ms): termina quieto, sem corte.
+  const rate = 48000; const body = 0.4 * rate; const decay = 0.3 * rate; const buf = Buffer.alloc((body + decay) * 2);
+  for (let i = 0; i < body + decay; i++) {
+    const env = i < body ? 1 : Math.exp(-(i - body) / (0.025 * rate));
+    buf.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 1000 * i) / rate) * 0.8 * env * 32767), i * 2);
+  }
+  const s = i16(toDiscordPcm({ pcm: buf, sampleRate: rate, channels: 1 }));
+  let last = s.length / 2 - 1;
+  while (last > 0 && s[last * 2] === 0) last--;
+  // Com o fade curto, 5 ms antes do último som a onda ainda tem o nível do decaimento; um fade de 70 ms a deixaria bem mais baixa.
+  let maxPerto = 0;
+  for (let i = last - 480; i < last - 240; i++) maxPerto = Math.max(maxPerto, Math.abs(s[i * 2]));
+  let maxLonge = 0;
+  for (let i = last - 3360; i < last - 3120; i++) maxLonge = Math.max(maxLonge, Math.abs(s[i * 2]));
+  assert.ok(maxPerto > 0, 'ainda há sinal perto do fim');
+  assert.ok(maxLonge > maxPerto * 3, `o decaimento natural segue o envelope (longe ${maxLonge}, perto ${maxPerto})`);
 });
 
 await test('silêncio inicial curto (10 ms) é preservado; o final é aparado', () => {
