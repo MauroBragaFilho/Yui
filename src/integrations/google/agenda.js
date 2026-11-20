@@ -89,3 +89,36 @@ export async function listarEventos({ autenticador, periodo = 'hoje', agora = Da
   // Sobrou uma página que não foi lida (o teto de páginas ou já há eventos de sobra): há mais compromissos do que os mostrados.
   return { ok: true, eventos: todos.slice(0, maxEventos), janela, fuso: tz, truncado: todos.length > maxEventos || Boolean(pagina), portao: portao.motivo };
 }
+
+/** O calendário de aniversários dos contatos: um calendário À PARTE (o "primary" não o inclui). A leitura direta vale com o escopo calendar.events.readonly (conferido em 19/11/2026). */
+export const CALENDARIO_ANIVERSARIOS = 'addressbook#contacts@group.v.calendar.google.com';
+export const MAX_ANIVERSARIOS = 10;
+
+/**
+ * Os aniversários de um período, lidos DIRETO do calendário de aniversários (sem calendarList, sem escopo novo). Somente leitura.
+ * Períodos: 'hoje' | 'amanha' | 'semana' | 'mes' | 'ano' (o "próximo aniversário" olha o próximo ano). Falha do calendário (403/404) = motivo 'calendario-inacessivel',
+ * diferente de "consultado e sem aniversários" (ok com lista vazia).
+ * @returns {Promise<{ ok: true, eventos: object[], janela: object, fuso: string, truncado: boolean, portao: string } | { ok: false, motivo: string }>}
+ */
+export async function listarAniversarios({ autenticador, periodo = 'ano', agora = Date.now, fuso = null, fetchImpl, hosts = hostsDoGoogle, maxEventos = MAX_ANIVERSARIOS, env = process.env, estadoDaRota = estadoDaRotaPrivada, timeoutMs }) {
+  const portao = portaoDoRecurso({ recurso: 'agenda', env, estadoDaRota });
+  if (!portao.liberado) return { ok: false, motivo: portao.motivo };
+  const tz = fuso ?? fusoDoGoogle(env);
+  const janela = janelaDeConsulta(periodo, agora(), tz);
+  const diaDe = dataDeHoje(janela.de, tz);
+  const diaAte = dataDeHoje(janela.ate, tz);
+  const q = new URLSearchParams({
+    timeMin: janela.de.toISOString(), timeMax: janela.ate.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: String(Math.max(2, maxEventos + 1)),
+    timeZone: tz, fields: 'items(summary,start,end,status)',
+  });
+  const r = await lerDoGoogle({ autenticador, recurso: 'agenda', url: `${hosts().agenda}/calendars/${encodeURIComponent(CALENDARIO_ANIVERSARIOS)}/events?${q}`, fetchImpl, timeoutMs });
+  if (!r.ok) return { ok: false, motivo: r.motivo === 'negado' || r.motivo === 'erro' ? 'calendario-inacessivel' : r.motivo };
+  const itens = Array.isArray(r.json?.items) ? r.json.items : [];
+  const todos = [];
+  for (const item of itens) {
+    if (!diaInteiroDentroDaJanela(item, diaDe, diaAte)) continue;
+    const e = eventoEnxuto(item);
+    if (e) todos.push(e);
+  }
+  return { ok: true, eventos: todos.slice(0, maxEventos), janela, fuso: tz, truncado: todos.length > maxEventos, portao: portao.motivo };
+}

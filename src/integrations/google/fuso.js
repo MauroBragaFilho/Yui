@@ -13,7 +13,7 @@ const pad = (n) => String(n).padStart(2, '0');
 export function janelaDeConsulta(tipo, agora, fuso) {
   const hoje = partesNoFuso(agora, fuso);
   const base = { ano: hoje.ano, mes: hoje.mes, dia: hoje.dia };
-  const [dia0, dias, rotulo] = tipo === 'amanha' ? [1, 1, 'amanhã'] : tipo === 'semana' ? [0, 7, 'os próximos 7 dias'] : [0, 1, 'hoje'];
+  const [dia0, dias, rotulo] = tipo === 'amanha' ? [1, 1, 'amanhã'] : tipo === 'semana' ? [0, 7, 'os próximos 7 dias'] : tipo === 'mes' ? [0, 30, 'os próximos 30 dias'] : tipo === 'ano' ? [0, 365, 'o próximo ano'] : [0, 1, 'hoje'];
   const ini = somarDias(base, dia0);
   const fim = somarDias(base, dia0 + dias);
   return { de: inicioDoDia(ini.ano, ini.mes, ini.dia, fuso), ate: inicioDoDia(fim.ano, fim.mes, fim.dia, fuso), rotulo, dias };

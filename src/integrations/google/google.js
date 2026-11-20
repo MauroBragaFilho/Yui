@@ -16,12 +16,12 @@ import { ROLES, MEMORY_SCOPES } from '../../core/permissions.js';
 import { logger as loggerPadrao } from '../../utils/logger.js';
 import { criarAutenticador } from './auth.js';
 import { googleLigado, fusoDoGoogle, semRotaPrivadaPelaChave } from './config.js';
-import { listarEventos } from './agenda.js';
+import { listarEventos, listarAniversarios } from './agenda.js';
 import { listarTarefas } from './tarefas.js';
 import { listarMensagens, FRASE_GMAIL_DESLIGADO } from './gmail.js';
 import { fraseDoPortaoFechado } from './portao.js';
-import { classificarPedido } from './intencao.js';
-import { blocoDeAgenda, blocoDeTarefas, blocoDeEmails, montarPromptComDados, pareceChamadaDeFerramenta, RESPOSTA_SEGURA, limparTexto } from './dados.js';
+import { classificarPedido, classificarContinuacao, pareceAgendaNaoReconhecida } from './intencao.js';
+import { blocoDeAgenda, blocoDeAniversarios, blocoDeTarefas, blocoDeEmails, montarPromptComDados, pareceChamadaDeFerramenta, RESPOSTA_SEGURA, limparTexto } from './dados.js';
 import { dataDeHoje, partesNoFuso, somarDias, formatarHora } from './fuso.js';
 
 /** As frases curtas (na voz da Yui, sem erro técnico). */
@@ -34,6 +34,8 @@ export const FRASES = Object.freeze({
   agendaIndisponivel: 'Não consegui ler a sua agenda agora. Tenta de novo daqui a pouco.',
   tarefasIndisponiveis: 'Não consegui ler as suas tarefas agora. Tenta de novo daqui a pouco.',
   emailIndisponivel: 'Não consegui ler os seus e-mails agora. Tenta de novo daqui a pouco.',
+  aniversariosInacessiveis: 'Não consegui ler o calendário de aniversários agora: o Google não o liberou para mim ou ele não respondeu.',
+  naoEntendi: 'Eu consigo ler a sua agenda, as suas tarefas e os aniversários no Google, mas só entendo pedidos curtos. Tente: “o que tenho hoje na agenda?”, “compromissos da semana”, “minhas tarefas” ou “quando é o próximo aniversário?”.',
 });
 
 /** A frase curta para uma falha de leitura do Google. */
@@ -68,7 +70,9 @@ export function criarGoogle(deps = {}) {
   const log = deps.log ?? loggerPadrao;
   const autenticador = deps.autenticador ?? criarAutenticador({ env, fetchImpl: deps.fetchImpl, agora, alertar: deps.alertar, log, timeoutMs: deps.timeoutMs, restringir: deps.restringir });
   const comum = { autenticador, fetchImpl: deps.fetchImpl, env, estadoDaRota: deps.estadoDaRota, timeoutMs: deps.timeoutMs };
-  const contadores = { consultas: 0, respondidasPorCodigo: 0, comDados: 0, falhas: 0, recusasPrivacidade: 0, portaoFechado: 0, viaExcecaoDoDono: 0 };
+  const contadores = { consultas: 0, respondidasPorCodigo: 0, comDados: 0, falhas: 0, recusasPrivacidade: 0, portaoFechado: 0, viaExcecaoDoDono: 0, naoEntendidos: 0 };
+  /** A última consulta bem-sucedida do dono (tipo, período e quando): só para entender "e amanhã?". Só em memória; só o dono chega aqui. */
+  let ultimaConsulta = null;
   let avisouExcecao = false;
   /** A exceção explícita do dono foi usada (a rota privada NÃO estava validada): conta e deixa UM aviso no log por processo (sem nenhum conteúdo). */
   function notarExcecao(r) {
@@ -82,8 +86,18 @@ export function criarGoogle(deps = {}) {
   /** A pré-rota de um passo do cérebro. Devolve null | { resposta } | { prompt, opcoes, revisar, tipo }. */
   async function rotear({ ctx, call = {}, texto, prompt }) {
     if (!googleLigado(env)) return null;
-    const pedido = classificarPedido(texto);
-    if (!pedido) return null;
+    let pedido = classificarPedido(texto);
+    // "E nesta semana?" logo depois de uma consulta: só o dono (a Yui guarda só a última consulta dele) e só com consulta recente.
+    const ehDono = Boolean(ctx) && ctx.role === ROLES.OWNER && !call.chatter && !call.thirdParty;
+    if (!pedido && ehDono && ctx.memoryScope === MEMORY_SCOPES.PERSONAL && !call.voice && !call.voiceItem) pedido = classificarContinuacao(texto, ultimaConsulta, agora());
+    if (!pedido) {
+      // Parece pergunta sobre a própria agenda, mas não é um pedido que eu entendo: orienta, em vez de a IA inventar ou dizer "não tenho acesso".
+      if (ehDono && ctx.memoryScope === MEMORY_SCOPES.PERSONAL && !call.voice && !call.voiceItem && pareceAgendaNaoReconhecida(texto)) {
+        contadores.naoEntendidos += 1;
+        return { resposta: FRASES.naoEntendi };
+      }
+      return null;
+    }
     if (!ctx || ctx.role !== ROLES.OWNER) return null;
     if (call.chatter || call.thirdParty) return null;
     // O dono fora de uma conversa privada (canal público, voz): a agenda dele não aparece onde outras pessoas leem.
@@ -100,6 +114,12 @@ export function criarGoogle(deps = {}) {
       if (!r.ok) { contadores.falhas += 1; if (r.motivo === 'sem-rota-privada') contadores.portaoFechado += 1; return { resposta: fraseDaFalha(r.motivo, 'email') }; }
       bloco = blocoDeEmails({ mensagens: r.mensagens, truncado: r.truncado });
       fonte = 'caixa de e-mail';
+    } else if (pedido.tipo === 'aniversarios') {
+      const r = await listarAniversarios({ ...comum, periodo: pedido.periodo, agora, fuso });
+      if (!r.ok) { contadores.falhas += 1; if (r.motivo === 'sem-rota-privada') contadores.portaoFechado += 1; return { resposta: r.motivo === 'calendario-inacessivel' ? FRASES.aniversariosInacessiveis : fraseDaFalha(r.motivo, 'agenda') }; }
+      notarExcecao(r);
+      bloco = blocoDeAniversarios({ eventos: r.eventos, janela: r.janela, fuso: r.fuso, truncado: r.truncado });
+      fonte = 'calendário de aniversários dos contatos';
     } else if (pedido.tipo === 'agenda') {
       const r = await listarEventos({ ...comum, periodo: pedido.periodo, agora, fuso });
       if (!r.ok) { contadores.falhas += 1; if (r.motivo === 'sem-rota-privada') contadores.portaoFechado += 1; return { resposta: fraseDaFalha(r.motivo, 'agenda') }; }
@@ -114,6 +134,7 @@ export function criarGoogle(deps = {}) {
       fonte = 'lista de tarefas';
     }
     contadores.comDados += 1;
+    if (pedido.tipo !== 'email') ultimaConsulta = { tipo: pedido.tipo, periodo: pedido.periodo ?? null, em: agora() };
     return {
       tipo: pedido.tipo,
       prompt: montarPromptComDados({ bloco, pedido: prompt, fonte }),

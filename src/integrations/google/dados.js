@@ -35,6 +35,15 @@ export function blocoDeAgenda({ eventos, janela, fuso, truncado = false }) {
   return linhas.join('\n');
 }
 
+/** O texto dos aniversários (dados limpos, em linhas). Vazio = o calendário FOI consultado e não tem aniversário no período. */
+export function blocoDeAniversarios({ eventos, janela, fuso, truncado = false }) {
+  const linhas = [`Aniversários de ${janela?.rotulo ?? 'hoje'} (calendário de aniversários dos contatos; fuso ${fuso}):`];
+  if (!eventos.length) linhas.push('(o calendário de aniversários foi consultado: nenhum aniversário nesse período)');
+  for (const e of eventos) linhas.push(`- ${formatarDia(e.inicio, fuso)} | ${limparTexto(e.titulo, 120)}`);
+  if (truncado) linhas.push('(a lista foi cortada: há mais aniversários)');
+  return linhas.join('\n');
+}
+
 /** O texto das tarefas (dados limpos, em linhas). `hoje` = "AAAA-MM-DD" no fuso, para marcar as atrasadas. */
 export function blocoDeTarefas({ tarefas, hoje = null, truncado = false }) {
   const linhas = ['Tarefas pendentes:'];

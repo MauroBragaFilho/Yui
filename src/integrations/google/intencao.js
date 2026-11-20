@@ -42,12 +42,77 @@ function extrairPeriodo(s) {
 const soDe = (palavras, permitidas) => palavras.every((p) => permitidas.has(p));
 const temUma = (palavras, nucleo) => palavras.some((p) => nucleo.has(p));
 
+// ANIVERSÁRIOS (A4): "quando é o próximo aniversário?", "tem aniversário hoje?", "aniversários do mês". Frase inteira só com estas palavras (nome de pessoa fica de fora de propósito).
+const PERMITIDAS_ANIVERSARIO = new Set([
+  'aniversario', 'aniversarios', 'aniversariante', 'aniversariantes', 'quando', 'e', 'o', 'a', 'os', 'as', 'um', 'uma', 'proximo', 'proximos', 'proxima', 'proximas', 'tem', 'tenho', 'algum', 'alguns',
+  'alguma', 'quais', 'qual', 'sao', 'ha', 'existe', 'que', 'meu', 'meus', 'minha', 'minhas', 'de', 'do', 'da', 'dos', 'das', 'no', 'na', 'nos', 'nas', 'calendario', 'agenda', 'esse', 'este', 'nesse',
+  'neste', 'essa', 'esta', 'nesta', 'dessa', 'desta', 'desse', 'deste', 'mes', 'semana', 'hoje', 'amanha', 'yui', 'me', 'diz', 'diga', 'fala', 'fale', 'mostra', 'mostre', 'lista', 'liste', 'por', 'favor',
+  'pode', 'poderia', 'voce', 'queria', 'quero', 'gostaria', 'saber', 'ver', 'veja', 'la', 'em', 'amigos', 'contatos', 'ai', 'oi', 'entao',
+]);
+
+function classificarAniversario(norm) {
+  if (!/\baniversari/.test(norm)) return null;
+  const palavras = norm.split(/\s+/).filter(Boolean);
+  if (palavras.length > 12 || !palavras.every((p) => PERMITIDAS_ANIVERSARIO.has(p))) return null;
+  const periodo = palavras.includes('amanha') ? 'amanha' : palavras.includes('semana') ? 'semana' : palavras.includes('mes') ? 'mes' : palavras.includes('hoje') ? 'hoje' : 'ano';
+  return { tipo: 'aniversarios', periodo };
+}
+
+/** Quanto tempo uma consulta ao Google ainda vale como "assunto" para uma continuação ("e amanhã?"). */
+export const VALIDADE_CONTINUACAO_MS = 10 * 60_000;
+const SOBRA_CONTINUACAO = new Set(['agenda', 'compromisso', 'compromissos', 'reuniao', 'reunioes', 'evento', 'eventos', 'tarefa', 'tarefas', 'afazeres', 'aniversario', 'aniversarios', 'proximo', 'proximos', 'dias', 'dia', 'que', 'tenho']);
+
+/**
+ * A CONTINUAÇÃO de uma consulta recente ("e nesta semana?", "e amanhã?", "e as tarefas?"). `ultimo` = { tipo, periodo, em } da última consulta que a Yui fez ao Google
+ * para a mesma pessoa, ou null. Sem consulta recente (10 min) nada é reconhecido: a frase segue como conversa. E-mail nunca continua.
+ * @returns {null | { tipo: 'agenda'|'tarefas'|'aniversarios', periodo: string|null }}
+ */
+export function classificarContinuacao(textoOriginal, ultimo, agora = Date.now()) {
+  if (!ultimo || !['agenda', 'tarefas', 'aniversarios'].includes(ultimo.tipo)) return null;
+  const idade = agora - Number(ultimo.em);
+  if (!Number.isFinite(idade) || idade < 0 || idade > VALIDADE_CONTINUACAO_MS) return null;
+  let original = String(textoOriginal ?? '').trim();
+  if (!original || original.length > 60 || /[\r\n]/.test(original)) return null;
+  original = original.replace(/^(?:<@!?\d{5,25}>[\s,:;-]*)+/, '').trim();
+  if (!original || /[<>]|https?:|www\./i.test(original)) return null;
+  let norm = normalizar(original).replace(/^yui /, '');
+  if (!/^e /.test(norm)) return null;
+  norm = norm.slice(2);
+  const { periodo, resto } = extrairPeriodo(norm);
+  const palavras = resto.split(/\s+/).filter((p) => p && !ENFEITE.has(p));
+  if (palavras.length > 4 || !soDe(palavras, SOBRA_CONTINUACAO)) return null;
+  if (temUma(palavras, NUCLEO_TAREFAS)) return { tipo: 'tarefas', periodo };
+  if (temUma(palavras, NUCLEO_AGENDA)) return { tipo: 'agenda', periodo: periodo ?? (ultimo.tipo === 'agenda' ? ultimo.periodo : 'hoje') };
+  if (palavras.some((p) => p.startsWith('aniversari'))) return { tipo: 'aniversarios', periodo: periodo ?? 'ano' };
+  // Sem assunto novo ("e amanhã?"): vale o assunto da consulta anterior, mas só com uma janela dita.
+  if (!palavras.length && periodo) return { tipo: ultimo.tipo, periodo };
+  return null;
+}
+
+const CRIAR_OU_MEXER = /\b(coloca|colocar|coloque|anota|anotar|anote|adiciona|adicionar|adicione|cria|criar|crie|marca|marcar|marque|agende|agendar|lembra|lembre|lembrar|lembrete|apaga|apagar|cancela|cancelar|remove|remover|exclui|excluir)\b/;
+const FALA_DA_AGENDA = /\b(?:minha|meu|meus|minhas)\s+(?:agenda|calendario|compromissos?|tarefas?|aniversarios?)\b|\bna\s+minha\s+agenda\b|\b(?:tarefas|compromissos|aniversarios)\s+(?:minhas|meus)\b/;
+const COM_JEITO_DE_PERGUNTA = /\?|^(?:yui )?(?:o que|quais|qual|quando|tem|tenho|ha|existe|como esta|me (?:mostra|mostre|diz|diga|fala|fale|conta)|mostra|mostre|ver|veja)\b/;
+
+/**
+ * A frase PARECE uma pergunta sobre a PRÓPRIA agenda, tarefas ou aniversários, mas não é um dos pedidos curtos reconhecidos (para a Yui orientar em vez de deixar o modelo
+ * inventar ou dizer "não tenho acesso"). Nunca é pedido de criar/mudar nada. Só para uma pergunta curta de uma linha.
+ */
+export function pareceAgendaNaoReconhecida(textoOriginal) {
+  const original = String(textoOriginal ?? '').trim();
+  if (!original || original.length > 120 || /[\r\n]/.test(original) || /[<>]|https?:|www\./i.test(original.replace(/^(?:<@!?\d{5,25}>[\s,:;-]*)+/, ''))) return false;
+  const norm = normalizar(original.replace(/^(?:<@!?\d{5,25}>[\s,:;-]*)+/, ''));
+  if (CRIAR_OU_MEXER.test(norm)) return false;
+  return FALA_DA_AGENDA.test(norm) && COM_JEITO_DE_PERGUNTA.test(original.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim());
+}
+
 /** Reconhece o pedido (ou null). */
 export function classificarPedido(textoOriginal) {
   let original = String(textoOriginal ?? '').trim();
   if (!original || original.length > MAX_CHARS || /[\r\n]/.test(original)) return null;
   original = original.replace(/^(?:<@!?\d{5,25}>[\s,:;-]*)+/, '').trim(); // "@Yui, ..." (a menção ao bot no começo)
   if (!original || /[<>]|https?:|www\./i.test(original)) return null;
+  const aniversario = classificarAniversario(normalizar(original));
+  if (aniversario) return aniversario;
   const { periodo, resto } = extrairPeriodo(normalizar(original));
   const palavras = resto.split(/\s+/).filter((p) => p && !ENFEITE.has(p));
   if (!palavras.length || resto.split(/\s+/).length > MAX_PALAVRAS) return null;

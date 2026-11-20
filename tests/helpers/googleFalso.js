@@ -184,6 +184,15 @@ export async function criarGoogleFalso({ clientId = CLIENT_ID, clientSecret = CL
           return paginar(dentro, q);
         });
       }
+      if (req.method === 'GET' && decodeURIComponent(u.pathname) === '/calendar/v3/calendars/addressbook#contacts@group.v.calendar.google.com/events') {
+        // O calendário de aniversários dos contatos: um calendário à parte do "primary" (a Yui o lê direto, sem calendarList).
+        if (estado.aniversariosModo === '404') { estado.pedidos.push({ metodo: 'GET', caminho: u.pathname, query: {}, auth: true }); return json(res, 404, { error: { code: 404 } }); }
+        return api(req, res, u, 'aniversarios', (q) => {
+          const min = Date.parse(q.timeMin); const max = Date.parse(q.timeMax);
+          const dentro = (estado.aniversarios ?? []).filter((e) => Date.parse(`${e.end?.date ?? e.start?.date}T00:00:00Z`) > min && Date.parse(`${e.start?.date}T00:00:00Z`) < max);
+          return paginar(dentro, q);
+        });
+      }
       if (req.method === 'GET' && u.pathname === '/tasks/v1/lists/@default/tasks') return api(req, res, u, 'tarefas', (q) => ({ kind: 'tasks#tasks', ...paginar(estado.tarefas, q) }));
       if (req.method === 'GET' && u.pathname === '/gmail/v1/users/me/messages') return api(req, res, u, 'gmail', () => ({ messages: estado.emails.map((m) => ({ id: m.id })) }));
       const m = /^\/gmail\/v1\/users\/me\/messages\/([0-9a-f]+)$/.exec(u.pathname);

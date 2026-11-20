@@ -31,7 +31,11 @@ A Yui pode **ler** a Agenda e as Tarefas do Google de quem a opera (o dono) e re
 | "o que tenho amanhã?", "minha agenda de amanhã" | os eventos de **amanhã** |
 | "compromissos da semana", "o que tenho essa semana?" | os eventos dos **próximos 7 dias**, a partir de hoje |
 | "minhas tarefas", "o que tenho pra fazer?" | as tarefas **pendentes** da lista padrão (com "de hoje" ou "de amanhã": só as que vencem até lá, incluindo as atrasadas) |
+| "quando é o próximo aniversário?", "tem aniversário hoje?", "aniversários do mês" | o **calendário de aniversários** dos contatos, lido direto (ele é um calendário à parte; não precisa de permissão nova). Nome de pessoa na frase não é reconhecido |
+| "e nesta semana?", "e amanhã?", "e as tarefas?" | a **continuação**: só vale até 10 minutos depois de uma consulta da Yui ao Google, só para o dono e em conversa privada; consulta o Google de novo |
 | "tenho e-mails novos?" | o Gmail, que está **travado** (veja a [seção 9](#-9-gmail-travado)) |
+
+Uma pergunta sobre a **sua** agenda, tarefas ou aniversários que a Yui não entende (por exemplo "qual é o meu compromisso mais importante desse mês?") recebe uma **orientação fixa** com exemplos de pedidos curtos: nunca a IA livre, que poderia inventar "agenda livre" ou dizer que não tem acesso. Pedido de criar, anotar ou marcar não entra nisso.
 
 Os dias são os do **fuso** configurado (`YUI_GOOGLE_FUSO`, ou o do dono, `YUI_FUSO`, se a primeira não existir), não os do servidor. A Yui lê só o necessário: título, hora, local e dia inteiro dos eventos; título e prazo das tarefas. Notas, convidados e outras listas ficam de fora.
 
