@@ -248,6 +248,31 @@ eq((await gate('111111111111111111')).researched, true, 'a troca não vai ao his
   ok(!(await as(A, 'meus lembretes')).text.includes('ir jogar arknights'), 'terceiro não vê');
   ok((await as(B, 'meus lembretes')).text.includes('ir jogar arknights'), 'o alvo vê o dele');
   ok((await asO(`cancela o lembrete ${created.id}`)).text.includes('Cancelei'), 'dono cancela o que criou para outro');
+
+  // A5: Lembretes em lista (2 e 3 linhas / itens)
+  {
+    const sl = createReminderStore({ file: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rem-list-')), 'l.json'), now: () => NOW.getTime() });
+    const asList = (text) => routeReminders({ text, userId: O, authorName: 'oBraga' }, { store: sl, now: NOW, isOwner: isOwn });
+
+    // 2 itens separados por barra ("colocar na agenda amanhã: 08:00 lavar o carro / 14:00 ir na casa do Edmundo")
+    const r2 = await asList('colocar na agenda amanhã: 08:00 lavar o carro / 14:00 ir na casa do Edmundo');
+    ok(r2.handled, '2 itens reconhecidos');
+    const items2 = sl.list();
+    eq(items2.length, 2, 'criou exatamente 2 lembretes');
+    ok(items2.some((x) => x.text.includes('lavar o carro')), 'item 1 criado');
+    ok(items2.some((x) => x.text.includes('ir na casa do Edmundo')), 'item 2 criado');
+    ok(r2.text.includes('lavar o carro') && r2.text.includes('ir na casa do Edmundo'), 'confirma todos na resposta');
+
+    // 3 itens separados por quebra de linha
+    const r3 = await asList('colocar na agenda amanhã:\n09:00 dentista\n12:00 almoço com a equipe\n16:00 reunião');
+    ok(r3.handled, '3 itens reconhecidos');
+    const items3 = sl.list();
+    eq(items3.length, 5, 'adicionou 3 novos lembretes (total 5)');
+    ok(items3.some((x) => x.text.includes('dentista')), 'item dentista criado');
+    ok(items3.some((x) => x.text.includes('almoço com a equipe')), 'item almoço criado');
+    ok(items3.some((x) => x.text.includes('reunião')), 'item reunião criado');
+    ok(r3.text.includes('dentista') && r3.text.includes('almoço com a equipe') && r3.text.includes('reunião'), 'confirma os 3 na resposta');
+  }
   const noOwner = await as(A, `lembra o <@${B}> de x amanhã às 9h`);
   ok(noOwner.handled && noOwner.text.includes('só crio lembrete para você') && !sp.list().some((x) => x.text === 'x'), 'quem não é dono NÃO cria para outros');
   ok((await asO(`lembra o <@${B}> de ir`)).text.includes('preciso do horário'), 'sem horário: pergunta, não cria errado');
