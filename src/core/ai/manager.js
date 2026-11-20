@@ -151,7 +151,7 @@ export async function chat({ prompt, system = '', history = [], ctx, memoryBlock
     }
   }
   const meta = {};
-  const text = await backend.chat({ prompt, system: persona, history, ctx, memoryBlock, ...(deadlineAt ? { deadlineAt } : {}), ...(sensitive === true ? { sensitive: true } : {}), ...pedidoDeLimite(tokensPorProvedor), meta });
+  const text = await backend.chat({ prompt, system: persona, history, ctx, memoryBlock, ...(deadlineAt ? { deadlineAt } : {}), ...(sensitive === true ? { sensitive: true } : {}), ...pedidoDeLimite(tokensPorProvedor), ...(backend.name === 'gateway' ? { meta } : {}) });
   logger.info(montarLogBackend(backend.name, meta, Date.now() - started));
   recordInteraction();
   return text;
@@ -231,7 +231,7 @@ export async function isolatedChat({ prompt, system = '', ctx = null, sensitive 
   const meta = {};
   const text = await backend.chat({
     prompt, system: system || buildPersonaPrompt(ctx), history: [], ctx, memoryBlock: '',
-    sensitive: sensitive === true, isolated: true, ...(deadlineAt ? { deadlineAt } : {}), ...pedidoDeLimite(tokensPorProvedor), meta,
+    sensitive: sensitive === true, isolated: true, ...(deadlineAt ? { deadlineAt } : {}), ...pedidoDeLimite(tokensPorProvedor), ...(backend.name === 'gateway' ? { meta } : {}),
   });
   logger.info(montarLogBackend(backend.name, meta, Date.now() - started, '(sem histórico nem memória)'));
   return text;
