@@ -154,7 +154,8 @@ async function rawFetch(cookieStr) {
  *   2. Faz o fetch com esses cookies.
  *   3. Se retornar 403 → renova cookies via Puppeteer → retry UMA vez.
  */
-export async function searchWeeklyPosts() {
+// `fetchBrowser` é injetável só para teste (provar quantas vezes o navegador seria aberto); em produção vale sempre o navegador de verdade.
+export async function searchWeeklyPosts({ fetchBrowser = fetchWeeklyFeedViaBrowser } = {}) {
   const userAgent = config.weekly.userAgent ||
     'nodejs:yui-gta-bot:1.0 (by /u/your_reddit_username)';
 
@@ -186,7 +187,7 @@ export async function searchWeeklyPosts() {
         let found;
         if (mode === 'browser') {
           // Sem plano B por cookies: ele também abre o Chrome e, bloqueado o navegador, só repete o mesmo 403.
-          found = (await fetchWeeklyFeedViaBrowser()).map((data) => ({ data }));
+          found = (await fetchBrowser()).map((data) => ({ data }));
         } else {
           // Método anterior: 1ª tentativa com cookies do cache.
           let cookieStr = await getCookies();

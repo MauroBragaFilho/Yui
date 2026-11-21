@@ -118,6 +118,51 @@ await test('REDDIT_FETCH_MODE=off: nenhuma tentativa, nenhum Chrome (erro REDDIT
   }
 });
 
+await test('parecer da Liz: com um navegador FALSO que conta aberturas, off NUNCA abre (0 chamadas) e o modo browser abre uma vez (controle positivo)', async () => {
+  const { searchWeeklyPosts } = await import('../src/engines/gtao/systems/weekly/reddit.js');
+  const antes = process.env.REDDIT_FETCH_MODE;
+  let aberturas = 0;
+  const navegadorFalso = async () => { aberturas += 1; return []; };
+  try {
+    process.env.REDDIT_FETCH_MODE = 'off';
+    for (let i = 0; i < 3; i++) await assert.rejects(() => searchWeeklyPosts({ fetchBrowser: navegadorFalso }), (e) => e.code === 'REDDIT_DESLIGADO');
+    assert.equal(aberturas, 0, 'off: nenhuma abertura do navegador em 3 ciclos');
+    process.env.REDDIT_FETCH_MODE = 'browser';
+    const posts = await searchWeeklyPosts({ fetchBrowser: navegadorFalso });
+    assert.deepStrictEqual(posts, []);
+    assert.equal(aberturas, 1, 'controle positivo: o modo browser abre uma vez');
+  } finally {
+    if (antes === undefined) delete process.env.REDDIT_FETCH_MODE; else process.env.REDDIT_FETCH_MODE = antes;
+  }
+});
+
+await test('parecer da Liz: off não consulta, não altera nem apaga um cache ANTERIOR (bytes idênticos), não alerta e o status é só "error" (o agendador então tenta a reserva GTABase por HTTP, sem Chrome)', async () => {
+  const { weeklyService } = await import('../src/engines/gtao/systems/weekly/service.js').then((m) => ({ weeklyService: m.weeklyService ?? m.default ?? m }));
+  const { logger } = await import('../src/utils/logger.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'weekly-off-cache-'));
+  const cacheFile = path.join(dir, 'cache.json');
+  const conteudo = JSON.stringify({ postId: 'abc123', processedAt: '2026-11-18T12:00:00.000Z' });
+  fs.writeFileSync(cacheFile, conteudo);
+  const antes = fs.readFileSync(cacheFile);
+  const alertas = [];
+  let chamadasAoBuscador = 0;
+  const eOrig = logger.error; const wOrig = logger.warn;
+  logger.error = (m) => alertas.push(`error: ${m}`); logger.warn = (m) => alertas.push(`warn: ${m}`);
+  try {
+    const r = await weeklyService.checkForUpdates({
+      cacheFile,
+      alert: () => { alertas.push('alertOwner chamado'); },
+      fetchLatest: async () => { chamadasAoBuscador += 1; const e = new Error('Reddit desligado (REDDIT_FETCH_MODE=off): o semanal não abre navegador'); e.code = 'REDDIT_DESLIGADO'; throw e; },
+    });
+    assert.equal(chamadasAoBuscador, 1);
+    assert.deepStrictEqual(r, { status: 'error', reason: 'REDDIT_DESLIGADO' });
+    assert.deepStrictEqual(fs.readFileSync(cacheFile), antes, 'cache anterior intacto, byte a byte');
+    assert.deepStrictEqual(alertas, [], 'sem log de erro, sem aviso de falha e sem alerta ao dono');
+  } finally {
+    logger.error = eOrig; logger.warn = wOrig;
+  }
+});
+
 await test('o semanal trata REDDIT_DESLIGADO como aviso (sem log de erro) e não mexe no cache', async () => {
   const { weeklyService } = await import('../src/engines/gtao/systems/weekly/service.js').then((m) => ({ weeklyService: m.weeklyService ?? m.default ?? m }));
   const { logger } = await import('../src/utils/logger.js');
