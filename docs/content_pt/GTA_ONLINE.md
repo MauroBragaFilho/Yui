@@ -66,7 +66,7 @@ Se o navegador falhar, a Yui cai no método antigo (cookies via Puppeteer + `fet
 |----------|--------|
 | `GTA_WEEKLY_ENABLED` | Liga/desliga a verificação semanal (padrão: ligada) |
 | `GTA_WEEKLY_INTERVAL_MINUTES` | Intervalo entre verificações (padrão 30; o `.env` atual usa 120) |
-| `REDDIT_FETCH_MODE` | `browser` (padrão) ou `cookies` (só o método antigo) |
+| `REDDIT_FETCH_MODE` | `browser` (padrão), `cookies` (só o método antigo) ou `off` (não consulta o Reddit nem abre o Chrome) |
 | `REDDIT_BROWSER_PATH` | Caminho do Chrome/Edge (se não achar sozinho; também vale `PUPPETEER_EXECUTABLE_PATH`) |
 | `REDDIT_USER_AGENT` | Identificação usada no método de cookies |
 

@@ -105,6 +105,37 @@ await test('em todos os posts reais a página 1 é um resumo curto e as páginas
   }
 });
 
+await test('REDDIT_FETCH_MODE=off: nenhuma tentativa, nenhum Chrome (erro REDDIT_DESLIGADO antes de qualquer navegador); qualquer caixa e espaços valem', async () => {
+  const { searchWeeklyPosts } = await import('../src/engines/gtao/systems/weekly/reddit.js');
+  const antes = process.env.REDDIT_FETCH_MODE;
+  try {
+    for (const valor of ['off', 'OFF', ' Off ']) {
+      process.env.REDDIT_FETCH_MODE = valor;
+      await assert.rejects(() => searchWeeklyPosts(), (e) => e.code === 'REDDIT_DESLIGADO' && /não abre navegador/.test(e.message), `modo "${valor}"`);
+    }
+  } finally {
+    if (antes === undefined) delete process.env.REDDIT_FETCH_MODE; else process.env.REDDIT_FETCH_MODE = antes;
+  }
+});
+
+await test('o semanal trata REDDIT_DESLIGADO como aviso (sem log de erro) e não mexe no cache', async () => {
+  const { weeklyService } = await import('../src/engines/gtao/systems/weekly/service.js').then((m) => ({ weeklyService: m.weeklyService ?? m.default ?? m }));
+  const { logger } = await import('../src/utils/logger.js');
+  const erros = []; const infos = [];
+  const eOrig = logger.error; const iOrig = logger.info;
+  logger.error = (m) => erros.push(String(m)); logger.info = (m) => infos.push(String(m));
+  try {
+    const tmpCache = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'weekly-off-')), 'cache.json');
+    const r = await weeklyService.checkForUpdates({ cacheFile: tmpCache, fetchLatest: async () => { const e = new Error('Reddit desligado (REDDIT_FETCH_MODE=off): o semanal não abre navegador'); e.code = 'REDDIT_DESLIGADO'; throw e; } });
+    assert.deepStrictEqual(r, { status: 'error', reason: 'REDDIT_DESLIGADO' });
+    assert.equal(erros.length, 0, 'sem log de erro');
+    assert.ok(infos.some((l) => /Reddit desligado/.test(l)), 'avisa em nível info');
+    assert.equal(fs.existsSync(tmpCache), false, 'o cache não foi criado nem alterado');
+  } finally {
+    logger.error = eOrig; logger.info = iOrig;
+  }
+});
+
 if (process.env.LIVE === '1') {
   console.log('Ao vivo (abre o navegador)');
   const { searchWeeklyPosts } = await import('../src/engines/gtao/systems/weekly/reddit.js');

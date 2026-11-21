@@ -160,7 +160,7 @@ export function buildIntegrations({ env = process.env, client = null, data = {},
       title: 'GTA Online',
       items: [
         item('gta-daily', 'Reset diário (06:00 UTC)', 'ok', data.lastDaily ? `último: ${data.lastDaily}` : 'ainda sem registro'),
-        item('gta-weekly', 'Evento semanal (Reddit)', weeklyOn ? 'ok' : 'off', weeklyOn ? `a cada ${env.GTA_WEEKLY_INTERVAL_MINUTES || 30} min, via ${redditMode === 'cookies' ? 'cookies' : 'navegador'}${data.lastWeekly ? `, último: ${data.lastWeekly}` : ''}` : 'GTA_WEEKLY_ENABLED=false'),
+        item('gta-weekly', 'Evento semanal (Reddit)', weeklyOn ? 'ok' : 'off', weeklyOn ? `a cada ${env.GTA_WEEKLY_INTERVAL_MINUTES || 30} min, via ${redditMode === 'off' ? 'nada (Reddit desligado, sem navegador)' : redditMode === 'cookies' ? 'cookies' : 'navegador'}${data.lastWeekly ? `, último: ${data.lastWeekly}` : ''}` : 'GTA_WEEKLY_ENABLED=false'),
         item('newswire', 'Rockstar Newswire', newsOn ? 'ok' : 'off', newsOn ? `a cada ${env.NEWSWIRE_INTERVAL_MINUTES || 30} min` : 'desligado (use /gta-noticias sob demanda)'),
       ],
     },

@@ -158,6 +158,14 @@ export async function searchWeeklyPosts() {
   const userAgent = config.weekly.userAgent ||
     'nodejs:yui-gta-bot:1.0 (by /u/your_reddit_username)';
 
+  // REDDIT_FETCH_MODE=off: nenhuma tentativa, nenhum Chrome. Em máquina de pouca memória o Chrome do semanal travava o bot (queda e religação pelo supervisor);
+  // com o Reddit desligado o semanal segue pelas outras fontes e pelo cache. Padrão continua `browser`.
+  if ((process.env.REDDIT_FETCH_MODE || 'browser').trim().toLowerCase() === 'off') {
+    const err = new Error('Reddit desligado (REDDIT_FETCH_MODE=off): o semanal não abre navegador');
+    err.code = 'REDDIT_DESLIGADO';
+    throw err;
+  }
+
   // Recuo depois de falha: o Reddit bloqueia este IP e cada tentativa abre um Chrome pesado. Em espera, nem abre (sem log de erro).
   const gate = redditGuard.canTry();
   if (!gate.ok) {
