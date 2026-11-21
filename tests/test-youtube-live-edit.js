@@ -94,6 +94,42 @@ await test('embed de live encerrada mostra a duração; os outros não', () => {
   assert.ok(!createYoutubeLiveEmbed({ ...base, type: 'live_started', durationMs: 5 * MIN }).toJSON().fields?.length);
 });
 
+await test('live agendada mostra QUANDO começa (campo com o carimbo do Discord) e o rodapé usa esse horário, não o da criação do vídeo', () => {
+  const base = { videoId: 'v1', channelId: 'UC1', channelName: 'Canal', title: 'Rodando por LS', url: 'https://youtu.be/v1', type: 'live_scheduled' };
+  const criado = '2026-11-21T13:21:00.000Z'; // quando a live foi agendada (09:21 em Cuiabá)
+  const inicio = '2026-11-21T18:00:00.000Z'; // quando ela começa (14:00 em Cuiabá)
+  const unix = Math.floor(Date.parse(inicio) / 1000);
+  const e = createYoutubeLiveEmbed({ ...base, publishedAt: criado, scheduledStart: inicio }).toJSON();
+  const campo = e.fields?.find((f) => f.name.includes('Começa'));
+  assert.ok(campo, 'campo "Começa" presente');
+  assert.strictEqual(campo.value, `<t:${unix}:F> (<t:${unix}:R>)`, 'carimbo completo e contagem, no fuso de quem lê');
+  assert.strictEqual(e.timestamp, inicio, 'o rodapé mostra o início da live, não o horário de criação');
+  assert.notStrictEqual(e.timestamp, criado);
+});
+
+await test('sem o horário da live (ou com ele inválido) o aviso fica como era: sem campo e com o horário de publicação', () => {
+  const base = { videoId: 'v1', channelId: 'UC1', channelName: 'Canal', title: 'T', url: 'https://youtu.be/v1', type: 'live_scheduled', publishedAt: '2026-11-21T13:21:00.000Z' };
+  for (const scheduledStart of [null, undefined, '', 'lixo', 'não é data']) {
+    const e = createYoutubeLiveEmbed({ ...base, scheduledStart }).toJSON();
+    assert.ok(!e.fields?.length, `sem campo com scheduledStart=${JSON.stringify(scheduledStart)}`);
+    assert.strictEqual(e.timestamp, base.publishedAt);
+  }
+  const semNada = createYoutubeLiveEmbed({ ...base, publishedAt: undefined, scheduledStart: null }).toJSON();
+  assert.ok(semNada.timestamp, 'sem nenhum horário usa o momento atual (não quebra)');
+});
+
+await test('ao vivo usa o horário em que começou e encerrada o horário em que terminou (com a duração); os outros tipos não mudam', () => {
+  const base = { videoId: 'v1', channelId: 'UC1', channelName: 'Canal', title: 'T', url: 'https://youtu.be/v1', publishedAt: '2026-11-21T13:21:00.000Z' };
+  const comeco = '2026-11-21T18:02:00.000Z'; const fim = '2026-11-21T21:14:00.000Z';
+  assert.strictEqual(createYoutubeLiveEmbed({ ...base, type: 'live_started', scheduledStart: '2026-11-21T18:00:00.000Z', actualStart: comeco }).toJSON().timestamp, comeco);
+  const ended = createYoutubeLiveEmbed({ ...base, type: 'live_ended', actualStart: comeco, actualEnd: fim, durationMs: 192 * MIN }).toJSON();
+  assert.strictEqual(ended.timestamp, fim);
+  assert.ok(ended.fields?.some((f) => f.name.includes('Duração') && f.value === '3h 12min'), 'a duração continua');
+  assert.ok(!ended.fields?.some((f) => f.name.includes('Começa')), 'só a agendada tem o campo "Começa"');
+  assert.strictEqual(createYoutubeLiveEmbed({ ...base, type: 'live_started' }).toJSON().timestamp, base.publishedAt, 'sem actualStart: o de sempre');
+  assert.strictEqual(createYoutubeLiveEmbed({ ...base, type: 'vod' }).toJSON().timestamp, base.publishedAt, 'gravação: o de sempre');
+});
+
 // ── Banco: migração e modo por inscrição ──
 const OLD_YOUTUBE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS youtube_subscriptions (
