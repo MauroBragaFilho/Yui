@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { setGlobalContext } from '../setGlobalContext.js';
+import { isGtaTopic } from '../../core/ai/temaGta.js';
 import { config } from '../../config/index.js';
 import { recordInteraction } from '../../core/interactionStats.js';
 import { gtaoRepository } from '../../database/repositories/gtaoRepo.js';
@@ -245,12 +246,8 @@ export function analisarContextoGta(pergunta) {
 
 // Assuntos de GTA Online: só nesses casos injetamos os dados do jogo e o conhecimento
 // de GTA no prompt (em conversa sobre outros jogos eles só gastariam tokens e puxariam o tema).
-const GTA_TOPIC =
-  /\b(gta\w*|rockstar|los santos|golpes?|cayo|perico|van de armas|gun van|traficantes?|comerciantes?|naufr[aá]gio|colecion[aá]veis|contra o rel[oó]gio|time trials?|bandito|junk energy|semanal|nightclub|bunker|acid lab|p[oó]dio|reset)\b/i;
-
-export function isGtaTopic(pergunta) {
-  return GTA_TOPIC.test(pergunta || '');
-}
+// A detecção mora em src/core/ai/temaGta.js (o cérebro usa a mesma, sem importar este comando do Discord).
+export { isGtaTopic };
 
 /**
  * Monta SÓ o contexto extra da pergunta. A personalidade já é aplicada pelo llmHandler

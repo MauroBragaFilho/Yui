@@ -75,6 +75,8 @@ import { cotaDaBusca } from './cotaDaBusca.js';
 import { comAvisoDeIndisponivel } from '../search/indisponivel.js';
 // Skills no padrão aberto (etapa 14, desligadas por padrão): só o dono, só dirigida à Yui, só texto, sem ferramentas (src/core/skills/integracao.js).
 import { skillDoPasso } from '../core/skills/integracao.js';
+import { pareceRecusaGenerica, pedidoReforcado } from '../core/ai/recusa.js';
+import { isGtaTopic } from '../core/ai/temaGta.js';
 
 const LOGGER_MUDO = Object.freeze({ debug() {}, info() {}, warn() {}, error() {} });
 const TURN_ID_RE =/^[A-Za-z0-9_.:-]{1,80}$/;
@@ -234,7 +236,7 @@ export function createChatBrain(deps = {}) {
   const open = new Map();
   /** Fila por conversa: os pedidos de uma conversa são atendidos um por vez, na ordem em que chegam. */
   const queues = new Map();
-  const counters = { steps: 0, commits: 0, repeatedCommits: 0, duplicatesBlocked: 0, aiFailures: 0, regenerated: 0, contextRecorded: 0, historyRecorded: 0, autoSearches: 0, autoSearchUsed: 0, researchedContextBlocked: 0,
+  const counters = { recusasRefeitas: 0, steps: 0, commits: 0, repeatedCommits: 0, duplicatesBlocked: 0, aiFailures: 0, regenerated: 0, contextRecorded: 0, historyRecorded: 0, autoSearches: 0, autoSearchUsed: 0, researchedContextBlocked: 0,
     // etapa 11 (só números): a pesquisa por intenção (decidida, sem cota para uma busca que ninguém pediu) e o clima (pedidos, respondidos, falhas)
     intencaoBusca: 0, intencaoSemCota: 0, intencaoErro: 0, climaPedidos: 0, climaRespondidos: 0, climaFalhas: 0, climaPerguntouCidade: 0, climaContinuacoes: 0, climaVariosLocais: 0 };
   /** Turnos que pesquisaram (por id): a troca deles nunca entra no contexto por horas. */
@@ -633,6 +635,19 @@ export function createChatBrain(deps = {}) {
           if (retry.trim()) text = retry;
         } catch { /* fica a primeira */ }
       }
+    }
+    // Recusa genérica de um modelo ("Desculpa, não posso ajudar com isso") a uma pergunta de JOGO (GTA Online: "golpe" e "Cayo Perico" são missões, não crimes): refaz UMA vez,
+    // com o contexto de que é um jogo. Só com YUI_IA_REFAZER_RECUSA=true, só na chamada principal e só com assunto de GTA; nunca mais de uma nova tentativa.
+    if (String(env?.YUI_IA_REFAZER_RECUSA ?? '').trim().toLowerCase() === 'true' && o.main && pareceRecusaGenerica(text) && isGtaTopic(f.ownText || o.searchPrompt || '')) {
+      counters.recusasRefeitas += 1;
+      logger.warn?.('[Conversa] o modelo deu uma recusa genérica a uma pergunta de jogo: refazendo UMA vez com o contexto do jogo.');
+      try {
+        const reforco = buildConversationSystemPrompt({
+          serverPrompt: channel.serverPrompt, radioBlock: channel.radioBlock, noToolRule: true, channelSettings: channel.channelSettings, voice: o.voicePersona,
+        });
+        const outra = String(await callAi({ prompt: pedidoReforcado(f.ownText || prompt), system: reforco.withMemory + (skill?.bloco ?? ''), history, ctx, sensitive: noAnonymous, channel, perfil, localPrivada: localPrivada ? { privada: localPrivada.privada } : null }) ?? '');
+        if (outra.trim() && !pareceRecusaGenerica(outra)) text = outra;
+      } catch { /* fica a primeira resposta */ }
     }
     if (google?.revisar) text = google.revisar(text); // com dados do Google, uma "chamada de ferramenta" na resposta nunca é legítima
     if (skill?.revisar) text = skill.revisar(text); // idem com uma skill (texto de arquivo): o bot executaria o JSON com a permissão do dono

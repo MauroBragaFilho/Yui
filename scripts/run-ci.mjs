@@ -100,6 +100,7 @@ export const SUITES = [
   'test:ttsomniroute',
   'test:ttsomnirouteint',
   'test:tts429',
+  'test:recusageral',
   // Etapa 15 (Google, SOMENTE LEITURA, desligado, só com um Google FALSO em loopback): a unidade (os endereços só em um arquivo, o arquivo da autorização restrito e atômico, o
   // autenticador com o invalid_grant avisando uma vez, a Agenda e as Tarefas no fuso, os dados cercados, a pré-rota só do dono em conversa privada, o Gmail travado, o relatório
   // matinal igual sem a chave) e o script de autorização única de verdade (PKCE, state, o retorno em 127.0.0.1, o arquivo restrito).
