@@ -97,9 +97,9 @@ export function listMemories(ctx, { limit = 50 } = {}) {
   return ask('memory.list', { ctx: wireContext(ctx), limit });
 }
 
-export function touchUser(ctx) {
-  if (!remote) return store.touchUser(ctx);
-  return ask('memory.touch', { ctx: wireContext(ctx) }, { effect: true }).then(() => undefined);
+export function touchUser(ctx, { minIntervalMs = 0, onlyExisting = false } = {}) {
+  if (!remote) return store.touchUser(ctx, { minIntervalMs, onlyExisting });
+  return ask('memory.touch', { ctx: wireContext(ctx), minIntervalMs, onlyExisting }, { effect: true }).then(() => undefined);
 }
 
 /** A limpeza diária roda no processo dono da memória (o cérebro); o bot com o cérebro separado não a agenda. */

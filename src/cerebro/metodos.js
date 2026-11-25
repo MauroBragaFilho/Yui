@@ -123,7 +123,7 @@ export function registerCerebroMethods(server, deps = {}) {
   handle('memory.touch', async (p, meta) => {
     const ctx = contextFromWire(p?.ctx, meta);
     gateAction(engine, 'memory.write_own', ctx, meta);
-    store.touchUser(ctx);
+    store.touchUser(ctx, { minIntervalMs: clampInt(p?.minIntervalMs, 0, 86_400_000, 0), onlyExisting: p?.onlyExisting === true });
     return { ok: true };
   });
   // Administração: só o dono (o store confere o papel de novo e recusa qualquer outro).

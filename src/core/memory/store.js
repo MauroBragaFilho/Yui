@@ -70,10 +70,21 @@ function escapeLike(s) {
 }
 
 /** Registra atividade e renova a retenção de todas as memórias do usuário. */
-export function touchUser(ctx) {
+/**
+ * Opções (usadas pelo caminho da conversa, para não regravar o arquivo inteiro a cada mensagem):
+ *  - minIntervalMs: não faz nada se a última atividade registrada for mais recente que isso;
+ *  - onlyExisting: não cria registro para quem ainda não tem memória (conversar não passa a guardar dados de ninguém).
+ * Sem opções, comporta-se como sempre (renova sempre).
+ */
+export function touchUser(ctx, { minIntervalMs = 0, onlyExisting = false } = {}) {
   const { db, personal } = dbFor(ctx);
   if (personal) return;
   const now = Date.now();
+  if (minIntervalMs > 0 || onlyExisting) {
+    const row = db.prepare('SELECT last_seen FROM memory_users WHERE user_id = ?').get(ctx.userId);
+    if (!row && onlyExisting) return;
+    if (row && minIntervalMs > 0 && now - Number(row.last_seen) < minIntervalMs) return;
+  }
   db.prepare(
     `INSERT INTO memory_users (user_id, first_seen, last_seen) VALUES (?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET last_seen = excluded.last_seen`

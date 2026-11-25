@@ -50,11 +50,29 @@ export function buildMemoryBlock(ctx, prompt) {
     return '';
   };
   try {
+    renewRetention(ctx);
     const found = memory.recall(ctx, prompt, { limit: 8 });
     if (found && typeof found.then === 'function') return found.then((rows) => memoryBlockText(ctx, rows)).catch(fail);
     return memoryBlockText(ctx, found);
   } catch (err) {
     return fail(err);
+  }
+}
+
+const RENEW_MIN_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * Conversar renova o prazo da memória pública (a doc sempre disse "renovada a cada interação"; antes só gravar renovava).
+ * No máximo 1x por hora por pessoa e só para quem já tem memória: não regrava o arquivo a cada mensagem nem passa a
+ * guardar dados de quem nunca pediu para lembrar. Falha aqui nunca atrapalha a resposta. A memória pessoal (dono) não expira.
+ */
+function renewRetention(ctx) {
+  if (ctx.memoryScope === 'personal') return;
+  try {
+    const r = memory.touchUser(ctx, { minIntervalMs: RENEW_MIN_INTERVAL_MS, onlyExisting: true });
+    if (r && typeof r.catch === 'function') r.catch((err) => logger.warn(`[Core] Falha ao renovar retenção da memória: ${err.message}`));
+  } catch (err) {
+    logger.warn(`[Core] Falha ao renovar retenção da memória: ${err.message}`);
   }
 }
 

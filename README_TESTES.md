@@ -49,6 +49,7 @@ npm run test:guilddelete   # a Yui sai de um servidor: limpa só os dados do ser
 npm run test:radiochat     # rádio por conversa: travas (servidor, canal de voz, banido, terceiros) com dublês
 npm run test:gtachat     # GTA Online por conversa: detecção, todas as páginas para a IA, cache, último semanal válido com aviso (sem rede)
 npm run test:memperm     # memória permanente (MEMORY_RETENTION_DAYS=0), conteúdo só para o dono e apagar item a item
+npm run test:memret      # conversar renova o prazo da memória pública (1x/hora, só quem já tem memória); desligada não renova
 npm run test:hybrid      # ferramentas híbridas (gta_online, listar_lembretes, criar_lembrete): definições, limpeza dos argumentos do modelo e escopo por pessoa
 npm run test:bdsproxy   # ponte do painel com o BDS Server (BDS de mentira): dono, Range, envio em fluxo de 3 MB, link curto, erros
 npm run test:atualizarpainel   # troca atômica do painel web pelo atualizador (só Windows)
