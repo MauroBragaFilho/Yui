@@ -39,6 +39,9 @@ const ROUTES = [
   ['PUT', /^\/v1\/admin\/ai\/cloudflare$/, 'admin.ai_configure'],
   ['DELETE', /^\/v1\/admin\/ai\/(keys\/[\w-]+\/\d+|custom\/[\w-]+)$/, 'admin.ai_configure'],
   ['POST', /^\/v1\/admin\/ai\/test\/[\w-]+$/, 'admin.ai_configure'],
+  // Configuração e chaves pelo painel (cofre de src/core/painelConfig.js): a mesma política das chaves de IA (no PC pede confirmação; remoto, a matriz decide).
+  ['PUT', /^\/v1\/admin\/config\/[A-Z0-9_]{3,80}$/, 'admin.ai_configure'],
+  ['DELETE', /^\/v1\/admin\/config\/[A-Z0-9_]{3,80}$/, 'admin.ai_configure'],
   ['POST', /^\/v1\/admin\/gateway\/reset$/, 'admin.gateway_reset'],
   ['POST', /^\/v1\/admin\/restart$/, 'admin.restart'],
   ['POST', /^\/v1\/admin\/ia\/rota-privada\/verificar$/, 'admin.ia_rota_privada'],

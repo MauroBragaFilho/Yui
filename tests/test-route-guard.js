@@ -48,11 +48,12 @@ await test('rotas que mudam estado mapeiam para ações da matriz; leituras e ro
     ['POST', '/v1/admin/bans', 'admin.ban_user'], ['DELETE', '/v1/admin/bans/user/123', 'admin.ban_user'],
     ['DELETE', '/v1/admin/memory/users/123', 'memory.admin_wipe_user'], ['DELETE', '/v1/admin/memory/users/123/9', 'memory.admin_wipe_user'],
     ['POST', '/v1/admin/ai/keys', 'admin.ai_configure'], ['POST', '/v1/admin/ai/custom', 'admin.ai_configure'], ['DELETE', '/v1/admin/ai/custom/meu', 'admin.ai_configure'],
+    ['PUT', '/v1/admin/config/YUI_FUSO', 'admin.ai_configure'], ['DELETE', '/v1/admin/config/YUI_FUSO', 'admin.ai_configure'],
     ['POST', '/v1/admin/restart', 'admin.restart'], ['POST', '/v1/admin/bds/purge', 'bds.purge'], ['POST', '/v1/admin/bds/delete', 'bds.delete'],
     ['PUT', '/v1/admin/bds/upload', 'bds.write'], ['GET', '/v1/admin/bds/list', 'bds.read'], ['POST', '/v1/admin/radio/123456789012345', 'radio.play_control'],
   ];
   for (const [m, p, a] of cases) assert.equal(actionForRoute(m, p), a, `${m} ${p}`);
-  for (const [m, p] of [['GET', '/v1/admin/overview'], ['GET', '/v1/memory'], ['POST', '/v1/chat'], ['GET', '/v1/health'], ['POST', '/v1/admin/inexistente']]) assert.equal(actionForRoute(m, p), null, `${m} ${p}`);
+  for (const [m, p] of [['GET', '/v1/admin/overview'], ['GET', '/v1/admin/config'], ['GET', '/v1/memory'], ['POST', '/v1/chat'], ['GET', '/v1/health'], ['POST', '/v1/admin/inexistente']]) assert.equal(actionForRoute(m, p), null, `${m} ${p}`);
 });
 
 console.log('observe (padrão): nada muda');

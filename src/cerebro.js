@@ -13,6 +13,7 @@
 // canal, a API e o Gateway e chama closeAllDatabases() (que solta as travas de dono).
 // Este arquivo e src/cerebro/ NÃO podem alcançar o Discord, nem por import dinâmico (tests/test-core-import-graph.js).
 import './utils/netDefaultsBoot.js'; // prazo padrão de rede (fetch e axios): precisa vir antes de tudo
+import './core/painelConfigBoot.js'; // valores salvos no painel (secrets/painel-config.json) por cima do .env, antes de a configuração ser lida
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { closeAllDatabases, databaseOwnerStats, databaseStats } from './database/db.js';

@@ -1,4 +1,5 @@
 import './utils/netDefaultsBoot.js'; // prazo padrão de rede (fetch e axios): precisa vir antes de tudo
+import './core/painelConfigBoot.js'; // valores salvos no painel (secrets/painel-config.json) por cima do .env, antes de a configuração ser lida
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { initDatabase, closeAllDatabases } from './database/db.js';

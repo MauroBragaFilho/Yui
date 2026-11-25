@@ -329,6 +329,13 @@ export function createApiServer({
     if (m === 'GET' && p === '/v1/admin/morning') return admin.morningPreview(ctx);
     if (m === 'POST' && p === '/v1/admin/morning/send') return admin.morningSend(ctx);
 
+    // Configuração e chaves pelo painel (só o dono): lista fechada de ajustes; o segredo só entra, nunca sai.
+    if (m === 'GET' && p === '/v1/admin/config') return admin.config(ctx);
+    if ((r = p.match(/^\/v1\/admin\/config\/([A-Z0-9_]{3,80})$/)) && m === 'PUT') {
+      const body = await readJson(req);
+      return admin.configSet(ctx, r[1], body.valor);
+    }
+    if ((r = p.match(/^\/v1\/admin\/config\/([A-Z0-9_]{3,80})$/)) && m === 'DELETE') return admin.configRemove(ctx, r[1]);
     if (m === 'GET' && p === '/v1/admin/ai') return admin.ai(ctx);
     if (m === 'POST' && p === '/v1/admin/ai/keys') {
       const body = await readJson(req);

@@ -6,6 +6,7 @@ import { listTools } from '../agent/tools.js';
 import { checkToolAccess, isOwnerId, isReadOnlyMode, ROLES } from '../permissions.js';
 import { isMemoryEnabled } from '../discordAdapter.js';
 import { audit, auditFilePath } from '../audit.js';
+import { descrever as descreverConfig, definir as definirConfig, remover as removerConfig, PainelConfigError } from '../painelConfig.js';
 import { interactionSeries } from '../interactionStats.js';
 import { parseWhen, describeWhen, describeRepeat } from '../../reminders/when.js';
 import { ReminderError } from '../../reminders/store.js';
@@ -637,6 +638,35 @@ export function createAdmin({
     },
 
     // ── Provedores de IA: chaves e provedores próprios (as chaves só entram, nunca saem) ──
+    // Configuração e chaves pelo painel (cofre secrets/painel-config.json, lista fechada em src/core/painelConfig.js): só o dono; segredo só ENTRA (nenhuma resposta o devolve);
+    // a auditoria leva só o NOME do ajuste, nunca o valor.
+    async config(ctx) {
+      requireOwner(ctx);
+      return descreverConfig();
+    },
+    async configSet(ctx, chave, valor) {
+      requireOwner(ctx);
+      try {
+        const r = definirConfig(chave, valor);
+        audit('admin.config.set', ctx, { chave: r.chave });
+        return { ok: true, ...r };
+      } catch (e) {
+        if (e instanceof PainelConfigError) throw new AdminError(e.status, e.message);
+        throw e;
+      }
+    },
+    async configRemove(ctx, chave) {
+      requireOwner(ctx);
+      try {
+        const r = removerConfig(chave);
+        audit('admin.config.remove', ctx, { chave: r.chave });
+        return { ok: true, ...r };
+      } catch (e) {
+        if (e instanceof PainelConfigError) throw new AdminError(e.status, e.message);
+        throw e;
+      }
+    },
+
     async ai(ctx) {
       requireOwner(ctx);
       const { getGateway } = await import('../../gateway/index.js');
