@@ -170,9 +170,9 @@ export interface AiTestResult { ok: boolean; ms: number; via?: string | null; er
 export interface ConfigItem {
   chave: string; rotulo: string; grupo: string; descricao: string; tipo: 'segredo' | 'bool' | 'int' | 'enum' | 'texto'; reinicio: boolean;
   definido: boolean; origem: 'painel' | 'env' | 'padrao'; opcoes?: string[]; min?: number; max?: number; padrao?: string;
-  secreto?: boolean; ultimos4?: string | null; valor?: string | null;
+  secreto?: boolean; ultimos4?: string | null; valor?: string | null; alteradoEm?: string | null;
 }
-export interface ConfigOverview { edicaoLigada: boolean; itens: ConfigItem[] }
+export interface ConfigOverview { edicaoLigada: boolean; protegido?: boolean; problema?: 'cofre-ilegivel'; itens: ConfigItem[] }
 export interface RadioTrack { title: string; artist: string; album: string | null }
 export interface RadioSession {
   guildId: string; guildName: string | null; voiceChannel: string | null; status: string; connected: boolean;

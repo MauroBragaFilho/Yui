@@ -64,6 +64,7 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
       </View>
       <Text style={styles.hint}>{item.descricao}</Text>
       <Text style={styles.value} testID={`config-atual-${item.chave}`}>{atual}</Text>
+      {item.alteradoEm ? <Text style={styles.hint}>Última alteração: {new Date(item.alteradoEm).toLocaleString('pt-BR')}</Text> : null}
 
       {editable && item.tipo === 'bool' ? (
         <View style={styles.chips}>
@@ -126,11 +127,15 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
   if (!data) return <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />;
 
   const grupos = [...new Set(data.itens.map((i) => i.grupo))];
+  const editavel = data.edicaoLigada && data.problema !== 'cofre-ilegivel';
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Configuração e chaves</Text>
+      {data.problema === 'cofre-ilegivel' ? (
+        <Text testID="config-cofre-ilegivel" style={styles.error}>O cofre de configuração existe mas não abriu (arquivo quebrado ou protegido por outra conta). Nada será alterado até você conferir o arquivo secrets/painel-config.json e a cópia .bak.</Text>
+      ) : null}
       {data.edicaoLigada ? (
-        <Text style={styles.hint}>O que você salvar aqui fica só neste computador (pasta secrets/, fora do Git) e vale por cima do .env. Uma chave nunca volta do servidor: só os 4 últimos caracteres aparecem. O token do Discord, a senha do painel e as regras de segurança continuam só no .env.</Text>
+        <Text style={styles.hint}>O que você salvar aqui fica só neste computador (pasta secrets/, fora do Git) e vale por cima do .env. Uma chave nunca volta do servidor: só os 4 últimos caracteres aparecem. O token do Discord, a senha do painel e as regras de segurança continuam só no .env. {data.protegido ? 'O arquivo é gravado protegido (DPAPI do Windows).' : 'O arquivo ainda NÃO é criptografado (YUI_PAINEL_CONFIG_DPAPI=true liga a proteção no Windows).'} A mudança vale na hora no cérebro; o bot (voz, semanal, avisos) só relê ao reiniciar: itens marcados "Pede reinício" só valem depois disso.</Text>
       ) : (
         <Text style={styles.hint}>A edição pelo painel está desligada (YUI_PAINEL_CONFIG_EDIT=false no .env). Só dá para consultar.</Text>
       )}
@@ -138,7 +143,7 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
         <View key={g} style={styles.section}>
           <Text style={styles.sectionTitle}>{g}</Text>
           {data.itens.filter((i) => i.grupo === g).map((i) => (
-            <ConfigCard key={i.chave} item={i} editable={data.edicaoLigada} client={client} reload={reload} />
+            <ConfigCard key={i.chave} item={i} editable={editavel} client={client} reload={reload} />
           ))}
         </View>
       ))}

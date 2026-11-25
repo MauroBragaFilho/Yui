@@ -134,6 +134,79 @@ await test('chave fora do catálogo = 404; remover o que não está salvo = 404;
   for (const v of ['false', 'FALSE', ' false ']) assert.equal(cfg.edicaoLigada({ YUI_PAINEL_CONFIG_EDIT: v }), false);
 });
 
+section('C2. Proteção em repouso, falha segura e datas (parecer da Liz)');
+// Um protetor FALSO e reversível (só para provar o fluxo; a DPAPI de verdade só roda no Windows e fora do CI).
+const falso = { rotulo: 'falso-teste', proteger: (s) => 'PROT:' + Buffer.from(s, 'utf8').toString('base64'), abrir: (s) => { if (!s.startsWith('PROT:')) throw new Error('não abre'); return Buffer.from(s.slice(5), 'base64').toString('utf8'); } };
+await test('com YUI_PAINEL_CONFIG_DPAPI=true o arquivo e o .bak NÃO têm o segredo em texto; o cofre continua legível por quem pode abrir', () => {
+  limpar();
+  cfg.usarProtetorParaTeste(falso);
+  try {
+    const env = { YUI_PAINEL_CONFIG_DPAPI: 'true' };
+    cfg.definir('AZURE_SPEECH_KEY', SEGREDO, env);
+    cfg.definir('YUI_FUSO', 'America/Cuiaba', env);
+    const bruto = fs.readFileSync(ARQ, 'utf8');
+    assert.ok(!bruto.includes(SEGREDO) && !bruto.includes('America/Cuiaba'), 'nada em texto puro no arquivo');
+    assert.equal(JSON.parse(bruto).version, 2);
+    assert.equal(JSON.parse(bruto).protecao, 'falso-teste');
+    assert.ok(!fs.readFileSync(`${ARQ}.bak`, 'utf8').includes(SEGREDO), 'o .bak também não tem o segredo em texto');
+    assert.equal(cfg.carregar().valores.AZURE_SPEECH_KEY, SEGREDO, 'quem abre, lê');
+    assert.equal(cfg.descrever(env).protegido, true);
+    // Desligar a proteção depois: continua lendo o arquivo protegido e a próxima gravação volta ao formato simples
+    cfg.definir('YUI_CLIMA_CIDADE_PADRAO', 'Cuiaba-MT', { YUI_PAINEL_CONFIG_DPAPI: 'false' });
+    assert.equal(JSON.parse(fs.readFileSync(ARQ, 'utf8')).version, 1);
+    assert.equal(cfg.carregar().valores.AZURE_SPEECH_KEY, SEGREDO, 'nada se perdeu na troca de formato');
+  } finally { cfg.usarProtetorParaTeste(null); }
+});
+await test('falha na proteção: nada é gravado (nem o arquivo, nem o .bak) e a variável não muda', () => {
+  limpar();
+  cfg.usarProtetorParaTeste({ rotulo: 'quebrado', proteger: () => { throw new Error('DPAPI indisponível'); }, abrir: () => '{}' });
+  try {
+    const env = { YUI_PAINEL_CONFIG_DPAPI: 'true' };
+    assert.throws(() => cfg.definir('YUI_FUSO', 'America/Cuiaba', env), /DPAPI indisponível/);
+    assert.ok(!fs.existsSync(ARQ), 'nada gravado');
+    assert.ok(!('YUI_FUSO' in env), 'nada aplicado');
+  } finally { cfg.usarProtetorParaTeste(null); }
+});
+await test('cofre que existe e NÃO abre (quebrado ou protegido por outra conta): a edição é recusada com 409, o arquivo fica intacto e nada é aplicado', () => {
+  limpar();
+  fs.mkdirSync(path.dirname(ARQ), { recursive: true });
+  for (const conteudo of ['{isto não é json', JSON.stringify({ version: 2, protecao: 'dpapi-currentuser', dados: 'DADOS-DE-OUTRA-CONTA' })]) {
+    fs.writeFileSync(ARQ, conteudo);
+    cfg.usarProtetorParaTeste({ rotulo: 'x', proteger: (s) => s, abrir: () => { throw new Error('outra conta'); } });
+    try {
+      assert.throws(() => cfg.definir('YUI_FUSO', 'America/Cuiaba', {}), (e) => e.status === 409 && /não abriu/.test(e.message) && !e.message.includes('DADOS-DE-OUTRA-CONTA'));
+      assert.throws(() => cfg.remover('YUI_FUSO', {}), (e) => e.status === 409);
+      assert.equal(fs.readFileSync(ARQ, 'utf8'), conteudo, 'o arquivo ficou intacto, byte a byte');
+      const env = {};
+      assert.equal(cfg.aplicarPainelConfig(env), 0);
+      assert.deepEqual(env, {}, 'nada aplicado de um cofre que não abriu');
+      assert.equal(cfg.descrever({}).problema, 'cofre-ilegivel', 'a tela mostra o problema');
+    } finally { cfg.usarProtetorParaTeste(null); }
+  }
+});
+await test('a data da última alteração é guardada por ajuste e aparece na descrição; sai junto quando o ajuste é removido', () => {
+  limpar();
+  const env = {};
+  const antes = Date.now();
+  cfg.definir('YUI_FUSO', 'America/Cuiaba', env);
+  const item1 = cfg.descrever(env).itens.find((i) => i.chave === 'YUI_FUSO');
+  assert.ok(Date.parse(item1.alteradoEm) >= antes - 1000 && Date.parse(item1.alteradoEm) <= Date.now() + 1000);
+  assert.equal(cfg.descrever(env).itens.find((i) => i.chave === 'REDDIT_FETCH_MODE').alteradoEm, null, 'o que não é do painel não tem data');
+  cfg.remover('YUI_FUSO', env);
+  assert.equal(cfg.descrever(env).itens.find((i) => i.chave === 'YUI_FUSO').alteradoEm, null);
+});
+await test('valor VAZIO não é remoção: grava texto vazio de verdade (o item segue "do painel") e só remover devolve o .env', () => {
+  limpar();
+  const env = { YUI_CLIMA_CIDADE_PADRAO: 'Cidade-do-env' };
+  cfg.definir('YUI_CLIMA_CIDADE_PADRAO', '', env);
+  assert.equal(env.YUI_CLIMA_CIDADE_PADRAO, '');
+  const it = cfg.descrever(env).itens.find((i) => i.chave === 'YUI_CLIMA_CIDADE_PADRAO');
+  assert.equal(it.origem, 'painel');
+  assert.equal(cfg.carregar().valores.YUI_CLIMA_CIDADE_PADRAO, '');
+  cfg.remover('YUI_CLIMA_CIDADE_PADRAO', env);
+  assert.equal(env.YUI_CLIMA_CIDADE_PADRAO, 'Cidade-do-env');
+});
+
 section('D. A descrição para a tela');
 await test('o segredo NUNCA sai: só "definido" e os 4 últimos caracteres do que veio do painel; do .env só "definido"', () => {
   limpar();
@@ -160,6 +233,7 @@ await test('ajuste comum mostra o valor em vigor e a origem (painel, .env ou pad
   assert.deepEqual(depois.opcoes, ['browser', 'cookies', 'off']);
   const vivo = cfg.descrever(env).itens.find((i) => i.chave === 'YUI_IA_REFAZER_RECUSA');
   assert.deepEqual([vivo.definido, vivo.origem, vivo.reinicio], [false, 'padrao', false]);
+  assert.equal(cfg.descrever(env).itens.find((i) => i.chave === 'AZURE_SPEECH_KEY').reinicio, true, 'o que o bot lê pede reinício');
 });
 
 section('D2. A subida dos processos');
@@ -214,7 +288,7 @@ try {
     limpar();
     const put = await call('PUT', '/v1/admin/config/AZURE_SPEECH_KEY', { token: OWNER, body: { valor: SEGREDO } });
     assert.equal(put.status, 200);
-    assert.deepEqual([put.json.ok, put.json.chave, put.json.reinicio], [true, 'AZURE_SPEECH_KEY', false]);
+    assert.deepEqual([put.json.ok, put.json.chave, put.json.reinicio], [true, 'AZURE_SPEECH_KEY', true], 'a voz roda no bot: pede reinício');
     assert.ok(!put.texto.includes(SEGREDO), 'a resposta do PUT não devolve o segredo');
     const lista = await call('GET', '/v1/admin/config', { token: OWNER });
     assert.ok(!lista.texto.includes(SEGREDO), 'a listagem não devolve o segredo');
