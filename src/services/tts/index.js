@@ -541,7 +541,7 @@ function skip(t, reason, guildId, userId) {
  * Monta a execução de UMA resposta: sintetiza frase a frase (a ordem importa para o corte por
  * duração e para o provedor "sticky"), usa o cache nas frases fixas e mede os tempos.
  */
-function createRun(t, { guildId, userId, sentences, mode, chars, requestedAt, sensitive }) {
+function createRun(t, { guildId, userId, sentences, mode, chars, requestedAt, sensitive, audienciaOk = null }) {
   const { cfg, engine, cache, deps, log } = t;
   const sticky = {}; // o engine grava o provedor da 1ª síntese: a resposta inteira usa a mesma voz
   const tasks = [];
@@ -625,7 +625,14 @@ function createRun(t, { guildId, userId, sentences, mode, chars, requestedAt, se
       const banned = syncCall(deps.isBanned, userId, guildId);
       if (banned.failed || banned.value) return false;
       const inCall = syncCall(deps.isUserInSameVoice, guildId, userId);
-      return !inCall.failed && Boolean(inCall.value);
+      if (inCall.failed || !inCall.value) return false;
+      // Voz unificada, turno PRIVADO: a call é recontada AGORA, antes de cada frase. Um convidado que entra depois do último portão
+      // (síntese, fila, frases longas) faz a fala parar. Só `true` estrito libera: falso, exceção ou Promise (não é síncrono) = não fala.
+      // Sem `audienciaOk` (turno público e chave desligada) nada muda.
+      if (typeof audienciaOk === 'function') {
+        try { if (audienciaOk() !== true) return false; } catch { return false; }
+      }
+      return true;
     },
 
     onFinish(info) {
@@ -697,6 +704,7 @@ function speak(t, req) {
     chars,
     requestedAt,
     sensitive: r.sensitive === false ? false : true,
+    audienciaOk: typeof r.audienciaOk === 'function' ? r.audienciaOk : null,
   });
 
   const queued = t.manager.enqueue(guildId, {
@@ -721,7 +729,8 @@ function speak(t, req) {
  * Fala a resposta da IA na call de voz. SÍNCRONA, nunca lança, dispara-e-esquece.
  *
  * @param {{ guildId: string, userId: string, text: string, sensitive: boolean, requestedAt: number,
- *           fromVoice: boolean, transcript: string }} req
+ *           fromVoice: boolean, transcript: string, audienciaOk?: () => boolean }} req
+ *   `audienciaOk` (opcional, SÍNCRONA, só no turno de voz privado): consultada antes de CADA frase; só `true` deixa falar.
  *   `fromVoice` só pode ser true quando o pedido nasceu na call (o voiceHandler marca);
  *   `sensitive` precisa ser exatamente `false` (conteúdo pessoal nunca é falado numa call pública);
  *   `transcript` (o que a pessoa disse) é OBRIGATÓRIO e não vazio: sem ele a resposta não é falada

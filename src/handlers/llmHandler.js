@@ -16,6 +16,7 @@ import { LIMITES_PADRAO_CADEIA } from '../core/ai/limitesTokens.js';
 import { stripThinking as stripThinkingCore, extractThinkingFallback, isSystemReply, EMPTY_REPLY_TEXT } from '../core/ai/limpezaResposta.js';
 import { isChatRemote, createRemoteTurn, isRemoteTurn, isCerebroUnavailable, CEREBRO_UNAVAILABLE_TEXT, forgetVoiceInCerebro } from '../discord/turnoCerebro.js';
 import { processandoStore, conversaDe as processandoConversaDe } from '../discord/processandoGuardado.js';
+import { vozUnificadaOn, ferramentaVozAutorizada, inserirItemVoz, AVISO_DM_PRIVADA, AVISO_DM_FALHOU } from './audienciaVoz.js';
 import { getGateway, gatewayInChain } from '../gateway/index.js';
 import fs from 'fs';
 import path from 'path';
@@ -1846,6 +1847,11 @@ async function generateThroughCerebro(turn, prompt, channelId, options = {}) {
         allowSearch: options.allowSearch === true,
         searchPrompt: typeof options.searchPrompt === 'string' ? options.searchPrompt.slice(0, 2000) : null,
     });
+    // Voz unificada (contrato B): o nível que o CÉREBRO decidiu para este passo. Invalidado = o texto devolvido não vale e nada sai.
+    if (out.audiencia !== undefined && turn.audienciaCtl) {
+        try { turn.audienciaCtl.registrarResultado(out.audiencia); } catch (_) { /* registrarResultado é à prova de erro; na dúvida o nível fica público */ }
+        if (turn.audienciaCtl.invalidada) return '';
+    }
     let text = String(out.text ?? '');
     if (!out.failed) {
         // com a web no prompt as ferramentas ficaram fora da chamada: nada de converter texto em chamada de ferramenta
@@ -2247,6 +2253,19 @@ function voiceToolBlocked(toolName, options, env = process.env) {
 }
 
 /**
+ * Voz unificada (YUI_VOZ_UNIFICADA): segunda trava do executor, SOMADA à de cima (as duas precisam deixar passar). A decisão é só da
+ * política de audiência, deny by default: YUI_VOICE_TOOLS=true não abre nada por trás dela. Consulta só pelo nome (os atalhos por código:
+ * música do status, sair da call) não leva argumentos e nunca passa. `extra` = { args, guard, desligada } do ponto único do executor.
+ * Desligada a chave (ou fora da voz) devolve false e o fluxo é o de sempre.
+ */
+function voiceToolBlockedPorAudiencia(toolName, options, env = process.env, extra = null) {
+    if (!toolName || toolName === 'generate_reply') return false;
+    if (options?.voice !== true || !vozUnificadaOn(env)) return false;
+    if (!extra) return true;
+    return !ferramentaVozAutorizada(toolName, extra.args, options, extra);
+}
+
+/**
  * Texto de sucesso do download de música. Se o plano B (YouTube) entrou, vale o aviso do plano B (formatDeezerDelivery) no lugar da
  * frase normal; sem plano B, a frase de sempre. Nunca lança.
  */
@@ -2284,6 +2303,7 @@ function gameInfoErrorText({ infoError, fallbackText, gameQuery } = {}) {
 // Sai pelo próprio reply da mensagem de voz (menciona a pessoa e libera a vaga de pedido pendente). Nunca lança nem atrasa a fila.
 const VOICE_STALE_NOTICE = 'Demorei demais para responder e perdi o fio. Pode pedir de novo?';
 function notifyStaleVoiceItem(item) {
+    if (item?.options?.avisoEnviado === true) return; // voz unificada: o aviso de prazo já foi dado, uma frase só
     try {
         Promise.resolve(item?.interaction?.reply?.(VOICE_STALE_NOTICE)).catch(() => {});
     } catch (_) { /* o aviso nunca atrapalha a fila */ }
@@ -2346,7 +2366,7 @@ function cerebroTurnFacts({ prompt, interaction, type, userId, channelId, option
     let isBlocked = false;
     try { isBlocked = Boolean(checkBan(userId, guildId, null)); } catch (_) { isBlocked = false; }
     const ownText = authorOwnText({ searchPrompt: opts.searchPrompt, prompt, thirdPartyPrompt: opts.thirdPartyPrompt === true, isVoice: voiceInteraction });
-    return {
+    const facts = {
         turn: { id: String(interaction?.id ?? ''), at: Number(interaction?.createdTimestamp) || Date.now() },
         ctx: { platform: 'discord', userId: String(userId), guildId: guildId ? String(guildId) : null, channelId: channelId ? String(channelId) : null, isDM: !guildId, isBlocked },
         call: {
@@ -2359,6 +2379,13 @@ function cerebroTurnFacts({ prompt, interaction, type, userId, channelId, option
         // A persona de canal usa a mesma chave do generateResponse (na voz, a chave da voz).
         channel: channelFactsForCerebro({ guildId, channelId: voiceItem ? buildVoiceKey(guildId, userId) : channelId, userId }),
     };
+    // Voz unificada: os FATOS da call (nunca um nível pronto) vão em call.audiencia, e cada passo do turno manda uma medição FRESCA
+    // (medirAudiencia). Só em item de voz e só com a chave ligada: sem isso o objeto é o de sempre, byte a byte.
+    if (voiceItem && opts.audiencia && typeof opts.audienciaCtl?.medirAgora === 'function' && vozUnificadaOn()) {
+        facts.call = { ...facts.call, audiencia: opts.audiencia };
+        facts.medirAudiencia = () => opts.audienciaCtl.medirAgora();
+    }
+    return facts;
 }
 // O /yui (e o +yui) com o cérebro separado: um turno do cérebro para a pergunta (o /yui não passa pela fila). `record`: a resposta é pública
 // (a privada só lê o contexto, como sempre). Sem o cérebro separado devolve null e o /yui segue como antes.
@@ -2383,6 +2410,7 @@ async function processQueue() {
         const stale = processingQueue.shift();
         logger.info(`[Voz] Pedido de voz descartado por idade, sem chamar a IA (servidor=${scrubLogText(stale?.interaction?.guild?.id || stale?.interaction?.guildId || '-', 32)} usuario=${scrubLogText(stale?.userId || '-', 32)}).`);
         notifyStaleVoiceItem(stale);
+        stale?.options?.audienciaCtl?.finalizar?.(); // voz unificada: sem temporizador pendurado
     }
     if (processingQueue.length === 0) {
         isProcessing = false;
@@ -2394,6 +2422,8 @@ async function processQueue() {
     // Cérebro separado (etapa 5): o pedido vira um TURNO do cérebro (contexto, histórico e prompt são dele). O rádio fica no bot.
     if (isChatRemote() && item?.options?.radioMode !== true) {
         const turn = createRemoteTurn(cerebroTurnFacts(item));
+        // Voz unificada: o resultado de audiência de CADA passo (também os do generateResponse dentro de ferramentas) volta por aqui.
+        if (item?.options?.audienciaCtl) turn.audienciaCtl = item.options.audienciaCtl;
         return runWithContext(turn, () => processQueueItem(item).finally(() => turn.finish()));
     }
     const target = contextTargetFor(item);
@@ -2417,6 +2447,9 @@ async function processQueueItem({ prompt, interaction, type, userTag, userId, ch
     // recebido de outra pessoa) e pode trazer instruções. Como no pedido com busca na web, as ferramentas ficam desligadas: o modelo só
     // responde com texto e nada do arquivo consegue acionar ban, download, entrada em call etc. (M1)
     if (typeof options.attachmentBlock === 'string' && options.attachmentBlock.length > 0) options = { ...options, disableTools: true };
+    // Voz unificada: o controle de audiência do turno (só existe com a chave ligada e em item de voz).
+    const audCtl = isVoice && options.audienciaCtl ? options.audienciaCtl : null;
+    audCtl?.marcarFim('fila');
     // Chave do histórico em RAM, da persona de canal e do escopo: um fio por pessoa em cada servidor (nunca o canal de texto).
     // Ban e AutoMod continuam no canal de texto REAL (realChannelId): a chave de voz não é um canal e contornaria o ban de canal.
     const channelId = isVoice ? buildVoiceKey(guildId, userId) : realChannelId;
@@ -2424,8 +2457,11 @@ async function processQueueItem({ prompt, interaction, type, userTag, userId, ch
     const savePromptToHistoryBase = isVoice ? moderateVoiceExchange : savePromptToHistoryOnDisk;
     // O texto de um anexo lido (options.attachmentBlock) é de terceiros: não chega ao historico.txt (sem rotação) nem ao alerta ao dono
     // (promptForDiskHistory troca o trecho por um marcador). Todos os ramos de ferramenta gravam por aqui. (M2)
+    // Voz unificada, turno PRIVADO: a resposta da IA (derivada de memória pessoal) nunca vai ao webhook de avisos nem a arquivo; o
+    // alerta de prompt continua valendo. rest = [userTag, userId, aiResponse, interaction]. Fora do privado nada muda.
     const savePromptToHistory = (promptToSave, ...rest) => savePromptToHistoryBase(
-        promptForDiskHistory(promptToSave, { attachmentBlock: options.attachmentBlock }), ...rest);
+        promptForDiskHistory(promptToSave, { attachmentBlock: options.attachmentBlock }),
+        ...(audCtl?.nivel() === 'privado' && rest.length >= 3 ? [rest[0], rest[1], '[resposta privada omitida]', ...rest.slice(3)] : rest));
     const guildName = interaction?.guild?.name || "DM";
     const serverIdentifier = interaction?.guild?.id || interaction?.guildId || "N/A";
     const channelName = interaction?.channel?.name || "Chat";
@@ -2438,7 +2474,7 @@ async function processQueueItem({ prompt, interaction, type, userTag, userId, ch
     let lastSendError = null; // último erro de envio do unifiedReply (para distinguir "arquivo grande demais" de outras falhas)
     // Envio com divisão automática de respostas longas (src/discord/longReply.js). Contrato antigo preservado:
     // devolve a mensagem que carrega botões/embeds/arquivos (na resposta dividida, a última parte) ou null.
-    const unifiedReply = createUnifiedReply({
+    const unifiedReplyBase = createUnifiedReply({
         interaction,
         type,
         userId,
@@ -2453,12 +2489,46 @@ async function processQueueItem({ prompt, interaction, type, userTag, userId, ch
         },
         limits: { maxParts: parseMaxParts() }
     });
+    // Voz unificada, turno PRIVADO: todo texto, embed ou arquivo derivado do turno vai por DM ao dono; o canal só recebe frases fixas (pelo unifiedReplyBase).
+    const unifiedReply = audCtl ? audCtl.envolverReply(unifiedReplyBase) : unifiedReplyBase;
+    // Voz unificada: o turno não vai ser entregue (a call mudou ou o prazo estourou). Responde só a frase fixa (ou nada) e NADA vai ao cérebro.
+    const portaDeEntregaVoz = async () => {
+        if (!audCtl) return false;
+        const porta = audCtl.antesDeEntregar();
+        if (porta.acao === 'entregar') return false;
+        const turnNow = currentContext();
+        if (isRemoteTurn(turnNow)) turnNow.discard();
+        try {
+            if (porta.acao === 'frase') await unifiedReplyBase(porta.frase);
+            else await replyMessage?.delete?.(); // prazo estourado: a resposta tardia some em silêncio (o aviso já foi dado)
+        } catch (_) { /* a frase fixa nunca derruba a fila */ }
+        return true;
+    };
+    // Resultado das ferramentas de leitura (check_steam, convert_currency, check_game_info). Sem controle de audiência (chave desligada)
+    // é a edição de sempre da mensagem "Processando...". Com ele: a última porta (call/prazo) antes de entregar e o envio pelo
+    // unifiedReply, que no turno privado manda tudo por DM (replyMessage.edit direto editaria a mensagem do CANAL do servidor).
+    // Devolve false se o resultado foi descartado (o chamador dá `return`).
+    const entregarResultadoDeFerramenta = async (payload) => {
+        if (!audCtl) {
+            if (type === 'mention') await replyMessage.edit(payload);
+            else await interaction.editReply(payload);
+            return true;
+        }
+        if (await portaDeEntregaVoz()) return false;
+        const enviada = await unifiedReply(payload.content, [], [], payload.embeds);
+        if (audCtl.nivel() === 'privado') {
+            try { await unifiedReplyBase(enviada ? AVISO_DM_PRIVADA : AVISO_DM_FALHOU); } catch (_) { /* só um aviso fixo */ }
+        }
+        return true;
+    };
     // Se o envio de um ARQUIVO falhou por tamanho (erro 40005 / HTTP 413), diz isso em vez de deixar a mensagem em "Executando Ação".
     const explainTooLargeUpload = () => explainFailedUpload(unifiedReply, lastSendError);
     // Contexto por horas: os ramos de ferramenta só gravam se o ÚLTIMO envio deu certo (lastDelivery nulo = ainda nada enviado).
     const ctxTarget = currentContext();
     if (ctxTarget?.active) ctxTarget.deliveredOk = () => unifiedReply.lastDelivery?.ok !== false;
     try {
+        // Voz unificada: o aviso de prazo já foi dado enquanto o pedido esperava na fila. Não gasta a IA com uma resposta que ninguém espera.
+        if (audCtl?.avisoEnviado) return;
         // Prompt que é LOG de terceiros (/chat_resumo): as palavras de outras pessoas não podem banir quem chamou o comando.
         const triggerSource = options.thirdPartyPrompt === true ? '' : (options.searchPrompt || prompt);
         const _automodMode = getAutoBlockMode(guildId);
@@ -2770,6 +2840,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             rawResponse = JSON.stringify({ thought: 'pedido de imagem por conversa', tool: 'generate_image', args: { prompt: imageSubject, negative_prompt: '' } });
         } else do {
             recordInteraction();
+            audCtl?.marcarInicio('prov');
             rawResponse = await generateResponse(prompt, channelId, {
                 ...options,
                 onMeta: (meta) => { genMeta = meta; },
@@ -2796,6 +2867,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     }
                 }
             });
+            audCtl?.marcarFim('prov');
             isBlocked = false;
             if (rawResponse) {
                 // Chamada de ferramenta escrita como texto (print(default_api.x(...)), default_api.x(...), generate_reply "..."): vira o JSON da ferramenta.
@@ -2851,6 +2923,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 break;
             }
         } while (isBlocked);
+        // Voz unificada: o cérebro invalidou o turno privado (mudou quem está na call) ou o prazo estourou: nada derivado dele sai.
+        if (audCtl && (audCtl.invalidada || audCtl.avisoEnviado) && await portaDeEntregaVoz()) return;
         const endTime = Date.now();
         const duration = ((endTime - startTime) / 1000).toFixed(1) + 's';
         const footerMatch = rawResponse.match(/(\n-# .*)$/);
@@ -2973,7 +3047,11 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 // Voz: a ferramenta NUNCA executa (inclusive as que o parser default_api/[Tool Use:] converteu em JSON acima) e o JSON nunca é
                 // falado: a resposta vira o texto fixo VOICE_TOOL_REFUSAL. Roda antes da checagem de disableTools para a recusa ser a da voz.
                 let voiceToolDropped = false;
-                if (voiceToolBlocked(toolData.tool, options)) {
+                if (voiceToolBlocked(toolData.tool, options) || voiceToolBlockedPorAudiencia(toolData.tool, options, process.env, {
+                    args: toolData.args,
+                    guard: () => guardToolCall({ tool: toolData.tool, userId, guildId, channelId: interaction?.channelId ?? null, isDM: !guildId }),
+                    desligada: () => isToolDisabled(options?.guildId || guildId, toolData.tool)
+                })) {
                     logger.warn(`[MCP TOOL] Ferramenta '${scrubLogText(String(toolData.tool), 40)}' descartada: pedido de voz sem ferramentas liberadas.`);
                     toolData.tool = null;
                     keys.tool = null;
@@ -3487,7 +3565,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     // Sair da call por aqui só vale com a ferramenta leave_voice_call LIBERADA no servidor (desligada por padrão) e fora de pedido
                     // de voz sem ferramentas: o modelo respondeu "generate_reply" e o texto do pedido não pode contornar o interruptor.
                     if (/yui.*\b(saia|sai|desconecta)\s+(da|do)?\s*(call|voz)\b/i.test(prompt)) {
-                        if (interaction.guildId && !isToolDisabled(interaction.guildId, 'leave_voice_call') && !voiceToolBlocked('leave_voice_call', options)) {
+                        if (interaction.guildId && !isToolDisabled(interaction.guildId, 'leave_voice_call') && !voiceToolBlocked('leave_voice_call', options) && !voiceToolBlockedPorAudiencia('leave_voice_call', options)) {
                             await leaveVoiceCall(interaction.guildId, interaction.channel);
                         }
                     }
@@ -3607,7 +3685,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         
                         try {
                             const commentPrompt = `Eu acabei de consultar o jogo "${steamInfo.name}" na Steam. O preço atual é ${steamInfo.price} e o lançamento foi em ${steamInfo.releaseDate}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, colocando o valor na resposta, na sua personalidade de forma natural. (NÃO gere json nem responda pedindo, apenas diga a fala natural).`;
-                            const rawComment = await generateResponse(commentPrompt, channelId, { allowSearch: false, disableTools: true, guildId, sensitive: sensitiveChat, isInternalComment: true });
+                            const rawComment = await generateResponse(commentPrompt, channelId, { allowSearch: false, disableTools: true, guildId, sensitive: sensitiveChat, isInternalComment: true, ...(audCtl ? { noHistory: true } : {}) });
                             if (rawComment && !isSystemReply(rawComment)) {
                                 let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
                                 const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
@@ -3624,8 +3702,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         }
 
                         const payload = { content: commentText(yuiComment), embeds: [steamEmbed], files: [], allowedMentions: NO_MENTIONS };
-                        if (type === 'mention') await replyMessage.edit(payload);
-                        else await interaction.editReply(payload);
+                        if (!(await entregarResultadoDeFerramenta(payload))) return;
                         
                         addToolExchangeToHistory(channelId, ownText, `[Consulta Steam: ${steamInfo.name}] ${commentText(yuiComment)}`);
                         recordContextTurn('Consultei a Steam e mostrei os dados do jogo pedido.');
@@ -3664,7 +3741,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         
                         try {
                             const commentPrompt = `Eu acabei de converter ${convInfo.amount} ${convInfo.from} para ${convInfo.to}. O resultado foi ${resultFormatted}. Faça um comentário CURTO (máximo 15 palavras) e bem casual sobre isso, na sua personalidade. (NÃO gere json nem responda pedindo, apenas diga a fala natural).`;
-                            const rawComment = await generateResponse(commentPrompt, channelId, { allowSearch: false, disableTools: true, guildId, sensitive: sensitiveChat, isInternalComment: true });
+                            const rawComment = await generateResponse(commentPrompt, channelId, { allowSearch: false, disableTools: true, guildId, sensitive: sensitiveChat, isInternalComment: true, ...(audCtl ? { noHistory: true } : {}) });
                             if (rawComment && !isSystemReply(rawComment)) {
                                 let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
                                 const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
@@ -3681,8 +3758,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                         }
 
                         const payload = { content: commentText(yuiComment), embeds: [convEmbed], files: [], allowedMentions: NO_MENTIONS };
-                        if (type === 'mention') await replyMessage.edit(payload);
-                        else await interaction.editReply(payload);
+                        if (!(await entregarResultadoDeFerramenta(payload))) return;
                         
                         addToolExchangeToHistory(channelId, ownText, `[Converteu ${convInfo.amount} ${convInfo.from} para ${convInfo.to} -> ${resultFormatted}] ${commentText(yuiComment)}`);
                         recordContextTurn('Converti o valor pedido e mostrei a cotação.');
@@ -3746,7 +3822,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     let yuiComment = gameInfo.rating != null ? `Nota ${gameInfo.rating}/10 na comunidade. Quer que eu detalhe algo específico desse jogo?` : 'Achei essas informações pra você.';
                     try {
                         const commentPrompt = `Você (Yui) acabou de buscar informações do jogo "${gameInfo.name}". Faça um comentário MUITO CURTO (máx 15 palavras), casual e de amiga gamer sobre o jogo. Não use JSON nem ferramentas.`;
-                        const rawComment = await generateResponse(commentPrompt, channelId, { allowSearch: false, disableTools: true, guildId, sensitive: sensitiveChat, isInternalComment: true });
+                        const rawComment = await generateResponse(commentPrompt, channelId, { allowSearch: false, disableTools: true, guildId, sensitive: sensitiveChat, isInternalComment: true, ...(audCtl ? { noHistory: true } : {}) });
                         if (rawComment && !isSystemReply(rawComment)) {
                             let cleanData = rawComment.replace(/\n-# .*$/gm, '').trim();
                             const jsonMatch = cleanData.match(/\{[\s\S]*\}/);
@@ -3756,8 +3832,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     } catch (e) {}
 
                     const payload = { content: commentText(yuiComment), embeds: [resultEmbed], files: [], allowedMentions: NO_MENTIONS };
-                    if (type === 'mention') await replyMessage.edit(payload);
-                    else await interaction.editReply(payload);
+                    if (!(await entregarResultadoDeFerramenta(payload))) return;
 
                     addToolExchangeToHistory(channelId, ownText, `[Consultou info de "${gameInfo.name}"]`);
                     recordContextTurn('Mostrei as informações do jogo pedido.');
@@ -4115,7 +4190,7 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
             /(?:minha\s+m[uú]sica\s+do\s+status|m[uú]sica\s+do\s+meu\s+status)/i.test(cleanPromptLower)
         );
         // Voz sem ferramentas liberadas: este atalho (baixar a música do status) também é uma ferramenta e não roda por voz.
-        const musicShortcutVoiceBlocked = voiceToolBlocked('get_current_music', options);
+        const musicShortcutVoiceBlocked = voiceToolBlocked('get_current_music', options) || voiceToolBlockedPorAudiencia('get_current_music', options);
         // Pedido com as ferramentas desligadas (o log de terceiros do /chat_resumo, o texto de um anexo lido): o atalho é uma ferramenta e o
         // prompt desses pedidos traz texto de outras pessoas, que não pode acioná-lo.
         const musicShortcutOff = !musicShortcutVoiceBlocked && options.disableTools === true;
@@ -4327,13 +4402,25 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
             }
             processedResponse = applyPromiseNotice(processedResponse, { savedSomething: savedMemories > 0 });
             noteProcessando('entregando');
+            // Voz unificada: a ÚLTIMA porta. Recontagem da call AGORA (revalidar); se mudou ou venceu o prazo, só a frase fixa (ou nada) e sem commit.
+            if (await portaDeEntregaVoz()) return;
+            audCtl?.marcarInicio('entrega');
             const sentMessage = await unifiedReply(processedResponse);
+            audCtl?.marcarFim('entrega');
+            // Turno privado: o texto foi por DM; o "Processando..." do canal vira uma frase fixa (nunca o texto da resposta).
+            if (audCtl?.nivel() === 'privado') {
+                try { await unifiedReplyBase(sentMessage ? AVISO_DM_PRIVADA : AVISO_DM_FALHOU); } catch (_) { /* só um aviso fixo */ }
+            }
             const delivery = unifiedReply.lastDelivery || { ok: false, mode: 'failed', parts: 1, sentParts: 0, durationMs: 0 };
             // [TTS-HOOK] Fala da resposta SÓ depois da entrega confirmada no chat (rastreabilidade: o texto escrito, com a menção de quem
             // pediu, sempre existe). Sem await: a síntese roda em segundo plano e nunca atrasa nem derruba a resposta. Só item de voz.
             if (voiceSpeak && delivery.ok && sentMessage) {
                 try {
-                    speakVoiceReply({ guildId, userId, text: processedResponse, transcript: options.voiceTranscript, sensitive: coreCtx.memoryScope === 'personal', requestedAt: options.voiceRequestedAt, fromVoice: true });
+                    // DECISÃO DO DONO (a confirmar, ver relatório): a fala de um turno PRIVADO pode usar TTS em NUVEM, do mesmo jeito que o texto
+                    // privado já vai a provedores de IA em nuvem; por isso `sensitive` segue como está (na voz o coreCtx é o do servidor,
+                    // então é sempre false). O que muda: no turno privado o TTS consulta `audienciaOk` ANTES DE CADA FRASE e reconta a call
+                    // agora; convidado que entrou depois do último portão = a fala para. Turno público: nada novo.
+                    speakVoiceReply({ guildId, userId, text: processedResponse, transcript: options.voiceTranscript, sensitive: coreCtx.memoryScope === 'personal', requestedAt: options.voiceRequestedAt, fromVoice: true, ...(audCtl?.nivel() === 'privado' ? { audienciaOk: () => audCtl.audienciaOk() } : {}) });
                 } catch (_) { /* a fala nunca derruba a resposta de texto */ }
             }
             // PONTO "APÓS ENTREGA" do histórico: a resposta só entra no buffer se foi entregue, e em cópia aparada
@@ -4379,6 +4466,7 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
         await unifiedReply('⚠️ Desculpe, tive um erro ao processar seu pedido. Tente novamente.');
         recordErrorExchange(unifiedReply.lastDelivery);
     } finally {
+        audCtl?.finalizar(); // voz unificada: limpa o temporizador do prazo e emite a linha única [VOZ-LAT]
         soltarProcessando(); // o turno terminou (entregue, com erro ou com o aviso): o "Processando..." guardado sai
         setTimeout(runQueueSafely, 1000);
     }
@@ -4494,13 +4582,17 @@ async function addToQueue(prompt, interaction, type, options = {}) {
             return;
         }
     }
-    processingQueue.push({ prompt, interaction, type, userTag, userId, channelId, options });
+    const queueEntry = { prompt, interaction, type, userTag, userId, channelId, options };
+    // Voz unificada: o item de voz entra antes dos itens que NÃO são de voz ainda não iniciados (ordem entre os de voz mantida). O item em
+    // andamento já saiu do array e nunca é tocado; continua um consumidor só. Desligada a chave, é o push de sempre.
+    const voicePriority = options?.voice === true && interaction?.isVoice === true && vozUnificadaOn();
+    if (voicePriority) inserirItemVoz(processingQueue, queueEntry); else processingQueue.push(queueEntry);
     notifyQueueUpdate();
     if (!isProcessing) {
         runQueueSafely();
     } else {
         if (type === 'mention' && !options.radioMode && !options.chatter) {
-            const queuePosition = processingQueue.length;
+            const queuePosition = voicePriority ? processingQueue.indexOf(queueEntry) + 1 : processingQueue.length;
             try {
                 const queueMsg = await interaction.reply({
                     content: `Sua solicitação está na fila. Posição: ${queuePosition}.`,
@@ -4569,7 +4661,7 @@ export {
     resetServerPrompt, getDisabledTools, isToolDisabled, setServerToolEnabled,
     resetServerTools, getServerSettings, setServerEveryoneMention,
     setServerUpdateChannel, setServerLastChannel, applyReplyMaxTokensEnv,
-    buildToolsPayload, buildToolsDefinition, voiceToolBlocked, clearVoiceHistory,
+    buildToolsPayload, buildToolsDefinition, voiceToolBlocked, voiceToolBlockedPorAudiencia, clearVoiceHistory,
     gameInfoErrorText, musicDeliveryText,
     coerceReplyContent, clampToolData, commentText, isSystemReply, aiDeadlineMs, anonymousTextTooBig,
     queueRefusalFor, refuseQueueRequest, uploadLimitLabel, videoUploadVerdict, explainFailedUpload, musicLabel,

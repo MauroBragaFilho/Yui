@@ -433,6 +433,18 @@ async function openDbSink({ dbApi, name, logger }) {
     await dbApi.initDatabase(name, SCHEMA);
     const db = dbApi.getDbWrapper(name);
     db.prepare('SELECT COUNT(*) AS n FROM context_turns').get(); // arquivo corrompido falha aqui
+    // Etiqueta de origem das falas (`source`, ex.: 'voz'): coluna OPCIONAL, adicionada de forma ADITIVA. Arquivo antigo sem a coluna segue abrindo
+    // (o ALTER é tolerante) e, se nem o ALTER couber (arquivo só de leitura), tudo funciona como antes, sem a etiqueta.
+    // A presença da coluna é conferida pelo esquema (PRAGMA table_info), NÃO por um SELECT que falha de propósito: o wrapper dos bancos conta toda
+    // consulta com erro, e o diagnóstico passava a mostrar "banco com alerta" nos dois arquivos de contexto a cada subida (regressão pega pelo test:perfisiaprocessos).
+    // Erro ao ler o esquema é transitório (arquivo bloqueado, SQLITE_BUSY...): relança, o arquivo cai no "só RAM" como se o COUNT acima tivesse falhado, e não
+    // fixa hasSource=false (as falas de voz perderiam a etiqueta até reiniciar).
+    const temColuna = () => db.prepare('PRAGMA table_info(context_turns)').all().some((c) => c?.name === 'source');
+    let hasSource = temColuna();
+    if (!hasSource) {
+      try { db.prepare('ALTER TABLE context_turns ADD COLUMN source TEXT').run(); } catch { /* já existe ou não dá para alterar */ }
+      hasSource = temColuna();
+    }
     // Só no motor nativo: esvazia o -wal depois de apagar (veja checkpointWal). No sql.js não há -wal e nada roda.
     let lastWalWarn = 0;
     const flushWal = () => {
@@ -448,7 +460,7 @@ async function openDbSink({ dbApi, name, logger }) {
       load() {
         return {
           scopes: db.prepare('SELECT scope_key, user_id, channel_id, guild_id, created_at, updated_at FROM context_scopes').all(),
-          turns: db.prepare('SELECT scope_key, role, content, at FROM context_turns ORDER BY at ASC, id ASC').all(),
+          turns: db.prepare(`SELECT scope_key, role, content, at${hasSource ? ', source' : ''} FROM context_turns ORDER BY at ASC, id ASC`).all(),
         };
       },
       /** Troca TODAS as falas do fio de uma vez (uma transação = uma reescrita do arquivo). */
@@ -462,7 +474,12 @@ async function openDbSink({ dbApi, name, logger }) {
              ON CONFLICT(scope_key) DO UPDATE SET updated_at = excluded.updated_at`
           ).run(meta.key, meta.userId, meta.channelId, meta.guildId, meta.personal ? 1 : 0, meta.createdAt, meta.updatedAt);
           for (const t of turns) {
-            db.prepare('INSERT INTO context_turns (scope_key, role, content, at) VALUES (?, ?, ?, ?)').run(meta.key, t.role, t.content, t.at);
+            // a coluna `source` só é gravada quando a fala TEM etiqueta (e o arquivo tem a coluna): sem etiqueta, o INSERT é o de sempre
+            if (hasSource && typeof t.source === 'string' && t.source) {
+              db.prepare('INSERT INTO context_turns (scope_key, role, content, at, source) VALUES (?, ?, ?, ?, ?)').run(meta.key, t.role, t.content, t.at, t.source);
+            } else {
+              db.prepare('INSERT INTO context_turns (scope_key, role, content, at) VALUES (?, ?, ?, ?)').run(meta.key, t.role, t.content, t.at);
+            }
           }
           // `turns` = as falas antigas que ficaram + a troca nova (2 falas). Saíram mais falas do que voltaram: alguma fala
           // antiga deixou o fio (limite de falas/caracteres ou prazo) e o texto dela não pode ficar no -wal.
@@ -512,10 +529,10 @@ async function openDbSink({ dbApi, name, logger }) {
 }
 
 /** Abre os dois arquivos (público e pessoal). Cada um pode falhar sozinho (null => RAM). */
-export async function createDbBackends({ logger = defaultLogger } = {}) {
+export async function createDbBackends({ logger = defaultLogger, dbApi: dbApiInjetado = null } = {}) {
   let dbApi;
   try {
-    dbApi = await import('../../database/db.js');
+    dbApi = dbApiInjetado ?? await import('../../database/db.js'); // dbApi injetável só para os testes simularem falha do banco
   } catch (err) {
     logger.warn(`[Context] banco indisponível, seguindo só em RAM: ${String(err?.message ?? err).slice(0, 160)}`);
     return { public: null, personal: null };
@@ -615,7 +632,7 @@ export function createContextStore({ now = Date.now, env = process.env, logger =
         }
         for (const r of rows.turns) {
           const scope = byKey.get(r.scope_key);
-          if (scope) scope.turns.push({ role: r.role, content: r.content, at: Number(r.at) });
+          if (scope) scope.turns.push({ role: r.role, content: r.content, at: Number(r.at), ...(typeof r.source === 'string' && r.source ? { source: r.source } : {}) });
         }
         const gone = [];
         for (const scope of byKey.values()) {
@@ -643,7 +660,7 @@ export function createContextStore({ now = Date.now, env = process.env, logger =
      * Grava UMA troca (fala do usuário + resposta) de uma vez. `assistantText` pode ser ERROR_MARKER.
      * Devolve true se gravou.
      */
-    record(target, { userText, assistantText, userAt = null, assistantAt = null } = {}) {
+    record(target, { userText, assistantText, userAt = null, assistantAt = null, source = null } = {}) {
       if (!target?.active || target.record === false || !target.key) return false;
       const { maxChars } = budget();
       const user = clipUserText(userText, Math.min(LIMITS.userChars, Math.floor(maxChars * 0.4)));
@@ -666,7 +683,9 @@ export function createContextStore({ now = Date.now, env = process.env, logger =
       // `assistantAt` (cérebro separado): o MESMO instante da fala, para a troca ficar junta na ordem do disco (at, id) mesmo quando a
       // resposta é gravada depois da mensagem seguinte da pessoa ter chegado. Sem ele, como sempre: o instante da gravação.
       const assistantAtMs = Number.isFinite(assistantAt) ? Math.max(userAtMs, Math.min(assistantAt, t)) : t;
-      scope.turns.push({ role: 'user', content: user, at: userAtMs }, { role: 'assistant', content: assistant, at: assistantAtMs });
+      // Etiqueta de origem (ex.: 'voz'): só de ARMAZENAMENTO (nunca vai ao prompt: read() devolve só role/content); sem ela a fala é a de sempre.
+      const etiqueta = typeof (source ?? target.fonte) === 'string' && (source ?? target.fonte) ? { source: String(source ?? target.fonte).slice(0, 20) } : {};
+      scope.turns.push({ role: 'user', content: user, at: userAtMs, ...etiqueta }, { role: 'assistant', content: assistant, at: assistantAtMs, ...etiqueta });
       scope.updatedAt = t;
       scope.turns = prune(scope.turns, t);
       if (scope.turns.length === 0) { removeScopes([scope]); return false; } // nada cabe no orçamento: não guarda fio vazio

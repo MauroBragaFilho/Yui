@@ -77,6 +77,9 @@ import { comAvisoDeIndisponivel } from '../search/indisponivel.js';
 import { skillDoPasso } from '../core/skills/integracao.js';
 import { pareceRecusaGenerica, pedidoReforcado } from '../core/ai/recusa.js';
 import { isGtaTopic } from '../core/ai/temaGta.js';
+// Voz unificada (Fase 1, docs/DESENHO_FASE1_YUI_PERSONAL_AI.md): a política de audiência é do CÓDIGO e vem antes da IA. Tudo atrás de YUI_VOZ_UNIFICADA (padrão desligado).
+import { decidirAudiencia, revalidar, fatosDaVoz, lerChavesVoz, NIVEL, MEDICAO_MAX_IDADE_MS } from '../core/politicaAudiencia.js';
+import { registrarAudiencia } from '../core/auditoriaAudiencia.js';
 
 const LOGGER_MUDO = Object.freeze({ debug() {}, info() {}, warn() {}, error() {} });
 const TURN_ID_RE =/^[A-Za-z0-9_.:-]{1,80}$/;
@@ -89,6 +92,34 @@ const OPEN_TTL_MS = 30 * 60_000;
 const WEB_TTL_MS = 30 * 60_000;
 const WEB_MAX = 200;
 const RESEARCHED_TTL_MS = COMMITTED_TTL_MS;
+// Decisão de audiência de cada turno de voz (só RAM): o commit reutiliza a do turno; passou do prazo (ou reinício) = público.
+const AUDIENCIA_TTL_MS = OPEN_TTL_MS;
+const AUDIENCIA_MAX = 2000;
+
+/** O turno privado deixou de valer no meio do caminho (a audiência mudou ou a medição ficou velha). */
+class TurnoInvalidado extends Error {
+  constructor(motivo, decisaoAgora) { super('turno invalidado'); this.motivo = motivo; this.decisaoAgora = decisaoAgora; }
+}
+
+/**
+ * O bloco `call.audiencia` que o bot manda no item de voz, só a FORMA conferida (tipos e tamanhos). Nada aqui decide: quem decide é
+ * fatosDaVoz + decidirAudiencia, e o cérebro nunca aceita um "nível" pronto do bot (campo desconhecido é ignorado). Ausente ou ruim = null.
+ */
+function audienciaFromWire(a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return null;
+  return {
+    v: Number.isInteger(a.v) ? a.v : 0,
+    falanteId: typeof a.falanteId === 'string' && /^\d{5,25}$/.test(a.falanteId) ? a.falanteId : null,
+    falanteVerificado: a.falanteVerificado === true,
+    donoPresente: a.donoPresente === true,
+    humanosNaCall: Number.isInteger(a.humanosNaCall) && a.humanosNaCall >= 0 && a.humanosNaCall <= 1000 ? a.humanosNaCall : null,
+    dirigida: a.dirigida === true,
+    medidoEm: Number.isFinite(a.medidoEm) ? a.medidoEm : null,
+    // Só o booleano true vale (qualquer outra forma = ausente): o bot diz que a decisão INICIAL do turno dele não foi privada, e então este turno nunca promove.
+    ...(a.promocaoProibida === true ? { promocaoProibida: true } : {}),
+    turnoId: typeof a.turnoId === 'string' && /^[0-9a-f]{12}$/.test(a.turnoId) ? a.turnoId : null,
+  };
+}
 
 /** A busca automática do passo (a do generateResponse do bot) está ligada no cérebro? YUI_CEREBRO_BUSCA_AUTOMATICA (padrão: true). */
 export function autoSearchEnabled(env = process.env) {
@@ -138,10 +169,13 @@ export function turnFactsFromWire(p, meta = {}) {
   const wire = p.ctx && typeof p.ctx === 'object' ? p.ctx : null;
   const ctx = contextFromWire(wire ? { ...wire, channelId: call.voiceItem ? null : wire.channelId } : null, meta);
   const realChannelId = wire?.channelId && /^\d{5,25}$/.test(String(wire.channelId)) ? String(wire.channelId) : null;
+  // Voz unificada: o bloco de audiência do bot é só GUARDADO aqui (forma conferida); quem o usa é audienciaDoTurno. Sem o bloco, o resultado é o de sempre.
+  const audienciaWire = call.voiceItem ? audienciaFromWire(c.audiencia) : null;
   return {
     turnId, at: Math.round(at), call, ctx, realChannelId,
     ownText: optStr(p.ownText, 8000),
     memoryQuery: str(p.memoryQuery, 4000),
+    ...(audienciaWire ? { audienciaWire } : {}),
   };
 }
 
@@ -258,6 +292,144 @@ export function createChatBrain(deps = {}) {
     return w.context;
   }
 
+  // ── Voz unificada (YUI_VOZ_UNIFICADA): a decisão de audiência do turno de voz ──
+  // Com a chave desligada (ou fora da voz) NADA daqui roda e nenhuma linha de comportamento muda. A decisão é por código, antes da IA.
+  /** turnId -> { decisao, turnoId, at, invalidada, motivo }: a decisão do INÍCIO do turno (o commit e os passos seguintes a reutilizam). */
+  const audiencias = new Map();
+  const contAud = { decididos: 0, privados: 0, publicos: 0, invalidados: 0 };
+  const registrarAud = deps.auditoriaAudiencia ?? registrarAudiencia; // injetável para teste
+  const auditar = (decisao, opcoes) => { try { registrarAud(decisao, { env, ...opcoes }); } catch { /* auditar nunca derruba o turno */ } };
+
+  function guardarAudiencia(turnId, dados) {
+    audiencias.delete(turnId);
+    audiencias.set(turnId, { ...dados, at: now() });
+    while (audiencias.size > AUDIENCIA_MAX) audiencias.delete(audiencias.keys().next().value);
+  }
+  function audienciaGuardada(turnId) {
+    const a = audiencias.get(turnId);
+    if (!a) return null;
+    if (now() - a.at > AUDIENCIA_TTL_MS) { audiencias.delete(turnId); return null; }
+    return a;
+  }
+  /**
+   * Os fatos da voz AGORA: a medição do bot (a do passo corrente, ou a mais nova que o ponto de extensão `deps.medicaoAtual` der) + o que o cérebro sabe sozinho + o relógio do cérebro.
+   * ATENÇÃO: hoje NADA fornece `deps.medicaoAtual`; então o portão do cérebro reavalia a MESMA medição do início do passo e, na prática, só aplica o limite de idade
+   * (MEDICAO_MAX_IDADE_MS). O convidado que entra no meio do passo só é visto pelo BOT, no portão final dele (por isso o bot revalida antes de entregar e antes da fala).
+   */
+  function fatosDaMedicao(f, wire) {
+    return fatosDaVoz(wire ?? null, { autorId: f.ctx.userId, autorEhDono: f.ctx.role === 'OWNER', chaves: lerChavesVoz(env), agora: now() });
+  }
+  /**
+   * O motivo que o bot recebe quando o turno é invalidado. A política só conhece 'contagem_indisponivel' para medição velha, ausente ou ruim; aqui, SEM mexer na decisão
+   * da política, separamos o caso "a medição EXISTE mas passou da idade máxima" ('medicao_velha'): o bot então diz que a resposta demorou (e não que "mudou quem está na call").
+   */
+  function motivoDaInvalidacao(motivo, wire) {
+    if (motivo !== 'contagem_indisponivel') return motivo;
+    const velha = wire && wire.v === 1 && Number.isFinite(wire.medidoEm) && now() - wire.medidoEm > MEDICAO_MAX_IDADE_MS;
+    return velha ? 'medicao_velha' : motivo;
+  }
+  /** Remonta o contexto como a DM do dono (as mesmas regras do cérebro) ou devolve null: falha fechado. */
+  function ctxComoDMDoDono(p, meta) {
+    try {
+      const priv = contextFromWire({ ...p.ctx, guildId: null, channelId: null, isDM: true }, meta);
+      return priv.role === 'OWNER' && priv.memoryScope === 'personal' ? priv : null;
+    } catch { return null; }
+  }
+  function aplicarAudiencia(f, p, meta, decisao, fatos, extra) {
+    let d = decisao;
+    let ctxPriv = null;
+    if (d.nivel === NIVEL.PRIVADO) {
+      ctxPriv = ctxComoDMDoDono(p, meta);
+      if (!ctxPriv) d = decidirAudiencia({ ...fatos, falanteEhDono: false }); // não consegui remontar: público
+    }
+    f.audiencia = { decisao: d, turnoId: extra.turnoId ?? null, invalidada: extra.invalidada === true, motivo: extra.motivo ?? null, ctxPublico: f.ctx };
+    if (d.nivel === NIVEL.PRIVADO && ctxPriv && !f.audiencia.invalidada) {
+      f.realGuildId = f.ctx.guildId ?? null; // o rótulo da voz (voice:<servidor>:<pessoa>) continua sendo o do servidor real
+      f.ctx = ctxPriv;
+    }
+    return f.audiencia;
+  }
+  /**
+   * A decisão de audiência do passo do chat.turn. null = chave desligada ou turno que não é de voz (nada muda). Passo 1: decide e GUARDA pelo turno
+   * (+ auditoria, uma vez). Passos seguintes (e o mesmo passo repetido): reutilizam a decisão guardada e a REVALIDAM com a medição nova; sem decisão
+   * guardada (reinício) só pode dar público (nunca promove no turno).
+   */
+  function audienciaDoTurno(f, p, meta, passo = 1) {
+    if (!f.call.voiceItem || !lerChavesVoz(env).unificada) return null;
+    const fatos = fatosDaMedicao(f, f.audienciaWire);
+    const g = audienciaGuardada(f.turnId);
+    if (!g) {
+      // Sem o bloco do bot (bot com a chave desligada, ou bloco ruim): decisão pública SILENCIOSA. É a de sempre (público, falha fechado), mas sem auditar, sem
+      // guardar no Map e sem contar: não há decisão de audiência de verdade a registrar, e o stats() não pode passar a mostrar "audiencia" por isso.
+      if (!f.audienciaWire) return aplicarAudiencia(f, p, meta, decidirAudiencia(fatos, { nivelInicialDoTurno: NIVEL.PUBLICO }), fatos, { turnoId: null });
+      // promocaoProibida: a decisão INICIAL do turno no bot não foi privada (ex.: convidado que SAIU no meio): este turno nunca promove, já no passo 1.
+      const decisao = decidirAudiencia(fatos, passo > 1 || f.audienciaWire.promocaoProibida === true ? { nivelInicialDoTurno: NIVEL.PUBLICO } : {});
+      const a = aplicarAudiencia(f, p, meta, decisao, fatos, { turnoId: f.audienciaWire?.turnoId ?? null });
+      guardarAudiencia(f.turnId, { decisao: a.decisao, turnoId: a.turnoId, invalidada: false, motivo: null });
+      contAud.decididos += 1;
+      if (a.decisao.nivel === NIVEL.PRIVADO) contAud.privados += 1; else contAud.publicos += 1;
+      auditar(a.decisao, { turnId: a.turnoId });
+      return a;
+    }
+    const a = aplicarAudiencia(f, p, meta, g.decisao, fatos, { turnoId: g.turnoId, invalidada: g.invalidada, motivo: g.motivo });
+    if (!g.invalidada && a.decisao.nivel === NIVEL.PRIVADO) {
+      const r = revalidar(a.decisao, fatos, {});
+      if (!r.mantem) invalidarTurno(f, motivoDaInvalidacao(r.motivo, f.audienciaWire), r.decisao);
+    }
+    return f.audiencia;
+  }
+  /**
+   * O commit: só a decisão GUARDADA do turno manda. SEM decisão guardada (reinício do cérebro, prazo vencido, decisão despejada, commit reenviado tarde) ou invalidada,
+   * o commit NÃO grava nada, nem no RAM público da voz: o history do bot traz a resposta do turno, que pode ter sido PRIVADA, e o RAM da voz é lido pelos turnos públicos.
+   * Sem a decisão não dá para saber se a troca era privada: falha fechado. Nunca promove.
+   */
+  function audienciaDoCommit(f, p, meta) {
+    if (!f.call.voiceItem || !lerChavesVoz(env).unificada) return null;
+    const g = audienciaGuardada(f.turnId);
+    const fatos = fatosDaMedicao(f, f.audienciaWire);
+    if (g && !g.invalidada) return aplicarAudiencia(f, p, meta, g.decisao, fatos, { turnoId: g.turnoId });
+    const decisao = g?.decisao.nivel === NIVEL.PUBLICO ? g.decisao : decidirAudiencia(fatos, { nivelInicialDoTurno: NIVEL.PUBLICO });
+    const a = aplicarAudiencia(f, p, meta, decisao, fatos, { turnoId: g?.turnoId ?? null, invalidada: true, motivo: g?.motivo ?? 'sem_decisao_guardada' });
+    // conta e audita (sem texto) o commit que ficou sem decisão; sem o bloco do bot (bot desligado) o turno foi "silencioso": nada gravado, mas também nada auditado
+    if (!g && f.audienciaWire) invalidarTurno(f, 'sem_decisao_guardada', decisao);
+    return a;
+  }
+  /** Descarta o turno privado: nada do que veio do privado sobra e nada será gravado. Conta e audita (sem texto). */
+  function invalidarTurno(f, motivo, decisaoAgora) {
+    const a = f.audiencia;
+    a.invalidada = true;
+    a.motivo = String(motivo ?? 'audiencia_mudou').slice(0, 40);
+    const g = audiencias.get(f.turnId);
+    if (g) { g.invalidada = true; g.motivo = a.motivo; }
+    webByTurn.delete(f.turnId); // a web de uma pesquisa privada não fica para um "nova resposta com a mesma web"
+    contAud.invalidados += 1;
+    auditar(decisaoAgora ?? a.decisao, { turnId: a.turnoId, bloqueio: 'turno_invalidado' });
+  }
+  /**
+   * O portão da revalidação do passo: só tem efeito em turno PRIVADO de voz. Chamado antes de montar contexto privado, antes de cada ai.chat,
+   * antes e depois de clima/busca/Google e antes de devolver. Não mantém => lança TurnoInvalidado (turn() descarta tudo e responde vazio).
+   */
+  function portaoDoPasso(f) {
+    const a = f.audiencia;
+    if (!a || a.decisao.nivel !== NIVEL.PRIVADO) return () => {};
+    return () => {
+      const wire = deps.medicaoAtual ? audienciaFromWire(deps.medicaoAtual(a.turnoId)) : null;
+      const r = revalidar(a.decisao, fatosDaMedicao(f, wire ?? f.audienciaWire), {});
+      if (!r.mantem) throw new TurnoInvalidado(motivoDaInvalidacao(r.motivo, wire ?? f.audienciaWire), r.decisao);
+    };
+  }
+  const resumoDaAudiencia = (f) => (f.audiencia.invalidada
+    ? { nivel: NIVEL.PUBLICO, invalidada: true, motivo: f.audiencia.motivo ?? 'audiencia_mudou', turnoId: f.audiencia.turnoId }
+    : { nivel: f.audiencia.decisao.nivel, invalidada: false, motivo: null, turnoId: f.audiencia.turnoId });
+  /** Contrato B: o resultado do passo de voz leva a audiência (só com a chave ligada). Invalidada = texto vazio, nada a entregar. */
+  const comAudiencia = (f, out) => {
+    if (!f.audiencia) return out;
+    const base = f.audiencia.invalidada ? { ...out, text: '', failed: false, usedSearch: false } : out;
+    return { ...base, audiencia: resumoDaAudiencia(f) };
+  };
+  const vozClimaPesquisa = (f) => (f.audiencia && f.call.voiceItem ? f.audiencia.decisao.recursos.climaPesquisa : 'nenhum');
+  const vozPodeClima = (f) => ['clima', 'tudo'].includes(vozClimaPesquisa(f));
+
   function inOrder(key, fn) {
     const previous = queues.get(key) ?? Promise.resolve();
     const current = previous.catch(() => {}).then(fn);
@@ -273,6 +445,7 @@ export function createChatBrain(deps = {}) {
     for (const [id, o] of open) if (t - o.at > OPEN_TTL_MS) open.delete(id);
     for (const [id, at] of researched) { if (t - at <= RESEARCHED_TTL_MS && researched.size <= COMMITTED_MAX) break; researched.delete(id); }
     for (const [id, w] of webByTurn) { if (t - w.at <= WEB_TTL_MS) break; webByTurn.delete(id); }
+    for (const [id, a] of audiencias) { if (t - a.at <= AUDIENCIA_TTL_MS) break; audiencias.delete(id); }
   }
 
   /**
@@ -301,7 +474,19 @@ export function createChatBrain(deps = {}) {
         target = null;
       }
     }
-    const ramKey = call.voiceItem && guildId ? `voice:${guildId}:${userId}` : `canal:${f.realChannelId ?? `dm:${userId}`}`;
+    // Voz privada (YUI_VOZ_UNIFICADA): só o dono sozinho na call, com o fio dele em DM (dm:<dono>, arquivo PESSOAL), etiquetado fonte='voz'. A voz PÚBLICA
+    // nunca chega aqui (continua sem alvo: histórico em RAM da voz) e nunca lê nem grava o fio do dono.
+    if (call.voiceItem && f.audiencia && f.audiencia.decisao.nivel === NIVEL.PRIVADO && !f.audiencia.invalidada && f.audiencia.decisao.recursos.fioDM === true && context.enabled()) {
+      try {
+        const t = resolveContextTarget({ userId, channelId: null, guildId: null, personal: true, record: call.record, userText: f.ownText, env });
+        target = t.active ? { ...t, fonte: 'voz' } : null;
+      } catch (err) {
+        logger.warn?.(`[Conversa] não consegui decidir o contexto da voz privada (segue sem ele): ${String(err?.message ?? err).slice(0, 100)}`);
+        target = null;
+      }
+    }
+    const guildDaVoz = f.realGuildId ?? guildId; // na voz privada o ctx é de DM (sem servidor): o rótulo da voz segue o servidor real
+    const ramKey = call.voiceItem && guildDaVoz ? `voice:${guildDaVoz}:${userId}` : `canal:${f.realChannelId ?? `dm:${userId}`}`;
     return { target, ramKey, lockKey: target ? `ctx:${target.key}` : ramKey };
   }
 
@@ -334,6 +519,11 @@ export function createChatBrain(deps = {}) {
    */
   function chamadaDireta(f, o = {}) {
     const c = f.call;
+    // Voz unificada: a política já decidiu se a Yui foi CHAMADA e o que a audiência permite (clima; pesquisa por intenção só no privado). Chave desligada: voz nunca.
+    if (c.voiceItem && f.audiencia) {
+      if (c.chatter || c.thirdParty || o.thirdParty || o.chatter) return false;
+      return f.audiencia.decisao.directed === true && vozPodeClima(f);
+    }
     if (c.chatter || c.thirdParty || c.voice || c.voiceItem || c.voiceInteraction || o.thirdParty || o.chatter) return false;
     if (c.entry === 'yui' || c.type !== 'mention' || !f.ctx.guildId) return true;
     return Boolean(c.mentionsBot || c.hasBotName || c.repliesToBot);
@@ -343,7 +533,9 @@ export function createChatBrain(deps = {}) {
   // a resposta (revisão independente: antes, qualquer fala curta, até horas depois, virava "cidade" e ia ao servidor do clima). Em RAM, nunca em disco.
   const CIDADE_PENDENTE_MS = 10 * 60_000;
   const cidadePendente = new Map();
-  const chaveDaCidade = (f) => `${f.ctx.userId}|${f.realChannelId ?? 'dm'}`;
+  // (na voz unificada a chave é PRÓPRIA: sem canal de texto real a voz cairia em 'dm' e colidiria com a DM do dono)
+  // e leva o NÍVEL: a cidade dita num turno privado (voz-priv) não é reaproveitada num turno público seguinte (voz-pub), com mais gente ouvindo
+  const chaveDaCidade = (f) => `${f.ctx.userId}|${f.call.voiceItem && f.audiencia ? (f.audiencia.decisao.nivel === NIVEL.PRIVADO ? 'voz-priv' : 'voz-pub') : (f.realChannelId ?? 'dm')}`;
   // O último pedido de clima ATENDIDO (da mesma pessoa, na mesma conversa): só por ele "e de São Paulo?" é entendido como a continuação do pedido (10 min, só em RAM).
   const ultimoClima = new Map();
   function marcarUltimoClima(f, quando) {
@@ -412,6 +604,7 @@ export function createChatBrain(deps = {}) {
 
   function decidirIntencao(f, o, texto, channel) {
     if (!texto || !autoSearchEnabled(env) || channel.toolsDisabled.includes('search_web')) return null;
+    if (f.call.voiceItem && f.audiencia && vozClimaPesquisa(f) !== 'tudo') return null; // voz PÚBLICA dirigida: só o clima, nunca a pesquisa por intenção
     if (climaConfig(env).ligado && detectarPedidoDeClima(texto).clima) return null; // o clima é ferramenta própria: nunca vira pesquisa
     const r = avaliarIntencaoFechado(f, o, texto);
     if (!r.buscar) return null;
@@ -469,13 +662,21 @@ export function createChatBrain(deps = {}) {
   async function step(f, channel, o, prompt, extra = {}) {
     counters.steps += 1;
     const { ctx, call } = f;
+    // Voz privada (só com a chave): o portão da revalidação e, como o contexto é o do dono em DM, a persona e a memória pessoal que a decisão permite
+    // (o bot pode mandar persona/memória desligadas na voz; o [MODO VOZ] continua por último no prompt).
+    const portao = portaoDoPasso(f);
+    if (f.audiencia?.decisao.nivel === NIVEL.PRIVADO && o.voicePersona) o = { ...o, persona: f.audiencia.decisao.recursos.personaDono === true, memory: f.audiencia.decisao.recursos.memoriaPessoal === true };
     const sensitive = ctx.memoryScope === 'personal';
     const semFerramentasNaOrigem = o.noTools === true; // antes de o Google e a skill mexerem nas opções do passo
     const principalNaOrigem = o.main === true;
+    portao('inicio');
     // Google (etapa 15): o pedido do dono à PRÓPRIA agenda/tarefas, reconhecido por código (sem YUI_GOOGLE: null, nada muda). Resposta curta (não conectado, expirou...)
     // sai direto; com os dados, o prompt os leva CERCADOS e o passo roda sem ferramentas, sem busca e sem provedor anônimo, fora do contexto por horas.
-    const googlePendente = rotearGoogle({ ctx, call, texto: f.ownText || o.searchPrompt || '', prompt });
+    // Na voz, só com YUI_VOZ_GOOGLE (decisão da política) a chamada vai como a de texto; senão continua "só no privado", como hoje.
+    const chamadaDoGoogle = f.audiencia?.decisao.nivel === NIVEL.PRIVADO && f.audiencia.decisao.recursos.google === true ? { ...call, voice: false, voiceItem: false, somenteAgenda: true } : call; // voz privada: só a agenda (e-mail, tarefas e aniversários seguem "só por mensagem privada")
+    const googlePendente = rotearGoogle({ ctx, call: chamadaDoGoogle, texto: f.ownText || o.searchPrompt || '', prompt });
     const google = googlePendente ? await googlePendente : null; // desligado: null na hora, sem esperar nada
+    portao('google');
     if (google?.resposta) {
       marcarPesquisado(f.turnId);
       return { text: google.resposta, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 };
@@ -488,13 +689,15 @@ export function createChatBrain(deps = {}) {
     if (skill?.bloco) { o = { ...o, noTools: true }; marcarPesquisado(f.turnId); }
     const { target, ramKey } = f.decision;
     if (target) { try { await context.init(); } catch { /* o contexto fica só em RAM */ } }
+    portao('historico');
     const history = o.noHistory ? [] : readHistory(target, ramKey, sensitive);
     // O CLIMA (etapa 11): ferramenta própria, decidida por código sobre a fala do próprio autor (a chamada principal da fila ou a resposta do /yui). Sai só o
     // nome do local. Sem os dados (falha, cota, local não achado, sem cidade) a Yui responde UMA frase fixa, sem chamar a IA: o modelo nunca inventa o tempo.
     let dadosDoClima = null;
     let semDadosDoClima = [];
     // (o `noTools` ORIGINAL: o Google e a skill o ligam depois, e o clima precisa continuar valendo com eles)
-    const textoDoAutor = extra.textoDoAutor ?? (principalNaOrigem && !semFerramentasNaOrigem ? f.ownText : null);
+    const textoDoAutor = extra.textoDoAutor ?? (principalNaOrigem && (!semFerramentasNaOrigem || vozPodeClima(f)) ? f.ownText : null);
+    portao('clima');
     const pedidoClima = pedidoDeClimaDoTurno(f, o, textoDoAutor, true);
     if (pedidoClima) {
       counters.climaPedidos += 1;
@@ -503,6 +706,7 @@ export function createChatBrain(deps = {}) {
       if (locaisPedidos.length > 1) counters.climaVariosLocais += 1;
       const resultados = [];
       for (const lugar of locaisPedidos) resultados.push({ lugar, r: await clima.obter({ local: lugar, quando: pedidoClima.quando, userId: ctx.userId }) });
+      portao('clima'); // a espera da rede pode ter mudado a audiência: o resultado só entra se o turno ainda vale
       const comDados = resultados.filter((x) => x.r.ok);
       const semDadosNomes = resultados.filter((x) => !x.r.ok && x.lugar?.nome).map((x) => `${x.lugar.nome}${x.lugar.uf ? `-${x.lugar.uf}` : ''}`);
       const r = comDados.length ? comDados[0].r : resultados[0].r;
@@ -525,6 +729,7 @@ export function createChatBrain(deps = {}) {
     if (o.memory && !call.thirdParty && !o.thirdParty) {
       try { memoryBlock = String((await memoryBlockFor(ctx, f.memoryQuery || prompt)) ?? ''); } catch { memoryBlock = ''; }
     }
+    portao('memoria');
     const persona = o.persona ? personaFor(ctx) : undefined;
     // A oferta da pesquisa é decisão do cérebro: conversa privada (a sensível e a DM de qualquer pessoa) só com o YUI_PRIVATE_SEARCH; espontânea nunca.
     const privateChat = sensitive || (!ctx.guildId && !call.voiceItem);
@@ -561,7 +766,9 @@ export function createChatBrain(deps = {}) {
         const again = avaliarIntencaoFechado(f, o, textoDoAutor);
         opcoesDaBusca = again.buscar && again.privado ? { ...o, searchPrompt: again.consultaPrivada, searchDecided: true } : { ...o, allowSearch: false };
       }
+      portao('busca');
       const out = opcoesDaBusca.allowSearch === false ? null : await autoSearch(f, channel, opcoesDaBusca, prompt, sensitive, extra.diario ?? null, { privadaPorIntencao });
+      portao('busca'); // idem: a web de uma busca privada só entra se o turno ainda vale
       if (out?.context) {
         usedSearch = true;
         counters.autoSearchUsed += 1;
@@ -605,6 +812,7 @@ export function createChatBrain(deps = {}) {
       imagem: o.image === true || MARCADOR_DE_IMAGEM.test(String(prompt).slice(0, 200_000)),
     });
     let text;
+    portao('ia'); // o ponto mais crítico: é aqui que o contexto privado seguiria para o provedor
     try {
       text = String(await callAi({ prompt: finalPrompt, system, history, ctx, sensitive: noAnonymous, deadlineAt: o.deadlineAt, channel, perfil, localPrivada }) ?? '');
     } catch (err) {
@@ -619,6 +827,7 @@ export function createChatBrain(deps = {}) {
       try { alertOwner('ai-down', 'A IA do cérebro não respondeu', String(err?.message ?? 'sem detalhes').slice(0, 300), { level: 'error', cooldownMinutes: 15 }); } catch { /* */ }
       return { text: LIMITS_REACHED_TEXT, model: backend, failed: true, usedSearch, searchFailure, searchRetryAfterMs };
     }
+    portao('ia'); // a resposta foi gerada com contexto privado: se a audiência mudou durante a espera, ela é descartada (nunca entregue)
     // Resposta idêntica à anterior (a chamada principal): pede UMA vez outra resposta, como a fila do bot fazia com o histórico dele.
     // Com o clima (ou a web da pesquisa por intenção) a resposta pode legitimamente se repetir, e o novo pedido iria SEM os dados (o modelo inventaria): não repete.
     if (o.main && history.length && !dadosDoClima && !(porIntencao && usedSearch)) {
@@ -627,13 +836,15 @@ export function createChatBrain(deps = {}) {
       if (lastClean.length > 15 && footerless(text) === lastClean) {
         counters.regenerated += 1;
         logger.warn?.('[Conversa] resposta idêntica à anterior: pedindo outra (anti-repetição).');
+        portao('ia');
         try {
           const again = buildConversationSystemPrompt({
             serverPrompt: channel.serverPrompt, radioBlock: channel.radioBlock, noToolRule: true, channelSettings: channel.channelSettings, voice: o.voicePersona,
           });
-          const retry = String(await callAi({ prompt: `(responda de forma diferente, com outras palavras): ${f.ownText || prompt}`, system: again.withMemory + (skill?.bloco ?? ''), history, ctx, sensitive: noAnonymous, channel, perfil, localPrivada: localPrivada ? { privada: localPrivada.privada } : null }) ?? '');
+          const retry = String(await callAi({ prompt: `(responda de forma diferente, com outras palavras): ${f.ownText || prompt}`, system: again.withMemory + (skill?.bloco ?? ''), history, ctx, sensitive: noAnonymous, ...(f.audiencia ? { deadlineAt: o.deadlineAt } : {}), channel, perfil, localPrivada: localPrivada ? { privada: localPrivada.privada } : null }) ?? '');
           if (retry.trim()) text = retry;
         } catch { /* fica a primeira */ }
+        portao('ia');
       }
     }
     // Recusa genérica de um modelo ("Desculpa, não posso ajudar com isso") a uma pergunta de JOGO (GTA Online: "golpe" e "Cayo Perico" são missões, não crimes): refaz UMA vez,
@@ -641,19 +852,22 @@ export function createChatBrain(deps = {}) {
     if (String(env?.YUI_IA_REFAZER_RECUSA ?? '').trim().toLowerCase() === 'true' && o.main && pareceRecusaGenerica(text) && isGtaTopic(f.ownText || o.searchPrompt || '')) {
       counters.recusasRefeitas += 1;
       logger.warn?.('[Conversa] o modelo deu uma recusa genérica a uma pergunta de jogo: refazendo UMA vez com o contexto do jogo.');
+      portao('ia');
       try {
         const reforco = buildConversationSystemPrompt({
           serverPrompt: channel.serverPrompt, radioBlock: channel.radioBlock, noToolRule: true, channelSettings: channel.channelSettings, voice: o.voicePersona,
         });
-        const outra = String(await callAi({ prompt: pedidoReforcado(f.ownText || prompt), system: reforco.withMemory + (skill?.bloco ?? ''), history, ctx, sensitive: noAnonymous, channel, perfil, localPrivada: localPrivada ? { privada: localPrivada.privada } : null }) ?? '');
+        const outra = String(await callAi({ prompt: pedidoReforcado(f.ownText || prompt), system: reforco.withMemory + (skill?.bloco ?? ''), history, ctx, sensitive: noAnonymous, ...(f.audiencia ? { deadlineAt: o.deadlineAt } : {}), channel, perfil, localPrivada: localPrivada ? { privada: localPrivada.privada } : null }) ?? '');
         if (outra.trim() && !pareceRecusaGenerica(outra)) text = outra;
       } catch { /* fica a primeira resposta */ }
+      portao('ia');
     }
     if (google?.revisar) text = google.revisar(text); // com dados do Google, uma "chamada de ferramenta" na resposta nunca é legítima
     if (skill?.revisar) text = skill.revisar(text); // idem com uma skill (texto de arquivo): o bot executaria o JSON com a permissão do dono
     // A pesquisa por intenção NÃO saiu porque a pesquisa está temporariamente indisponível (sem o dono da cota ou sem o registro em disco): o texto ÚNICO de sempre,
     // uma vez só, sem detalhe interno (a mesma regra do /yui).
     if (porIntencao && searchFailure === 'unavailable') text = comAvisoDeIndisponivel(text);
+    portao('entrega'); // por último: nada gerado com contexto privado sai se a audiência mudou
     return { text, model: `cérebro (${backend})`, failed: false, usedSearch, searchFailure, searchRetryAfterMs, ...(dadosDoClima ? { usedClima: true } : {}) };
   }
 
@@ -669,7 +883,15 @@ export function createChatBrain(deps = {}) {
       logger.info?.('[Conversa] este turno pesquisou na web: a troca não entra no contexto por horas.');
       contextLine = null;
     }
-    const { target, ramKey } = f.decision;
+    let { target } = f.decision;
+    const { ramKey } = f.decision;
+    // Voz unificada: turno invalidado (a audiência mudou) não grava NADA; e, em profundidade, só a decisão PRIVADA do turno pode gravar no fio do dono.
+    if (f.audiencia?.invalidada) {
+      committed.set(f.turnId, now());
+      sweep();
+      return { ok: true, context: false, history: 0, duplicate: false };
+    }
+    if (f.call.voiceItem && f.audiencia && f.audiencia.decisao.nivel !== NIVEL.PRIVADO) target = null;
     let recorded = { context: false, history: 0, duplicate: false };
     if (target) {
       // Contexto por horas ativo: só o contexto (o histórico em RAM do canal fica intocado, como no processo único).
@@ -687,7 +909,8 @@ export function createChatBrain(deps = {}) {
         }
         if (out.recorded) counters.contextRecorded += 1;
       }
-    } else if (f.call.entry !== 'yui') {
+    } else if (f.call.entry !== 'yui' && !(f.audiencia && f.audiencia.decisao.nivel === NIVEL.PRIVADO)) {
+      // (a troca PRIVADA de voz sem fio do dono não vai ao histórico em RAM da voz: ele é lido pelos turnos públicos)
       for (const h of history) addRam(ramKey, h.role, h.content);
       recorded.history = history.length;
       counters.historyRecorded += history.length;
@@ -707,6 +930,8 @@ export function createChatBrain(deps = {}) {
       const prompt = str(p.prompt, 200_000);
       if (!prompt.trim()) throw bad('Texto do turno vazio.');
       f.step = stepNo;
+      audienciaDoTurno(f, p, meta, stepNo); // voz com a chave ligada: f.audiencia (e, se privado, f.ctx remontado como a DM do dono); senão nada muda
+      if (f.audiencia?.invalidada) return Promise.resolve(comAudiencia(f, { text: '', model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 }));
       f.decision = decide(f);
       if (!open.has(f.turnId)) open.set(f.turnId, { at: now(), steps: 0 });
       open.get(f.turnId).steps = stepNo;
@@ -714,7 +939,7 @@ export function createChatBrain(deps = {}) {
       // MESMO passo depois de um reinício do cérebro reaproveita a web já achada, sem buscar de novo.
       // A pesquisa por intenção (etapa 11): só na chamada principal da fila, sobre a fala do próprio autor; decidida ANTES de abrir o diário (a busca dela
       // também grava no diário da retomada, como a busca automática de sempre).
-      const intencao = o.main && !o.noTools && !o.allowSearch && !o.reuseWeb ? decidirIntencao(f, o, f.ownText, channel) : null;
+      const intencao = o.main && (!o.noTools || vozClimaPesquisa(f) === 'tudo') && !o.allowSearch && !o.reuseWeb ? decidirIntencao(f, o, f.ownText, channel) : null;
       let diario = null;
       if ((o.allowSearch || intencao) && retomada && typeof meta.idem === 'string') {
         // privada para a pesquisa: a conversa sensível e a DM de qualquer pessoa (a mesma regra do research.turn): sem conteúdo em disco
@@ -726,17 +951,26 @@ export function createChatBrain(deps = {}) {
         // na chamada principal do turno e só para mensagem dirigida à Yui. A troca não entra no contexto por horas (como os lembretes).
         if (monitores && stepNo === 1 && o.main) {
           const mon = await monitores.rotear({ ctx: f.ctx, call: f.call, texto: f.ownText });
-          if (mon?.handled) { try { diario?.descartar(); } catch { /* */ } marcarPesquisado(f.turnId); return { text: mon.text, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 }; }
+          if (mon?.handled) { try { diario?.descartar(); } catch { /* */ } marcarPesquisado(f.turnId); return comAudiencia(f, { text: mon.text, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 }); }
         }
         // Passo com a busca automática numa conversa PRIVADA interrompido por um reinício: sem o conteúdo (nunca em disco), a Yui não busca de
         // novo sozinha e pede para mandar de novo (segunda revisão da Liz, §12).
         if (diario?.reenviar) {
           marcarPesquisado(f.turnId); // o aviso não entra no contexto por horas
-          return { text: TEXTO_PRIVADA_REENVIAR, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 };
+          return comAudiencia(f, { text: TEXTO_PRIVADA_REENVIAR, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 });
         }
-        const out = await step(f, channel, o, prompt, { diario, intencao });
+        let out;
+        try {
+          out = await step(f, channel, o, prompt, { diario, intencao });
+        } catch (err) {
+          if (!(err instanceof TurnoInvalidado)) throw err;
+          // A audiência mudou no meio do turno privado: descarta TUDO o que veio do privado, devolve vazio (o bot diz a frase fixa) e não grava nada.
+          invalidarTurno(f, err.motivo, err.decisaoAgora);
+          try { diario?.descartar(); } catch { /* */ }
+          return comAudiencia(f, { text: '', model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 });
+        }
         try { if (diario) { if (out.usedSearch || out.searchFailure) diario.concluir(); else diario.descartar(); } } catch { /* */ }
-        return out;
+        return comAudiencia(f, out);
       });
     },
     /** Handler do chat.commit (cérebro <- bot). */
@@ -747,6 +981,7 @@ export function createChatBrain(deps = {}) {
         .slice(0, 20)
         .map((h) => ({ role: h.role, content: h.content.slice(0, 2000) }));
       const contextLine = optStr(p.contextLine, 4000);
+      audienciaDoCommit(f, p, meta); // voz com a chave ligada: a decisão GUARDADA do turno (sem ela, público); senão nada muda
       f.decision = decide(f);
       return inOrder(f.decision.lockKey, () => commit(f, history, contextLine));
     },
@@ -758,7 +993,7 @@ export function createChatBrain(deps = {}) {
       for (const key of [...ramHistory.keys()]) if (key.startsWith(`voice:${guildId}:`)) { ramHistory.delete(key); removed += 1; }
       return { removed };
     },
-    stats: () => ({ ...counters, open: open.size, ramKeys: ramHistory.size, committed: committed.size, queues: queues.size, researched: researched.size, webTurns: webByTurn.size, clima: clima.stats() }),
+    stats: () => ({ ...counters, open: open.size, ramKeys: ramHistory.size, committed: committed.size, queues: queues.size, researched: researched.size, webTurns: webByTurn.size, clima: clima.stats(), ...(contAud.decididos ? { audiencia: { ...contAud } } : {}) }),
     // ── Para o /yui do cérebro (src/cerebro/pesquisa.js) ──
     /** O pedido de clima da fala (ou null): decidido por código, só em chamada dirigida à Yui. */
     pedidoDeClima: (f, texto) => pedidoDeClimaDoTurno(f, {}, String(texto ?? ''), false),

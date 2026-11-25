@@ -61,6 +61,11 @@ const NEW_VARS = [
   ['YUI_IA_LOCAL_PRIVADA_TIMEOUT_S', '20'],
   ['YUI_IA_LOCAL_PRIVADA_MAX_TOKENS', '768'],
   ['YUI_IA_LOCAL_PRIVADA_FALLBACK', 'fechar'],
+  // a voz unificada (política de audiência; tudo desligado por padrão)
+  ['YUI_VOZ_UNIFICADA', 'false'],
+  ['YUI_VOZ_GOOGLE', 'false'],
+  ['YUI_VOZ_TOOLS', 'false'],
+  ['YUI_VOZ_PRAZO_S', '8'],
 ];
 
 // Scripts novos desta rodada e o arquivo de teste de cada um.

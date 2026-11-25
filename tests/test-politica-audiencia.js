@@ -150,4 +150,37 @@ assert.ok(!/\d{15,}/.test(texto), 'nenhum id de pessoa');
 assert.throws(() => { 'use strict'; priv.nivel = 'x'; }, TypeError);
 assert.throws(() => { 'use strict'; priv.recursos.memoriaPessoal = false; }, TypeError);
 
+// 10) Chaves: tudo desligado por padrão; só o texto exato "true" liga; prazo com limites.
+const { lerChavesVoz, fatosDaVoz, MEDICAO_MAX_IDADE_MS } = await import('../src/core/politicaAudiencia.js');
+assert.deepEqual(lerChavesVoz({}), { unificada: false, google: false, ferramentas: false, prazoMs: 8000 });
+assert.equal(lerChavesVoz({ YUI_VOZ_UNIFICADA: ' TRUE ' }).unificada, true);
+for (const v of ['1', 'yes', 'on', 'sim', '', 'truee']) assert.equal(lerChavesVoz({ YUI_VOZ_UNIFICADA: v }).unificada, false, v);
+assert.equal(lerChavesVoz({ YUI_VOZ_PRAZO_S: '1' }).prazoMs, 3000);
+assert.equal(lerChavesVoz({ YUI_VOZ_PRAZO_S: '999' }).prazoMs, 12000);
+assert.ok(lerChavesVoz({ YUI_VOZ_PRAZO_S: '999' }).prazoMs < MEDICAO_MAX_IDADE_MS, 'o prazo máximo fica abaixo da idade máxima da medição');
+assert.equal(lerChavesVoz({ YUI_VOZ_PRAZO_S: 'abc' }).prazoMs, 8000);
+assert.equal(lerChavesVoz({ YUI_VOZ_PRAZO_S: '12' }).prazoMs, 12000);
+
+// 11) Fatos vindos do bot: o cérebro valida, recompõe e nunca aceita "nível" pronto.
+const AGORA = 1_700_000_000_000;
+const DONO = '111111111111111111';
+const wire = (o = {}) => ({ v: 1, falanteId: DONO, falanteVerificado: true, donoPresente: true, humanosNaCall: 1, dirigida: true, medidoEm: AGORA - 1000, turnoId: 'abc123', ...o });
+const ON = lerChavesVoz({ YUI_VOZ_UNIFICADA: 'true' });
+const fatos = (w, o = {}) => fatosDaVoz(w, { autorId: DONO, autorEhDono: true, chaves: ON, agora: AGORA, ...o });
+assert.equal(decidirAudiencia(fatos(wire())).nivel, NIVEL.PRIVADO);
+assert.equal(decidirAudiencia(fatos(wire({ nivel: 'privado', audience_level: 'privado' }), { chaves: lerChavesVoz({}) })).nivel, NIVEL.PUBLICO, 'chave desligada no cérebro: público, mesmo com o bot dizendo o contrário');
+assert.equal(decidirAudiencia(fatos(wire({ humanosNaCall: 2 }))).nivel, NIVEL.PUBLICO);
+assert.equal(decidirAudiencia(fatos(wire({ falanteId: '222222222222222222' }))).rebaixadaPor, MOTIVO.FALANTE_NAO_VERIFICADO, 'o falante do bot precisa ser o autor do turno');
+assert.equal(decidirAudiencia(fatos(wire(), { autorEhDono: false })).rebaixadaPor, MOTIVO.FALANTE_NAO_DONO, 'quem é o dono quem diz é o cérebro, não o bot');
+assert.equal(decidirAudiencia(fatos(wire({ falanteVerificado: 'true' }))).nivel, NIVEL.PUBLICO, 'só o booleano true vale');
+assert.equal(decidirAudiencia(fatos(wire({ medidoEm: AGORA - MEDICAO_MAX_IDADE_MS - 1 }))).rebaixadaPor, MOTIVO.CONTAGEM_INDISPONIVEL, 'medição velha');
+assert.equal(decidirAudiencia(fatos(wire({ medidoEm: AGORA + 60_000 }))).rebaixadaPor, MOTIVO.CONTAGEM_INDISPONIVEL, 'medição do futuro');
+assert.equal(decidirAudiencia(fatos(wire({ medidoEm: undefined }))).nivel, NIVEL.PUBLICO);
+assert.equal(decidirAudiencia(fatos(wire({ humanosNaCall: '1' }))).nivel, NIVEL.PUBLICO);
+assert.equal(decidirAudiencia(fatos(wire({ v: 2 }))).nivel, NIVEL.PUBLICO, 'versão desconhecida');
+for (const lixo of [null, undefined, 'x', 7, [], {}]) assert.equal(decidirAudiencia(fatos(lixo)).nivel, NIVEL.PUBLICO);
+assert.equal(decidirAudiencia(fatosDaVoz(wire(), {})).nivel, NIVEL.PUBLICO, 'sem parâmetros: público');
+assert.equal(fatos(wire()).googleVoz, false);
+assert.equal(fatosDaVoz(wire(), { autorId: DONO, autorEhDono: true, chaves: lerChavesVoz({ YUI_VOZ_UNIFICADA: 'true', YUI_VOZ_GOOGLE: 'true', YUI_VOZ_TOOLS: 'true' }), agora: AGORA }).googleVoz, true);
+
 console.log('test-politica-audiencia OK (' + casos + ' combinações)');

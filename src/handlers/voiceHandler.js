@@ -15,6 +15,15 @@ import {
     warmupTts
 } from '../services/tts/index.js';
 import { buildVoiceKey, voiceToolsAllowed } from '../services/tts/voiceGuards.js';
+import {
+    alucinacaoSttUnificada,
+    contarHumanosNaCall,
+    criarControleAudiencia,
+    donoNaCall,
+    localizarGatilho,
+    temGatilhoForte,
+    vozUnificadaOn
+} from './audienciaVoz.js';
 import { addToQueue } from './llmHandler.js';
 import { checkBan } from './banHandler.js';
 import { logger } from '../utils/logger.js';
@@ -108,7 +117,9 @@ export function buildVoiceOptions({ speakable, prompt, now = Date.now(), env = p
     const options = {
         voice: true,
         voiceTranscript: prompt,
-        disableTools: !voiceToolsAllowed(env),
+        // Voz unificada: a OFERTA de ferramentas fica FECHADA e YUI_VOICE_TOOLS=true não abre nada por trás da política (a lista fechada
+        // da YUI_VOZ_TOOLS é conferida no executor do llmHandler). Desligada, vale o de sempre.
+        disableTools: vozUnificadaOn(env) ? true : !voiceToolsAllowed(env),
         voiceRequestedAt: now
     };
     if (!speakable) options.voiceSpeak = false;
@@ -116,13 +127,34 @@ export function buildVoiceOptions({ speakable, prompt, now = Date.now(), env = p
 }
 
 /**
+ * Lê a transcrição do STT no modo UNIFICADO (YUI_VOZ_UNIFICADA): a palavra de ativação é procurada no texto sem acento ("Yuí" casa) e
+ * ricardo/ícaro são gatilho FRACO (só nas 2 primeiras palavras). O prompt sai do texto ORIGINAL (com os acentos). `speakable` = o
+ * gatilho que valeu está nas 3 primeiras palavras. Desligada a chave, quem roda é o parseVoiceTranscript, sem mudança nenhuma.
+ */
+export function parseVoiceTranscriptUnificado(text, triggerRegex = VOICE_TRIGGER_REGEX) {
+    if (typeof text !== 'string' || !text) return { matched: false };
+    const achado = localizarGatilho(text, triggerRegex);
+    if (!achado) return { matched: false };
+    let prompt = text.substring(achado.index + achado.length).replace(/^[,\s.!?-]+/, '').trim();
+    if (!prompt) prompt = 'Olá Yui';
+    return {
+        matched: true,
+        prompt,
+        command: parseVoiceCommand(prompt),
+        speakable: achado.antes < 3 && achado.index < 300
+    };
+}
+
+/**
  * Mensagem falsa que o llmHandler trata como se fosse uma mensagem de texto da pessoa. Mantém o canal de texto REAL
  * (ban e AutoMod olham o canal de verdade; a saída em texto vai para ele) e traz `voiceKey` (histórico, persona e
  * escopo do contexto: um fio por pessoa). `onReply(texto)` avisa cada resposta enviada ao chat.
  */
-export function buildVoiceMessage({ userId, username, userTag, prompt, textChannel, guildId, now = Date.now(), onReply = null }) {
-    return {
-        id: `voice_${now}`,
+export function buildVoiceMessage({ userId, username, userTag, prompt, textChannel, guildId, now = Date.now(), onReply = null, entrega = null, turnoId = null }) {
+    const message = {
+        // Com a chave ligada o id leva o turnoId aleatório: dois pedidos no mesmo milissegundo (dois falantes ou dois servidores)
+        // não podem compartilhar decisão, commit nem chave de idempotência no cérebro. Desligada: `voice_${now}` como sempre.
+        id: turnoId ? `voice_${now}_${turnoId}` : `voice_${now}`,
         isVoice: true,
         voiceKey: buildVoiceKey(guildId, userId),
         content: prompt,
@@ -140,6 +172,9 @@ export function buildVoiceMessage({ userId, username, userTag, prompt, textChann
         reply: async (responsePayload) => {
             let contentText = typeof responsePayload === 'string' ? responsePayload : responsePayload?.content || '';
             try { onReply?.(contentText); } catch (_) { /* o aviso nunca atrapalha a resposta */ }
+            // Voz unificada, turno PRIVADO: o texto vai por mensagem privada ao dono e NUNCA ao canal do servidor (o canal de texto é
+            // público para quem não está na call). Sem DM, nada sai. Sem `entrega` (chave desligada) este desvio nem existe.
+            if (entrega?.privado?.()) return entrega.enviarPrivado(responsePayload);
             if (contentText && !contentText.includes(`<@${userId}>`)) {
                 contentText = `<@${userId}> ${contentText}`;
             }
@@ -150,6 +185,14 @@ export function buildVoiceMessage({ userId, username, userTag, prompt, textChann
             return textChannel.send({ content: contentText });
         }
     };
+    if (entrega) {
+        // Frase FIXA (prazo estourado): vai ao canal mesmo no turno privado, porque nunca leva texto derivado da conversa.
+        message.replyFixo = async (frase) => {
+            try { onReply?.(frase); } catch (_) { /* o aviso nunca atrapalha */ }
+            return textChannel.send({ content: `<@${userId}> ${frase}` });
+        };
+    }
+    return message;
 }
 
 /**
@@ -397,6 +440,8 @@ export function createTtsDeps(client, io = {}) {
         // a voz lê "Yuí" como "Yui" e o STT escreve "Yui", mas a regex do gatilho não casa "Yuí".
         matchesTrigger: (text) => {
             const raw = String(text ?? '');
+            // Voz unificada: só o gatilho FORTE cala a resposta (uma resposta legítima que cita um Ricardo ou um Ícaro continua sendo falada).
+            if (vozUnificadaOn()) return temGatilhoForte(raw, VOICE_TRIGGER_REGEX);
             return VOICE_TRIGGER_REGEX.test(raw) || VOICE_TRIGGER_REGEX.test(raw.normalize('NFD').replace(/\p{M}/gu, ''));
         },
 
@@ -834,7 +879,9 @@ async function handleCapturedAudio(userId, pcmBuffer, stateData, client, segment
     const wavHeader = createWavHeader(pcmBuffer.length, 48000, 2, 16);
     const wavBuffer = Buffer.concat([wavHeader, pcmBuffer]);
 
+    const sttInicio = performance.now();
     const result = await (io.transcribeAudio ?? transcribeAudio)(wavBuffer);
+    const sttMs = performance.now() - sttInicio;
     if (result && typeof result === 'object' && result.isRateLimit) {
         const textChannel = client.channels.cache.get(stateData.textChannelId);
         if (textChannel) {
@@ -847,7 +894,11 @@ async function handleCapturedAudio(userId, pcmBuffer, stateData, client, segment
     }
     const transcribedText = typeof result === 'string' ? result : '';
     if (transcribedText) {
-        await (io.processVoiceTranscription ?? processVoiceTranscription)(userId, transcribedText, stateData, client);
+        // Voz unificada: este é o ÚNICO caminho até aqui e o userId veio do receiver.speaking desta captura (é isso que o "falante
+        // verificado" prova: a conta que abriu o microfone, não a voz). O tempo do STT segue para a medição de latência.
+        const unificadaOn = vozUnificadaOn(io.env ?? process.env);
+        const extra = unificadaOn ? [{ falanteDoReceiver: true, sttMs, ...(io.env ? { env: io.env } : {}), ...(io.processIo ?? {}) }] : [];
+        await (io.processVoiceTranscription ?? processVoiceTranscription)(userId, transcribedText, stateData, client, ...extra);
     }
 }
 
@@ -855,6 +906,7 @@ async function handleCapturedAudio(userId, pcmBuffer, stateData, client, segment
 async function processVoiceTranscription(userId, text, stateData, client, io = {}) {
     // A transcrição chegou agora: é daqui que o prazo de 30 s da fala (e da fila da IA) começa a contar.
     const requestedAt = Date.now();
+    const unificada = vozUnificadaOn(io.env ?? process.env); // YUI_VOZ_UNIFICADA: desligada, nada abaixo muda
 
     const banInfo = (io.checkBan ?? checkBan)(userId, stateData.guildId, stateData.textChannelId);
     if (banInfo) {
@@ -904,13 +956,14 @@ async function processVoiceTranscription(userId, text, stateData, client, io = {
         'falar com o'
     ];
 
-    if (STT_HALLUCINATIONS.some(h => lowerText.includes(h))) {
+    if (unificada ? alucinacaoSttUnificada(text, STT_HALLUCINATIONS, VOICE_TRIGGER_REGEX) : STT_HALLUCINATIONS.some(h => lowerText.includes(h))) {
         // Sem o texto transcrito no log (privacidade): só o tamanho.
         logger.info(`[VOICE] Alucinação de STT/ruído ignorada (${text.length} caracteres, servidor ${stateData.guildId}).`);
         return;
     }
 
-    const plan = parseVoiceTranscript(text);
+    let plan = parseVoiceTranscript(text);
+    if (unificada) plan = parseVoiceTranscriptUnificado(text);
     if (!plan.matched) return;
 
     const guildId = stateData.guildId;
@@ -983,7 +1036,33 @@ async function processVoiceTranscription(userId, text, stateData, client, io = {
         return;
     }
 
+    let audCtl = null;
     try {
+        // Voz unificada: o controle de audiência deste turno (medição da call, entrega privada, prazo e latência). Fora do modo voz
+        // ou com a chave desligada não existe e tudo segue como sempre foi.
+        let mensagemVoz = null;
+        if (unificada && !voiceMode && shouldLogDrop(`${guildId}:voz-unificada-sem-modo-voz`)) {
+            // Sem o modo voz (fala ligada no servidor E serviço de TTS de pé) a política não age: o turno segue como sempre e o cérebro decide público.
+            // Um aviso (sem conteúdo) evita ligar a chave e achar que está valendo.
+            logger.warn(`[VOICE] YUI_VOZ_UNIFICADA está ligada, mas o modo voz não está ativo no servidor ${guildId}: a política de audiência não vale neste turno.`);
+        }
+        if (voiceMode && unificada) {
+            audCtl =(io.criarControleAudiencia ?? criarControleAudiencia)({
+                client,
+                guildId,
+                voiceChannelId: stateData.voiceChannelId,
+                userId,
+                falanteDoReceiver: io.falanteDoReceiver === true,
+                dirigida: plan.speakable === true,
+                confirmarHumano: io.isConfirmedHuman ?? isConfirmedHuman,
+                env: io.env ?? process.env,
+                // DM ao dono: abre a conversa privada pelo próprio client (nunca pelo canal de texto do servidor).
+                enviarDM: async (payload) => (await client.users.fetch(userId)).send(payload),
+                enviarAviso: (frase) => mensagemVoz?.replyFixo?.(frase),
+                ...(io.audienciaDeps ?? {})
+            });
+            if (Number.isFinite(io.sttMs)) audCtl.marcarMs('stt', io.sttMs);
+        }
         // O pedido deixa de estar "pendente" quando a primeira resposta (o "Processando...") sai para o chat.
         const voiceContextMessage = buildVoiceMessage({
             userId,
@@ -993,14 +1072,26 @@ async function processVoiceTranscription(userId, text, stateData, client, io = {
             textChannel,
             guildId,
             now: requestedAt,
-            onReply: (content) => { if (!QUEUE_NOTICE_RE.test(content)) slot.release(); }
+            onReply: (content) => { if (!QUEUE_NOTICE_RE.test(content)) slot.release(); },
+            ...(audCtl ? { entrega: audCtl.entrega, turnoId: audCtl.turnoId } : {})
         });
+        mensagemVoz = voiceContextMessage;
         // Modo voz: todo pedido é item de voz; a palavra de ativação nas 3 primeiras palavras decide se a resposta pode ser FALADA
         // (senão voiceSpeak=false: só texto). Fora do modo voz, nada é marcado e tudo segue como sempre foi.
-        const options = voiceMode ? buildVoiceOptions({ speakable: plan.speakable, prompt, now: requestedAt }) : {};
+        const options = voiceMode ? buildVoiceOptions({ speakable: plan.speakable, prompt, now: requestedAt, ...(unificada && io.env ? { env: io.env } : {}) }) : {};
+        if (audCtl) {
+            // Campos novos SÓ com a chave ligada: os fatos da call (contrato A) e o controle do turno (entrega, prazo, ferramentas).
+            options.audiencia = audCtl.audiencia;
+            options.audienciaCtl = audCtl;
+            // Prazo duro: o cérebro e os provedores (options.deadlineAt) param de trabalhar numa resposta que já está condenada.
+            options.deadlineAt = audCtl.prazoAte(requestedAt);
+            audCtl.ligarOpcoes(options);
+            audCtl.iniciarPrazo(requestedAt);
+        }
         await (io.addToQueue ?? addToQueue)(prompt, voiceContextMessage, 'mention', options);
     } catch (error) {
         slot.release();
+        audCtl?.finalizar();
         logger.error(`[VOICE] Erro ao processar transcrição (servidor ${guildId}, usuário ${userId}): ${errMsg(error)}`);
         try {
             await textChannel.send(`<@${userId}> Tive um erro ao processar o seu comando de voz.`);
@@ -1034,6 +1125,8 @@ function getActiveVoiceConnection(guildId) {
 }
 
 export { joinVoiceCall, leaveVoiceCall, handleVoiceStateUpdate, getActiveVoiceConnection, handleCapturedAudio, processVoiceTranscription, setupVoiceReceiver };
+// Medição da call (voz unificada): funções puras com dublê de client, implementadas em audienciaVoz.js.
+export { contarHumanosNaCall, donoNaCall };
 export default {
     joinVoiceCall,
     leaveVoiceCall,

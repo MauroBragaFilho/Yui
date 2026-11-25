@@ -486,6 +486,17 @@ class GuildSpeaker {
         this.finishRun(run, still.reason);
         return;
       }
+      // O gate por frase de cima foi conferido ANTES da espera do DAVE e do preparo do stream (segundos). Para a voz privada (a frase vem de memória
+      // pessoal) quem entrou na call nessa janela não pode ouvir a frase: confere de novo, de forma síncrona, imediatamente antes do play.
+      if (typeof entry.job.canSpeak === 'function') {
+        let allowedAgain = false;
+        try { allowedAgain = !!entry.job.canSpeak(index); } catch { allowedAgain = false; }
+        if (!allowedAgain) {
+          destroyQuietly(readable);
+          this.finishRun(run, 'not-allowed');
+          return;
+        }
+      }
 
       try {
         resource = ctx.createResource(readable, { inputType: ctx.lib.StreamType.Raw });

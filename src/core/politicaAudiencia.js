@@ -144,6 +144,56 @@ export function revalidar(inicial, fatosAgora, opts = {}) {
   return { mantem: true, decisao: agora, motivo: null };
 }
 
+/**
+ * As chaves da voz unificada, lidas num lugar só (bot e cérebro leem igual). Tudo nasce DESLIGADO: só o texto exato "true" liga.
+ *  - YUI_VOZ_UNIFICADA: liga a política de audiência na voz;
+ *  - YUI_VOZ_GOOGLE: dono sozinho pode consultar a agenda por voz (só leitura, resposta curta);
+ *  - YUI_VOZ_TOOLS: dono sozinho pode usar a lista fechada de ferramentas só de leitura (exige o bloqueio do executor);
+ *  - YUI_VOZ_PRAZO_S: prazo da resposta de voz em segundos (padrão 8, de 3 a 12: tem de ficar abaixo da idade máxima da medição da call, 15 s).
+ *    YUI_VOZ_TOOLS: RESERVADA nesta fase (o executor deny-by-default existe, mas a oferta de ferramentas à voz continua fechada).
+ */
+export function lerChavesVoz(env = process.env) {
+  const ligada = (v) => String(v ?? '').trim().toLowerCase() === 'true';
+  const n = Number.parseInt(String(env.YUI_VOZ_PRAZO_S ?? '').trim(), 10);
+  const prazoS = Number.isFinite(n) ? Math.min(12, Math.max(3, n)) : 8;
+  return {
+    unificada: ligada(env.YUI_VOZ_UNIFICADA),
+    google: ligada(env.YUI_VOZ_GOOGLE),
+    ferramentas: ligada(env.YUI_VOZ_TOOLS),
+    prazoMs: prazoS * 1000,
+  };
+}
+
+/** Idade máxima de uma medição da call (humanos, dono presente) para valer como "agora". Passou disso: contagem indisponível = público. */
+export const MEDICAO_MAX_IDADE_MS = 15_000;
+const ID_RE = /^\d{5,25}$/;
+
+/**
+ * Valida o bloco de audiência que o BOT manda no turno de voz (`call.audiencia`) e devolve os FATOS para decidirAudiencia.
+ * O cérebro NUNCA aceita um "nível" pronto do bot: só fatos, e o que ele sabe sozinho (quem é o dono, quem é o autor do turno,
+ * o relógio) manda. Qualquer campo faltando, fora de forma ou velho vira o fato mais fechado (contagem indisponível, falante não confirmado).
+ *
+ * @param {object|null} wire { v:1, falanteId, falanteVerificado, donoPresente, humanosNaCall, dirigida, medidoEm, turnoId }
+ * @param {{ autorId: string, autorEhDono: boolean, chaves: ReturnType<typeof lerChavesVoz>, agora: number, maxIdadeMs?: number }} p
+ */
+export function fatosDaVoz(wire, { autorId, autorEhDono, chaves, agora, maxIdadeMs = MEDICAO_MAX_IDADE_MS } = {}) {
+  const w = wire && typeof wire === 'object' && !Array.isArray(wire) && wire.v === 1 ? wire : {};
+  const frescor = Number.isFinite(w.medidoEm) && Number.isFinite(agora) && w.medidoEm <= agora + 5_000 && agora - w.medidoEm <= maxIdadeMs;
+  const humanos = Number.isInteger(w.humanosNaCall) && w.humanosNaCall >= 0 && w.humanosNaCall <= 1000 && frescor ? w.humanosNaCall : null;
+  const falanteVerificado = w.falanteVerificado === true && typeof w.falanteId === 'string' && ID_RE.test(w.falanteId) && w.falanteId === String(autorId ?? '');
+  return {
+    interface: INTERFACE.VOZ,
+    chaveLigada: chaves?.unificada === true,
+    falanteVerificado,
+    falanteEhDono: falanteVerificado && autorEhDono === true,
+    donoPresente: frescor && w.donoPresente === true,
+    humanosNaCall: humanos,
+    dirigida: w.dirigida === true,
+    googleVoz: chaves?.google === true,
+    ferramentasVoz: chaves?.ferramentas === true,
+  };
+}
+
 /** Uma ferramenta pode rodar nesta decisão? Deny by default: o executor consulta isto, não o prompt. */
 export function ferramentaPermitida(decisaoAtual, { nome, somenteLeitura, permitidas = [] } = {}) {
   if (!decisaoAtual || typeof nome !== 'string' || !nome) return false;

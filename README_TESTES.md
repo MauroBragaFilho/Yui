@@ -51,6 +51,9 @@ npm run test:gtachat     # GTA Online por conversa: detecção, todas as página
 npm run test:memperm     # memória permanente (MEMORY_RETENTION_DAYS=0), conteúdo só para o dono e apagar item a item
 npm run test:memret      # conversar renova o prazo da memória pública (1x/hora, só quem já tem memória); desligada não renova
 npm run test:audiencia   # política de audiência (módulo puro): matriz completa de voz/texto, falha fechado, revalidação, ferramentas deny-by-default, auditoria sem texto
+npm run test:vozaudaux    # auditoria politica.audiencia (sem texto, hash encadeado) e linha de latencia da voz (so numeros)
+npm run test:vozaudcerebro # voz unificada no cerebro: privado valido, todo rebaixamento, invalidacao no meio do turno, fio dm com fonte=voz, chave desligada identica
+npm run test:vozaudbot    # voz unificada no bot: contagem de humanos, entrega por DM, prazo, fila com prioridade, gatilho, executor de ferramentas deny-by-default
 npm run test:hybrid      # ferramentas híbridas (gta_online, listar_lembretes, criar_lembrete): definições, limpeza dos argumentos do modelo e escopo por pessoa
 npm run test:bdsproxy   # ponte do painel com o BDS Server (BDS de mentira): dono, Range, envio em fluxo de 3 MB, link curto, erros
 npm run test:atualizarpainel   # troca atômica do painel web pelo atualizador (só Windows)

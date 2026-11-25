@@ -102,6 +102,11 @@ export function criarGoogle(deps = {}) {
     }
     if (!ctx || ctx.role !== ROLES.OWNER) return null;
     if (call.chatter || call.thirdParty) return null;
+    // Voz privada (call.somenteAgenda, posto só pelo cérebro): só a agenda; e-mail, tarefas e aniversários nunca são lidos por voz, mesmo com o dono sozinho.
+    if (call.somenteAgenda === true && pedido.tipo !== 'agenda') {
+      contadores.recusasPrivacidade += 1;
+      return { resposta: FRASES.soPrivado };
+    }
     // O dono fora de uma conversa privada (canal público, voz): a agenda dele não aparece onde outras pessoas leem.
     if (ctx.memoryScope !== MEMORY_SCOPES.PERSONAL || call.voice || call.voiceItem) {
       contadores.recusasPrivacidade += 1;

@@ -198,6 +198,24 @@ export function flushPendingCommits() {
   return run;
 }
 
+/** call sem o bloco de audiência: o cérebro lê "sem fatos" como contagem indisponível, ou seja, público. */
+function semAudiencia(call) {
+  const { audiencia: _ignorada, ...resto } = call ?? {};
+  return resto;
+}
+
+/** O resultado de audiência do passo (contrato B), com tipos e tamanhos fixos. Qualquer coisa fora de forma vira público. */
+function audienciaDoResultado(raw) {
+  const a = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+  if (!a) return { nivel: 'publico', invalidada: false, motivo: 'sem_resposta', turnoId: null };
+  return {
+    nivel: a.nivel === 'privado' ? 'privado' : 'publico',
+    invalidada: a.invalidada === true,
+    motivo: typeof a.motivo === 'string' ? a.motivo.slice(0, 40) : null,
+    turnoId: typeof a.turnoId === 'string' ? a.turnoId.slice(0, 40) : null,
+  };
+}
+
 function normalizeTurnId(raw, fallbackParts) {
   const id = String(raw ?? '').trim();
   if (TURN_ID_RE.test(id)) return id;
@@ -219,8 +237,21 @@ export function createRemoteTurn(facts) {
   const base = {
     turn: { id: turnId, at },
     ctx: facts.ctx,
-    call: facts.call,
+    // Voz unificada: a medição da call NUNCA fica congelada aqui. Ela viaja só em callAgora() (fresca a cada passo e no commit), para
+    // research/yui não mandarem uma medição velha. Sem `medirAudiencia` (chave desligada) o objeto é o de sempre.
+    call: typeof facts?.medirAudiencia === 'function' ? semAudiencia(facts.call) : facts.call,
     ownText: typeof facts.ownText === 'string' && facts.ownText.trim() ? facts.ownText : null,
+  };
+  // Voz unificada (YUI_VOZ_UNIFICADA): o bot manda os FATOS da call (call.audiencia) e a cada passo/commit uma medição FRESCA
+  // (`medirAudiencia`, injetada pelo llmHandler). Sem a função (chave desligada) nada disto existe e os params são os de sempre.
+  const medir = typeof facts?.medirAudiencia === 'function' ? facts.medirAudiencia : null;
+  const callAgora = () => {
+    try {
+      const a = medir();
+      return a && typeof a === 'object' ? { ...base.call, audiencia: a } : semAudiencia(base.call);
+    } catch {
+      return semAudiencia(base.call); // medir falhou: sem fatos frescos o cérebro trata como público
+    }
   };
   const history = [];
   let contextLine = null;
@@ -267,6 +298,7 @@ export function createRemoteTurn(facts) {
       await flushPendingCommits();
       const params = {
         ...base,
+        ...(medir ? { call: callAgora() } : {}),
         memoryQuery: String(facts.memoryQuery ?? '').slice(0, 4000),
         channel: facts.channel,
         step,
@@ -280,6 +312,8 @@ export function createRemoteTurn(facts) {
         // etapa 6: a busca automática do passo rodou no cérebro (usedSearch) ou foi tentada e não deu certo (searchFailure)
         usedSearch: out?.usedSearch === true, searchFailure: typeof out?.searchFailure === 'string' ? out.searchFailure : '',
         searchRetryAfterMs: Number(out?.searchRetryAfterMs) || 0,
+        // Contrato B (só com a chave ligada): o que o cérebro decidiu para o turno. Faltando ou fora de forma = público (falha fechado).
+        ...(medir ? { audiencia: audienciaDoResultado(out?.audiencia) } : {}),
       };
     },
     /**
@@ -322,7 +356,7 @@ export function createRemoteTurn(facts) {
       if (finished) return;
       finished = true;
       if (step === 0 && history.length === 0 && contextLine === null) return; // nada passou pelo cérebro (pré-rotas, ban, voz recusada...)
-      const params = { ...base, history, contextLine };
+      const params = { ...base, ...(medir ? { call: callAgora() } : {}), history, contextLine };
       const idem = `chat.commit:${turnId}`;
       counters.commits += 1;
       try {
