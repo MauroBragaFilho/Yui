@@ -163,20 +163,26 @@ await test('ajuste comum mostra o valor em vigor e a origem (painel, .env ou pad
 });
 
 section('D2. A subida dos processos');
-await test('o módulo de boot aplica o painel por cima do .env ANTES de a configuração ser lida (um processo de verdade)', async () => {
-  const { execFileSync } = await import('node:child_process');
+await test('o módulo de boot aplica o painel por cima do .env, e entra ANTES de a configuração ser lida nas duas entradas (index.js e cerebro.js)', async () => {
   limpar();
   fs.mkdirSync(path.dirname(ARQ), { recursive: true });
-  fs.writeFileSync(ARQ, JSON.stringify({ version: 1, valores: { YUI_CLIMA_CIDADE_PADRAO: 'Cidade-do-Painel', REDDIT_FETCH_MODE: "off", DISCORD_TOKEN: 'nao-deve-entrar-0123456789' } }));
-  const raiz = path.resolve(import.meta.dirname, '..');
-  const codigo = "import './src/core/painelConfigBoot.js'; const { config } = await import('./src/config/index.js'); console.log(JSON.stringify({ cidade: process.env.YUI_CLIMA_CIDADE_PADRAO, reddit: process.env.REDDIT_FETCH_MODE, token: process.env.DISCORD_TOKEN ?? null }));";
-  const out = execFileSync(process.execPath, ['--input-type=module', '-e', codigo], {
-    cwd: raiz, encoding: 'utf8', timeout: 30_000, env: { ...process.env, YUI_PAINEL_CONFIG_FILE: ARQ, YUI_CLIMA_CIDADE_PADRAO: 'Cidade-do-env', REDDIT_FETCH_MODE: 'browser', DISCORD_TOKEN: '', LOG_LEVEL: 'error' },
-  }).trim().split('\n').pop();
-  const r = JSON.parse(out);
-  assert.equal(r.cidade, 'Cidade-do-Painel', 'o painel vence o ambiente');
-  assert.equal(r.reddit, 'off');
-  assert.ok(!String(r.token ?? '').includes('nao-deve-entrar'), 'chave fora do catálogo não entra');
+  fs.writeFileSync(ARQ, JSON.stringify({ version: 1, valores: { YUI_CLIMA_CIDADE_PADRAO: 'Cidade-do-Painel', REDDIT_FETCH_MODE: 'off', DISCORD_TOKEN: 'nao-deve-entrar-0123456789' } }));
+  process.env.YUI_CLIMA_CIDADE_PADRAO = 'Cidade-do-env';
+  process.env.REDDIT_FETCH_MODE = 'browser';
+  const tokenAntes = process.env.DISCORD_TOKEN;
+  try {
+    await import('../src/core/painelConfigBoot.js'); // o efeito colateral roda ao importar
+    assert.equal(process.env.YUI_CLIMA_CIDADE_PADRAO, 'Cidade-do-Painel', 'o painel vence o ambiente');
+    assert.equal(process.env.REDDIT_FETCH_MODE, 'off');
+    assert.equal(process.env.DISCORD_TOKEN, tokenAntes, 'chave fora do catálogo não entra');
+  } finally { for (const k of cfgPrimeiro) delete process.env[k]; /* o boot também leu o .env do PC (dotenv): volta ao ambiente limpo */ cfg.esquecerParaTeste(); }
+  // a ordem dos imports (a configuração lê o ambiente ao ser importada): o boot do painel vem ANTES dela nas duas entradas
+  for (const arq of ['src/index.js', 'src/cerebro.js']) {
+    const fonte = fs.readFileSync(path.resolve(import.meta.dirname, '..', arq), 'utf8');
+    const boot = fonte.indexOf("import './core/painelConfigBoot.js'");
+    const configuracao = fonte.indexOf("import { config } from './config/index.js'");
+    assert.ok(boot > 0 && configuracao > 0 && boot < configuracao, `${arq}: o boot do painel precisa vir antes da configuração`);
+  }
 });
 
 section('E. A API');
