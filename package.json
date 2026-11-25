@@ -109,6 +109,7 @@
     "test:translate": "node tests/test-translate.js",
     "test:memperm": "node tests/test-memory-permanent.js",
     "test:memret": "node tests/test-memory-retention.js",
+    "test:audiencia": "node tests/test-politica-audiencia.js",
     "test:hybrid": "node tests/test-hybrid-tools.js",
     "panel:password": "node scripts/panel-password.mjs",
     "tts:testar": "node scripts/tts-testar.mjs",
