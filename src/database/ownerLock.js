@@ -29,7 +29,10 @@ export const DEFAULT_HEARTBEAT_MS = 15_000;
 export const DEFAULT_STALE_MS = 60_000;
 /** Diferença máxima entre a hora de início registrada e a consultada para considerar que é o MESMO processo. */
 export const START_TOLERANCE_MS = 3_000;
-const QUERY_TIMEOUT_MS = 5_000;
+// Prazo da consulta da hora de início do processo (PowerShell no Windows, ps fora dele). Só roda quando a trava está em disputa, nunca no caminho quente. Com 5 s o
+// PowerShell frio de uma máquina carregada (o runner do CI com a suíte inteira rodando; o notebook de 4 GB com disco rígido) estourava o prazo, a hora vinha `null` e o
+// dono vivo era tratado como "sem prova" (recusa, o lado seguro) ou o teste do processo real falhava de forma intermitente (CI de 20/11: test:ownerlock).
+const QUERY_TIMEOUT_MS = 20_000;
 
 /** Hora de início deste processo (ms desde 1970), calculada uma vez na carga do módulo. */
 export const PROCESS_START_MS = Math.round(Date.now() - process.uptime() * 1000);
