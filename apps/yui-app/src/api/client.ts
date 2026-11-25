@@ -167,6 +167,12 @@ export interface AiTemplate { id: string; label: string; baseUrl: string; models
 export interface AiOverview { editable: boolean; providers: AiProvider[]; custom: AiCustomProvider[]; templates: AiTemplate[] }
 export interface AiCustomInput { id: string; label: string; baseUrl: string; models: string; key?: string; first?: boolean; anonymous?: boolean }
 export interface AiTestResult { ok: boolean; ms: number; via?: string | null; error?: string }
+export interface ConfigItem {
+  chave: string; rotulo: string; grupo: string; descricao: string; tipo: 'segredo' | 'bool' | 'int' | 'enum' | 'texto'; reinicio: boolean;
+  definido: boolean; origem: 'painel' | 'env' | 'padrao'; opcoes?: string[]; min?: number; max?: number; padrao?: string;
+  secreto?: boolean; ultimos4?: string | null; valor?: string | null;
+}
+export interface ConfigOverview { edicaoLigada: boolean; itens: ConfigItem[] }
 export interface RadioTrack { title: string; artist: string; album: string | null }
 export interface RadioSession {
   guildId: string; guildName: string | null; voiceChannel: string | null; status: string; connected: boolean;
@@ -442,6 +448,9 @@ export function createClient(options: ClientOptions) {
       aiCustomOptions: (id: string, options: { first?: boolean; anonymous?: boolean; models?: string }) => request<{ ok: boolean; first: boolean; anonymous: boolean }>('POST', `/v1/admin/ai/custom/${id}/options`, options, 20_000),
       aiRemoveCustom: (id: string) => request<{ ok: boolean }>('DELETE', `/v1/admin/ai/custom/${id}`, undefined, 20_000),
       aiTest: (provider: string) => request<AiTestResult>('POST', `/v1/admin/ai/test/${provider}`, {}, 60_000),
+      config: () => request<ConfigOverview>('GET', '/v1/admin/config', undefined, 20_000),
+      configSet: (chave: string, valor: string) => request<{ ok: boolean; chave: string; reinicio: boolean }>('PUT', `/v1/admin/config/${chave}`, { valor }, 20_000),
+      configRemove: (chave: string) => request<{ ok: boolean; chave: string; reinicio: boolean }>('DELETE', `/v1/admin/config/${chave}`, undefined, 20_000),
       sendDiscordDm: (message: string) => request<{ ok: boolean }>('POST', '/v1/admin/discord/dm', { message }, 30_000),
       radio: async () => (await request<{ sessions: RadioSession[] }>('GET', '/v1/admin/radio', undefined, 20_000)).sessions,
       radioAction: (guildId: string, action: RadioAction) => request<{ ok: boolean }>('POST', `/v1/admin/radio/${guildId}`, { action }, 30_000),

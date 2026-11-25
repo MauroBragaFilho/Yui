@@ -20,6 +20,7 @@ import {
 import { confirmAction } from '../components/confirm.ts';
 import { confirmacaoDeReinicio } from '../restartLogic.ts';
 import { AiProviders } from './AdminAi.tsx';
+import { ConfigPainel } from './AdminConfig.tsx';
 import { GuildEditor } from './AdminGuild.tsx';
 import { Logs, Radio } from './AdminOps.tsx';
 import { Badge, Button, Card, Chip, PageHeader } from '../components/ui.tsx';
@@ -477,6 +478,7 @@ function Ia({ client }: Props) {
   return (
     <View style={styles.section}>
       <AiProviders client={client} onChanged={reload} />
+      <ConfigPainel client={client} />
       <Text style={styles.sectionTitle}>Saúde do Yui Gateway</Text>
       <Text style={styles.hint}>O Yui Gateway tenta os provedores abaixo em ordem e passa para o próximo se um falhar. Aparece logo depois do LM Studio na cadeia da Yui.</Text>
       <Status loading={loading} error={error} />
