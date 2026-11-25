@@ -32,7 +32,12 @@ function CartaoDoDiagnostico({ cartao }: { cartao: Cartao }) {
           <Text selectable style={[styles.kvValue, l.tom ? { color: TOM_COR[l.tom] } : null]}>{l.valor}</Text>
         </View>
       ))}
-      {cartao.itens?.map((i, idx) => (
+      {cartao.itens?.map((i, idx) => i.alinhado ? (
+        <View key={`${i.titulo}-${idx}`} style={styles.kv}>
+          <Text style={styles.kvLabel}>{i.titulo}</Text>
+          <Text selectable style={[styles.kvValue, i.tom ? { color: TOM_COR[i.tom] } : null]}>{i.detalhe ?? '—'}</Text>
+        </View>
+      ) : (
         <View key={`${i.titulo}-${idx}`} style={styles.item}>
           <Text selectable style={[styles.itemTitle, i.tom ? { color: TOM_COR[i.tom] } : null]}>{i.titulo}</Text>
           {i.detalhe ? <Text selectable style={styles.hint}>{i.detalhe}</Text> : null}
@@ -82,7 +87,7 @@ function DiagnosticoDoServidor({ client }: { client: YuiClient }) {
     <>
       <View style={styles.row}>
         <Text style={styles.sectionTitle}>Diagnóstico</Text>
-        <Button testID="btn-diag-refresh" label="Atualizar diagnóstico" variant="ghost" onPress={refresh} loading={loading} />
+        <Button testID="btn-diag-refresh" label="Atualizar diagnóstico" variant="ghost" compact onPress={refresh} loading={loading} />
       </View>
       <Text style={styles.hint}>Só você vê esta parte. Só leitura: números e palavras fixas do servidor, nunca conversas, chaves nem textos de erro. Atualiza sozinho a cada 30 segundos.</Text>
       {error ? <Text testID="diag-error" style={styles.error}>{error}</Text> : null}
@@ -125,11 +130,14 @@ export function StatusScreen({ client, me, onLogout }: Props) {
       <Card style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.label}>Servidor</Text>
-          <Badge label={online ? '● Online' : '● Offline'} color={online ? colors.success : colors.danger} />
+          <Badge
+            label={online ? '● Online' : health === null && !error ? '● Verificando' : '● Offline'}
+            color={online ? colors.success : health === null && !error ? colors.muted : colors.danger}
+          />
         </View>
         <Text selectable style={styles.value}>{client.baseUrl}</Text>
         {error ? <Text testID="status-error" style={styles.error}>{error}</Text> : null}
-        <Button label="Atualizar" variant="ghost" onPress={refresh} loading={loading} />
+        <Button label="Atualizar" variant="ghost" compact onPress={refresh} loading={loading} />
       </Card>
 
       <Card style={styles.card}>
@@ -205,7 +213,7 @@ export function StatusScreen({ client, me, onLogout }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.lg, gap: spacing.md, width: '100%', maxWidth: 860, alignSelf: 'center' },
-  themeBtn: { flex: 1, minHeight: 40 },
+  themeBtn: { flex: 1, minHeight: 44 },
   card: { gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' },
   label: { color: colors.muted, fontSize: 13 },

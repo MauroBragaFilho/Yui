@@ -17,11 +17,11 @@ const CSS = `
 
 :root, [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #08060e; --card: #181222; --card-2: #221a30; --line: #32273f;
-  --text: #f4f0fa; --muted: #9c93b3;
-  --btn-bg: #8a3fe6; --btn-fg: #ffffff; --input-bg: #221a30;
-  --accent: #8a3fe6; --accent-text: #c77dff; --accent-light: rgba(138,63,230,0.24);
-  --danger: #ff5a5f; --danger-bg: rgba(255,90,95,0.14); --danger-solid: #b42318;
+  --bg: #0b0912; --card: #14101d; --card-2: #1c1628; --line: #2c2339;
+  --text: #f4f0fa; --muted: #a79fbd;
+  --btn-bg: #8a3fe6; --btn-fg: #ffffff; --input-bg: #100c19;
+  --accent: #8a3fe6; --accent-text: #c9a0ff; --accent-light: rgba(138,63,230,0.24);
+  --danger: #ff7a7f; --danger-bg: rgba(255,90,95,0.14); --danger-solid: #b42318;
   --success: #3fb27f; --warning: #f59e0b;
 }
 [data-theme="light"] {
@@ -37,7 +37,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 :where(#root) * { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; }
 :where(#root) input, :where(#root) textarea { font-family: inherit; }
 ::selection { background: var(--accent-light); }
-*:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+*:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 6px; }
+input:focus, textarea:focus { outline: 2px solid var(--accent-text); outline-offset: 0; }
 [role="button"], [role="tab"] { transition: background-color .2s ease, opacity .2s ease, transform .15s ease; }
 [role="button"]:active:not([aria-disabled="true"]) { transform: scale(0.98); }
 * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
@@ -59,7 +60,7 @@ export function setTheme(mode: ThemeMode): void {
   if (Platform.OS !== 'web') return;
   document.documentElement.setAttribute('data-theme', mode);
   const meta = document.querySelector('meta[name="theme-color"]');
-  meta?.setAttribute('content', mode === 'light' ? '#f6f3fb' : '#08060e');
+  meta?.setAttribute('content', mode === 'light' ? '#f6f3fb' : '#0b0912');
   try {
     localStorage.setItem(KEY, mode);
   } catch {

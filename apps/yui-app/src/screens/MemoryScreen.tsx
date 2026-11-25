@@ -120,7 +120,13 @@ export function MemoryScreen({ client }: Props) {
           )
         }
         ListFooterComponent={
-          items.length ? <Button testID="btn-clear-memory" label="Apagar toda a memória" variant="ghost" onPress={clearAll} style={{ marginTop: spacing.lg }} /> : null
+          items.length ? (
+            <View style={styles.risk}>
+              <Text style={styles.riskTitle}>Zona de risco</Text>
+              <Text style={styles.riskText}>Apaga tudo o que a Yui lembra sobre você. Não dá para desfazer.</Text>
+              <Button testID="btn-clear-memory" label="Apagar toda a memória" icon="delete" variant="dangerOutline" compact onPress={clearAll} />
+            </View>
+          ) : null
         }
         renderItem={({ item }) => (
           <Card style={styles.item}>
@@ -132,7 +138,7 @@ export function MemoryScreen({ client }: Props) {
                 {item.expires_at ? ` • expira em ${new Date(item.expires_at).toLocaleDateString('pt-BR')}` : ' • permanente'}
               </Text>
             </View>
-            <Button testID={`btn-del-${item.id}`} label="Apagar" variant="ghost" onPress={() => remove(item.id)} style={styles.delBtn} />
+            <Button testID={`btn-del-${item.id}`} label="Apagar" variant="dangerOutline" compact onPress={() => remove(item.id)} style={styles.delBtn} />
           </Card>
         )}
       />
@@ -152,12 +158,16 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 14,
+    minHeight: 44,
+    fontSize: 16,
   },
+  risk: { marginTop: spacing.xl, gap: spacing.sm, padding: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.danger },
+  riskTitle: { color: colors.danger, fontSize: 14, fontWeight: '700' },
+  riskText: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger },
   empty: { color: colors.muted, textAlign: 'center', marginTop: spacing.xl },
   item: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   content: { color: colors.text, fontSize: 14, lineHeight: 21 },
   meta: { color: colors.muted, fontSize: 12 },
-  delBtn: { minHeight: 36, paddingHorizontal: spacing.md },
+  delBtn: { minHeight: 44, paddingHorizontal: spacing.md },
 });

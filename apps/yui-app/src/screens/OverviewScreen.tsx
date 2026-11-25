@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ApiError, type AdminOverview, type GatewayStatus, type Me, type ReminderView, type YuiClient } from '../api/client.ts';
-import { Badge, Button, Card, Icon, PageHeader, type TabKey } from '../components/ui.tsx';
+import { Badge, Button, Card, Icon, PageHeader, SectionHeading, StateView, type TabKey } from '../components/ui.tsx';
 import { buildAlerts, chartBars, formatUptime, greetingFor, groupEvents, levelForFree, percent, relativeTime, systemSummary, type Level } from '../overviewLogic.ts';
 import { groupReminders, summarizeReminders } from '../remindersLogic.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
@@ -11,6 +11,19 @@ type Props = { client: YuiClient; me: Me; onNavigate: (tab: TabKey) => void };
 const REFRESH_MS = 30_000;
 const LEVEL_COLOR: Record<Level, string> = { ok: colors.success, warn: colors.warning, danger: colors.danger, unknown: colors.muted };
 const LEVEL_TEXT: Record<Level, string> = { ok: 'Folgado', warn: 'Apertado', danger: 'Crítico', unknown: 'Sem leitura' };
+
+/** Tipos crus do registro (ex.: "chat", "tool") viram rótulos em português; o que não é conhecido volta com inicial maiúscula. */
+const TIPO_PT: Record<string, string> = {
+  chat: 'Conversa', tool: 'Ferramenta', reminder: 'Lembrete', reminders: 'Lembrete', memory: 'Memória', auth: 'Acesso', admin: 'Painel',
+  agent: 'Agente', skill: 'Habilidade', alert: 'Alerta', dev: 'Código', voice: 'Voz', context: 'Contexto', api: 'App', files: 'Arquivos', bds: 'Arquivos',
+};
+function rotuloAtividade(label: string): string {
+  if (!/^[a-z0-9._-]+$/.test(label)) return label;
+  const key = label.split('.')[0];
+  if (TIPO_PT[label]) return TIPO_PT[label];
+  if (TIPO_PT[key]) return TIPO_PT[key];
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Não consegui carregar a visão geral.');
 
@@ -65,13 +78,13 @@ export function OverviewScreen({ client, onNavigate }: Props) {
   return (
     <View style={styles.root}>
       <PageHeader
-        title="Visão Geral"
-        subtitle="Central de comando"
+        title="Início"
+        subtitle="Estado da Yui e atalhos"
         right={<Button testID="overview-refresh" label="Atualizar" variant="ghost" onPress={load} loading={loading} />}
       />
       <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-        {error ? <Text testID="overview-error" style={styles.error}>{error}</Text> : null}
-        {!data && !error ? <Text style={styles.hint}>Carregando…</Text> : null}
+        {error ? <StateView kind="error" testID="overview-error" title="Não consegui carregar o painel" message={error} onRetry={load} /> : null}
+        {!data && !error ? <StateView kind="loading" title="Carregando o estado da Yui…" /> : null}
 
         {data && summary ? (
           <>
@@ -80,16 +93,37 @@ export function OverviewScreen({ client, onNavigate }: Props) {
               <View style={styles.heroText}>
                 <Text style={styles.greeting}>{greetingFor(new Date().getHours())}{data.ownerName ? `, ${data.ownerName}` : ''}.</Text>
                 <Text testID="overview-summary" style={[styles.summary, !summary.ok && { color: colors.warning }]}>{summary.text}</Text>
-                <View style={styles.badges}>
-                  <Badge label={data.discord.online ? '● Discord conectado' : '● Discord desconectado'} color={data.discord.online ? colors.success : colors.danger} />
-                  <Badge
-                    label={aiOk === null ? '● IA sem leitura' : aiOk ? `● IA operacional${providersUp !== null ? ` (${providersUp} provedor${providersUp === 1 ? '' : 'es'})` : ''}` : '● IA indisponível'}
-                    color={aiOk === null ? colors.muted : aiOk ? colors.success : colors.danger}
-                  />
-                </View>
               </View>
             </Card>
 
+            <SectionHeading title="Saúde" hint="Cérebro, bot, IA e voz de relance." />
+            <View style={styles.health}>
+              <HealthCard icon="psychology" title="Cérebro" level="ok" text={`No ar há ${formatUptime(data.uptimeSeconds)}`} />
+              <HealthCard
+                icon="forum"
+                title="Bot do Discord"
+                level={data.discord.online && data.cerebro?.botConectado !== false ? 'ok' : 'danger'}
+                text={!data.discord.online ? 'Desconectado' : data.cerebro?.botConectado === false ? 'Sem ligação com o cérebro' : `Conectado em ${data.discord.guilds} servidor${data.discord.guilds === 1 ? '' : 'es'}`}
+              />
+              <HealthCard
+                icon="bolt"
+                title="IA"
+                level={aiOk === null ? 'unknown' : aiOk ? 'ok' : 'danger'}
+                text={aiOk === null ? 'Sem leitura' : aiOk ? `Operacional${providersUp !== null ? ` (${providersUp} provedor${providersUp === 1 ? '' : 'es'})` : ''}` : 'Indisponível'}
+              />
+              <HealthCard icon="graphic_eq" title="Voz" level="unknown" text="Sem leitura aqui. Veja em Admin > Rádio." />
+            </View>
+
+            <SectionHeading title="Atalhos" />
+            <View style={styles.badges}>
+              <Shortcut testID="go-chat" icon="chat_bubble" label="Chat" onPress={() => onNavigate('chat')} />
+              <Shortcut testID="go-files" icon="folder" label="Arquivos" onPress={() => onNavigate('files')} />
+              <Shortcut testID="go-memory" icon="psychology" label="Memória" onPress={() => onNavigate('memory')} />
+              <Shortcut testID="go-admin" icon="admin_panel_settings" label="Admin" onPress={() => onNavigate('admin')} />
+              <Shortcut testID="go-status" icon="monitor_heart" label="Status" onPress={() => onNavigate('status')} />
+            </View>
+
+            <SectionHeading title="Números do dia" />
             <View style={styles.grid}>
               <Kpi testID="kpi-servers" icon="dns" value={String(data.discord.guilds)} label="Servidores ativos" />
               <Kpi testID="kpi-memory-users" icon="psychology" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} label="Pessoas com memória" />
@@ -153,8 +187,8 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                   const tone = v.tone === 'good' ? colors.success : v.tone === 'bad' ? colors.danger : colors.accentText;
                   return (
                     <View key={`${v.ts}-${i}`} style={styles.eventRow} testID="overview-event">
-                      <Icon name={v.icon} size={20} color={tone} />
-                      <Text style={styles.eventLabel} numberOfLines={1}>{v.label}{v.count > 1 ? ` ×${v.count}` : ''}</Text>
+                      {v.icon === 'history' ? <View style={[styles.dot, { backgroundColor: tone }]} /> : <Icon name={v.icon} size={20} color={tone} />}
+                      <Text style={styles.eventLabel} numberOfLines={1}>{rotuloAtividade(v.label)}{v.count > 1 ? ` ×${v.count}` : ''}</Text>
                       <Text style={styles.eventTime}>{relativeTime(v.ts)}</Text>
                     </View>
                   );
@@ -181,17 +215,6 @@ export function OverviewScreen({ client, onNavigate }: Props) {
             </Card>
 
             <Card style={styles.card}>
-              <SectionTitle icon="bolt" title="Atalhos" />
-              <View style={styles.badges}>
-                <Shortcut testID="go-chat" icon="chat_bubble" label="Chat" onPress={() => onNavigate('chat')} />
-                <Shortcut testID="go-files" icon="folder" label="Arquivos" onPress={() => onNavigate('files')} />
-                <Shortcut testID="go-memory" icon="psychology" label="Memória" onPress={() => onNavigate('memory')} />
-                <Shortcut testID="go-admin" icon="admin_panel_settings" label="Admin" onPress={() => onNavigate('admin')} />
-                <Shortcut testID="go-status" icon="monitor_heart" label="Status" onPress={() => onNavigate('status')} />
-              </View>
-            </Card>
-
-            <Card style={styles.card}>
               <View style={styles.rowBetween}>
                 <SectionTitle icon="alarm" title="Lembretes" />
                 <Badge label={reminders ? summarizeReminders(reminders) : 'sem dado'} color={reminders && groupReminders(reminders).overdue.length ? colors.warning : colors.accentText} />
@@ -209,7 +232,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 </>
               )}
               <View style={styles.badges}>
-                <Shortcut testID="go-reminders" icon="alarm" label="Lembretes" onPress={() => onNavigate('reminders')} />
+                <Shortcut testID="go-reminders" icon="alarm" label="Abrir lembretes" onPress={() => onNavigate('reminders')} />
                 <Shortcut testID="morning-now" icon="wb_sunny" label="Enviar o resumo do dia agora" onPress={async () => { setMorningMsg(null); try { await client.reminders.morningSend(); setMorningMsg('Resumo enviado por mensagem privada.'); } catch (e) { setMorningMsg(errText(e)); } }} />
               </View>
               {morningMsg ? <Text testID="morning-msg" style={styles.hint}>{morningMsg}</Text> : null}
@@ -227,8 +250,27 @@ export function OverviewScreen({ client, onNavigate }: Props) {
 function SectionTitle({ icon, title }: { icon: string; title: string }) {
   return (
     <View style={styles.sectionTitle}>
-      <Icon name={icon} size={22} color={colors.accent} />
+      <Icon name={icon} size={20} color={colors.accentText} />
       <Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>
+    </View>
+  );
+}
+
+const LEVEL_PT: Record<Level, string> = { ok: 'Normal', warn: 'Atenção', danger: 'Problema', unknown: 'Sem leitura' };
+
+/** Cartão pequeno de saúde: cor do estado (verde, amarelo, vermelho) e texto, nunca só a cor. */
+function HealthCard({ icon, title, level, text }: { icon: string; title: string; level: Level; text: string }) {
+  const color = LEVEL_COLOR[level];
+  return (
+    <View style={[styles.healthCard, { borderLeftColor: level === 'unknown' ? colors.border : color }]} accessibilityLabel={`${title}: ${LEVEL_PT[level]}. ${text}`}>
+      <View style={styles.rowBetween}>
+        <View style={styles.sectionTitle}>
+          <Icon name={icon} size={18} color={colors.muted} />
+          <Text style={styles.healthTitle}>{title}</Text>
+        </View>
+        <Text style={[styles.healthState, { color }]}>{LEVEL_PT[level]}</Text>
+      </View>
+      <Text style={styles.healthText}>{text}</Text>
     </View>
   );
 }
@@ -236,7 +278,7 @@ function SectionTitle({ icon, title }: { icon: string; title: string }) {
 function Kpi({ icon, value, label, testID }: { icon: string; value: string; label: string; testID?: string }) {
   return (
     <Card style={styles.kpi}>
-      <Icon name={icon} size={22} color={colors.accentText} />
+      <Icon name={icon} size={20} color={colors.muted} />
       <Text testID={testID} style={styles.kpiValue}>{value}</Text>
       <Text style={styles.kpiLabel}>{label}</Text>
     </Card>
@@ -270,20 +312,25 @@ function Shortcut({ icon, label, onPress, testID }: { icon: string; label: strin
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl, gap: spacing.lg, width: '100%', maxWidth: 1100, alignSelf: 'center' },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, flexWrap: 'wrap', padding: spacing.xl, borderRadius: radius.lg },
-  avatar: { width: 84, height: 84, borderRadius: 42, borderWidth: 1, borderColor: colors.border },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md, width: '100%', maxWidth: 1100, alignSelf: 'center' },
+  health: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  healthCard: { flexGrow: 1, flexBasis: 220, gap: spacing.xs, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 4, backgroundColor: colors.surface },
+  healthTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  healthState: { fontSize: 12, lineHeight: 16, fontWeight: '700' },
+  healthText: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, flexWrap: 'wrap', padding: spacing.lg, borderRadius: radius.md },
+  avatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 1, borderColor: colors.border },
   heroText: { flex: 1, minWidth: 220, gap: spacing.sm },
-  greeting: { color: colors.text, fontSize: 22, fontFamily: fonts.title, fontWeight: '700' },
+  greeting: { color: colors.text, fontSize: 20, fontFamily: fonts.title, fontWeight: '700' },
   summary: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
-  kpi: { flexGrow: 1, flexBasis: 180, gap: 6, paddingVertical: 24, paddingHorizontal: 20 },
-  kpiValue: { color: colors.text, fontSize: 26, fontFamily: fonts.title, fontWeight: '700' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  kpi: { flexGrow: 1, flexBasis: 150, gap: spacing.xs, padding: spacing.lg },
+  kpiValue: { color: colors.text, fontSize: 24, fontFamily: fonts.title, fontWeight: '700' },
   kpiLabel: { color: colors.muted, fontSize: 12 },
-  card: { gap: spacing.md, padding: spacing.xl, borderRadius: radius.lg },
-  cardTitle: { color: colors.text, fontSize: 18, fontFamily: fonts.title, fontWeight: '700', letterSpacing: -0.2 },
-  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  card: { gap: spacing.md, padding: spacing.lg },
+  cardTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontFamily: fonts.title, fontWeight: '700' },
+  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' },
   meterLabel: { color: colors.text, fontSize: 13 },
   meterValue: { fontSize: 13, fontWeight: '600' },
@@ -292,15 +339,16 @@ const styles = StyleSheet.create({
   bar: { width: '100%', backgroundColor: colors.accent, borderRadius: 3 },
   track: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   fill: { height: 8, borderRadius: radius.pill },
-  eventRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border },
+  eventRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   eventLabel: { color: colors.text, fontSize: 13, flex: 1 },
   eventTime: { color: colors.muted, fontSize: 12 },
   memRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   memBox: { flexGrow: 1, flexBasis: 150, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: spacing.md, gap: 2 },
   memTitle: { color: colors.muted, fontSize: 12 },
   memValue: { color: colors.text, fontSize: 18, fontFamily: fonts.title, fontWeight: '700' },
-  shortcut: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
+  shortcut: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
+  dot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 6 },
   shortcutText: { color: colors.text, fontSize: 13 },
-  hint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  hint: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger },
 });

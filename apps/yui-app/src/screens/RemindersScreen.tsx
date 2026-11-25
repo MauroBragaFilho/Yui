@@ -89,11 +89,11 @@ export function RemindersScreen({ client }: Props) {
         <Button label="Amanhã 9h" variant="ghost" onPress={() => act('Adiado para amanhã às 9h.', () => client.reminders.snooze(r.id, { when: 'amanhã às 9h' }))} />
         {confirm === r.id ? (
           <>
-            <Button testID="reminder-delete-ok" label="Apagar mesmo" variant="danger" onPress={() => { setConfirm(null); act('Lembrete apagado.', () => client.reminders.remove(r.id)); }} />
-            <Button label="Cancelar" variant="ghost" onPress={() => setConfirm(null)} />
+            <Button testID="reminder-delete-ok" label="Apagar mesmo" variant="danger" compact onPress={() => { setConfirm(null); act('Lembrete apagado.', () => client.reminders.remove(r.id)); }} />
+            <Button label="Cancelar" variant="ghost" compact onPress={() => setConfirm(null)} />
           </>
         ) : (
-          <Button testID="reminder-delete" label="Apagar" icon="delete" variant="ghost" onPress={() => setConfirm(r.id)} />
+          <Button testID="reminder-delete" label="Apagar" icon="delete" variant="dangerOutline" compact onPress={() => setConfirm(r.id)} />
         )}
       </View>
     </View>
@@ -108,8 +108,9 @@ export function RemindersScreen({ client }: Props) {
 
         <Card style={styles.card}>
           <View style={styles.title}><Icon name="add_alarm" size={22} color={colors.accent} /><Text style={styles.titleText}>Novo lembrete</Text></View>
-          <TextInput testID="reminder-text" value={text} onChangeText={setText} placeholder="Do que devo te lembrar? Ex.: pagar a conta de luz" placeholderTextColor={colors.muted} style={styles.input} maxLength={300} />
-          <TextInput testID="reminder-when" value={when} onChangeText={setWhen} placeholder="Quando? Ex.: amanhã às 9h · em 2 horas · sexta às 10h · todo dia às 8h" placeholderTextColor={colors.muted} style={styles.input} onSubmitEditing={create} />
+          <TextInput testID="reminder-text" value={text} onChangeText={setText} placeholder="Do que lembrar? Ex.: pagar a luz" placeholderTextColor={colors.muted} style={styles.input} maxLength={300} />
+          <TextInput testID="reminder-when" value={when} onChangeText={setWhen} placeholder="Quando? Ex.: amanhã às 9h" placeholderTextColor={colors.muted} style={styles.input} onSubmitEditing={create} />
+          <Text style={styles.hint}>Também vale: em 2 horas · sexta às 10h · todo dia às 8h.</Text>
           <View style={styles.chips}>
             {QUICK_WHEN.map((q) => <Chip key={q.label} label={q.label} on={when === q.when} onPress={() => setWhen(q.when)} />)}
           </View>
@@ -159,7 +160,7 @@ const styles = StyleSheet.create({
   title: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   titleBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   titleText: { color: colors.text, fontSize: 18, fontFamily: fonts.title, fontWeight: '700' },
-  input: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, color: colors.text, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 14 },
+  input: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, color: colors.text, paddingHorizontal: spacing.md, paddingVertical: 12, minHeight: 44, fontSize: 16 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   rowWrap: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, gap: spacing.sm },

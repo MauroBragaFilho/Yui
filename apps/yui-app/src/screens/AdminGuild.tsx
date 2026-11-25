@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   picker: { maxHeight: 150 },
   form: { gap: spacing.sm, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: spacing.md },
   followRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
-  smallBtn: { minHeight: 36, paddingHorizontal: spacing.md, alignSelf: 'flex-start' },
+  smallBtn: { minHeight: 44, paddingHorizontal: spacing.md, alignSelf: 'flex-start' },
   input: {
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
@@ -275,6 +275,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 14,
+    minHeight: 44,
+    fontSize: 16,
   },
 });

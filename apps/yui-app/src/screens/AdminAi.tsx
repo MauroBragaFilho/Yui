@@ -138,7 +138,18 @@ function ProviderCard({ p, editable, client, reload }: { p: AiProvider; editable
           />
         ) : null}
       </View>
-      {p.url && editable ? <Text style={styles.hint}>Onde conseguir a chave: {p.url}</Text> : null}
+      {p.url && editable ? (
+        <Text style={styles.hint}>
+          Onde conseguir a chave:{' '}
+          <Text
+            accessibilityRole="link"
+            style={styles.link}
+            onPress={() => { const u = String(p.url); if (Platform.OS === 'web') window.open(u, '_blank', 'noopener'); else Linking.openURL(u).catch(() => {}); }}
+          >
+            {p.url}
+          </Text>
+        </Text>
+      ) : null}
       {msg ? <Text style={msg.ok ? styles.ok : styles.error}>{msg.text}</Text> : null}
     </Card>
   );
@@ -399,7 +410,8 @@ const styles = StyleSheet.create({
   formRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
-  smallBtn: { minHeight: 36, paddingHorizontal: spacing.md },
+  smallBtn: { minHeight: 44, paddingHorizontal: spacing.md },
+  link: { color: colors.accentText, textDecorationLine: 'underline' },
   input: {
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
@@ -408,6 +420,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 14,
+    minHeight: 44,
+    fontSize: 16,
   },
 });

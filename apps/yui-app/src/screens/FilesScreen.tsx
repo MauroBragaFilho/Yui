@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError, type YuiClient } from '../api/client.ts';
-import { Badge, Button, Card, Chip, Icon, IconButton, PageHeader } from '../components/ui.tsx';
+import { Badge, Button, Card, Chip, Icon, IconButton, PageHeader, StateView } from '../components/ui.tsx';
 import {
   breadcrumbs, describeBdsAudit, describeBdsStatus, diskUsage, formatBytes, formatWhen, iconFor, joinPath, nameProblem, normalizeItems, parentPath, previewKind, sortItems,
   type FileItem, type PreviewKind,
@@ -180,7 +180,12 @@ export function FilesScreen({ client }: Props) {
           <Chip testID="files-tab-server" label="Servidor" on={mode === 'server'} onPress={() => loadMode('server')} />
         </View>
 
-        {error ? <Text testID="files-error" style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <View testID="files-error" accessibilityRole="alert" style={styles.errorBox}>
+            <Icon name="error" size={20} color={colors.danger} />
+            <Text style={styles.errorBoxText}>{error}</Text>
+          </View>
+        ) : null}
         {notice ? <Text testID="files-notice" style={styles.notice}>{notice}</Text> : null}
 
         {disk && mode === 'files' ? (
@@ -260,7 +265,7 @@ export function FilesScreen({ client }: Props) {
 
         {loading ? <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} /> : null}
 
-        {(mode === 'files' || mode === 'recent') && !loading ? (
+        {(mode === 'files' || mode === 'recent') && !loading && !(error && rows.length === 0) ? (
           <Card style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
             {mode === 'files' && !found && !atRoot && path ? (
               <Pressable testID="files-up" accessibilityRole="button" onPress={() => loadDir(parentPath(path))} style={styles.row}>
@@ -268,7 +273,7 @@ export function FilesScreen({ client }: Props) {
                 <Text style={styles.name}>Subir um nível</Text>
               </Pressable>
             ) : null}
-            {rows.length === 0 ? <Text style={[styles.hint, { padding: spacing.lg }]}>{found ? 'Nada encontrado.' : mode === 'recent' ? 'Nenhum arquivo recente.' : 'Esta pasta está vazia.'}</Text> : null}
+            {rows.length === 0 ? <View style={{ padding: spacing.lg }}><StateView kind="empty" title={found ? 'Nada encontrado.' : mode === 'recent' ? 'Nenhum arquivo recente.' : 'Esta pasta está vazia.'} /></View> : null}
             {rows.map((it) => (
               <View key={it.path} style={styles.rowWrap}>
                 <Pressable testID="files-row" accessibilityRole="button" onPress={() => (it.isDir ? openItem(it) : setOpen(open === it.path ? null : it.path))} style={styles.row}>
@@ -405,7 +410,7 @@ const styles = StyleSheet.create({
   track: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   fill: { height: 8, borderRadius: radius.pill },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: spacing.lg },
-  search: { flex: 1, color: colors.text, paddingVertical: 12, fontSize: 14 },
+  search: { flex: 1, color: colors.text, paddingVertical: 12, minHeight: 44, fontSize: 16 },
   crumbs: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
   crumb: { color: colors.accentText, fontSize: 14, fontWeight: '600', paddingVertical: 4 },
   rowWrap: { borderTopWidth: 1, borderTopColor: colors.border },
@@ -415,13 +420,15 @@ const styles = StyleSheet.create({
   metaDate: { minWidth: 110 },
   menu: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.sm },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  input: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, color: colors.text, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 14 },
+  input: { backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, color: colors.text, paddingHorizontal: spacing.md, paddingVertical: 10, minHeight: 44, fontSize: 16 },
   label: { color: colors.muted, fontSize: 12 },
   title: { color: colors.text, fontSize: 18, fontFamily: fonts.title, fontWeight: '700', flexShrink: 1 },
   hint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   drop: { color: colors.muted, fontSize: 12, textAlign: 'center', paddingVertical: spacing.sm },
   warn: { color: colors.warning, fontSize: 13 },
   error: { color: colors.danger, fontSize: 13 },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.danger, backgroundColor: colors.dangerBg },
+  errorBoxText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 13, lineHeight: 18 },
   notice: { color: colors.success, fontSize: 13 },
   modalBack: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   modalBox: { width: '100%', maxWidth: 960, backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md, borderWidth: 1, borderColor: colors.border },

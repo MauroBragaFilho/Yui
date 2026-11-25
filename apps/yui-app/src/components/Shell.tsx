@@ -63,7 +63,7 @@ export function Shell({ tab, onChange, showAdmin, roleLabel, onLogout, children 
 
   return (
     <View style={[styles.root, { flexDirection: 'row' }]}>
-      <View style={[styles.sidebar, { width: collapsed ? 64 : 240 }]}>
+      <View style={[styles.sidebar, { width: collapsed ? 64 : 232 }]}>
         <View style={[styles.brand, collapsed && styles.brandCollapsed]}>
           {collapsed ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Expandir menu" onPress={toggleCollapsed}>
@@ -73,10 +73,10 @@ export function Shell({ tab, onChange, showAdmin, roleLabel, onLogout, children 
             <>
               <Image source={require('../../assets/yui-avatar.webp')} style={styles.brandAvatar} accessibilityLabel="Yui" />
               <View style={{ flexShrink: 1 }}>
-                <Text style={styles.brandMark}>YUI</Text>
-                <Text numberOfLines={1} style={styles.brandText}>ASSISTENTE</Text>
+                <Text style={styles.brandMark}>Yui</Text>
+                <Text numberOfLines={1} style={styles.brandText}>Painel de controle</Text>
               </View>
-              <IconButton icon="menu_open" label="Recolher menu" size={28} onPress={toggleCollapsed} style={{ marginLeft: 'auto' }} />
+              <IconButton icon="menu_open" label="Recolher menu" size={32} onPress={toggleCollapsed} style={{ marginLeft: 'auto' }} />
             </>
           )}
         </View>
@@ -140,10 +140,11 @@ function NavItem({
       style={(state: any) => [
         styles.navItem,
         collapsed && styles.navItemCollapsed,
-        active ? { backgroundColor: colors.accentLight } : state.hovered ? { backgroundColor: colors.surfaceAlt } : null,
+        // Só o item ativo tem fundo roxo; hover e foco só ganham um contorno discreto (sem fundo).
+        active ? { backgroundColor: colors.accentLight, borderColor: colors.accent } : state.hovered || state.focused ? { borderColor: colors.border } : null,
       ]}
     >
-      <Icon name={icon} size={24} color={active ? colors.accent : colors.muted} />
+      <Icon name={icon} size={24} color={active ? colors.accentText : colors.muted} />
       {collapsed ? null : (
         <Text numberOfLines={1} style={[styles.navLabel, { color: active ? colors.accentText : colors.muted }]}>
           {label}
@@ -166,25 +167,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   brandCollapsed: { justifyContent: 'center', paddingHorizontal: 0 },
   brandAvatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.border },
-  brandMark: { color: colors.text, fontFamily: fonts.title, fontWeight: '700', fontSize: 14, letterSpacing: 0.6 },
-  brandText: { color: colors.muted, fontWeight: '600', fontSize: 10, letterSpacing: 0.6 },
+  brandMark: { color: colors.text, fontFamily: fonts.title, fontWeight: '700', fontSize: 16, lineHeight: 20 },
+  brandText: { color: colors.muted, fontSize: 12, lineHeight: 16 },
   nav: { padding: spacing.md, gap: 4 },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: 13,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.pill,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   navItemCollapsed: { justifyContent: 'center', paddingHorizontal: 0 },
-  navLabel: { fontWeight: '600', fontSize: 14, flexShrink: 1 },
+  navLabel: { fontWeight: '600', fontSize: 14, lineHeight: 20, flexShrink: 1 },
   footer: { padding: spacing.md, gap: 4, borderTopWidth: 1, borderTopColor: colors.border },
-  footerText: { color: colors.muted, fontSize: 12, textAlign: 'center', paddingTop: spacing.sm },
+  footerText: { color: colors.muted, fontSize: 12, lineHeight: 16, textAlign: 'center', paddingTop: spacing.sm },
 });

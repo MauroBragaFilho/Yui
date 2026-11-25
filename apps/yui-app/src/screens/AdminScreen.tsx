@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import {
   ApiError,
   type AdminBans,
@@ -23,23 +23,39 @@ import { AiProviders } from './AdminAi.tsx';
 import { ConfigPainel } from './AdminConfig.tsx';
 import { GuildEditor } from './AdminGuild.tsx';
 import { Logs, Radio } from './AdminOps.tsx';
-import { Badge, Button, Card, Chip, PageHeader } from '../components/ui.tsx';
+import { Badge, Button, Card, Chip, PageHeader, SectionHeading, StateView } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
 
 type Props = { client: YuiClient };
-type Section = 'geral' | 'integracoes' | 'servidores' | 'radio' | 'logs' | 'bans' | 'memoria' | 'ia' | 'auditoria' | 'ferramentas';
+type Section = 'config' | 'geral' | 'integracoes' | 'servidores' | 'radio' | 'logs' | 'bans' | 'memoria' | 'ia' | 'auditoria' | 'ferramentas';
 
-const SECTIONS: { key: Section; label: string }[] = [
-  { key: 'geral', label: 'Geral' },
-  { key: 'integracoes', label: 'Integrações' },
-  { key: 'servidores', label: 'Servidores' },
-  { key: 'radio', label: 'Rádio' },
-  { key: 'bans', label: 'Bans' },
-  { key: 'memoria', label: 'Memória' },
-  { key: 'ia', label: 'IA' },
-  { key: 'auditoria', label: 'Auditoria' },
-  { key: 'logs', label: 'Logs' },
-  { key: 'ferramentas', label: 'Ferramentas' },
+const GROUPS: { title: string; sections: { key: Section; label: string }[] }[] = [
+  {
+    title: 'Operação',
+    sections: [
+      { key: 'geral', label: 'Geral' },
+      { key: 'servidores', label: 'Servidores' },
+      { key: 'radio', label: 'Rádio' },
+      { key: 'bans', label: 'Bans' },
+    ],
+  },
+  {
+    title: 'IA e memória',
+    sections: [
+      { key: 'config', label: 'Configuração e chaves' },
+      { key: 'ia', label: 'IA' },
+      { key: 'memoria', label: 'Memória' },
+      { key: 'integracoes', label: 'Integrações' },
+    ],
+  },
+  {
+    title: 'Segurança e registros',
+    sections: [
+      { key: 'ferramentas', label: 'Ferramentas' },
+      { key: 'auditoria', label: 'Auditoria' },
+      { key: 'logs', label: 'Logs' },
+    ],
+  },
 ];
 
 const AUTOMOD: { mode: AutomodMode; label: string }[] = [
@@ -90,10 +106,22 @@ function useLoad<T>(fn: () => Promise<T>) {
 }
 
 function Status({ loading, error }: { loading: boolean; error: string | null }) {
-  if (loading) return <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />;
-  if (error) return <Text testID="admin-error" style={styles.error}>{error}</Text>;
+  if (loading) return <StateView kind="loading" />;
+  if (error) return <StateView kind="error" testID="admin-error" message={error} />;
   return null;
 }
+
+const capital = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+
+const AUDIT_ACTIONS: Record<string, string> = { login: 'Entrou no painel', logout: 'Saiu do painel' };
+const auditAction = (event: string) => AUDIT_ACTIONS[event] ?? capital(String(event ?? '').replace(/[_.-]+/g, ' ').trim());
+const ROLE_LABEL: Record<string, string> = { OWNER: 'Dono', MEMBER: 'Membro' };
+const roleLabel = (role: string) => ROLE_LABEL[role] ?? capital(String(role).toLowerCase());
+const ACCESS_LABEL: Record<string, string> = { OWNER: 'Dono', MEMBER: 'Membro' };
+const accessLabel = (a: string) => ACCESS_LABEL[a] ?? capital(String(a).toLowerCase());
+const TIER_LABEL: Record<string, string> = { free: 'Gratuito' };
+const tierLabel = (t: string) => TIER_LABEL[t] ?? t;
+const toolTitle = (name: string) => capital(name.replace(/_/g, ' '));
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -185,17 +213,19 @@ function Geral({ client }: Props) {
           <Card style={styles.card}>
             <Text style={styles.cardTitle}>Proteções</Text>
             <View style={styles.badges}>
-              <Badge label={data.flags.readOnly ? '🔒 Somente leitura' : '⚠️ Leitura/escrita liberada'} color={data.flags.readOnly ? colors.success : colors.warning} />
+              <Badge label={data.flags.readOnly ? 'Somente leitura' : 'Leitura e escrita liberadas'} color={data.flags.readOnly ? colors.success : colors.warning} />
               <Badge label={data.flags.memoryEnabled ? 'Memória ativa' : 'Memória desligada'} color={data.flags.memoryEnabled ? colors.success : colors.warning} />
               <Badge label={data.flags.pcToolsEnabled ? 'Ferramentas do PC' : 'Sem ferramentas do PC'} color={data.flags.pcToolsEnabled ? colors.success : colors.muted} />
             </View>
-            <Text style={styles.hint}>O modo somente leitura e a senha de entrada só mudam no arquivo .env, nunca por este painel. As chaves de IA você gerencia na aba IA.</Text>
+            <Text style={styles.hint}>O modo somente leitura e a senha de entrada só mudam no arquivo .env, nunca por este painel. As chaves de IA você gerencia em Configuração e chaves.</Text>
           </Card>
 
           <DmCard client={client} limits={data?.limits} />
 
-          <Button label="Atualizar" variant="ghost" onPress={reload} />
-          <Button testID="btn-restart" label="Reiniciar a Yui" variant="danger" onPress={restart} />
+          <View style={styles.actionsRow}>
+            <Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} />
+            <Button testID="btn-restart" label="Reiniciar a Yui" variant="danger" onPress={restart} style={{ marginLeft: 'auto' }} />
+          </View>
           {msg ? <Text testID="restart-msg" style={styles.hint}>{msg}</Text> : null}
         </>
       ) : null}
@@ -214,6 +244,7 @@ function Integracoes({ client }: Props) {
   const { data, error, loading, reload } = useLoad<IntegrationGroup[]>(() => client.admin.integrations());
   return (
     <View style={styles.section}>
+      <SectionHeading title="Integrações" right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} />} />
       <Status loading={loading} error={error} />
       {data ? (
         <>
@@ -232,7 +263,6 @@ function Integracoes({ client }: Props) {
               ))}
             </Card>
           ))}
-          <Button label="Atualizar" variant="ghost" onPress={reload} />
         </>
       ) : null}
     </View>
@@ -346,6 +376,7 @@ function Bans({ client }: Props) {
 
   return (
     <View style={styles.section}>
+      <SectionHeading title="Bans" right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} loading={loading} />} />
       <Card style={styles.card}>
         <Text style={styles.cardTitle}>Novo banimento</Text>
         <View style={styles.chips}>
@@ -358,14 +389,14 @@ function Bans({ client }: Props) {
         <TextInput testID="ban-id" style={styles.input} value={id} onChangeText={setId} placeholder="ID (somente números)" placeholderTextColor={colors.muted} keyboardType="number-pad" />
         <TextInput testID="ban-reason" style={styles.input} value={reason} onChangeText={setReason} placeholder="Motivo (opcional)" placeholderTextColor={colors.muted} maxLength={200} />
         {err ? <Text testID="ban-error" style={styles.error}>{err}</Text> : null}
-        <Button testID="btn-ban" label="Banir" variant="danger" onPress={add} disabled={!id.trim()} />
+        <Button testID="btn-ban" label="Banir" variant="danger" compact onPress={add} disabled={!id.trim()} />
       </Card>
 
       <Status loading={loading} error={error} />
       {lists.map((l) => (
         <View key={l.type} style={{ gap: spacing.sm }}>
           <Text style={styles.sectionTitle}>{l.title} ({l.items.length})</Text>
-          {l.items.length === 0 ? <Text style={styles.hint}>Nenhum.</Text> : null}
+          {l.items.length === 0 ? <StateView kind="empty" title="Nenhum." /> : null}
           {l.items.map((b) => (
             <Card key={b.id} style={styles.card}>
               <View style={styles.rowBetween}>
@@ -422,6 +453,7 @@ function Memoria({ client }: Props) {
 
   return (
     <View style={styles.section}>
+      <SectionHeading title="Memória dos usuários" right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} loading={loading} />} />
       <Text style={styles.hint}>
         {data?.permanent ? 'A memória dos usuários é permanente: só some se você apagar aqui ou se a própria pessoa pedir para a Yui esquecer.' : 'A memória dos usuários expira por inatividade (MEMORY_RETENTION_DAYS; 0 deixa permanente).'}{' '}
         Como dono, você vê o conteúdo de cada lembrança e pode apagar uma a uma. Cada consulta fica na auditoria.
@@ -438,7 +470,7 @@ function Memoria({ client }: Props) {
           <Text style={styles.hint}>Última interação {formatWhen(u.lastSeen)} • {u.expiresAt ? `expira ${formatWhen(u.expiresAt)}` : 'permanente'}</Text>
           <View style={styles.rowGap}>
             <Button testID={`mem-open-${u.userId}`} label={open === u.userId ? 'Ocultar' : 'Ver detalhes'} variant="ghost" onPress={() => inspect(u.userId)} style={styles.smallBtn} />
-            <Button label="Apagar tudo" variant="ghost" onPress={() => forgetAll(u.userId)} style={styles.smallBtn} />
+            <Button label="Apagar tudo" variant="dangerOutline" compact onPress={() => forgetAll(u.userId)} style={styles.smallBtn} />
           </View>
           {open === u.userId
             ? metas.map((m) => (
@@ -478,7 +510,6 @@ function Ia({ client }: Props) {
   return (
     <View style={styles.section}>
       <AiProviders client={client} onChanged={reload} />
-      <ConfigPainel client={client} />
       <Text style={styles.sectionTitle}>Saúde do Yui Gateway</Text>
       <Text style={styles.hint}>O Yui Gateway tenta os provedores abaixo em ordem e passa para o próximo se um falhar. Aparece logo depois do LM Studio na cadeia da Yui.</Text>
       <Status loading={loading} error={error} />
@@ -502,15 +533,15 @@ function Ia({ client }: Props) {
                 <View key={t.id} style={styles.metaRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.value}>{t.model}</Text>
-                    <Text style={styles.hint}>{t.tier} • ok {t.ok} • falhas {t.fail}{t.lastError ? ` • ${t.lastError.replace(/\s+/g, ' ').slice(0, 70)}` : ''}</Text>
+                    <Text style={styles.hint}>{tierLabel(t.tier)} • sucessos {t.ok} · falhas {t.fail}{t.lastError ? ` • ${t.lastError.replace(/\s+/g, ' ').slice(0, 70)}` : ''}</Text>
                   </View>
                   <Badge label={t.available ? 'Disponível' : `Descansa ${t.cooldownSeconds}s`} color={t.available ? colors.success : colors.warning} />
                 </View>
               ))}
             </Card>
           ))}
-          <Button label="Atualizar" variant="ghost" onPress={reload} />
-          <Button testID="btn-gateway-reset" label="Zerar descansos" variant="ghost" onPress={reset} />
+          <Button label="Atualizar" variant="ghost" compact onPress={reload} />
+          <Button testID="btn-gateway-reset" label="Zerar descansos" variant="ghost" compact onPress={reset} />
           {msg ? <Text style={styles.hint}>{msg}</Text> : null}
         </>
       ) : null}
@@ -522,15 +553,15 @@ function Auditoria({ client }: Props) {
   const { data, error, loading, reload } = useLoad<AuditEvent[]>(() => client.admin.audit(100));
   return (
     <View style={styles.section}>
+      <SectionHeading title="Auditoria" right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} loading={loading} />} />
       <Status loading={loading} error={error} />
-      <Button label="Atualizar" variant="ghost" onPress={reload} />
-      {data?.length === 0 ? <Text style={styles.hint}>Sem eventos.</Text> : null}
+      {data?.length === 0 ? <StateView kind="empty" title="Sem eventos." /> : null}
       {data?.map((e, i) => {
         const detail = String((e.tool ?? e.target ?? e.guild ?? e.type ?? '') || '');
         return (
           <View key={`${e.ts}-${i}`} style={styles.audit}>
-            <Text style={styles.auditEvent}>{e.event}{detail ? ` · ${detail}` : ''}</Text>
-            <Text style={styles.hint}>{formatWhen(e.ts)}{e.userId ? ` • ${e.userId}` : ''}{e.role ? ` • ${e.role}` : ''}</Text>
+            <Text style={styles.auditEvent}>{auditAction(e.event)}{detail ? ` · ${detail}` : ''}</Text>
+            <Text style={styles.hint}>{formatWhen(e.ts)}{e.userId ? ` • ${e.userId}` : ''}{e.role ? ` • ${roleLabel(e.role)}` : ''}</Text>
           </View>
         );
       })}
@@ -545,18 +576,21 @@ function Ferramentas({ client }: Props) {
       <Status loading={loading} error={error} />
       {data ? (
         <>
-          <Badge label={data.readOnly ? '🔒 Modo somente leitura ligado' : '⚠️ Modo somente leitura desligado'} color={data.readOnly ? colors.success : colors.warning} />
+          <Badge label={data.readOnly ? 'Modo somente leitura ligado' : 'Modo somente leitura desligado'} color={data.readOnly ? colors.success : colors.warning} />
           <Text style={styles.hint}>Estas são as únicas ferramentas que a Yui pode usar. A liberação depende do arquivo .env e não pode ser alterada por aqui.</Text>
           {data.tools.length === 0 ? <Text style={styles.hint}>Nenhuma ferramenta registrada.</Text> : null}
           {data.tools.map((t) => (
             <Card key={t.name} style={styles.card}>
               <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>{t.name}</Text>
+                <View style={styles.toolName}>
+                  <Text style={styles.cardTitle}>{toolTitle(t.name)}</Text>
+                  <Text style={styles.toolId}>{t.name}</Text>
+                </View>
                 <Badge label={t.allowed ? 'Liberada' : 'Bloqueada'} color={t.allowed ? colors.success : colors.danger} />
               </View>
               <Text style={styles.hint}>{t.description}</Text>
               <View style={styles.badges}>
-                <Badge label={`acesso: ${t.access}`} color={colors.muted} />
+                <Badge label={`Acesso: ${accessLabel(t.access)}`} color={colors.muted} />
                 {t.confirm ? <Badge label="pede confirmação" color={colors.warning} /> : null}
               </View>
               {!t.allowed && t.reason ? <Text style={styles.hint}>{t.reason}</Text> : null}
@@ -572,15 +606,41 @@ function Ferramentas({ client }: Props) {
 
 export function AdminScreen({ client }: Props) {
   const [section, setSection] = useState<Section>('geral');
+  const { width } = useWindowDimensions();
+  const narrow = width < 700;
   return (
     <View style={styles.root}>
       <PageHeader title="Administração" subtitle="Servidores, memória, IA e auditoria" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabs}>
-        {SECTIONS.map((s) => (
-          <Chip key={s.key} testID={`admin-tab-${s.key}`} label={s.label} on={section === s.key} onPress={() => setSection(s.key)} />
-        ))}
-      </ScrollView>
+      {narrow ? (
+        // Celular: uma única fileira de chips que rola na horizontal (só a barra rola, a página não); os grupos ficam separados por um traço.
+        <View style={styles.navBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navScroll}>
+            {GROUPS.map((g, gi) => (
+              <React.Fragment key={g.title}>
+                {gi > 0 ? <View style={styles.navDivider} /> : null}
+                {g.sections.map((x) => (
+                  <Chip key={x.key} testID={`admin-tab-${x.key}`} label={x.label} on={section === x.key} onPress={() => setSection(x.key)} />
+                ))}
+              </React.Fragment>
+            ))}
+          </ScrollView>
+        </View>
+      ) : (
+        <View style={styles.nav}>
+          {GROUPS.map((g) => (
+            <View key={g.title} style={styles.navGroup}>
+              <Text style={styles.navTitle}>{g.title}</Text>
+              <View style={styles.chips}>
+                {g.sections.map((x) => (
+                  <Chip key={x.key} testID={`admin-tab-${x.key}`} label={x.label} on={section === x.key} onPress={() => setSection(x.key)} />
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
       <ScrollView contentContainerStyle={styles.content}>
+        {section === 'config' ? <ConfigPainel client={client} /> : null}
         {section === 'geral' ? <Geral client={client} /> : null}
         {section === 'integracoes' ? <Integracoes client={client} /> : null}
         {section === 'servidores' ? <Servidores client={client} /> : null}
@@ -598,24 +658,29 @@ export function AdminScreen({ client }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  tabsScroll: { flexGrow: 0, flexShrink: 0, borderBottomWidth: 1, borderBottomColor: colors.border },
-  tabs: { gap: spacing.sm, padding: spacing.md },
-  content: { padding: spacing.lg, width: '100%', maxWidth: 860, alignSelf: 'center' },
+  nav: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.xl, rowGap: spacing.md, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  navBar: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  navScroll: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, paddingHorizontal: spacing.lg },
+  navDivider: { width: 1, height: 24, backgroundColor: colors.border, marginHorizontal: spacing.xs },
+  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
+  navGroup: { gap: spacing.xs, maxWidth: '100%' },
+  navTitle: { color: colors.muted, fontSize: 12, lineHeight: 16, fontWeight: '600' },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl, width: '100%', maxWidth: 860, alignSelf: 'center' },
   section: { gap: spacing.md },
   card: { gap: spacing.sm },
   cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700', flexShrink: 1 },
-  sectionTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginTop: spacing.sm },
+  sectionTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: '700', marginTop: spacing.sm },
   label: { color: colors.muted, fontSize: 13 },
   value: { color: colors.text, fontSize: 14, flexShrink: 1 },
-  hint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  hint: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger },
   kv: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
   rowGap: { flexDirection: 'row', gap: spacing.sm },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: colors.border },
-  chipOn: { backgroundColor: colors.accentLight, borderColor: 'transparent' },
+  chip: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  chipOn: { backgroundColor: colors.accentLight, borderColor: colors.accent },
   chipText: { color: colors.muted, fontWeight: '600', fontSize: 13 },
   chipTextOn: { color: colors.accentText },
   input: {
@@ -625,12 +690,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     color: colors.text,
     paddingHorizontal: spacing.md,
-    paddingVertical: 11,
-    fontSize: 14,
+    minHeight: 44,
+    paddingVertical: spacing.sm,
+    fontSize: 16,
   },
+  toolName: { flexShrink: 1, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: spacing.sm },
+  toolId: { color: colors.muted, fontSize: 11 },
   integration: { gap: 2, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   detail: { gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
-  smallBtn: { minHeight: 36, paddingHorizontal: spacing.md },
+  smallBtn: { minHeight: 44, paddingHorizontal: spacing.md },
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
   audit: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm, gap: 2 },
   auditEvent: { color: colors.text, fontSize: 13, fontWeight: '600' },

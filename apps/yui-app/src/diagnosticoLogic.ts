@@ -15,7 +15,7 @@ export const DIAGNOSTICO_ATUALIZA_MS = 30_000;
 
 export type Tom = 'ok' | 'atencao' | 'problema' | 'neutro';
 export interface Linha { rotulo: string; valor: string; tom?: Tom }
-export interface Item { titulo: string; detalhe?: string; tom?: Tom }
+export interface Item { titulo: string; detalhe?: string; tom?: Tom; /** A tela mostra rótulo à esquerda e valor à direita (em vez de título e detalhe empilhados). */ alinhado?: boolean }
 export interface Cartao { chave: string; titulo: string; selo?: { texto: string; tom: Tom }; linhas: Linha[]; itens?: Item[]; nota?: string }
 export interface VisaoDoDiagnostico { estado: EstadoGeral; geradoEm: string; cartoes: Cartao[] }
 
@@ -57,6 +57,18 @@ export function haQuanto(segundos: unknown): string {
   if (s === null || s < 0) return VAZIO;
   if (s < 5) return 'agora';
   return `há ${duracao(s)}`;
+}
+
+/** "1 erro" / "2 erros". */
+export const plural = (q: unknown, um: string, varios: string): string => { const x = numero(q); return `${x === null ? VAZIO : Math.round(x)} ${x !== null && Math.round(x) === 1 ? um : varios}`; };
+
+const NOMES: Record<string, string> = { omniroute: 'OmniRoute', gemini: 'Gemini', tavily: 'Tavily', groq: 'Groq', serper: 'Serper', openai: 'OpenAI', openrouter: 'OpenRouter', ia: 'IA', tool: 'Ferramenta', search: 'Busca', discord: 'Discord', api: 'App' };
+/** Nome de provedor ou etiqueta para a tela: os conhecidos com a grafia certa, os outros com inicial maiúscula. */
+export function nomeBonito(valor: unknown): string {
+  const t = seguro(valor, 40);
+  if (t === VAZIO) return t;
+  const k = t.toLowerCase();
+  return Object.hasOwn(NOMES, k) ? NOMES[k] : t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 const simNao = (v: unknown, sim = 'Sim', nao = 'Não'): string => (v === true ? sim : v === false ? nao : VAZIO);
@@ -223,7 +235,7 @@ function cartaoIa(d: Diagnostico): Cartao {
         : ia.algumDisponivel === true ? { texto: 'Provedor disponível', tom: 'ok' } : undefined,
     linhas: [
       { rotulo: 'Caminho em uso', valor: ia?.backendAtivo ? seguro(ia.backendAtivo, 40) : VAZIO },
-      { rotulo: 'Responderia agora', valor: ia?.provedorAtual ? seguro(ia.provedorAtual, 40) : ia?.gatewayConfigurado ? 'nenhum provedor disponível' : VAZIO, tom: ia?.gatewayConfigurado && !ia.provedorAtual ? 'problema' : undefined },
+      { rotulo: 'Responderia agora', valor: ia?.provedorAtual ? nomeBonito(ia.provedorAtual) : ia?.gatewayConfigurado ? 'nenhum provedor disponível' : VAZIO, tom: ia?.gatewayConfigurado && !ia.provedorAtual ? 'problema' : undefined },
       { rotulo: 'Chamadas aos provedores', valor: `${milhar(t.requests)} (${milhar(t.ok)} ok, ${milhar(t.failed)} com falha)` },
     ],
     itens: provedores.map((p) => {
@@ -234,8 +246,8 @@ function cartaoIa(d: Diagnostico): Cartao {
       return {
         titulo: `${seguro(p.rotulo || p.id, 40)}${p.anonimo === true ? ' (anônimo)' : ''}`,
         detalhe: [
-          `${disponiveis} de ${alvos.length} modelo(s) disponível(is)`,
-          `${n(p.chaves)} chave(s)${(numero(p.chavesEmDescanso) ?? 0) > 0 ? `, ${n(p.chavesEmDescanso)} em descanso` : ''}`,
+          `${disponiveis} de ${alvos.length} ${alvos.length === 1 ? 'modelo disponível' : 'modelos disponíveis'}`,
+          `${plural(p.chaves, 'chave', 'chaves')}${(numero(p.chavesEmDescanso) ?? 0) > 0 ? `, ${n(p.chavesEmDescanso)} em descanso` : ''}`,
           (numero(p.descansoSegundos) ?? 0) > 0 ? `em descanso por mais ${duracao(p.descansoSegundos)}` : '',
           comErro ? `último erro: ${comErro}` : '',
         ].filter(Boolean).join(' · '),
@@ -248,7 +260,7 @@ function cartaoIa(d: Diagnostico): Cartao {
 function cartaoLimites(d: Diagnostico): Cartao {
   const l = d.limitesDeTokens;
   const lista = (a: { provedor: string; limite: number; origem: string }[] | undefined): Item[] => (Array.isArray(a) ? a : []).slice(0, 30)
-    .map((x) => ({ titulo: seguro(x.provedor, 40), detalhe: `${milhar(x.limite)} tokens${x.origem ? ` · ${seguro(x.origem, 80)}` : ''}` }));
+    .map((x) => ({ titulo: nomeBonito(x.provedor), detalhe: `${milhar(x.limite)} tokens${x.origem ? ` · ${seguro(x.origem, 80)}` : ''}` }));
   const app = lista(l?.app?.provedores);
   const discord = l?.discord?.aplica === true ? lista(l.discord.provedores) : [];
   return {
@@ -256,8 +268,8 @@ function cartaoLimites(d: Diagnostico): Cartao {
     selo: l?.erroDeConfiguracao === true ? { texto: 'Configuração inválida (valendo o padrão)', tom: 'atencao' } : undefined,
     linhas: [
       { rotulo: 'Teto global', valor: numero(l?.teto) === null ? VAZIO : `${milhar(l.teto)} tokens` },
-      { rotulo: 'No Discord', valor: l?.discord?.aplica === true ? `${discord.length} provedor(es) abaixo` : 'usa os limites da cadeia do bot (processo único)' },
-      { rotulo: 'No app', valor: `${app.length} provedor(es) abaixo` },
+      { rotulo: 'No Discord', valor: l?.discord?.aplica === true ? `${plural(discord.length, 'provedor', 'provedores')} abaixo` : 'usa os limites da cadeia do bot (processo único)' },
+      { rotulo: 'No app', valor: `${plural(app.length, 'provedor', 'provedores')} abaixo` },
     ],
     itens: [...discord.map((i) => ({ ...i, titulo: `Discord · ${i.titulo}` })), ...app.map((i) => ({ ...i, titulo: `App · ${i.titulo}` }))],
   };
@@ -282,7 +294,7 @@ function cartaoCotas(d: Diagnostico): Cartao {
       { rotulo: 'Pesquisa na web', valor: p?.pesquisaDisponivel === true ? 'disponível' : p?.pesquisaDisponivel === false ? 'indisponível agora' : VAZIO, tom: p?.pesquisaDisponivel === false ? 'atencao' : undefined },
       ...(numero(c?.reservaPercentual) === null ? [] : [{ rotulo: 'Reserva para o /yui', valor: `${n(c.reservaPercentual)}% da cota` }]),
     ],
-    itens: mes.map((m) => ({ titulo: `${seguro(m.provedor, 40)} (mês)`, detalhe: `${milhar(m.usadas)} de ${milhar(m.teto)}`, tom: numero(m.teto) && (numero(m.usadas) ?? 0) >= (numero(m.teto) ?? 0) ? 'atencao' : 'ok' } as Item)),
+    itens: mes.map((m) => ({ titulo: `${nomeBonito(m.provedor)} (mês)`, alinhado: true, detalhe: `${milhar(m.usadas)} de ${milhar(m.teto)}`, tom: numero(m.teto) && (numero(m.usadas) ?? 0) >= (numero(m.teto) ?? 0) ? 'atencao' : 'ok' } as Item)),
   };
 }
 
@@ -301,7 +313,7 @@ function cartaoPerfis(d: Diagnostico, agora: number): Cartao | null {
         `combo ${x.combo ? seguro(x.combo, 40) : VAZIO}`,
         x.privacidade === 'privada' ? 'privado' : x.privacidade === 'geral' ? 'geral' : '',
         `limite ${numero(x.limiteEfetivo) === null ? VAZIO : `${milhar(x.limiteEfetivo)} tokens`}`,
-        `${n(x.chamadas)} chamada(s): ${n(x.ok)} ok, ${n(x.erros)} erro(s), ${n(x.fallbacks)} pelo caminho de sempre, ${n(x.fechadas)} fechada(s)`,
+        `${plural(x.chamadas, 'chamada', 'chamadas')}: ${n(x.ok)} ok, ${plural(x.erros, 'erro', 'erros')}, ${n(x.fallbacks)} pelo caminho de sempre, ${plural(x.fechadas, 'fechada', 'fechadas')}`,
         x.provedorCadastrado === false ? 'provedor da Yui não cadastrado' : '',
       ].filter(Boolean).join(' · '),
       tom: x.habilitado === false ? 'neutro' : x.provedorCadastrado === false ? 'atencao' : 'ok',
@@ -312,7 +324,7 @@ function cartaoPerfis(d: Diagnostico, agora: number): Cartao | null {
     selo: p.configurado === true ? { texto: 'Configurados', tom: erros.length ? 'atencao' : 'ok' } : { texto: 'Nenhum perfil configurado', tom: 'neutro' },
     linhas: [
       { rotulo: 'Origem da configuração', valor: p.origem === 'nenhuma' ? 'nenhuma' : p.origem === 'arquivo' ? 'arquivo' : p.origem === 'ambiente' ? 'variável de ambiente' : seguro(p.origem, 30) },
-      { rotulo: 'Chamadas por perfil', valor: `${n(t.chamadas)} (${n(t.ok)} ok, ${n(t.erros)} erro(s), ${n(t.fallbacks)} pelo caminho de sempre, ${n(t.fechadas)} fechada(s))` },
+      { rotulo: 'Chamadas por perfil', valor: `${n(t.chamadas)} (${n(t.ok)} ok, ${plural(t.erros, 'erro', 'erros')}, ${n(t.fallbacks)} pelo caminho de sempre, ${plural(t.fechadas, 'fechada', 'fechadas')})` },
     ],
     itens: [...itens, ...ultimas.map((c) => chamadaEmItem(c, agora))],
     nota: p.configurado === true ? 'Abaixo dos perfis, as últimas chamadas (a mais recente primeiro).' : 'Sem perfil configurado, a IA responde pelo caminho de sempre.',
@@ -364,17 +376,16 @@ function cartaoErros(d: Diagnostico): Cartao {
   const b = d.bancos;
   const por = (Array.isArray(e?.porEtiqueta) ? e.porEtiqueta : []).slice(0, 8);
   const comAlerta = (Array.isArray(b?.comAlerta) ? b.comAlerta : []).slice(0, 10).map((x) => seguro(x, 40));
-  const motores = Object.entries(b?.motores ?? {}).slice(0, 4).map(([k, v]) => `${v} ${k === 'nativo' ? 'nativo(s)' : k === 'sqljs' ? 'sql.js' : 'fechado(s)'}`);
   return {
     chave: 'erros', titulo: 'Erros e bancos',
     selo: (numero(e?.ultimas24h) ?? 0) >= 20 ? { texto: 'Muitos erros no log', tom: 'atencao' } : undefined,
     linhas: [
       { rotulo: 'Erros nas últimas 24 h', valor: n(e?.ultimas24h), tom: (numero(e?.ultimas24h) ?? 0) >= 20 ? 'atencao' : undefined },
       { rotulo: 'Reconexões do Discord (24 h)', valor: n(e?.reconexoesDoDiscord24h) },
-      { rotulo: 'Bancos de dados', valor: `${n(b?.total)}${motores.length ? ` (${motores.join(', ')})` : ''} · ${numero(b?.tamanhoTotalMB) === null ? VAZIO : `${b.tamanhoTotalMB} MB`}` },
+      { rotulo: 'Bancos de dados', valor: `${plural(b?.total, 'banco aberto', 'bancos abertos')}, ${numero(b?.tamanhoTotalMB) === null ? VAZIO : `${Math.round(b.tamanhoTotalMB)} MB`}` },
       { rotulo: 'Bancos com alerta', valor: comAlerta.length ? comAlerta.join(', ') : 'nenhum', tom: comAlerta.length ? 'atencao' : undefined },
     ],
-    itens: por.map((x) => ({ titulo: `[${seguro(x.etiqueta, 24)}]`, detalhe: `${n(x.quantidade)} erro(s)` })),
+    itens: por.map((x) => ({ titulo: nomeBonito(x.etiqueta), alinhado: true, detalhe: plural(x.quantidade, 'erro', 'erros') })),
   };
 }
 
@@ -382,7 +393,7 @@ function cartaoAvisos(d: Diagnostico): Cartao | null {
   const avisos = Array.isArray(d.avisosDeConfiguracao) ? d.avisosDeConfiguracao.slice(0, 10) : [];
   if (!avisos.length) return null;
   return {
-    chave: 'avisos', titulo: 'Avisos de configuração', selo: { texto: `${avisos.length} aviso(s)`, tom: 'atencao' }, linhas: [],
+    chave: 'avisos', titulo: 'Avisos de configuração', selo: { texto: plural(avisos.length, 'aviso', 'avisos'), tom: 'atencao' }, linhas: [],
     itens: avisos.map((a) => ({ titulo: seguro(a.variavel, 60), detalhe: `${seguro(a.problema, 160)} (valendo: ${typeof a.usando === 'number' ? String(a.usando) : seguro(a.usando, 60)})`, tom: 'atencao' } as Item)),
   };
 }

@@ -12,21 +12,21 @@ const web = Platform.OS === 'web';
 const v = (name: string, dark: string) => (web ? `var(--${name})` : dark);
 
 export const colors = {
-  bg: v('bg', '#08060e'),
-  surface: v('card', '#181222'),
-  surfaceAlt: v('card-2', '#221a30'),
-  border: v('line', '#32273f'),
+  bg: v('bg', '#0b0912'),
+  surface: v('card', '#14101d'),
+  surfaceAlt: v('card-2', '#1c1628'),
+  border: v('line', '#2c2339'),
   text: v('text', '#f4f0fa'),
-  muted: v('muted', '#9c93b3'),
+  muted: v('muted', '#a79fbd'),
   /** Destaque (vermelho). `accentText` é a versão legível sobre as superfícies. */
   accent: v('accent', '#8a3fe6'),
-  accentText: v('accent-text', '#c77dff'),
+  accentText: v('accent-text', '#c9a0ff'),
   accentLight: v('accent-light', 'rgba(138,63,230,0.24)'),
   /** Botão primário em pílula, no roxo da Yui com texto branco. */
   btnBg: v('btn-bg', '#8a3fe6'),
   btnFg: v('btn-fg', '#ffffff'),
-  inputBg: v('input-bg', '#221a30'),
-  danger: v('danger', '#ff5a5f'),
+  inputBg: v('input-bg', '#1c1628'),
+  danger: v('danger', '#ff7a7f'),
   dangerBg: v('danger-bg', 'rgba(255,90,95,0.14)'),
   dangerSolid: v('danger-solid', '#b42318'),
   success: v('success', '#3fb27f'),
@@ -38,8 +38,19 @@ export const colors = {
   yuiBubble: v('card-2', '#221a30'),
 } as const;
 
-export const radius = { sm: 8, md: 16, lg: 24, pill: 999 } as const;
-export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const;
+/** Raio único: controles e cartões usam o mesmo (md); pill só para marcadores e barras. */
+export const radius = { sm: 8, md: 10, lg: 10, pill: 999 } as const;
+/** Escala única de espaçamento (múltiplos de 4). */
+export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
+
+/** Escala tipográfica: título de tela, seção, corpo, rótulo de campo e apoio. */
+export const type = {
+  screen: { fontSize: 22, lineHeight: 28, fontWeight: '700' as const },
+  section: { fontSize: 16, lineHeight: 22, fontWeight: '700' as const },
+  body: { fontSize: 14, lineHeight: 20, fontWeight: '400' as const },
+  label: { fontSize: 13, lineHeight: 18, fontWeight: '600' as const },
+  caption: { fontSize: 12, lineHeight: 17, fontWeight: '400' as const },
+} as const;
 
 /** Montserrat nos títulos e Inter no texto (só na web; no Android usa a fonte do sistema). */
 export const fonts = {

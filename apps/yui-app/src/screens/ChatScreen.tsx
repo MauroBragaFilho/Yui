@@ -122,7 +122,7 @@ export function ChatScreen({ client }: Props) {
                   key={s}
                   accessibilityRole="button"
                   onPress={() => send(s)}
-                  style={(state: any) => [styles.example, state.hovered && { backgroundColor: colors.surfaceAlt }]}
+                  style={(state: any) => [styles.example, (state.hovered || state.focused) && { backgroundColor: colors.accentLight, borderColor: colors.accent }, state.pressed && { opacity: 0.85 }]}
                 >
                   <Text style={styles.exampleText}>{s}</Text>
                 </Pressable>
@@ -165,7 +165,7 @@ export function ChatScreen({ client }: Props) {
                 }
               : {})}
           />
-          <IconButton testID="btn-send" icon="arrow_upward" label="Enviar" filled onPress={() => send()} disabled={!input.trim() || busy} />
+          <IconButton testID="btn-send" icon="arrow_upward" label="Enviar" filled size={44} onPress={() => send()} disabled={!input.trim() || busy} />
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -222,10 +222,10 @@ function Bubble({
           ) : (
             <Text style={styles.pendingDone}>
               {message.pending.status === 'approved'
-                ? '✔ Confirmado'
+                ? 'Confirmado'
                 : message.pending.status === 'cancelled'
-                  ? '✖ Cancelado'
-                  : '⏱ Expirou'}
+                  ? 'Cancelado'
+                  : 'Expirou'}
             </Text>
           )
         ) : null}
@@ -236,28 +236,30 @@ function Bubble({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  newChat: { minHeight: 36, paddingHorizontal: spacing.lg },
+  newChat: { minHeight: 44, paddingHorizontal: spacing.lg },
   list: { padding: spacing.lg, gap: spacing.sm, flexGrow: 1, width: '100%', maxWidth: 860, alignSelf: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 64, gap: spacing.sm },
   emptyTitle: { color: colors.text, fontSize: 22, fontFamily: fonts.title, fontWeight: '700' },
   emptyText: { color: colors.muted, textAlign: 'center', maxWidth: 380, lineHeight: 20, fontSize: 14 },
   examples: { width: '100%', maxWidth: 380, gap: 6, marginTop: spacing.md },
   example: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: spacing.md,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
+    borderColor: colors.muted,
+    backgroundColor: colors.surface,
   },
-  exampleText: { color: colors.text, fontSize: 13 },
+  exampleText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   row: { flexDirection: 'row' },
   bubble: { maxWidth: '85%', borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 10, gap: spacing.sm, borderWidth: 1 },
   bubbleMine: { backgroundColor: colors.btnBg, borderColor: 'transparent' },
   bubbleYui: { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
   bubbleText: { fontSize: 14, lineHeight: 21 },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  actionBtn: { flex: 1, minHeight: 38 },
+  actionBtn: { flex: 1, minHeight: 44 },
   pendingDone: { color: colors.muted, fontSize: 12, marginTop: spacing.xs },
   typing: {
     flexDirection: 'row',
@@ -275,7 +277,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     maxHeight: 140,
-    minHeight: 40,
+    minHeight: 44,
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
     borderWidth: 1,
@@ -283,6 +285,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 16, // 16 px evita o zoom automático do iOS ao focar o campo
   },
 });

@@ -111,15 +111,15 @@ test('cérebro e bot: ligado há, bot ligado ao cérebro, Discord visto pelo bot
 test('IA: o provedor que responderia agora, os totais e, por provedor, os modelos disponíveis, o descanso e o último erro (tipo e HTTP, nunca o texto)', () => {
   const c = cartao(visaoDoDiagnostico(payload(), AGORA), 'ia');
   assert.deepEqual(c.selo, { texto: 'Provedor disponível', tom: 'ok' });
-  assert.equal(c.linhas.find((l) => l.rotulo === 'Responderia agora').valor, 'omniroute');
+  assert.equal(c.linhas.find((l) => l.rotulo === 'Responderia agora').valor, 'OmniRoute');
   assert.equal(c.linhas.find((l) => l.rotulo === 'Chamadas aos provedores').valor, '1.200 (1.150 ok, 50 com falha)');
   const [omni, groq] = c.itens;
   assert.equal(omni.titulo, 'OmniRoute (anônimo)');
-  assert.match(omni.detalhe, /1 de 1 modelo\(s\) disponível\(is\)/);
+  assert.match(omni.detalhe, /1 de 1 modelo disponível/);
   assert.match(omni.detalhe, /último erro: cota esgotada \(HTTP 429\)/);
   assert.equal(omni.tom, 'atencao');
   assert.equal(groq.tom, 'problema', 'nenhum modelo disponível = problema');
-  assert.match(groq.detalhe, /2 chave\(s\), 1 em descanso/);
+  assert.match(groq.detalhe, /2 chaves, 1 em descanso/);
   assert.match(groq.detalhe, /em descanso por mais 2 min/);
   assert.match(groq.detalhe, /último erro: tempo esgotado/);
   const sem = cartao(visaoDoDiagnostico(payload({ ia: { ...payload().ia, algumDisponivel: false, provedorAtual: null } }), AGORA), 'ia');
@@ -132,8 +132,8 @@ test('IA: o provedor que responderia agora, os totais e, por provedor, os modelo
 test('limites de tokens e cotas de busca: teto, Discord (só com o cérebro separado), app, hora, mês, disco e pesquisa indisponível', () => {
   const l = cartao(visaoDoDiagnostico(payload(), AGORA), 'limites');
   assert.equal(l.linhas.find((x) => x.rotulo === 'Teto global').valor, '4.096 tokens');
-  assert.ok(l.itens.some((i) => i.titulo === 'Discord · groq' && /1\.500 tokens/.test(i.detalhe)));
-  assert.ok(l.itens.some((i) => i.titulo === 'App · groq' && /1\.000 tokens · capacidade do provedor/.test(i.detalhe)));
+  assert.ok(l.itens.some((i) => i.titulo === 'Discord · Groq' && /1\.500 tokens/.test(i.detalhe)));
+  assert.ok(l.itens.some((i) => i.titulo === 'App · Groq' && /1\.000 tokens · capacidade do provedor/.test(i.detalhe)));
   const unico = cartao(visaoDoDiagnostico(payload({ limitesDeTokens: { ...payload().limitesDeTokens, discord: { aplica: false, provedores: [{ provedor: 'groq', limite: 9, configurado: 9, capacidade: 9, origem: 'x' }] } } }), AGORA), 'limites');
   assert.ok(!unico.itens.some((i) => i.titulo.startsWith('Discord')), 'no processo único o Discord não segue esta tabela');
   assert.match(unico.linhas.find((x) => x.rotulo === 'No Discord').valor, /cadeia do bot/);
@@ -155,9 +155,9 @@ test('perfis de IA: cada perfil (combo, limite, contadores) e as últimas chamad
   const c = cartao(visaoDoDiagnostico(payload(), AGORA), 'perfis');
   assert.deepEqual(c.selo, { texto: 'Configurados', tom: 'ok' });
   assert.equal(c.linhas[0].valor, 'arquivo');
-  assert.match(c.linhas[1].valor, /12 \(9 ok, 1 erro\(s\), 1 pelo caminho de sempre, 1 fechada\(s\)\)/);
+  assert.match(c.linhas[1].valor, /12 \(9 ok, 1 erro, 1 pelo caminho de sempre, 1 fechada\)/);
   const conversa = c.itens.find((i) => i.titulo === 'Perfil conversa');
-  assert.match(conversa.detalhe, /combo auto · geral · limite 1\.024 tokens · 10 chamada\(s\): 8 ok, 1 erro\(s\), 1 pelo caminho de sempre, 0 fechada\(s\)/);
+  assert.match(conversa.detalhe, /combo auto · geral · limite 1\.024 tokens · 10 chamadas: 8 ok, 1 erro, 1 pelo caminho de sempre, 0 fechadas/);
   assert.match(c.itens.find((i) => i.titulo === 'Perfil privado').detalhe, /privado/);
   const chamadas = c.itens.filter((i) => / · combo /.test(i.titulo) && /·.*há/.test(i.titulo));
   assert.equal(chamadas.length, 2);
@@ -217,8 +217,8 @@ test('motor do agente, erros e bancos, avisos de configuração', () => {
   assert.match(recusado.nota, /segue no motor nativo/);
   const e = cartao(visaoDoDiagnostico(payload(), AGORA), 'erros');
   assert.equal(e.linhas[0].valor, '3');
-  assert.match(e.linhas[2].valor, /^10 \(10 sql\.js\) · 12\.5 MB$/);
-  assert.deepEqual(e.itens.map((i) => i.titulo), ['[IA]', '[Search]']);
+  assert.match(e.linhas[2].valor, /^10 bancos abertos, 13 MB$/);
+  assert.deepEqual(e.itens.map((i) => i.titulo), ['IA', 'Busca']);
   assert.equal(cartao(visaoDoDiagnostico(payload({ erros: { ...payload().erros, ultimas24h: 25 } }), AGORA), 'erros').selo.tom, 'atencao');
   assert.equal(cartao(visaoDoDiagnostico(payload(), AGORA), 'avisos'), undefined, 'sem avisos, sem cartão');
   const a = cartao(visaoDoDiagnostico(payload({ avisosDeConfiguracao: [{ variavel: 'AI_MAX_TOKENS', problema: 'valor inválido', usando: 1500 }] }), AGORA), 'avisos');

@@ -10,7 +10,7 @@ import {
   type YuiClient,
 } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
-import { Badge, Button, Card, Chip } from '../components/ui.tsx';
+import { Badge, Button, Card, Chip, SectionHeading, StateView } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu errado.');
@@ -110,13 +110,13 @@ export function Radio({ client }: { client: YuiClient }) {
   if (!data) return <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />;
   return (
     <View style={styles.section}>
+      <SectionHeading title="Modo Rádio" right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} />} />
       <Text style={styles.hint}>Servidores em que o Modo Rádio está ativo. Escolher música e pular faixa continuam no menu do próprio rádio no Discord. A tela atualiza sozinha.</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {data.length === 0 ? <Text testID="radio-empty" style={styles.hint}>Nenhuma sessão de rádio ativa.</Text> : null}
+      {data.length === 0 ? <StateView testID="radio-empty" kind="empty" title="Nenhuma sessão de rádio ativa." /> : null}
       {data.map((s) => (
         <SessionCard key={s.guildId} s={s} client={client} reload={reload} />
       ))}
-      <Button label="Atualizar" variant="ghost" onPress={reload} />
     </View>
   );
 }
@@ -192,7 +192,7 @@ export function Logs({ client }: { client: YuiClient }) {
           onSubmitEditing={() => setSearch(q.trim())}
         />
         <Button testID="logs-search-btn" label="Buscar" onPress={() => setSearch(q.trim())} style={styles.smallBtn} />
-        <Button label="Atualizar" variant="ghost" onPress={load} loading={loading} style={styles.smallBtn} />
+        <Button label="Atualizar" variant="ghost" compact onPress={load} loading={loading} style={styles.smallBtn} />
       </View>
       {error ? <Text testID="admin-error" style={styles.error}>{error}</Text> : null}
       {data ? (
@@ -204,8 +204,8 @@ export function Logs({ client }: { client: YuiClient }) {
             {data.entries.length === 0 ? <Text style={styles.hint}>Nada para mostrar com esses filtros.</Text> : null}
             {data.entries.map((e, i) => (
               <View key={`${e.time}-${i}`} style={styles.logRow}>
-                <Text style={styles.logMeta}>
-                  {e.time.slice(5)} <Text style={{ color: LEVEL_COLOR[e.level] ?? colors.muted, fontWeight: '700' }}>{e.level.toUpperCase()}</Text>
+                <Text style={styles.logMeta} numberOfLines={1}>
+                  {horaDoLog(e.time)} <Text style={{ color: LEVEL_COLOR[e.level] ?? colors.muted, fontWeight: '700' }}>{e.level.toUpperCase()}</Text>
                 </Text>
                 <Text selectable style={[styles.logText, e.level === 'error' && { color: colors.danger }]}>{e.text}</Text>
               </View>
@@ -219,6 +219,9 @@ export function Logs({ client }: { client: YuiClient }) {
   );
 }
 
+/** Só HH:MM:SS (a data já é escolhida no filtro); sem hora legível, o texto original. */
+const horaDoLog = (t: string) => /(\d{2}:\d{2}:\d{2})/.exec(t)?.[1] ?? t;
+
 const MONO = Platform.select({ web: "ui-monospace, 'Cascadia Mono', Consolas, monospace", default: undefined });
 
 const styles = StyleSheet.create({
@@ -231,7 +234,7 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
   formRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  smallBtn: { minHeight: 36, paddingHorizontal: spacing.md },
+  smallBtn: { minHeight: 44, paddingHorizontal: spacing.md },
   input: {
     backgroundColor: colors.inputBg,
     borderColor: colors.border,
@@ -240,10 +243,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 14,
+    minHeight: 44,
+    fontSize: 16,
   },
   logCard: { padding: spacing.md, gap: 0 },
   logRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 2 },
-  logMeta: { color: colors.muted, fontSize: 11, fontFamily: MONO },
+  logMeta: { color: colors.muted, fontSize: 12, fontFamily: MONO, flexShrink: 0 },
   logText: { color: colors.text, fontSize: 12, lineHeight: 17, fontFamily: MONO },
 });
