@@ -40,6 +40,9 @@ const MIN_AUDIO_MS = 20;
 const MAX_TEXT_CHARS = 1000;
 const LOG_THROTTLE_MS = 10 * 60_000;
 
+/** Códigos de falha que significam "limite de uso do provedor" (429): o disjuntor abre na hora (ver recordFailure). */
+const RATE_LIMIT_CODES = new Set(['OMNIROUTE_RATE', 'RATE_LIMIT']);
+
 const BREAKER_DEFAULTS = Object.freeze({
   threshold: 3,
   windowMs: 2 * 60_000,
@@ -238,6 +241,14 @@ export function createEngine({ providers = [], config, logger, now, timers, env 
     s.failures = s.failures.filter((at) => t - at < brk.windowMs);
     s.failures.push(t);
     logThrottled(`fail:${p.name}`, 'warn', `[TTS] Provedor "${p.name}" falhou (${code}).`);
+    // 429 (cota do provedor de nuvem): é limite, não defeito. Abre o disjuntor NA HORA pelo tempo configurado (se houver) e as próximas falas vão direto ao
+    // provedor seguinte, sem martelar uma cota estourada a cada frase. Só nuvem; 0 = desligado (comportamento de sempre).
+    const waitMs = num(cfg.rateLimitWaitMs, 0);
+    if (waitMs > 0 && !isLocal(p) && RATE_LIMIT_CODES.has(code)) {
+      s.openUntil = Math.max(s.openUntil, t + waitMs);
+      logThrottled(`rate:${p.name}`, 'warn', `[TTS] Provedor "${p.name}" em espera por limite de uso (429): ${Math.round(waitMs / 1000)} s.`);
+      return;
+    }
     if (wasTrial || s.failures.length >= brk.threshold) {
       const ms = isLocal(p) ? brk.openLocalMs : brk.openCloudMs;
       s.openUntil = t + ms;

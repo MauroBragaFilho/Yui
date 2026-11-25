@@ -175,6 +175,9 @@ export function getTtsConfig(env = process.env) {
     // leve (GET /models, mesma rota e mesma chave da IA) mantém o processo dele na memória enquanto a Yui está numa call com a voz ligada.
     omnirouteWarmMinutes: int(env, 'YUI_TTS_OMNIROUTE_WARM_MINUTES', 5, 1, 240),
     omnirouteKeepaliveMinutes: int(env, 'YUI_TTS_OMNIROUTE_KEEPALIVE_MINUTES', 0, 0, 60),
+    // Espera (em ms) depois de um 429 de um provedor de nuvem: o disjuntor dele abre NA HORA por esse tempo, em vez de a cota estourada ser tentada de novo a cada frase.
+    // 0 (o padrão) = desligado: o comportamento de sempre (o disjuntor só abre depois de várias falhas). Em segundos na chave: YUI_TTS_ESPERA_429_S (0 a 600).
+    rateLimitWaitMs: int(env, 'YUI_TTS_ESPERA_429_S', 0, 0, 600) * 1000,
 
     // Prazo da 1ª frase (quanto a fala espera pela síntese antes de desistir e ficar só em texto) e o ORÇAMENTO DE NUVEM do motor: os provedores de
     // nuvem dividem `firstSentenceWaitMs - localReserveMs`; o provedor local (SAPI) nunca é pulado por falta de tempo. Abaixo de `cloudMinMs` de orçamento
