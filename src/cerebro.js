@@ -27,6 +27,8 @@ import { ownerUserId } from './core/api/auth.js';
 import { startGatewayServer } from './gateway/index.js';
 import { startChannelServer } from './core/channel/server.js';
 import { configureAlerts, alertOwner, crashAlertKey, describeReason, formatCrashDetail } from './core/alerts.js';
+import { criarFiltroDeAvisos, definirFiltroDoProcesso, iniciarDescarga, registrarMetodoDosAvisos } from './core/avisos/fila.js';
+import { jobAllowed } from './core/security/jobGuard.js';
 import { audit } from './core/audit.js';
 import { contextEnabled, contextFilesExist, initContextStore } from './core/context/contextStore.js';
 import { registerCerebroMethods } from './cerebro/metodos.js';
@@ -41,6 +43,9 @@ import { tabelaDeLimites, tetoGlobal, ajustesDoCerebro, avisarConfigDosLimites, 
 import { loadProviders } from './gateway/providers.js';
 import { createCerebroAdmin } from './cerebro/painel.js';
 import { startCerebroReminders } from './cerebro/lembretes.js';
+import { planosLigados } from './core/planos/pedido.js';
+import { criarStoreDePlanos } from './core/planos/store.js';
+import { registrarPlanos } from './cerebro/planos.js';
 import { iniciarMonitores } from './cerebro/monitores/index.js';
 import { iniciarEventos } from './cerebro/eventos.js';
 import { activateFakeAi } from './cerebro/iaFalsa.js';
@@ -64,6 +69,8 @@ let comentarios = null;
 let cotaHora = null;
 let monitores = null; // etapa 16 (proatividade, YUI_MONITORES): os monitores "me avisa quando..." do dono (null = desligados)
 let eventos = null; // etapa 16 (YUI_ALERTAS_EVENTOS): os alertas por evento (disco, memória, internet, religadas do supervisor)
+let descarga = null; // a descarga da fila dos avisos (YUI_AVISOS_FILTRO=ligar)
+let planos = null; // planos com aprovação (YUI_PLANOS; null = desligados)
 let shuttingDown = false;
 const startedAt = Date.now();
 
@@ -225,8 +232,13 @@ async function bootstrap() {
       try { channel?.emit('listas.dono', { cerebro: appComandosLigado(process.env) }, { role: 'bot' }); } catch { /* */ }
       setTimeout(() => { reminders?.tick('bot conectou').catch(() => {}); }, 100).unref?.();
       setTimeout(() => { monitores?.passada('bot conectou'); }, 300).unref?.();
+      setTimeout(() => { planos?.tick(); }, 400).unref?.();
     },
   });
+  // Avisos na hora certa (modo ligar): a fila é do cérebro; o bot entrega o aviso por este método.
+  const avisos = criarFiltroDeAvisos({ env: process.env, logger });
+  definirFiltroDoProcesso(avisos);
+  registrarMetodoDosAvisos(channel, avisos);
   const lembretesMudaram = () => { setTimeout(() => { reminders?.tick('pedido do dono').catch(() => {}); }, 50).unref?.(); };
   const methods = registerCerebroMethods(channel, { health: cerebroHealth, lembretesMudaram });
   // A conversa do Discord (etapa 5): chat.turn, chat.commit e chat.forgetVoice. O cérebro é o dono do contexto por horas e do histórico.
@@ -244,7 +256,7 @@ async function bootstrap() {
   // Os monitores (etapa 16, proatividade; YUI_MONITORES, padrão desligado = null): DEPOIS da cota por hora (as buscas deles passam pela mesma porta e
   // pela reserva própria) e ANTES da conversa (a pré-rota do chat.turn os usa). O aviso sai pelo bot, como o dos lembretes.
   // (uma função opcional que não sobe, por exemplo por um arquivo de estado que não abre, nunca derruba o cérebro: o erro vai para o log e o resto segue)
-  try { monitores = iniciarMonitores({ channel, logger, ownerId: ownerUserId(), budget: getDefaultBudget() }); } catch (err) { monitores = null; logger.error(`[Cérebro] os monitores não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
+  try { monitores = iniciarMonitores({ channel, logger, ownerId: ownerUserId(), budget: getDefaultBudget(), avisos }); } catch (err) { monitores = null; logger.error(`[Cérebro] os monitores não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
   const conversa = registerChatMethods(channel, { busca, retomada, ...(monitores ? { monitores } : {}) });
   chat = conversa.brain;
   const pesquisas = registerResearchMethods(channel, { chat, busca, retomada });
@@ -259,7 +271,7 @@ async function bootstrap() {
 
   // 4. Avisos ao dono: saem pelo bot (discord.dm.send). Sem o bot conectado, o aviso falha e fica na auditoria (alert.fail).
   const ownerId = ownerUserId();
-  configureAlerts({ ownerId, notify: (id, text) => dmThroughBot(id, text, 'alerta') });
+  configureAlerts({ ownerId, notify: (id, text) => dmThroughBot(id, text, 'alerta'), filtro: avisos });
 
   // 4b. Perfis de IA (etapa 9): se o dono declarou o perfil PRIVADO, a rota dele só liga depois de uma verificação prévia (uma sonda sem conteúdo privado,
   // pela mesma rota e chave do perfil, com o cabeçalho de decisão lido pelo leitor estrito). Em segundo plano: a subida não espera o OmniRoute. Sem a
@@ -269,7 +281,23 @@ async function bootstrap() {
   }
 
   // 5. Lembretes e relatório matinal (o cérebro é o dono do lembretes.json).
-  reminders = startCerebroReminders({ channel, logger, ownerId });
+  reminders = startCerebroReminders({ channel, logger, ownerId, avisos });
+  descarga = iniciarDescarga(avisos, {
+    podeAlertas: () => jobAllowed('alerts.send'),
+    podeResumo: () => jobAllowed('reminders.morning'),
+    enviar: async (texto, { idem }) => {
+      if (!ownerId || !channel.isConnected('bot')) return false;
+      if ((await channel.request('bot', 'discord.status', {}, { timeoutMs: 5_000 }))?.online !== true) return false;
+      const r = await channel.request('bot', 'discord.dm.send', { userId: String(ownerId), text: texto, motivo: 'alerta' }, { idem, timeoutMs: 30_000 });
+      if (r?.incerto) return { incerto: true };
+      return r?.sent === true || r?.repetido === true;
+    },
+  });
+  // Planos com aprovação (YUI_PLANOS, padrão desligado). Desligado, só se apaga o que sobrou de antes depois de 7 dias.
+  try {
+    if (planosLigados(process.env)) planos = registrarPlanos({ channel, logger });
+    else criarStoreDePlanos().limpar();
+  } catch (err) { planos = null; logger.error(`[Cérebro] os planos não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
   // 5b. Alertas por evento (etapa 16; YUI_ALERTAS_EVENTOS, padrão desligado = null): disco, memória, internet e religadas do supervisor, pelo alertOwner.
   try { eventos = iniciarEventos({ logger }); } catch (err) { eventos = null; logger.error(`[Cérebro] os alertas por evento não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
 
@@ -317,6 +345,8 @@ async function shutdown(reason) {
   const hard = setTimeout(() => process.exit(1), 10_000);
   hard.unref?.();
   try { reminders?.stop(); } catch { /* */ }
+  try { descarga?.parar(); } catch { /* */ }
+  try { planos?.parar(); } catch { /* */ }
   try { monitores?.parar(); } catch { /* */ }
   try { eventos?.parar(); } catch { /* */ }
   try { cotaHora?.parar(); } catch { /* */ }

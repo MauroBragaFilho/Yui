@@ -2,7 +2,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { redact } from './api/panelLogs.js';
 import { audit } from './audit.js';
-import { observarAviso } from './avisos/observar.js';
+import { modoDoFiltro, observarAviso } from './avisos/observar.js';
+import { CLASSES, classeDaChave } from './avisos/regras.js';
 import { jobAllowed } from './security/jobGuard.js';
 
 /**
@@ -114,7 +115,7 @@ export function isHarmlessNetworkCrash(reason, { root = PROJECT_ROOT } = {}) {
 
 const ICON = { info: 'ℹ️', warn: '⚠️', error: '🚨' };
 
-export function createAlerter({ notify = null, ownerId = null, env = process.env, now = () => Date.now(), maxPerHour = 10 } = {}) {
+export function createAlerter({ notify = null, ownerId = null, env = process.env, now = () => Date.now(), maxPerHour = 10, filtro = null } = {}) {
   const last = new Map(); // chave -> quando foi avisado
   let sent = []; // horários dos avisos da última hora
   const defaultCooldown = Math.max(1, Number(env.YUI_ALERTS_COOLDOWN_MINUTES) || 30) * 60 * 1000;
@@ -122,9 +123,9 @@ export function createAlerter({ notify = null, ownerId = null, env = process.env
   const enabled = () => String(env.YUI_ALERTS ?? 'true').toLowerCase() !== 'false' && Boolean(notify && ownerId);
 
   /**
-   * @returns {Promise<boolean>} true se a mensagem foi enviada.
+   * @returns {Promise<boolean|'adiado'>} true se a mensagem foi enviada; 'adiado' (só com YUI_AVISOS_FILTRO=ligar) se ficou guardada na fila para depois.
    */
-  async function alert(key, title, detail = '', { level = 'warn', cooldownMinutes = null } = {}) {
+  async function alert(key, title, detail = '', { level = 'warn', cooldownMinutes = null, confirmado = false, ocorrencia = '' } = {}) {
     if (!enabled()) return false;
     if (!jobAllowed('alerts.send')) return false; // motor de políticas (jobGuard)
     const t = now();
@@ -140,6 +141,22 @@ export function createAlerter({ notify = null, ownerId = null, env = process.env
     const text = [`${ICON[level] ?? ICON.warn} **Yui: ${title}**`, body ? `\n${body}` : '']
       .filter(Boolean)
       .join('\n');
+    // Avisos na hora certa (modo ligar): o crítico não consulta ninguém; qualquer falha do filtro vale "enviar".
+    const filtrar = filtro && modoDoFiltro(env) === 'ligar' && classeDaChave(key) !== CLASSES.CRITICO;
+    const consultar = async (extra) => {
+      try { return (await filtro.filtrar({ chave: key, texto: text, confirmado, ocorrencia, ...extra }))?.acao; } catch { return 'enviar'; }
+    };
+    const guardado = () => {
+      const i = sent.indexOf(t);
+      if (i >= 0) sent.splice(i, 1); // o que ficou na fila não gasta o teto por hora
+      audit('alert.adiado', null, { key });
+      return 'adiado';
+    };
+    if (filtrar) {
+      const acao = await consultar();
+      if (acao === 'adiado') return guardado();
+      if (acao === 'enviado') return true; // já saiu pela fila (só para quem pede confirmação)
+    }
     try {
       await notify(ownerId, text);
       audit('alert.sent', null, { key });
@@ -147,6 +164,7 @@ export function createAlerter({ notify = null, ownerId = null, env = process.env
       return true;
     } catch (err) {
       audit('alert.fail', null, { key, error: String(err?.message ?? err).slice(0, 100) });
+      if (filtrar && (await consultar({ falhou: true })) === 'adiado') return guardado();
       return false;
     }
   }
@@ -213,12 +231,13 @@ export function alertOwner(key, title, detail = '', options = {}) {
 }
 
 /**
- * Como `alertOwner`, mas devolve a Promise<boolean>: `true` SÓ se a mensagem foi de fato enviada (`false` = desligado, no intervalo, no teto por hora ou a DM falhou). Nunca lança.
+ * Como `alertOwner`, mas devolve a Promise: `true` SÓ se a mensagem foi de fato enviada (`false` = desligado, no intervalo, no teto por hora ou a DM falhou;
+ * 'adiado' = guardada pelo filtro, ainda não saiu: repetir depois devolve `true` quando tiver saído). Nunca lança.
  * Para quem precisa saber se o aviso chegou (o aviso de autorização expirada do Google repete até a entrega ser confirmada). Atenção: o intervalo do `key` é consumido
  * antes do envio (veja o topo), então quem repete deve usar um `cooldownMinutes` menor que o seu próprio intervalo de repetição.
  */
 export function alertOwnerConfirmado(key, title, detail = '', options = {}) {
-  return current.alert(key, title, detail, options).catch(() => false);
+  return current.alert(key, title, detail, { ...options, confirmado: true }).catch(() => false);
 }
 
 export function alertsEnabled() {

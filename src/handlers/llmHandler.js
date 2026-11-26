@@ -33,6 +33,8 @@ import { isOwnerId } from '../core/permissions.js';
 import { routeModList } from './modListResolver.js';
 import { routeLibrary } from './libraryIntent.js';
 import { routeLists } from './listAssistant.js';
+import { planosLigados, pedidoDePlano } from '../core/planos/pedido.js';
+import { portaDePlanos } from '../core/planos/porta.js';
 import { routeReminders, formatReminderList, scopedReminderStore, getReminderStore, reminderTextFromTool, isRemindersRemote, listRemindersFor } from '../reminders/assistant.js';
 import { logger } from '../utils/logger.js';
 import { getMediaUserMessage, formatDeezerDelivery, codeSafe, isUploadTooLargeError, MEDIA_MESSAGES } from '../utils/mediaUrls.js';
@@ -2715,6 +2717,22 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         // (cobre a mensagem que chegou enquanto o pedido ainda estava na fila, e a fala por voz).
         if (hasForgetAllPending(userId) && detectMemoryIntent(ownQuestion, { direct: directToYui, voice: isVoice, pendingForgetAll: true }).kind === 'none') {
             clearForgetAllPending(userId);
+        }
+        // Porta P (planos com aprovação, YUI_PLANOS): "monta um plano: ..." na DM do dono. Antes das outras portas para elas não pegarem um pedaço do pedido.
+        if (planosLigados() && directToYui && !isVoice && interaction?.isVoice !== true && !guildId && !options.guildId && isOwnerId(userId) && options.radioMode !== true && options.thirdPartyPrompt !== true && options.disableTools !== true && !options.attachmentBlock && !(interaction?.attachments?.size > 0) && pedidoDePlano(ownQuestion)) {
+            // Aprovação automática (YUI_PLANOS_AUTO): só mensagem comum escrita pelo próprio dono; comando, resposta, encaminhada ou figurinha fica nos botões.
+            const digitado = type === 'mention' && interaction?.author?.id === userId && interaction.author.bot !== true && !interaction.webhookId
+                && !interaction.reference && !(interaction.messageSnapshots?.size > 0) && !(interaction.stickers?.size > 0);
+            let plano;
+            try {
+                plano = portaDePlanos() ? await portaDePlanos().rotear({ userId, texto: ownQuestion, idem: interaction?.id, digitado }) : { handled: true, text: 'Os planos estão indisponíveis agora.' };
+            } catch (_) {
+                plano = { handled: true, text: 'Os planos estão indisponíveis agora.' };
+            }
+            if (plano?.handled) {
+                await unifiedReply(plano.text);
+                return;
+            }
         }
         // Porta L (listas pessoais): "anota na lista X: ...", "mostra a lista X", "tira o item 3...": o CÓDIGO executa no arquivo da própria pessoa; nada vai ao histórico nem ao contexto.
         if (directToYui && !isVoice && options.radioMode !== true && options.thirdPartyPrompt !== true && ownQuestion) {

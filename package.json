@@ -101,6 +101,8 @@
     "test:panel": "node tests/test-panel.js",
     "test:alerts": "node tests/test-alerts.js",
     "test:avisos": "node tests/test-avisos.js",
+    "test:avisosfila": "node tests/test-avisos-fila.js",
+    "test:planos": "node tests/test-planos.js",
     "test:gateway": "node tests/test-gateway.js",
     "test:config": "node tests/test-config.js",
     "test:vision": "node tests/test-vision.js",

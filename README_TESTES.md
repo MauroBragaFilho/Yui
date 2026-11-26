@@ -26,7 +26,9 @@ npm run test:skillspadrao # etapa 14 (item 4a), num processo só: o carregador d
 npm run test:skillscerebro # etapa 14 (item 4a), a conversa do cérebro com a IA falsa: chave YUI_SKILLS desligada = chamada de IA idêntica; ligada, só o dono em conversa privada e dirigida à Yui usa a skill (bloco rotulado, sem ferramentas, `skill.usada` na auditoria); membro, público, voz, espontânea e terceiros nunca; lista por código; permitidas e pastas extras; o texto da skill não fecha o bloco
 npm run test:dev          # Código (as funções do Jarvis): projetos, arquivos, comandos, aprovação, rotas /v1/dev
 npm run test:alerts       # avisos automáticos por DM
-npm run test:avisos       # avisos na hora certa (modo observar)
+npm run test:avisos       # avisos na hora certa (regras e modo observar)
+npm run test:avisosfila   # avisos na hora certa ligados (fila em disco e descarga)
+npm run test:planos       # planos com aprovação (só leitura): botões, aprovação automática, reinício no meio, injeção, arquivo corrompido
 npm run test:discordreconnect # reconexão do Discord: rede caindo no meio do handshake não vira "Erro grave" (sem rede, servidor local)
 npm run test:dmowner      # privado (DM): só o dono conversa com a Yui
 npm run test:gateway      # Yui Gateway: failover, cooldown, streaming, servidor HTTP
@@ -225,6 +227,8 @@ node tests/test-weekly-combined-embed.js   # composição de todas as páginas
 | `test:approvals` | 19 | Tickets de uso único (validade, hash, HMAC, replay, concorrência, adulteração), canal local (segredo, proxy, Host, trava), CLI e fluxo API + módulo Código |
 | `test:dev` | 70 | Código: workspace sem escapar da pasta, `SEARCH/REPLACE`, política de comandos, laço do agente, projetos, histórico, execução com aprovação (somente leitura, negar, expirar, cancelar, remoto), rotas `/v1/dev/*` e `403` para membros |
 | `test:alerts` | 24 | Avisos ao dono: intervalo, teto por hora, máscara de segredos, desligar, chave pela causa-raiz, origem no código da Yui |
+| `test:avisosfila` | 9 | Avisos ligados (dublês, pasta temporária, sem rede): desligado não cria nada, silêncio que cruza a meia-noite e reinício, saída só com confirmação, incerto, falha de envio, teto e resumo, fila ilegível, cérebro fora, monitor sem contar tentativa |
+| `test:planos` | 24 | Planos com aprovação (dublês, pasta temporária, sem rede): pedido conservador, chave desligada, proposta inválida, política, clique duplo e botão velho, validade, reinício no meio, tempo esgotado, injeção por resultado, arquivo corrompido, apagar a memória, canal do cérebro, botões do Discord e aprovação automática (YUI_PLANOS_AUTO: só o plano, origem não digitada, entrega incerta, cancelamento) |
 | `test:avisos` | 11 | Avisos na hora certa (modo observar): toda chave de alerta do código tem classe, decisão com silêncio e teto, desligado por padrão, o envio não muda e a linha do log não leva conteúdo |
 | `test:discordreconnect` | 9 | Reconexão do Discord: reproduz com a `@discordjs/ws` real a conexão órfã que virava "Opening handshake has timed out", confere a proteção (`src/discord/gatewayGuard.js`) e o filtro que tira essa falha de rede da DM de "Erro grave" |
 | `test:dmowner` | 4 | Privado: só o dono conversa com a Yui no DM; outras pessoas são ignoradas em silêncio |

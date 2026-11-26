@@ -23,6 +23,7 @@
 // Não depende de foreign_keys: as falas do fio são apagadas explicitamente.
 //
 // VARIÁVEIS: YUI_CONTEXT_ENABLED, YUI_CONTEXT_SCOPE, YUI_CONTEXT_TTL_HOURS, YUI_CONTEXT_MAX_CHARS, YUI_CONTEXT_MAX_TURNS.
+import { apagarPlanosDe } from '../planos/store.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -865,6 +866,7 @@ export function recordContextExchangeOnce(target, payload = {}) {
 export async function forgetUserContext(userId) {
   if (!userId) return { scopes: 0, turns: 0 };
   if (contextRemote) return contextRemote.forgetUser(String(userId)); // o cérebro é o dono dos arquivos (pode lançar: quem chama trata)
+  apagarPlanosDe(userId); // planos com aprovação (sem arquivo, nada acontece)
   // Arquivo corrompido guardado de lado pode ter falas dela e ninguém o lê mais: no apagar-tudo some inteiro (não espera as 48 h).
   purgeCorruptContextFiles({ maxAgeMs: 0 });
   if (!contextEnabled() && !contextFilesExist() && !defaultStore) return { scopes: 0, turns: 0 };

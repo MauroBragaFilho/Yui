@@ -20,12 +20,14 @@ import path from 'node:path';
 import { startGatewayServer } from './gateway/index.js';
 import { applyAiSettings } from './core/aiSettings.js';
 import { isChromeProfileCleanupError } from './utils/chromeProfile.js';
-import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail, isHarmlessNetworkCrash } from './core/alerts.js';
+import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail, isHarmlessNetworkCrash, sendOwnerMessage } from './core/alerts.js';
+import { criarFiltroDeAvisos, criarFiltroRemoto, definirFiltroDoProcesso, iniciarDescarga } from './core/avisos/fila.js';
 import { ownerUserId } from './core/api/auth.js';
 import { jobAllowed } from './core/security/jobGuard.js';
 import { setLegacyBridge } from './core/ai/manager.js';
 import { avisarConfigDosLimites } from './core/ai/limitesTokens.js';
 import { ligarCotaHora } from './search/cotaHora.js';
+import { planosLigados } from './core/planos/pedido.js';
 import { cerebroExterno, prepareSeparatedBot } from './discord/modoSeparado.js';
 
 // Ponte do Core para a cadeia de IA legada do bot (llmHandler): o Core não importa o bot, quem roda o bot instala.
@@ -268,7 +270,46 @@ async function bootstrap() {
 
   // 3.1 Avisos automáticos ao dono (DM) quando algo der errado
   const alertOwnerId = ownerUserId();
-  configureAlerts({ ownerId: alertOwnerId, notify: async (id, text) => (await client.users.fetch(id)).send(text) });
+  // Avisos na hora certa (modo ligar): com o cérebro separado a fila é dele e o bot só pergunta; no processo único é daqui.
+  const avisos = SEPARADO ? criarFiltroRemoto(cerebroChannel) : criarFiltroDeAvisos({ logger });
+  configureAlerts({ ownerId: alertOwnerId, notify: async (id, text) => (await client.users.fetch(id)).send(text), filtro: avisos });
+  if (!SEPARADO) {
+    definirFiltroDoProcesso(avisos);
+    iniciarDescarga(avisos, {
+      enviar: (text) => (client.isReady?.() ? sendOwnerMessage(text) : false),
+      podeAlertas: () => jobAllowed('alerts.send'),
+      podeResumo: () => jobAllowed('reminders.morning'),
+    });
+  }
+  // Planos com aprovação (YUI_PLANOS). Processo único: o serviço roda aqui; separado: roda no cérebro (a porta é o canal).
+  if (!SEPARADO) {
+    try {
+      if (planosLigados()) {
+        const { iniciarPlanos } = await import('./core/planos/servico.js');
+        const { definirPortaDePlanos } = await import('./core/planos/porta.js');
+        const { mensagemDoPlano } = await import('./discord/planosDiscord.js');
+        const { splitForDiscord } = await import('./core/alerts.js');
+        const dm = async (id, conteudo) => {
+          if (!client.isReady?.() || String(id) !== String(alertOwnerId)) return false;
+          await (await client.users.fetch(id)).send(conteudo);
+          return true;
+        };
+        definirPortaDePlanos(iniciarPlanos({
+          canal: {
+            entregarPlano: (id, dados) => dm(id, mensagemDoPlano(dados)),
+            enviarTexto: async (id, texto) => {
+              for (const parte of splitForDiscord(texto)) if (!(await dm(id, { content: parte, allowedMentions: { parse: [] } }))) return false;
+              return true;
+            },
+          },
+        }));
+      } else {
+        (await import('./core/planos/store.js')).criarStoreDePlanos().limpar();
+      }
+    } catch (err) {
+      logger.warn(`[Bootstrap] Planos indisponíveis: ${String(err?.message ?? err).slice(0, 100)}`);
+    }
+  }
   alertOwner('boot', 'Estou no ar', 'A Yui acabou de iniciar (ou reiniciar) e já está conectada ao Discord.', { level: 'info', cooldownMinutes: 5 });
   if (mediaStatus && !mediaStatus.opusOk) {
     alertOwner(

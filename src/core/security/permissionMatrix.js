@@ -73,6 +73,12 @@ const ROWS = [
   ['job.data_cleanup', false, 'ADDDD', true],
   ['job.cleanup_files', false, 'ADDDD', true],
   ['job.maintenance', true, 'ADDDD', true],
+  // Planos com aprovação (YUI_PLANOS, só leitura): as leituras que ainda não tinham linha. Só o dono.
+  ['plan.agenda_read', false, 'AAADD', true],
+  ['plan.tasks_read', false, 'AAADD', true],
+  ['plan.web_search', false, 'AAADD', true],
+  ['plan.reminders_read', false, 'AAADD', true],
+  ['plan.lists_read', false, 'AAADD', true],
   ['bds.read', false, 'AAADD', true],
   ['bds.write', true, 'SSDDD', true],
   ['bds.delete', true, 'SSDDD', true],

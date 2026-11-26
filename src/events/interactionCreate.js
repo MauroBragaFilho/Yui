@@ -1,4 +1,5 @@
 ﻿import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
+import { ehResultadoDePlano } from '../core/planos/pedido.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import config from '../config.js';
@@ -172,7 +173,7 @@ export function extractAiComment(rawComment) {
 
 /** Mensagens do Discord (em ordem cronológica) no formato do buildChatLog: { time, user, content }. */
 export function toLogEntries(messages) {
-    return (Array.isArray(messages) ? messages : []).map((msg) => ({
+    return (Array.isArray(messages) ? messages : []).filter((msg) => !(msg?.author?.bot && ehResultadoDePlano(msg.content))).map((msg) => ({
         time: msg && msg.createdAt ? msg.createdAt.toLocaleString('pt-BR', { timeZone: fusoDoDono() }) : '',
         user: msg && msg.author ? msg.author.username : '',
         content: msg ? msg.content : ''
@@ -546,6 +547,10 @@ export default {
         }
         if (interaction.isButton()) {
             const cid = interaction.customId;
+            if (cid.startsWith('plano_')) {
+                const { handlePlanoButton } = await import('../discord/planosDiscord.js');
+                return await handlePlanoButton(interaction);
+            }
             if (cid.startsWith('radio_')) {
                 if (cid.startsWith('radio_ambiguous_cancel_')) {
                     return await handleAmbiguousSelect(interaction, client);

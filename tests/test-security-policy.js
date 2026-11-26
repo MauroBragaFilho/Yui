@@ -40,7 +40,7 @@ await test('toda linha tem as 5 colunas com um estado válido; as 15 da especifi
     for (const d of Object.values(row.decisions)) assert.ok([AUTO, ASK, CRITICAL, DENY].includes(d), `${row.action}: ${d}`);
   }
   assert.equal([...MATRIX.values()].filter((r) => !r.proposed).length, 15);
-  assert.ok([...MATRIX.values()].filter((r) => r.proposed).every((r) => ['system', 'files', 'projects', 'commands', 'apps', 'skills', 'memory', 'admin', 'bds', 'media', 'job'].includes(r.action.split('.')[0])));
+  assert.ok([...MATRIX.values()].filter((r) => r.proposed).every((r) => ['system', 'files', 'projects', 'commands', 'apps', 'skills', 'memory', 'admin', 'bds', 'media', 'job', 'plan'].includes(r.action.split('.')[0])));
 });
 
 await test('exemplos da especificação §1.2', () => {

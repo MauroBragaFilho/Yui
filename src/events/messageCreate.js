@@ -15,6 +15,7 @@ import { observarParaApagarTudo } from '../handlers/chatIntents.js';
 import { isOwnerId } from '../core/permissions.js';
 import { fusoDoDono } from '../core/fuso.js';
 import { describeImages } from '../services/vision.js';
+import { ehResultadoDePlano } from '../core/planos/pedido.js';
 
 // ---------------------------------------------------------------------------------------------
 // Bloco CONTEXTO: teto de caracteres
@@ -479,6 +480,7 @@ export default {
                 const longIds = longContextIds(sortedMessages, { repliedId: repliedMessage?.id ?? null, authorId: message.author.id });
                 for (const msg of sortedMessages) {
                     const isBot = msg.author.id === client.user.id;
+                    if (isBot && ehResultadoDePlano(msg.content)) continue; // dados lidos por um plano não vão à IA
                     const authorName = isBot ? 'Yui' : msg.author.username;
                     let content = resolveMentions(msg.content, client);
                     if (isBot && (content.includes('erro ao processar seu pedido') || content.includes('Limites de Processamento Atingidos') || content.includes('Desculpe, tive um erro'))) {
@@ -553,6 +555,7 @@ export default {
                         const longIds = longContextIds(orderedRecent, { authorId: message.author.id });
                         orderedRecent.forEach(msg => {
                             const isBot = msg.author.id === client.user.id;
+                            if (isBot && ehResultadoDePlano(msg.content)) return;
                             const authorName = isBot ? 'Yui' : msg.author.username;
                             let content = resolveMentions(msg.content, client);
                             if (isBot && (content.includes('erro ao processar seu pedido') || content.includes('Limites de Processamento Atingidos') || content.includes('Desculpe, tive um erro'))) {

@@ -7,6 +7,7 @@
 import { sendOwnerMessage, sendUserMessage } from '../core/alerts.js';
 import { audit } from '../core/audit.js';
 import { observarAviso } from '../core/avisos/observar.js';
+import { filtroDoProcesso } from '../core/avisos/fila.js';
 import { guardedJob } from '../core/security/jobGuard.js';
 import { ownerUserId } from '../core/api/auth.js';
 import { buildHealthReport, collectHealth, sendHealthReport, healthReportSchedule } from '../core/healthReport.js';
@@ -33,7 +34,7 @@ export function createMorningComposer({ client = null, env = process.env } = {})
   });
 }
 
-export function startReminderService({ cron, client = null, logger, env = process.env } = {}) {
+export function startReminderService({ cron, client = null, logger, env = process.env, avisos = filtroDoProcesso() } = {}) {
   const schedule = (name, expr, fn, options) => cron.schedule(expr, guardedJob(name, fn), options);
   // 1) lembretes: a cada minuto
   let busy = false;
@@ -53,12 +54,17 @@ export function startReminderService({ cron, client = null, logger, env = proces
   const morning = morningSchedule(env);
   if (morning) {
     const compose = createMorningComposer({ client, env });
-    const run = () => sendMorningReport({ send: sendOwnerMessage, compose })
+    // Avisos na hora certa (modo ligar): o filtro guarda a retomada do resumo, compõe na hora de enviar e repete se não sair.
+    avisos?.definirResumo(async (secao) => {
+      const r = await sendMorningReport({ send: (text) => sendOwnerMessage(`${text}${secao}`), compose });
+      return { ok: r.ok, secaoConfirmada: r.ok };
+    });
+    const run = () => (avisos?.agendarResumo() ? avisos.passada() : sendMorningReport({ send: sendOwnerMessage, compose })
       .then((r) => {
         if (!r.ok) logger.warn('[Matinal] A DM do relatório não saiu (Discord fora?).');
         else observarAviso({ chave: 'matinal', env });
       })
-      .catch((err) => logger.warn(`[Matinal] Falha: ${err.message}`));
+      .catch((err) => logger.warn(`[Matinal] Falha: ${err.message}`)));
     schedule('reminders.morning', morning.cron, run, { timezone: morning.timezone });
     // depois de uma queda ou reinício de manhã, manda assim que der (uma vez por dia)
     setTimeout(() => { if (shouldCatchUp(new Date(), morning)) run(); }, 3 * 60 * 1000);

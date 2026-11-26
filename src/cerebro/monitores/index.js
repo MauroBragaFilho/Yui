@@ -47,7 +47,7 @@ export function vistaDoMonitor(m) {
  */
 export function iniciarMonitores({
   channel, logger = null, ownerId = null, env = process.env, buscar = null, budget = null, store = null, now = () => Date.now(),
-  tickMs = tickDosMonitoresMs(env), audit = auditoria, permitido = jobAllowed, engine = undefined, liberada = undefined, scrub = undefined,
+  tickMs = tickDosMonitoresMs(env), audit = auditoria, permitido = jobAllowed, engine = undefined, liberada = undefined, scrub = undefined, avisos = null,
 } = {}) {
   if (!monitoresLigados(env)) return null;
   const estado = store ?? criarStoreDeMonitores({ env, now, logger, ...(scrub ? { scrub } : {}) });
@@ -67,7 +67,7 @@ export function iniciarMonitores({
   }
 
   const executor = criarExecutor({
-    store: estado, enviar, ownerId, env, now, budget,
+    store: estado, enviar, ownerId, env, now, budget, avisos,
     buscar: buscar ?? ativarBuscaFalsaDosMonitores({ env, logger }),
     audit, logger, canalPronto, passadaPermitida: () => permitido('monitores.tick'), liberada: aLiberada, ...(scrub ? { scrub } : {}),
   });

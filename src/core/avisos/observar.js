@@ -2,7 +2,7 @@
 // continua sendo enviado como hoje. Os pontos de saída chamam `observarAviso` DEPOIS do envio confirmado; ela é síncrona, não devolve nada que
 // mude o envio e nunca lança.
 //
-// YUI_AVISOS_FILTRO: off (padrão; qualquer outro valor também) ou observar. YUI_SILENCIO (23-07), YUI_AVISOS_POR_DIA (8), no fuso YUI_FUSO.
+// YUI_AVISOS_FILTRO: off (padrão; qualquer outro valor também), observar ou ligar (fila.js; aqui nada é registrado). YUI_SILENCIO (23-07), YUI_AVISOS_POR_DIA (8), no fuso YUI_FUSO.
 // Privacidade: a linha do log leva só o prefixo da chave, a classe e a decisão. Nunca título, texto, usuário ou conteúdo.
 // O uso do dia fica só em memória, POR PROCESSO (bot e cérebro contam cada um o seu) e recomeça a cada reinício.
 import { logger } from '../../utils/logger.js';
@@ -15,7 +15,8 @@ let uso = usoVazio();
 let aEntregar = { dia: '', total: 0 };
 
 export function modoDoFiltro(env = process.env) {
-  return String(env?.YUI_AVISOS_FILTRO ?? '').trim().toLowerCase() === 'observar' ? 'observar' : 'off';
+  const v = String(env?.YUI_AVISOS_FILTRO ?? '').trim().toLowerCase();
+  return v === 'observar' || v === 'ligar' ? v : 'off';
 }
 
 /** Só para teste. */
@@ -27,7 +28,7 @@ export function reiniciarUsoDosAvisos() { uso = usoVazio(); aEntregar = { dia: '
  */
 export function observarAviso({ chave, destinatario = 'dono', env = process.env, agora = Date.now(), log = logger } = {}) {
   try {
-    if (modoDoFiltro(env) !== 'observar') return null;
+    if (modoDoFiltro(env) !== 'observar') return null; // em "ligar" quem decide e registra é a fila
     const fuso = fusoDoDono(env);
     const dia = chaveDoDia(agora, fuso);
     if (dia !== uso.dia) uso = usoVazio(dia, aEntregar.dia === dia ? aEntregar.total : 0);

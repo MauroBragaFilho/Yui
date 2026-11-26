@@ -90,7 +90,7 @@ export function textoDoFim(monitor) {
  */
 export function criarExecutor({
   store, enviar, ownerId, env = process.env, now = () => Date.now(), buscar = null, budget = null,
-  audit = () => {}, logger = null, canalPronto = () => true, passadaPermitida = () => true, liberada = undefined, scrub = undefined,
+  audit = () => {}, logger = null, canalPronto = () => true, passadaPermitida = () => true, liberada = undefined, scrub = undefined, avisos = null,
 } = {}) {
   const pesquisaLiberada = typeof liberada === 'function' ? liberada : () => pesquisaPrivadaLiberada(ownerId);
   const orcamento = budget ?? getDefaultBudget();
@@ -133,7 +133,7 @@ export function criarExecutor({
   }
 
   async function entregar(m) {
-    const r = await entregarAviso({ store, id: m.id, enviar, texto: textoDoAviso, now, audit, logger });
+    const r = await entregarAviso({ store, id: m.id, enviar, texto: textoDoAviso, now, audit, logger, avisos });
     if (r.resultado === 'enviado') { contadores.avisosEnviados += 1; if (r.reconciliado) contadores.avisosReconciliados += 1; }
     if (r.resultado === 'incerto') contadores.avisosIncertos += 1;
     return r;

@@ -24,7 +24,7 @@ const scripts = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf
 
 /** Suítes que rodam sem rede, sem Discord e sem Windows específico. Acrescente aqui ao criar uma nova. */
 export const SUITES = [
-  'test:core', 'test:core-api', 'test:core-agent', 'test:readonly', 'test:permgaps', 'test:panel', 'test:alerts', 'test:avisos',
+  'test:core', 'test:core-api', 'test:core-agent', 'test:readonly', 'test:permgaps', 'test:panel', 'test:alerts', 'test:avisos', 'test:avisosfila', 'test:planos',
   'test:persona', 'test:mentions', 'test:search', 'test:gateway', 'test:config', 'test:memperm', 'test:memret', 'test:audiencia', 'test:vozaudaux', 'test:vozaudcerebro', 'test:vozaudbot', 'test:histcomp', 'test:fase2', 'test:gatewaychecagem', 'test:hybrid',
   'test:audit', 'test:backup', 'test:dmowner', 'test:chatintents', 'test:imageintent', 'test:library',
   'test:reminders', 'test:remindersapi', 'test:fusodono','test:llmsafety', 'test:context', 'test:safefetch', 'test:netdefaults',

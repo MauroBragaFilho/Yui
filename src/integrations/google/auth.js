@@ -93,7 +93,7 @@ export function criarAutenticador(deps = {}) {
     contadores.tentativasDeAviso += 1;
     avisoEmVoo = (async () => {
       let entregue = false;
-      try { entregue = (await alertar('google-reautorizar', 'Preciso que você autorize o Google de novo', TEXTO_DO_AVISO, { level: 'warn', cooldownMinutes: INTERVALO_DO_ALERTER_MIN })) === true; } catch { entregue = false; }
+      try { entregue = (await alertar('google-reautorizar', 'Preciso que você autorize o Google de novo', TEXTO_DO_AVISO, { level: 'warn', cooldownMinutes: INTERVALO_DO_ALERTER_MIN, ocorrencia: impressao })) === true; } catch { entregue = false; }
       if (!entregue) { aviso(`[Google] o aviso de "autorizar de novo" não saiu; tento de novo no próximo uso, depois de ${INTERVALO_DA_REENTREGA_MIN} min.`); return; }
       avisoConfirmado = impressao;
       contadores.avisos += 1;

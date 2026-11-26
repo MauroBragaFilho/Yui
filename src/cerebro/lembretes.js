@@ -17,6 +17,7 @@
 import cron from 'node-cron';
 import { audit } from '../core/audit.js';
 import { observarAviso } from '../core/avisos/observar.js';
+import { filtroDoProcesso } from '../core/avisos/fila.js';
 import { jobAllowed, guardedJob } from '../core/security/jobGuard.js';
 import { purgeExpired } from '../core/memory/store.js';
 import { healthReportSchedule, sendHealthReport } from '../core/healthReport.js';
@@ -51,7 +52,7 @@ function dmTimeoutFromEnv(env) {
  */
 export function startCerebroReminders({
   channel, logger, ownerId = null, env = process.env, store = getReminderStore,
-  tickMs = tickFromEnv(env), dmTimeoutMs = dmTimeoutFromEnv(env), schedule = cron.schedule,
+  tickMs = tickFromEnv(env), dmTimeoutMs = dmTimeoutFromEnv(env), schedule = cron.schedule, avisos = filtroDoProcesso(),
 } = {}) {
   let busy = false;
   let botDiscordOnline = null; // última leitura do bot (null = ainda não sabe)
@@ -139,14 +140,34 @@ export function startCerebroReminders({
   const morning = morningSchedule(env);
   if (morning) {
     const compose = createMorningComposer({ client: healthClient, env });
-    const run = () => sendMorningReport({
-      send: (text) => sendDm(ownerId, text, { idem: `matinal:${new Date().toISOString().slice(0, 10)}`, motivo: 'relatorio' }),
+    const idemDoDia = () => `matinal:${new Date().toISOString().slice(0, 10)}`;
+    // Avisos na hora certa (modo ligar): o filtro guarda a retomada do resumo, compõe na hora de enviar e repete se não sair.
+    avisos?.definirResumo(async (secao) => {
+      if (!channel.isConnected('bot') || !(await readBotDiscord())) return { ok: false };
+      let resposta = null;
+      const r = await sendMorningReport({
+        compose,
+        send: async (text) => {
+          try { resposta = await pedirDm(ownerId, `${text}${secao}`, { idem: idemDoDia(), motivo: 'relatorio' }); } catch { return false; }
+          return resposta?.sent === true || resposta?.repetido === true;
+        },
+      });
+      if (resposta?.incerto) {
+        counters.incertos += 1;
+        relatorioIncerto = { motivo: 'relatorio', em: new Date().toISOString(), detalhe: String(resposta.motivo ?? '').slice(0, 120) };
+        logger.warn?.('[Matinal] entrega INCERTA do resumo da manhã: não reenvio às cegas.');
+        return { ok: false, incerto: true };
+      }
+      return { ok: r.ok, secaoConfirmada: r.ok && !resposta?.repetido && !resposta?.reconciliado };
+    });
+    const run = () => (avisos?.agendarResumo() ? avisos.passada() : sendMorningReport({
+      send: (text) => sendDm(ownerId, text, { idem: idemDoDia(), motivo: 'relatorio' }),
       compose,
     }).then((r) => {
       if (!r.ok) logger.warn?.('[Matinal] A DM do relatório não saiu (bot ou Discord fora?).');
       else observarAviso({ chave: 'matinal', env });
     })
-      .catch((err) => logger.warn?.(`[Matinal] Falha: ${err.message}`));
+      .catch((err) => logger.warn?.(`[Matinal] Falha: ${err.message}`)));
     tasks.push(schedule(morning.cron, guardedJob('reminders.morning', run), { timezone: morning.timezone }));
     const catchUp = setTimeout(() => { if (shouldCatchUp(new Date(), morning)) run(); }, 3 * 60 * 1000);
     catchUp.unref?.();

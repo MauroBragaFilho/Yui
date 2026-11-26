@@ -31,7 +31,7 @@ const iso = (ms) => new Date(ms).toISOString();
  *   `enviar` resolve com a resposta do bot ({ sent, repetido?, reconciliado?, incerto?, motivo? }) ou rejeita com o erro.
  * @returns {Promise<{ resultado: 'nenhum'|'enviado'|'incerto'|'a-confirmar'|'adiado'|'desistiu'|'descartado'|'aguardando', reconciliado?: string }>}
  */
-export async function entregarAviso({ store, id, enviar, texto, now = () => Date.now(), audit = () => {}, logger = null }) {
+export async function entregarAviso({ store, id, enviar, texto, now = () => Date.now(), audit = () => {}, logger = null, avisos = null }) {
   const registrar = (evento, dados) => { try { audit(evento, null, dados); } catch { /* a auditoria nunca derruba a entrega */ } };
   const m = store.obter(id);
   if (!m?.aviso) return { resultado: 'nenhum' };
@@ -49,6 +49,9 @@ export async function entregarAviso({ store, id, enviar, texto, now = () => Date
   }
 
   const reconciliar = a.estado === E.ENVIANDO || a.estado === E.INCERTO;
+  const chaveDoFiltro = a.tipo === TIPOS_DE_AVISO.FIM ? 'monitor:fim' : 'monitor:novidade';
+  // Avisos na hora certa: decidido ANTES de "enviando" e sem contar tentativa; o aviso continua pendente no monitor.
+  if (!reconciliar && avisos && !avisos.podeSair(chaveDoFiltro)) return { resultado: 'adiado' };
   const desde = reconciliar && a.desde ? a.desde : iso(t);
   // ANTES de pedir ao bot: se o cérebro cair agora, a próxima subida sabe que precisa reconciliar. Sem o registro durável, nada sai.
   if (!reconciliar) {
@@ -74,7 +77,8 @@ export async function entregarAviso({ store, id, enviar, texto, now = () => Date
         return { resultado: 'a-confirmar' };
       }
     }
-    observarAviso({ chave: a.tipo === TIPOS_DE_AVISO.FIM ? 'monitor:fim' : 'monitor:novidade', agora: t });
+    observarAviso({ chave: chaveDoFiltro, agora: t });
+    avisos?.registrarEnvio(chaveDoFiltro);
     registrar(a.tipo === TIPOS_DE_AVISO.FIM ? 'monitor.fim_avisado' : 'monitor.aviso', { id, ...(resposta.reconciliado ? { reconciliado: resposta.reconciliado } : {}) });
     return { resultado: 'enviado', ...(resposta.reconciliado ? { reconciliado: resposta.reconciliado } : {}) };
   }

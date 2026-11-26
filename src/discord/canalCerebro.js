@@ -35,6 +35,8 @@ import { redact } from '../core/api/panelLogs.js';
 import { createAdmin, AdminError } from '../core/api/admin.js';
 import { ownerUserId } from '../core/api/auth.js';
 import { carregarServidorDoBot } from './painelServidor.js';
+import { planosLigados } from '../core/planos/pedido.js';
+import { definirPortaDePlanos } from '../core/planos/porta.js';
 import { applyAiSettings } from '../core/aiSettings.js';
 import { recarregarAoVivo } from '../core/painelConfig.js';
 import { getGateway, resetGateway } from '../gateway/index.js';
@@ -43,7 +45,7 @@ import { logger as defaultLogger } from '../utils/logger.js';
 export const BOT_CAPABILITIES = Object.freeze(['discord.dm', 'discord.status', 'guild.admin', 'panel.admin']);
 /** As telas do painel que o cérebro pode pedir por panel.admin (a mesma lista do src/cerebro/painel.js). */
 export const BOT_PANEL_ACTIONS = Object.freeze(['setAutomod', 'bans', 'addBan', 'removeBan', 'addYoutubeFollow', 'setYoutubeLiveMode', 'removeYoutubeFollow', 'addTwitchFollow', 'removeTwitchFollow', 'radio', 'radioAction', 'integrations', 'guildTools', 'setGuildTool', 'resetGuildTools', 'tosTerms', 'guildTos', 'acceptGuildTos', 'revokeGuildTos', 'channelConfig', 'setPersona', 'resetPersona', 'setChatter', 'setMentions']);
-const DM_MOTIVOS = new Set(['lembrete', 'relatorio', 'alerta', 'painel']);
+const DM_MOTIVOS = new Set(['lembrete', 'relatorio', 'alerta', 'painel', 'plano']);
 const MAX_DM_CHARS = 8000;
 const ID_RE = /^\d{5,25}$/;
 
@@ -223,6 +225,21 @@ export function registerBotActions(channel, { getClient, admin = null, getBans =
     return { ...resultado, reconciliado: via, reenviadas: faltam.length };
   });
 
+  // A DM com os botões de um plano (YUI_PLANOS): só para o dono; os botões são montados aqui.
+  if (planosLigados(process.env)) {
+    channel.handle('discord.plano.send', async (p, meta) => {
+      const userId = String(p?.userId ?? '');
+      if (!ID_RE.test(userId) || (!isOwnerId(userId) && userId !== ownerUserId())) throw coded('FORBIDDEN', 'Planos só para o dono.');
+      const client = getClient();
+      if (!client?.isReady?.()) throw coded('DISCORD_OFFLINE', 'O bot não está conectado ao Discord agora.');
+      const { mensagemDoPlano } = await import('./planosDiscord.js');
+      const mensagem = mensagemDoPlano({ texto: p?.texto, id: p?.id, versao: p?.versao, hash: p?.hash, auto: p?.auto === true });
+      const user = await client.users.fetch(userId);
+      await user.send(meta?.idem ? { ...mensagem, nonce: nonceDaChave(meta.idem), enforceNonce: true } : mensagem);
+      return { sent: true };
+    });
+  }
+
   channel.handle('discord.status', async () => {
     const client = getClient();
     const online = Boolean(client?.isReady?.());
@@ -267,6 +284,12 @@ export function startBotChannel({ getClient, logger = defaultLogger, connect = c
   setListsRemote({ route: (params) => channel.request('lists.route', params, { idem: effect('lists.route') }) });
   // A conversa do Discord pelo cérebro (etapa 5): o llmHandler passa a montar turnos (chat.turn/chat.commit) em vez de chamar a IA daqui.
   setChatRemote(channel, { logger });
+  if (planosLigados(process.env)) {
+    definirPortaDePlanos({
+      rotear: ({ userId, texto, idem, digitado }) => channel.request('planos.pedir', { userId, texto, digitado: digitado === true }, { idem: idem ? `planos.pedir:${idem}` : effect('planos.pedir'), timeoutMs: 125_000 }),
+      decidir: (p) => channel.request('planos.decidir', p, { idem: effect('planos.decidir') }),
+    });
+  }
   channel.onState(({ state }) => {
     if (state !== 'open') return;
     logger.info('[Cérebro] Bot ligado ao cérebro: conversa, memória, lembretes e pesquisa pelo canal.');
