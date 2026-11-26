@@ -6,6 +6,7 @@
  */
 import { sendOwnerMessage, sendUserMessage } from '../core/alerts.js';
 import { audit } from '../core/audit.js';
+import { observarAviso } from '../core/avisos/observar.js';
 import { guardedJob } from '../core/security/jobGuard.js';
 import { ownerUserId } from '../core/api/auth.js';
 import { buildHealthReport, collectHealth, sendHealthReport, healthReportSchedule } from '../core/healthReport.js';
@@ -53,7 +54,10 @@ export function startReminderService({ cron, client = null, logger, env = proces
   if (morning) {
     const compose = createMorningComposer({ client, env });
     const run = () => sendMorningReport({ send: sendOwnerMessage, compose })
-      .then((r) => { if (!r.ok) logger.warn('[Matinal] A DM do relatório não saiu (Discord fora?).'); })
+      .then((r) => {
+        if (!r.ok) logger.warn('[Matinal] A DM do relatório não saiu (Discord fora?).');
+        else observarAviso({ chave: 'matinal', env });
+      })
       .catch((err) => logger.warn(`[Matinal] Falha: ${err.message}`));
     schedule('reminders.morning', morning.cron, run, { timezone: morning.timezone });
     // depois de uma queda ou reinício de manhã, manda assim que der (uma vez por dia)

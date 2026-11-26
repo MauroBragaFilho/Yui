@@ -8,6 +8,7 @@
  */
 import { describeRepeat } from './when.js';
 import { fusoDoDono, partesNoFuso } from '../core/fuso.js';
+import { observarAviso } from '../core/avisos/observar.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const LATE_MS = 5 * 60 * 1000;
@@ -47,6 +48,7 @@ export async function runDueReminders({ store, send, now = Date.now(), audit = (
     if (ok) {
       store.complete(r.id, now);
       fired += 1;
+      observarAviso({ chave: 'lembrete', destinatario: r.userId ? 'terceiro' : 'dono' });
       try { audit('reminder.fire', null, { id: r.id, repeat: Boolean(r.repeat) }); } catch { /* auditoria não derruba a entrega */ }
     } else {
       store.recordFailure(r.id);

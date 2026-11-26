@@ -14,6 +14,7 @@
 //                reconciliar de novo, sem reenviar às cegas. Nunca duplica sozinho e nunca some em silêncio
 // O processo único não passa por aqui: lá o agendador do bot manda direto, como sempre (reminders/runner.js).
 import { formatReminderMessage } from '../reminders/runner.js';
+import { observarAviso } from '../core/avisos/observar.js';
 
 export const ESTADOS = Object.freeze({ PENDENTE: 'pendente', ENVIANDO: 'enviando', ENVIADO: 'enviado', INCERTO: 'incerto' });
 /** De quanto em quanto tempo um lembrete incerto tenta reconciliar de novo (sem reenviar às cegas). */
@@ -62,6 +63,7 @@ export async function entregarLembretesDevidos({ store, enviar, audit = () => {}
     if (!erro && res && (res.sent === true || res.repetido === true)) {
       store.complete(r.id, now); // enviado
       out.enviados += 1;
+      observarAviso({ chave: 'lembrete', destinatario: r.userId ? 'terceiro' : 'dono' });
       if (res.reconciliado) out.reconciliados += 1;
       registrar('reminder.fire', { id: r.id, repeat: Boolean(r.repeat), ...(res.reconciliado ? { reconciliado: res.reconciliado } : {}), ...reenvio });
       continue;

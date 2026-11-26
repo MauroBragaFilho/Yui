@@ -242,7 +242,7 @@ await test('ajuste comum mostra o valor em vigor e a origem (painel, .env ou pad
   limpar();
   const env = { REDDIT_FETCH_MODE: 'cookies' };
   const antes = cfg.descrever(env).itens.find((i) => i.chave === 'REDDIT_FETCH_MODE');
-  assert.deepEqual([antes.valor, antes.origem, antes.padrao, antes.reinicio], ['cookies', 'env', 'browser', true]);
+  assert.deepEqual([antes.valor, antes.origem, antes.padrao, antes.reinicio], ['cookies', 'env', 'browser', false]);
   cfg.definir('REDDIT_FETCH_MODE', 'off', env);
   const depois = cfg.descrever(env).itens.find((i) => i.chave === 'REDDIT_FETCH_MODE');
   assert.deepEqual([depois.valor, depois.origem], ['off', 'painel']);

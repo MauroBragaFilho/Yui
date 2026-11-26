@@ -160,6 +160,18 @@ export function createCerebroAdmin({ channel, timeoutMs = 20_000, base = null, d
       return out;
     };
   }
+  // Ajustes do painel (cofre): o cérebro grava e aplica aqui; o bot relê ao receber o aviso (SEM valores) ou ao reconectar.
+  // `botConectado` vai na resposta dos ajustes que valem na hora, para a tela não afirmar que o bot já mudou quando ele está fora.
+  for (const name of ['configSet', 'configRemove']) {
+    const original = admin[name];
+    if (typeof original !== 'function') continue;
+    wrapped[name] = async (...args) => {
+      const out = await original(...args);
+      let avisados = 0;
+      try { avisados = channel.emit?.('painel.settingsChanged', {}, { role: 'bot' }) ?? 0; } catch { /* o aviso nunca derruba o painel */ }
+      return out?.reinicio === false ? { ...out, botConectado: avisados > 0 } : out;
+    };
+  }
   return wrapped;
 }
 

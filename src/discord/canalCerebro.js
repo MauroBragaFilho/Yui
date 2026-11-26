@@ -27,7 +27,7 @@ import { setMemoryRemote } from '../core/memory/facade.js';
 import { setContextRemote } from '../core/context/contextStore.js';
 import { setRemindersRemote } from '../reminders/assistant.js';
 import { descartarContinuidade } from '../core/continuidade.js';
-import { setListsRemote } from '../handlers/listAssistant.js';
+import { setListsRemote, setListasNoCerebro } from '../handlers/listAssistant.js';
 import { setChatRemote } from './turnoCerebro.js';
 import { buildContext, isOwnerId, ROLES } from '../core/permissions.js';
 import { splitForDiscord } from '../core/alerts.js';
@@ -36,6 +36,7 @@ import { createAdmin, AdminError } from '../core/api/admin.js';
 import { ownerUserId } from '../core/api/auth.js';
 import { carregarServidorDoBot } from './painelServidor.js';
 import { applyAiSettings } from '../core/aiSettings.js';
+import { recarregarAoVivo } from '../core/painelConfig.js';
 import { getGateway, resetGateway } from '../gateway/index.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 
@@ -267,13 +268,33 @@ export function startBotChannel({ getClient, logger = defaultLogger, connect = c
   // A conversa do Discord pelo cérebro (etapa 5): o llmHandler passa a montar turnos (chat.turn/chat.commit) em vez de chamar a IA daqui.
   setChatRemote(channel, { logger });
   channel.onState(({ state }) => {
-    if (state === 'open') logger.info('[Cérebro] Bot ligado ao cérebro: conversa, memória, lembretes e pesquisa pelo canal.');
+    if (state !== 'open') return;
+    logger.info('[Cérebro] Bot ligado ao cérebro: conversa, memória, lembretes e pesquisa pelo canal.');
+    applyPanelSettingsChange(logger); // o painel pode ter mudado um ajuste enquanto o bot estava fora
   });
   // O painel (no cérebro) mudou as chaves/provedores de IA ou zerou os descansos: a cadeia de IA do bot acompanha.
   // "Apagar tudo" feito no cérebro (app): a proposta de continuidade da DM vive na memória deste processo.
   channel.on('continuidade.descartar', (p) => { if (p?.userId) descartarContinuidade(String(p.userId)); });
   channel.on('ai.settingsChanged', (payload) => { applyAiSettingsChange(payload, logger); });
+  // Quem grava as listas: se o cérebro subiu com YUI_APP_COMANDOS, o bot pede a ele mesmo com a chave dele ainda antiga.
+  channel.on('listas.dono', (p) => { setListasNoCerebro(p?.cerebro === true); });
+  // O painel salvou ou removeu um ajuste: o aviso não traz valores; o bot relê o cofre.
+  channel.on('painel.settingsChanged', () => { applyPanelSettingsChange(logger); });
   return channel;
+}
+
+/**
+ * Atualiza neste processo os ajustes do painel que valem sem reiniciar. Com a DPAPI a abertura do cofre bloqueia o bot (execFileSync):
+ * `recarregarAoVivo` só abre quando o arquivo mudou (uma vez por mudança; uma falha repetida espera alguns minutos). O log leva só os nomes.
+ */
+export function applyPanelSettingsChange(logger = defaultLogger, { recarregar = recarregarAoVivo, env = process.env } = {}) {
+  const mudaram = recarregar(env);
+  if (mudaram === null) {
+    logger.warn?.('[Cérebro] Não consegui ler o cofre do painel: o bot segue com os ajustes anteriores.');
+    return null;
+  }
+  if (mudaram.length) logger.info?.(`[Cérebro] Ajustes do painel aplicados sem reiniciar: ${mudaram.join(', ')}.`);
+  return mudaram;
 }
 
 /** Relê as chaves de IA (secrets/ai-providers.json + .env) e refaz o Gateway deste processo; 'descanso' só zera os descansos. */

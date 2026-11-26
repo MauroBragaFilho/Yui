@@ -16,6 +16,7 @@ import './utils/netDefaultsBoot.js'; // prazo padrão de rede (fetch e axios): p
 import './core/painelConfigBoot.js'; // valores salvos no painel (secrets/painel-config.json) por cima do .env, antes de a configuração ser lida
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
+import { appComandosLigado } from './handlers/listAssistant.js';
 import { closeAllDatabases, databaseOwnerStats, databaseStats } from './database/db.js';
 import { initMemory } from './core/memory/store.js';
 import { isMemoryEnabled } from './core/discordAdapter.js';
@@ -220,6 +221,8 @@ async function bootstrap() {
       if (role !== 'bot') return;
       // O bot pode ter perdido uma troca de chaves de IA feita no painel enquanto estava fora: relê ao conectar.
       try { channel?.emit('ai.settingsChanged', { tipo: 'reconexao' }, { role: 'bot' }); } catch { /* */ }
+      // Quem grava as listas (YUI_APP_COMANDOS só muda na subida, e o supervisor pode religar um processo só).
+      try { channel?.emit('listas.dono', { cerebro: appComandosLigado(process.env) }, { role: 'bot' }); } catch { /* */ }
       setTimeout(() => { reminders?.tick('bot conectou').catch(() => {}); }, 100).unref?.();
       setTimeout(() => { monitores?.passada('bot conectou'); }, 300).unref?.();
     },

@@ -16,6 +16,7 @@
 // (reminders.tick, como no agendador do bot).
 import cron from 'node-cron';
 import { audit } from '../core/audit.js';
+import { observarAviso } from '../core/avisos/observar.js';
 import { jobAllowed, guardedJob } from '../core/security/jobGuard.js';
 import { purgeExpired } from '../core/memory/store.js';
 import { healthReportSchedule, sendHealthReport } from '../core/healthReport.js';
@@ -141,7 +142,10 @@ export function startCerebroReminders({
     const run = () => sendMorningReport({
       send: (text) => sendDm(ownerId, text, { idem: `matinal:${new Date().toISOString().slice(0, 10)}`, motivo: 'relatorio' }),
       compose,
-    }).then((r) => { if (!r.ok) logger.warn?.('[Matinal] A DM do relatório não saiu (bot ou Discord fora?).'); })
+    }).then((r) => {
+      if (!r.ok) logger.warn?.('[Matinal] A DM do relatório não saiu (bot ou Discord fora?).');
+      else observarAviso({ chave: 'matinal', env });
+    })
       .catch((err) => logger.warn?.(`[Matinal] Falha: ${err.message}`));
     tasks.push(schedule(morning.cron, guardedJob('reminders.morning', run), { timezone: morning.timezone }));
     const catchUp = setTimeout(() => { if (shouldCatchUp(new Date(), morning)) run(); }, 3 * 60 * 1000);

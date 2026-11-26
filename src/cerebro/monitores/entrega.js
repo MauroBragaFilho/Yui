@@ -12,6 +12,7 @@
 // A chave é `monitor:<id>:<assinatura>` (novidade: a mesma mudança nunca tem outra chave) ou `monitor:<id>:fim` (o fim do prazo): por isso
 // um reinício do cérebro no meio do envio, ou uma segunda passada, nunca manda o mesmo aviso duas vezes. O texto do aviso NÃO vai para o
 // disco: depois de um reinício, a novidade sai com um texto genérico (sem o título do resultado, que nunca é guardado).
+import { observarAviso } from '../../core/avisos/observar.js';
 import { LIMITES } from './config.js';
 import { ESTADOS_DO_AVISO as E, TIPOS_DE_AVISO } from './store.js';
 
@@ -73,6 +74,7 @@ export async function entregarAviso({ store, id, enviar, texto, now = () => Date
         return { resultado: 'a-confirmar' };
       }
     }
+    observarAviso({ chave: a.tipo === TIPOS_DE_AVISO.FIM ? 'monitor:fim' : 'monitor:novidade', agora: t });
     registrar(a.tipo === TIPOS_DE_AVISO.FIM ? 'monitor.fim_avisado' : 'monitor.aviso', { id, ...(resposta.reconciliado ? { reconciliado: resposta.reconciliado } : {}) });
     return { resultado: 'enviado', ...(resposta.reconciliado ? { reconciliado: resposta.reconciliado } : {}) };
   }

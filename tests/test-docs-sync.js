@@ -69,6 +69,10 @@ const NEW_VARS = [
   ['YUI_HISTORICO_COMPARTILHADO', 'false'],
   // a checagem rápida de vida do Gateway (ligada por padrão para provedor próprio fora desta máquina)
   ['YUI_GATEWAY_CHECAGEM_RAPIDA', 'true'],
+  // avisos na hora certa (só o modo de observação)
+  ['YUI_AVISOS_FILTRO', 'off'],
+  ['YUI_SILENCIO', '23-07'],
+  ['YUI_AVISOS_POR_DIA', '8'],
 ];
 
 // Scripts novos desta rodada e o arquivo de teste de cada um.

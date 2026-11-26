@@ -12,6 +12,10 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu e
 /** Valor para mostrar: booleanos viram Ligado/Desligado. */
 const mostra = (item: ConfigItem, v: unknown) => (item.tipo === 'bool' ? (String(v) === 'true' ? 'Ligado' : String(v) === 'false' ? 'Desligado' : String(v)) : v === '' || v === undefined ? '(vazio)' : String(v));
 
+/** O que aconteceu depois de gravar. `botConectado: false` só vem com o cérebro separado e o bot fora. */
+const quandoVale = (r: { reinicio: boolean; botConectado?: boolean }) =>
+  r.reinicio ? 'Vale depois de reiniciar a Yui.' : r.botConectado === false ? 'Já vale no cérebro; no bot, quando ele reconectar.' : r.botConectado ? 'Já vale no cérebro; o bot foi avisado para aplicar.' : 'Já está valendo.';
+
 /** "Pede reinício" já aparece como selo: só na exibição, tira a repetição do fim da descrição. */
 const semReinicio = (texto: string) => texto.replace(/[\s.;,(\-–—]*\(?\s*pede\s+rein[ií]cio\s*\)?\s*\.?\s*$/i, '').trim();
 
@@ -41,7 +45,7 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
       const r = await client.admin.configSet(item.chave, valor, confirm);
       setText('');
       await reload();
-      setMsg({ text: r.reinicio ? 'Salvo. Vale depois de reiniciar a Yui.' : 'Salvo. Já está valendo.', ok: true });
+      setMsg({ text: `Salvo. ${quandoVale(r)}`, ok: true });
     } catch (e) {
       setMsg({ text: errText(e), ok: false });
     } finally {
@@ -55,7 +59,7 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
     try {
       const r = await client.admin.configRemove(item.chave, Boolean(item.confirmar));
       await reload();
-      setMsg({ text: r.reinicio ? 'Removido do painel. Vale depois de reiniciar a Yui.' : 'Removido do painel. Já está valendo.', ok: true });
+      setMsg({ text: `Removido do painel. ${quandoVale(r)}`, ok: true });
     } catch (e) {
       setMsg({ text: errText(e), ok: false });
     } finally {
@@ -187,7 +191,7 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
             {[
               'O que você salvar aqui fica só neste computador (pasta secrets/, fora do Git) e vale por cima do .env. Uma chave nunca volta do servidor: só os 4 últimos caracteres aparecem.',
               'O token do Discord, a senha do painel e as regras de segurança continuam só no .env.',
-              'A mudança vale na hora no cérebro; o bot (voz, semanal, avisos) só relê ao reiniciar: itens marcados "Pede reinício" só valem depois disso.',
+              'Itens sem o selo "Pede reinício" valem na hora (com o bot desconectado, nele valem quando reconectar; se ele não conseguir ler o ajuste, o log dele avisa). Os marcados só valem depois de reiniciar a Yui.',
               ...(data.protegido ? ['O arquivo é gravado protegido (DPAPI do Windows).'] : []),
             ].map((t) => (
               <View key={t} style={styles.bulletRow}>

@@ -74,7 +74,7 @@ await test('o painel oferece as duas chaves, desligadas, com confirmação para 
     const c = CATALOGO.find((i) => i.chave === chave);
     assert.equal(c.grupo, 'Conversa');
     assert.equal(c.padrao, 'false');
-    assert.equal(c.reinicio, true);
+    assert.equal(c.reinicio, chave === 'YUI_APP_COMANDOS');
     assert.deepEqual(c.confirmar, ['true']);
   }
 });

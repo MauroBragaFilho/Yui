@@ -24,7 +24,7 @@ const scripts = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf
 
 /** Suítes que rodam sem rede, sem Discord e sem Windows específico. Acrescente aqui ao criar uma nova. */
 export const SUITES = [
-  'test:core', 'test:core-api', 'test:core-agent', 'test:readonly', 'test:permgaps', 'test:panel', 'test:alerts',
+  'test:core', 'test:core-api', 'test:core-agent', 'test:readonly', 'test:permgaps', 'test:panel', 'test:alerts', 'test:avisos',
   'test:persona', 'test:mentions', 'test:search', 'test:gateway', 'test:config', 'test:memperm', 'test:memret', 'test:audiencia', 'test:vozaudaux', 'test:vozaudcerebro', 'test:vozaudbot', 'test:histcomp', 'test:fase2', 'test:gatewaychecagem', 'test:hybrid',
   'test:audit', 'test:backup', 'test:dmowner', 'test:chatintents', 'test:imageintent', 'test:library',
   'test:reminders', 'test:remindersapi', 'test:fusodono','test:llmsafety', 'test:context', 'test:safefetch', 'test:netdefaults',
@@ -102,6 +102,7 @@ export const SUITES = [
   'test:tts429',
   'test:recusageral',
   'test:painelconfig',
+  'test:recarga',
   'test:painelservidor',
   // Etapa 15 (Google, SOMENTE LEITURA, desligado, só com um Google FALSO em loopback): a unidade (os endereços só em um arquivo, o arquivo da autorização restrito e atômico, o
   // autenticador com o invalid_grant avisando uma vez, a Agenda e as Tarefas no fuso, os dados cercados, a pré-rota só do dono em conversa privada, o Gmail travado, o relatório

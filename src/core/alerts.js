@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { redact } from './api/panelLogs.js';
 import { audit } from './audit.js';
+import { observarAviso } from './avisos/observar.js';
 import { jobAllowed } from './security/jobGuard.js';
 
 /**
@@ -142,6 +143,7 @@ export function createAlerter({ notify = null, ownerId = null, env = process.env
     try {
       await notify(ownerId, text);
       audit('alert.sent', null, { key });
+      observarAviso({ chave: key, env, agora: t }); // só registra (YUI_AVISOS_FILTRO=observar); nunca lança
       return true;
     } catch (err) {
       audit('alert.fail', null, { key, error: String(err?.message ?? err).slice(0, 100) });

@@ -178,8 +178,14 @@ function store() {
 // (dois processos gravando o mesmo arquivo perdem itens). Com a chave desligada o remoto é ignorado e o bot grava como sempre.
 export const LISTS_UNAVAILABLE_TEXT = 'Não consegui mexer nas listas agora. Confira a lista e tente de novo daqui a pouco.';
 let listsRemote = null;
+// O cérebro diz, a cada conexão, se está com a chave ligada: religar um processo só não pode deixar dois escritores.
+let listasNoCerebro = false;
+export function setListasNoCerebro(valor) {
+  listasNoCerebro = valor === true;
+}
 export function setListsRemote(remote) {
   listsRemote = remote && typeof remote.route === 'function' ? remote : null;
+  listasNoCerebro = false;
 }
 export function appComandosLigado(env = process.env) {
   return String(env?.YUI_APP_COMANDOS ?? '').trim().toLowerCase() === 'true';
@@ -193,7 +199,7 @@ export function appComandosLigado(env = process.env) {
 export async function routeLists({ text, userId } = {}, { store: injected = null, env = process.env } = {}) {
   if (String(env?.YUI_LISTS_ENABLED ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
   if (!userId || !/^\d{5,25}$/.test(String(userId))) return { handled: false };
-  if (listsRemote && !injected && appComandosLigado(env)) {
+  if (listsRemote && !injected && (listasNoCerebro || appComandosLigado(env))) {
     if (!parseListRequest(text)) return { handled: false };
     try {
       const out = await listsRemote.route({ text: String(text ?? ''), userId: String(userId) });
