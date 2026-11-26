@@ -48,6 +48,13 @@ const MAX_AUDIT = 500;
 const FREQUENCIAS = ['low', 'medium', 'high'];
 const SERVIDOR_FORA = 'As configurações por servidor só funcionam com o bot do Discord ligado a este processo.';
 
+// A ponte registrada pelo processo do bot ANTES de subir a API (processo único): assim a chamada startApi(client) do src/index.js continua a mesma
+// (o test:cotahora confere que a cota liga antes dela). Quem passa `servidor` ao createAdmin (o cérebro separado, os testes) vence.
+let servidorRegistrado = null;
+export function registrarServidorDoPainel(loader) {
+  servidorRegistrado = typeof loader === 'function' ? loader : null;
+}
+
 // O reinício com o cérebro separado (etapa 10): o que o dono lê é a verdade sobre o que reinicia e, se o supervisor recusa, que NADA reiniciou.
 const RESTART_MESSAGE_BOTH = 'Reiniciando o cérebro e o bot do Discord, nesta ordem: o bot para, o cérebro para, o cérebro sobe e depois o bot. O app fica sem resposta até o cérebro voltar (de alguns segundos a cerca de um minuto) e o bot fica fora do Discord nesse intervalo.';
 const RESTART_REFUSALS = Object.freeze({
@@ -319,8 +326,9 @@ export function createAdmin({
 } = {}) {
   let servidorCache = null;
   const srv = async () => {
-    if (!servidor) throw new AdminError(503, SERVIDOR_FORA);
-    return (servidorCache ??= await servidor());
+    const carregar = servidor ?? servidorRegistrado;
+    if (!carregar) throw new AdminError(503, SERVIDOR_FORA);
+    return (servidorCache ??= await carregar());
   };
   let cached = deps;
   const d = async () => (cached ??= await defaultDeps());

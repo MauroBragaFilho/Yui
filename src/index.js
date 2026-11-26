@@ -306,7 +306,9 @@ async function bootstrap() {
   } else {
     // 5. Yui API (opcional; YUI_API_ENABLED=true) — interface HTTP do Core para os apps
     const { carregarServidorDoBot } = await import('./discord/painelServidor.js');
-    startApi(client, { servidor: carregarServidorDoBot });
+    const { registrarServidorDoPainel } = await import('./core/api/admin.js');
+    registrarServidorDoPainel(carregarServidorDoBot); // configurações por servidor no painel (só o processo do bot tem a ponte)
+    startApi(client);
 
     // 6. Yui Gateway (servidor de IA compatível com OpenAI; opcional: YUI_GATEWAY_ENABLED=true)
     startGatewayServer();
