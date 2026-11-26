@@ -2,10 +2,8 @@
 // Sem Discord, sem rede e sem tocar em banco: npm run test:chatintents
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-    detectMemoryIntent, runMemoryIntent, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize,
-    setForgetAllPending, hasForgetAllPending, forgetTokens, __resetChatIntentsForTests
-} from '../src/handlers/chatIntents.js';
+import fs from 'fs';
+import { detectMemoryIntent, runMemoryIntent, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize, setForgetAllPending, hasForgetAllPending, forgetTokens, __resetChatIntentsForTests, clearForgetAllPending, observarParaApagarTudo } from '../src/handlers/chatIntents.js';
 
 const direct = { direct: true };
 const kind = (t, extra = {}) => detectMemoryIntent(t, { ...direct, ...extra }).kind;
@@ -67,6 +65,41 @@ test('apagar tudo só vale depois da confirmação, que expira', async () => {
     // outra conversa ou "não" cancelam
     assert.equal(detectMemoryIntent('qual a cotação do dólar?', { ...direct, pendingForgetAll: true }).kind, 'none');
     assert.equal(detectMemoryIntent('não, deixa', { ...direct, pendingForgetAll: true }).kind, 'cancel_forget_all');
+});
+
+test('apagar tudo: a confirmação vale só para a mensagem seguinte', () => {
+    for (const [texto, extra] of [['me indica um filme', {}], ['+yui diario', {}], ['', { comAnexo: true }], ['sim', { comAnexo: true }]]) {
+        setForgetAllPending('u9');
+        observarParaApagarTudo('u9', texto, extra);
+        assert.equal(hasForgetAllPending('u9'), false, texto);
+    }
+    for (const texto of ['sim', 'sim, apagar tudo', 'Yui, pode apagar', '<@123456> sim', 'não, deixa']) {
+        setForgetAllPending('u9');
+        observarParaApagarTudo('u9', texto);
+        assert.equal(hasForgetAllPending('u9'), true, texto);
+    }
+    for (const texto of ['não sei que filme ver', 'para quem é isso?', 'deixa eu ver', 'sim ' + 'apagar tudo '.repeat(200) + 'x']) {
+        setForgetAllPending('u9');
+        observarParaApagarTudo('u9', texto);
+        assert.equal(hasForgetAllPending('u9'), false, texto.slice(0, 30));
+    }
+    setForgetAllPending('u9');
+    observarParaApagarTudo('u9', 'sim', { dirigida: false });
+    assert.equal(hasForgetAllPending('u9'), false, 'sim para outra pessoa no canal');
+    setForgetAllPending('u9');
+    observarParaApagarTudo('u9', 'sim, apagar tudo');
+    observarParaApagarTudo('u9', 'obrigado');
+    assert.equal(hasForgetAllPending('u9'), true, 'o sim já enviado não é desfeito pela mensagem de trás');
+    const inicio = Date.now();
+    assert.equal(detectMemoryIntent('sim ' + 'apagar tudo '.repeat(22) + 'x', { ...direct, pendingForgetAll: true }).kind, 'none');
+    assert.ok(Date.now() - inicio < 200, 'sem backtracking exponencial');
+    clearForgetAllPending('u9');
+    for (const [arquivo, trecho] of [['events/interactionCreate.js', 'clearForgetAllPending(interaction.user.id)'], ['handlers/llmHandler.js', 'direct: directToYui, voice: isVoice, pendingForgetAll: true']]) {
+        assert.ok(fs.readFileSync(new URL('../src/' + arquivo, import.meta.url), 'utf8').includes(trecho), arquivo);
+    }
+    const porta = fs.readFileSync(new URL('../src/events/messageCreate.js', import.meta.url), 'utf8');
+    const chamada = porta.indexOf('observarParaApagarTudo(message.author.id');
+    assert.ok(chamada > 0 && chamada < porta.indexOf('if (startsWithCommandPrefix('));
 });
 
 test('ver: lista na DM, só a contagem em canal público', async () => {

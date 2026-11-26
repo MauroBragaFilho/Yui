@@ -2711,6 +2711,11 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         }
         // Fala por voz não confirma nada, mas é "outra mensagem": descarta a proposta pendente da DM.
         if (isVoice || interaction?.isVoice === true) descartarContinuidade(userId, 'dm');
+        // "Apagar tudo" pendente: o que passa por aqui e não é confirmar nem desistir encerra a pendência, antes das portas que respondem e saem
+        // (cobre a mensagem que chegou enquanto o pedido ainda estava na fila, e a fala por voz).
+        if (hasForgetAllPending(userId) && detectMemoryIntent(ownQuestion, { direct: directToYui, voice: isVoice, pendingForgetAll: true }).kind === 'none') {
+            clearForgetAllPending(userId);
+        }
         // Porta L (listas pessoais): "anota na lista X: ...", "mostra a lista X", "tira o item 3...": o CÓDIGO executa no arquivo da própria pessoa; nada vai ao histórico nem ao contexto.
         if (directToYui && !isVoice && options.radioMode !== true && options.thirdPartyPrompt !== true && ownQuestion) {
             const listRouted = await routeLists({ text: ownQuestion, userId });

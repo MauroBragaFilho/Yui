@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import config from '../config.js';
+import { clearForgetAllPending } from '../handlers/chatIntents.js';
 import { guardInteraction } from '../core/security/discordGuard.js';
 import { getCurrentMusicFromUser } from '../services/activityMusicService.js';
 import { handleTosInteraction } from '../handlers/tosHandler.js';
@@ -407,6 +408,8 @@ export default {
     name: 'interactionCreate',
     once: false,
     async execute(interaction, client) {
+        // Usar um comando é "outro assunto": encerra um "apagar tudo" que esperava confirmação.
+        if (interaction.isChatInputCommand?.()) clearForgetAllPending(interaction.user.id);
         if (interaction.guildId) {
             const isWhitelisted = config.isAutomodWhitelisted(interaction.user.id) || config.isOwner(interaction.user.id);
             if (!isWhitelisted) {

@@ -11,6 +11,7 @@ import { safeFetchText } from '../search/safeFetch.js';
 import { clipHeadTail } from '../utils/promptBudget.js';
 import { logger } from '../utils/logger.js';
 import { observarMensagem } from '../core/continuidade.js';
+import { observarParaApagarTudo } from '../handlers/chatIntents.js';
 import { isOwnerId } from '../core/permissions.js';
 import { fusoDoDono } from '../core/fuso.js';
 import { describeImages } from '../services/vision.js';
@@ -365,6 +366,14 @@ export default {
         if (message.author.bot) return;
         if (isForeignDirectMessage(message)) return;
         const isDirectMessage = !message.guildId; // no privado ninguém precisa citar "Yui" (com YUI_DM_EVERYONE=false só o dono chega aqui)
+        // "Apagar tudo" pendente: vale só para a próxima mensagem desta pessoa, em qualquer canal.
+        observarParaApagarTudo(message.author.id, message.content, {
+            comAnexo: (message.attachments?.size ?? 0) > 0,
+            // No servidor, só vale como resposta o que fala com a Yui: nome, menção a ela ou resposta a uma mensagem dela.
+            dirigida: isDirectMessage || message.mentions?.repliedUser?.id === client.user?.id
+                || /\byui\b/i.test(message.content ?? '') || String(message.content ?? '').includes(`<@${client.user?.id}>`)
+                || String(message.content ?? '').includes(`<@!${client.user?.id}>`)
+        });
         // Continuidade: na DM, o que não for "sim"/"não" sozinho descarta a proposta aqui, antes de qualquer retorno (comando por prefixo,
         // anexo com resposta fixa, fila recusada...). Sem proposta pendente não faz nada.
         if (isDirectMessage) observarMensagem(message.author.id, 'dm', message.content, { comAnexo: (message.attachments?.size ?? 0) > 0 });

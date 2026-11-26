@@ -55,7 +55,7 @@ const FORGET_ALL_RES = [
     /\b(?:apaga|apague|limpa|limpe|zera|zere|deleta|delete)\b\s+(?:toda\s+)?(?:a\s+)?minha\s+memoria\b/i
 ];
 const FORGET_TEXT_RE = /^(?:esquece|esqueca)\s+que\s+(.{4,200})$/i;
-const CONFIRM_RE = /^(?:sim|confirmo|confirma|pode|pode sim|pode apagar|apaga|apague|isso|isso mesmo|tenho certeza|quero)(?:[\s,.!]+(?:apagar|apaga|tudo|apagar tudo|sim|confirmo|pode))*[\s.!]*$/i;
+const CONFIRM_RE = /^(?:sim|confirmo|confirma|pode|pode sim|pode apagar|apaga|apague|isso|isso mesmo|tenho certeza|quero)(?:[\s,.!]+(?:apagar|apaga|tudo|sim|confirmo|pode))*[\s.!]*$/i;
 const CANCEL_RE = /^(?:nao|cancela|cancelar|cancele|deixa|deixa pra la|melhor nao|esquece|espera|para)\b/i;
 const FILLER = new Set(['quando', 'sobre', 'esse', 'essa', 'isso', 'aquilo', 'falei', 'disse', 'tinha', 'para', 'pelo', 'pela', 'voce', 'mais', 'muito']);
 
@@ -95,14 +95,33 @@ export function detectMemoryIntent(text, ctx = {}) {
 
 // Confirmação pendente de "apagar tudo" (em RAM; some ao reiniciar, de propósito).
 const pending = new Map(); // userId -> expiresAt
-export function setForgetAllPending(userId, now = Date.now()) { pending.set(String(userId), now + PENDING_MS); }
+const confirmados = new Set(); // userId cujo "sim" já chegou e ainda está na fila
+export function setForgetAllPending(userId, now = Date.now()) { confirmados.delete(String(userId)); pending.set(String(userId), now + PENDING_MS); }
 export function hasForgetAllPending(userId, now = Date.now()) {
     const until = pending.get(String(userId));
     if (!until) return false;
-    if (now > until) { pending.delete(String(userId)); return false; }
+    if (now > until) { clearForgetAllPending(userId); return false; }
     return true;
 }
-export function clearForgetAllPending(userId) { pending.delete(String(userId)); }
+export function clearForgetAllPending(userId) { confirmados.delete(String(userId)); pending.delete(String(userId)); }
+
+// Para a porta de entrada: só desistência inteira ("não", "deixa pra lá"); "não sei que filme ver" é outro assunto.
+const SO_DESISTIR_RE = /^(?:nao|cancela|cancelar|cancele|deixa|deixa pra la|melhor nao|esquece|para)(?:[\s,.!]+(?:nao|apaga|apagar|cancela|deixa|obrigado|obrigada|pra la))*[\s.!]*$/i;
+const RESPOSTA_MAX_CHARS = 60;
+
+/**
+ * Para a porta de entrada das mensagens: a confirmação de "apagar tudo" vale só para a MENSAGEM SEGUINTE. O que não for confirmar nem
+ * desistir descarta a pendência, para um "sim" dito depois sobre outro assunto não apagar nada.
+ * `dirigida: false` (canal de servidor, sem chamar a Yui) nunca confirma. Depois de um "sim" visto, a mensagem de trás não o desfaz na fila.
+ */
+export function observarParaApagarTudo(userId, text, { comAnexo = false, dirigida = true } = {}) {
+    if (!hasForgetAllPending(userId) || confirmados.has(String(userId))) return;
+    const bruto = String(text ?? '');
+    const dito = bruto.length > 4 * RESPOSTA_MAX_CHARS ? '' : fold(stripAddressing(bruto)).replace(/^[\s,.!?]+|[\s,.!?]+$/g, '');
+    const curta = !comAnexo && dirigida && dito !== '' && dito.length <= RESPOSTA_MAX_CHARS;
+    if (curta && CONFIRM_RE.test(dito)) confirmados.add(String(userId));
+    else if (!(curta && SO_DESISTIR_RE.test(dito))) clearForgetAllPending(userId);
+}
 
 const HISTORY_NOTE = '\n-# O registro de uso do bot (historico.txt) não é apagado por este pedido.';
 const LIST_BUDGET = 1800;
