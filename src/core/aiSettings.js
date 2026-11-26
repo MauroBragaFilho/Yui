@@ -132,7 +132,7 @@ export function applyAiSettings() {
     const entries = s.custom.map((c) => {
       const keyVar = `YUI_PANEL_KEY_${c.id.toUpperCase().replace(/-/g, '_')}`;
       if (c.keys?.length) process.env[keyVar] = c.keys.join(',');
-      return { id: c.id, label: c.label, baseUrl: c.baseUrl, models: c.models, anonymous: Boolean(c.anonymous), ...(c.keys?.length ? { apiKeyEnv: keyVar } : {}), priority: c.first ? FIRST_PRIORITY : 25 };
+      return { id: c.id, label: c.label, baseUrl: c.baseUrl, models: c.models, anonymous: Boolean(c.anonymous), ...(c.keys?.length ? { apiKeyEnv: keyVar } : {}), priority: c.first ? FIRST_PRIORITY : 25, ...(typeof c.checagemRapida === 'boolean' ? { checagemRapida: c.checagemRapida } : {}) };
     });
     set('YUI_GATEWAY_CUSTOM', JSON.stringify([...envCustom, ...entries]));
   }

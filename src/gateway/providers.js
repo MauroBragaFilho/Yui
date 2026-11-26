@@ -31,14 +31,27 @@ const model = (id, tier = 'smart') => ({ id, tier });
 
 const csv = (value) => String(value ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
+/** O endereço aponta para esta máquina? (endereço ilegível conta como esta máquina: sem checagem) */
+function ehLoopback(endpoint) {
+  try {
+    const host = new URL(endpoint).hostname.toLowerCase();
+    return host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || host === '0.0.0.0' || /^127(\.\d{1,3}){3}$/.test(host);
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Provedores extras definidos pelo dono em YUI_GATEWAY_CUSTOM (JSON):
  *   [{ "id":"meu", "label":"Meu provedor", "baseUrl":"https://x.com/v1" (ou "endpoint": ".../chat/completions"),
  *      "apiKeyEnv":"MEU_PROVEDOR_KEY", "models":["m1","m2"], "priority":15, "anonymous":false, "maxTokens":2048 }]
  * `maxTokens` (opcional, etapa 6): a capacidade de saída do provedor; o cérebro nunca pede mais que isto a ele (core/ai/limitesTokens.js).
  * A chave NUNCA vai no JSON: só o NOME da variável de ambiente que a contém.
+ * `checagemRapida` (opcional, true/false): antes de tentar o provedor, o roteador confere em até 1,5 s se ele responde. Sem o campo, vale
+ * para host fora desta máquina (nem 127.x, nem localhost, nem ::1). YUI_GATEWAY_CHECAGEM_RAPIDA=false desliga para todos.
  */
 export function loadCustomProviders(env = process.env) {
+  const checagemLigada = String(env.YUI_GATEWAY_CHECAGEM_RAPIDA ?? '').trim().toLowerCase() !== 'false';
   const raw = String(env.YUI_GATEWAY_CUSTOM ?? '').trim();
   if (!raw) return { providers: [], errors: [] };
   const errors = [];
@@ -63,11 +76,13 @@ export function loadCustomProviders(env = process.env) {
     const keys = c.apiKeyEnv ? splitKeys(env[String(c.apiKeyEnv)]) : [];
     const anonymous = Boolean(c.anonymous);
     if (!keys.length && !anonymous) { errors.push(`${id}: sem chave em ${c.apiKeyEnv || '(apiKeyEnv)'}; ignorado`); continue; }
+    const checar = checagemLigada && (typeof c.checagemRapida === 'boolean' ? c.checagemRapida : !ehLoopback(endpoint));
     providers.push({
       id, label: String(c.label || id), endpoint, keys, anonymous,
       noAuth: !keys.length, priority: Number.isFinite(c.priority) ? c.priority : 45, models,
       // Capacidade de saída declarada pelo dono (opcional, 64 a 8192): o cérebro nunca pede mais que isto a este provedor (core/ai/limitesTokens.js).
       ...(Number.isInteger(c.maxTokens) && c.maxTokens >= 64 ? { maxTokens: Math.min(c.maxTokens, 8192) } : {}),
+      ...(checar ? { checagemRapida: true } : {}),
     });
   }
   return { providers, errors };

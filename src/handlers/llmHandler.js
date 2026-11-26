@@ -4416,7 +4416,7 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
             // pediu, sempre existe). Sem await: a síntese roda em segundo plano e nunca atrasa nem derruba a resposta. Só item de voz.
             if (voiceSpeak && delivery.ok && sentMessage) {
                 try {
-                    // DECISÃO DO DONO (a confirmar, ver relatório): a fala de um turno PRIVADO pode usar TTS em NUVEM, do mesmo jeito que o texto
+                    // DECISÃO DO DONO (Braga, 25/11/2026: "Aceito nuvem"): a fala de um turno PRIVADO pode usar TTS em NUVEM, do mesmo jeito que o texto
                     // privado já vai a provedores de IA em nuvem; por isso `sensitive` segue como está (na voz o coreCtx é o do servidor,
                     // então é sempre false). O que muda: no turno privado o TTS consulta `audienciaOk` ANTES DE CADA FRASE e reconta a call
                     // agora; convidado que entrou depois do último portão = a fala para. Turno público: nada novo.

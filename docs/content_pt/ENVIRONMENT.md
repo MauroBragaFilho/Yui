@@ -465,6 +465,7 @@ Como entrar e as rotas: [Yui API](YUI_API.md).
 | `YUI_GATEWAY_PRIORITY` | Ordem dos provedores |
 | `YUI_GATEWAY_COMBOS` | Combos de modelos |
 | `YUI_GATEWAY_CUSTOM` | Provedores personalizados compatíveis com OpenAI |
+| `YUI_GATEWAY_CHECAGEM_RAPIDA` | Checagem rápida de vida dos provedores próprios que estão **fora desta máquina** (nem `127.x`, nem `localhost`, nem `::1`), como um OmniRoute noutro PC da rede. Antes de tentar, o Gateway faz um `GET .../models` sem chave (prazo de 2,5 s; qualquer resposta HTTP vale como vivo) e, sem resposta, pula o provedor e vai ao próximo. O "vivo" vale 30 s; o "fora" vale 30 s, depois 60 s, até 2 min. Se nenhum outro provedor puder ser tentado, ele é tentado assim mesmo. `false` desliga para todos; no cadastro de um provedor, o campo `"checagemRapida": false` (ou `true`) decide só para ele. Padrão `true` |
 | `OPENROUTER_API_KEY` | Chave do OpenRouter (só no Gateway) |
 | `OPENROUTER_MODELS` | Modelos do OpenRouter, separados por vírgula. Padrão `meta-llama/llama-3.3-70b-instruct:free` |
 

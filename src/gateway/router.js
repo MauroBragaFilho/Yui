@@ -13,6 +13,8 @@
  *  - Modelos virtuais: `auto`, `smart`, `fast`, combos seus e `provedor/modelo`.
  *  - Conversas sensíveis (contexto pessoal) NUNCA vão a provedores anônimos.
  *  - Nada de prompt ou chave em log/erro: mensagens passam por `scrub`.
+ *  - Checagem rápida de vida (só provedor com `checagemRapida: true`: os próprios fora desta máquina): um GET curto antes de tentar; sem
+ *    resposta, o provedor inteiro é pulado em vez de segurar o pedido até o prazo da tentativa.
  */
 
 export class GatewayError extends Error {
@@ -45,6 +47,9 @@ const COOLDOWN = {
   model: 30 * MIN,
   empty: 15 * SEC,
 };
+
+/** Checagem rápida de vida: prazo do GET, validade do "vivo" e do "fora" (o "fora" dobra a cada falha seguida, até o teto). */
+const CHECAGEM = { timeout: 2500, vivo: 30 * SEC, foraBase: 30 * SEC, foraMax: 2 * MIN };
 
 const PASS_THROUGH = [
   'temperature', 'max_tokens', 'top_p', 'stop', 'tools', 'tool_choice',
@@ -106,6 +111,7 @@ export function createRouter({
   const keyCooldown = new Map();      // `${provedor}#${i}` -> until
   const rotation = new Map();         // provedor.id -> próximo índice de chave
   const totals = { requests: 0, ok: 0, failed: 0 };
+  const checagens = new Map();        // provedor.id -> { vivo, ate, falhas, emVoo }
 
   const h = (id) => {
     if (!health.has(id)) health.set(id, { failures: 0, cooldownUntil: 0, ok: 0, fail: 0, lastError: null, lastStatus: null, lastOkAt: 0 });
@@ -227,6 +233,43 @@ export function createRouter({
     // 'client': sem penalidade
   }
 
+  // ── checagem rápida de vida ──
+  /**
+   * GET em {base}/models SEM chave e sem os cabeçalhos do provedor. Qualquer resposta HTTP (200, 401, 404, redirecionamento) = vivo;
+   * só falha de conexão ou prazo = fora. O redirecionamento não é seguido.
+   */
+  async function sondar(p) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CHECAGEM.timeout);
+    try {
+      const base = /^(.*)\/chat\/completions\/?$/i.exec(p.endpoint);
+      const url = base ? `${base[1]}/models` : new URL('/', p.endpoint).href;
+      const res = await fetchImpl(url, { method: 'GET', headers: { Accept: 'application/json' }, redirect: 'manual', signal: controller.signal });
+      try { await res.body?.cancel?.(); } catch { /* corpo já fechado */ }
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** O provedor responde? Usa o resultado recente; pedidos simultâneos esperam a MESMA checagem. */
+  function estaVivo(p) {
+    let c = checagens.get(p.id);
+    if (!c) checagens.set(p.id, (c = { vivo: true, ate: 0, falhas: 0, emVoo: null }));
+    if (c.emVoo) return c.emVoo;
+    if (now() < c.ate) return Promise.resolve(c.vivo);
+    c.emVoo = sondar(p).then((vivo) => {
+      c.vivo = vivo;
+      c.falhas = vivo ? 0 : c.falhas + 1;
+      c.ate = now() + (vivo ? CHECAGEM.vivo : Math.min(CHECAGEM.foraMax, CHECAGEM.foraBase * 2 ** (c.falhas - 1)));
+      c.emVoo = null;
+      return vivo;
+    });
+    return c.emVoo;
+  }
+
   // ── chamada ao provedor ──
   function buildPayload(t, request, stream, opts = {}) {
     const payload = { model: t.model.id, messages: request.messages, stream: Boolean(stream) };
@@ -311,9 +354,26 @@ export function createRouter({
     const log = [];
     const skipProviders = new Set(); // provedor que falhou como um todo: não tenta outros modelos dele nesta requisição
     let tried = 0;
-    for (const target of available) {
+    // A checagem não conta como tentativa. Os alvos pulados por ela vão para o FIM da fila: se nenhum outro responder, são tentados assim mesmo
+    // (um falso "fora", por exemplo um servidor lento para acordar, nunca deixa o pedido sem resposta só por causa da checagem).
+    const fila = [...available];
+    const pulados = [];
+    let ultimoRecurso = false;
+    const juntarPulados = (i) => {
+      if (i === fila.length - 1 && !ultimoRecurso && pulados.length) {
+        ultimoRecurso = true;
+        fila.push(...pulados);
+      }
+    };
+    for (let i = 0; i < fila.length; i += 1) {
+      const target = fila[i];
       if (tried >= maxAttempts || now() - started >= deadlineMs) break;
-      if (skipProviders.has(target.provider.id)) continue;
+      if (skipProviders.has(target.provider.id)) { juntarPulados(i); continue; }
+      if (target.provider.checagemRapida && !ultimoRecurso && !(await estaVivo(target.provider))) {
+        pulados.push(target);
+        juntarPulados(i);
+        continue;
+      }
       let lastKind = null;
       for (const keyIdx of keyOrder(target.provider)) {
         if (tried >= maxAttempts || now() - started >= deadlineMs) break;
@@ -332,12 +392,15 @@ export function createRouter({
           log.push({ provider: target.provider.id, model: target.model.id, status: err.status ?? null, kind, message: scrub(err.message) });
           lastKind = kind;
           if (kind === 'transient' || kind === 'credit') skipProviders.add(target.provider.id);
+          // o "vivo" guardado já não vale: vence o cache (sem apagar a contagem de falhas nem uma checagem em voo)
+          if (kind === 'transient') { const c = checagens.get(target.provider.id); if (c && !c.emVoo) c.ate = 0; }
           if (kind === 'rate' || kind === 'auth') continue; // tenta outra chave do mesmo provedor
           break; // próximo alvo
         }
       }
       // acabaram as chaves por limite/autenticação: o provedor está fora por enquanto
       if (lastKind === 'rate' || lastKind === 'auth') skipProviders.add(target.provider.id);
+      juntarPulados(i);
     }
 
     totals.failed += 1;
@@ -383,6 +446,8 @@ export function createRouter({
         keys: p.noAuth ? 0 : p.keys.length,
         keysCoolingDown: p.noAuth ? 0 : p.keys.filter((_, i) => keyUntil(p, i) > t0).length,
         cooldownSeconds: secs(providerCooldown.get(p.id) || 0),
+        // a checagem rápida de vida (só provedor próprio remoto): sem endereço nem segredo
+        ...(p.checagemRapida && checagens.has(p.id) ? { checagem: { vivo: checagens.get(p.id).vivo, falhas: checagens.get(p.id).falhas, validaPorSegundos: secs(checagens.get(p.id).ate) } } : {}),
         targets: targets.filter((t) => t.provider.id === p.id).map((t) => {
           const st = h(t.id);
           return {
@@ -405,6 +470,7 @@ export function createRouter({
     providerCooldown.clear();
     providerFailures.clear();
     keyCooldown.clear();
+    checagens.clear();
   }
 
   return {
