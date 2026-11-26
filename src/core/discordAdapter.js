@@ -1,5 +1,6 @@
 import { buildContext } from './permissions.js';
 import * as memory from './memory/facade.js';
+import { continuidadeLigada, falaDeContinuidade, juntarContinuidade } from './continuidade.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -51,7 +52,14 @@ export function buildMemoryBlock(ctx, prompt) {
   };
   try {
     renewRetention(ctx);
-    const found = memory.recall(ctx, prompt, { limit: 8 });
+    let found = memory.recall(ctx, prompt, { limit: 8 });
+    // Continuidade (YUI_CONTINUIDADE): fala sobre projeto ou decisão leva junto os mais recentes (só na memória pessoal).
+    if (continuidadeLigada() && ctx.memoryScope === 'personal' && falaDeContinuidade(prompt)) {
+      const todas = memory.listMemories(ctx, { limit: 200 });
+      found = memory.isMemoryRemote()
+        ? Promise.all([found, todas]).then(([achadas, lista]) => juntarContinuidade(achadas, lista))
+        : juntarContinuidade(found, todas);
+    }
     if (found && typeof found.then === 'function') return found.then((rows) => memoryBlockText(ctx, rows)).catch(fail);
     return memoryBlockText(ctx, found);
   } catch (err) {

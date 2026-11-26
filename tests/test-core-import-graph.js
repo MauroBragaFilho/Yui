@@ -23,6 +23,8 @@ const PURE_EXCEPTIONS = {
   'src/handlers/currencyHandler.js': 'cotação de moeda (só axios)',
   'src/services/tts/reasons.js': 'textos dos motivos da voz desligada, sem imports',
   'src/handlers/listStore.js': 'listas pessoais do dono (só fs e path), usado pelo relatório matinal dos lembretes',
+  'src/handlers/listAssistant.js': 'listas por conversa (só o listStore), usado pelo cérebro e pelo chat do app',
+  'src/handlers/chatIntents.js': 'memória por conversa, sem imports, usada pelo chat do app',
 };
 
 // Dívidas conhecidas da API: rotas do painel que ainda carregam código do bot NA HORA DO USO (a aresta pode estar no

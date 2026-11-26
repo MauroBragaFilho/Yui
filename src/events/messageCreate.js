@@ -10,6 +10,7 @@ import { fenceUntrustedWeb } from '../handlers/llmSafety.js';
 import { safeFetchText } from '../search/safeFetch.js';
 import { clipHeadTail } from '../utils/promptBudget.js';
 import { logger } from '../utils/logger.js';
+import { observarMensagem } from '../core/continuidade.js';
 import { isOwnerId } from '../core/permissions.js';
 import { fusoDoDono } from '../core/fuso.js';
 import { describeImages } from '../services/vision.js';
@@ -364,6 +365,9 @@ export default {
         if (message.author.bot) return;
         if (isForeignDirectMessage(message)) return;
         const isDirectMessage = !message.guildId; // no privado ninguém precisa citar "Yui" (com YUI_DM_EVERYONE=false só o dono chega aqui)
+        // Continuidade: na DM, o que não for "sim"/"não" sozinho descarta a proposta aqui, antes de qualquer retorno (comando por prefixo,
+        // anexo com resposta fixa, fila recusada...). Sem proposta pendente não faz nada.
+        if (isDirectMessage) observarMensagem(message.author.id, 'dm', message.content, { comAnexo: (message.attachments?.size ?? 0) > 0 });
         // Comando por prefixo ("+yui diario", "+yui perguntar ..."): quem trata é o prefixRouter (client.js). Sem este retorno a mesma
         // mensagem virava também uma conversa (o nome "Yui" casa com "+yui"): custo dobrado e até ferramenta acionada pela menção.
         if (startsWithCommandPrefix(message.content, config.discord?.prefix ?? config.prefix)) return;

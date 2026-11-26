@@ -3,7 +3,8 @@ import { recordInteraction } from '../core/interactionStats.js';
 import { contextFromDiscord, buildMemoryBlock, captureFromUserText, isMemoryEnabled } from '../core/discordAdapter.js';
 import { memory as coreMemory, audit as coreAudit } from '../core/index.js';
 import { forgetUserContext } from '../core/context/contextStore.js';
-import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize, detectGtaIntent, detectRadioIntent } from './chatIntents.js';
+import { continuidadeLigada, rotearContinuidade, descartarContinuidade } from '../core/continuidade.js';
+import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, clearForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize, detectGtaIntent, detectRadioIntent } from './chatIntents.js';
 import { runGtaIntent, buildGtaModelPrompt } from './gtaChat.js';
 import { buildThirdPartyLogPrompt, fenceUntrustedWeb } from './llmSafety.js';
 import { resolveMentions, neutralizeMassMentions } from '../discord/mentions.js';
@@ -2695,6 +2696,21 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 return '';
             }
         };
+        // Continuidade (YUI_CONTINUIDADE, padrão desligado): projetos e decisões do dono, só na DM e em texto, com confirmação antes de gravar. Roda ANTES das
+        // outras portas porque qualquer outra mensagem descarta a proposta pendente. Nada vai ao histórico, ao contexto nem à captura automática de memória.
+        if (continuidadeLigada() && !guildId && !options.guildId && directToYui && !isVoice && interaction?.isVoice !== true && options.radioMode !== true && options.thirdPartyPrompt !== true) {
+            const cont = await rotearContinuidade({
+                text: ownQuestion, ctx: coreCtx, interfaceId: 'dm', memory: coreMemory, enabled: isMemoryEnabled(),
+                semProposta: !ownQuestion || options.disableTools === true || Boolean(options.attachmentBlock) || (interaction?.attachments?.size ?? 0) > 0
+            });
+            if (cont.handled) {
+                if (cont.kind === 'proposta') clearForgetAllPending(userId); // um "sim" depois não pode valer para duas confirmações
+                await unifiedReply(cont.text);
+                return;
+            }
+        }
+        // Fala por voz não confirma nada, mas é "outra mensagem": descarta a proposta pendente da DM.
+        if (isVoice || interaction?.isVoice === true) descartarContinuidade(userId, 'dm');
         // Porta L (listas pessoais): "anota na lista X: ...", "mostra a lista X", "tira o item 3...": o CÓDIGO executa no arquivo da própria pessoa; nada vai ao histórico nem ao contexto.
         if (directToYui && !isVoice && options.radioMode !== true && options.thirdPartyPrompt !== true && ownQuestion) {
             const listRouted = await routeLists({ text: ownQuestion, userId });
@@ -2760,7 +2776,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 const memRun = await runMemoryIntent(memIntent, {
                     userId, isDM: !guildId, enabled: isMemoryEnabled(), memoryCtx: coreCtx, memory: coreMemory, audit: coreAudit,
                     scopeLabel: coreCtx.memoryScope === 'personal' ? '🔒 memória pessoal (permanente)' : (coreMemory.isPermanent?.() ? '🕒 memória do servidor (permanente)' : `🕒 memória temporária (${coreMemory.retentionDays()} dias sem interação)`),
-                    wipeContext: async (uid) => { try { return (await forgetUserContext(uid)).turns; } catch (_) { return 0; } }
+                    wipeContext: async (uid) => { descartarContinuidade(uid); try { return (await forgetUserContext(uid)).turns; } catch (_) { return 0; } }
                 });
                 if (memRun.handled) {
                     await unifiedReply(memRun.text);

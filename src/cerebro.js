@@ -224,7 +224,8 @@ async function bootstrap() {
       setTimeout(() => { monitores?.passada('bot conectou'); }, 300).unref?.();
     },
   });
-  const methods = registerCerebroMethods(channel, { health: cerebroHealth, lembretesMudaram: () => { setTimeout(() => { reminders?.tick('pedido do dono').catch(() => {}); }, 50).unref?.(); } });
+  const lembretesMudaram = () => { setTimeout(() => { reminders?.tick('pedido do dono').catch(() => {}); }, 50).unref?.(); };
+  const methods = registerCerebroMethods(channel, { health: cerebroHealth, lembretesMudaram });
   // A conversa do Discord (etapa 5): chat.turn, chat.commit e chat.forgetVoice. O cérebro é o dono do contexto por horas e do histórico.
   // A pesquisa do Discord (etapa 6): research.turn (a da fila) e chat.yui (o /yui inteiro); a busca automática roda no passo do chat.turn.
   // A busca falsa só existe nos testes (NODE_ENV=test).
@@ -271,6 +272,8 @@ async function bootstrap() {
 
   // 6. Yui API sem o cliente do Discord: as telas do Discord viram pedidos ao bot; o aviso por DM vai pelo bot.
   api = startApi(null, {
+    lembretesMudaram,
+    aoApagarMemoria: (userId) => { try { channel?.emit('continuidade.descartar', { userId: String(userId) }, { role: 'bot' }); } catch { /* o aviso nunca derruba o apagamento */ } },
     // `reinicio` (etapa 10, piloto do app): "Reiniciar a Yui" pede ao SUPERVISOR o reinício dos dois processos (bot e cérebro); sem supervisor o pedido é recusado
     // e nada reinicia (o `process.exit` de sempre nunca é usado aqui: ninguém religaria o cérebro, e o bot ficaria sem ele).
     admin: createCerebroAdmin({ channel, diagnostico: cerebroParaDiagnostico, reinicio: (pedido) => supervisor.pedirReinicio(pedido), monitores }),

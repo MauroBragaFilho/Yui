@@ -20,6 +20,9 @@ import { getApprovalManager } from '../security/approvalManager.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
 import { perfilDoApp } from './perfilDoApp.js';
 import { fioCompartilhado } from './historicoCompartilhado.js';
+import { preRotaDoApp } from './preRotas.js';
+import { descartarContinuidade } from '../continuidade.js';
+import { forgetUserContext } from '../context/contextStore.js';
 import { criarIdentidade } from './identidade.js';
 
 // Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
@@ -216,11 +219,20 @@ export function createApiServer({
   health = null, // () => objeto extra do /v1/health (ex.: estado do Discord); usado pelo supervisor
   bds = createBdsProxy(), // ponte para o BDS Server (o painel da Yui é a única porta de entrada para os arquivos)
   selecionarPerfil = null,
+  lembretesMudaram = null,
+  aoApagarMemoria = null, // (userId) => avisa o bot (processo separado) para descartar a proposta de continuidade da DM
   identidade = criarIdentidade({ arquivo: null }), // prova de identidade do servidor (GET /v1/identidade, assinatura Ed25519); o startApi liga com a chave do arquivo. Sem ela, a rota responde 404
 } = {}) {
   const discordKeyEnabled = Boolean(notify && ownerId);
   const hits = new Map();       // userId -> [timestamps]
   const histories = new Map();  // userId -> [{role, content}]
+
+  /** Pré-rotas por código do chat (preRotas.js). A auditoria leva só o tipo e o tamanho. */
+  async function preRota(ctx, message) {
+    const pre = await preRotaDoApp({ ctx, message, histories }, { aoMudar: lembretesMudaram, aoApagarMemoria });
+    if (pre) audit('api.prerota', ctx, { kind: pre.kind, chars: message.length });
+    return pre;
+  }
 
   const devRoute = createDevRoutes(dev);
 
@@ -615,6 +627,10 @@ export function createApiServer({
         if (!message) return send(res, 400, { error: 'message obrigatória' });
         if (message.length > MAX_MESSAGE) return send(res, 400, { error: `message excede ${MAX_MESSAGE} caracteres` });
 
+        // Pré-rotas por código (chaves próprias, desligadas por padrão): não entram no histórico, no fio nem na captura de memória.
+        const pre = await preRota(ctx, message);
+        if (pre) return send(res, 200, { type: 'reply', reply: pre.reply, memoryScope: ctx.memoryScope });
+
         // Fase 2: com a chave ligada, o dono conversa no app sobre o mesmo fio da DM (senão, o histórico em RAM de sempre).
         const fio = await fioCompartilhado(ctx);
         const history = fio ? fio.ler() : (histories.get(ctx.userId) || []);
@@ -645,6 +661,9 @@ export function createApiServer({
         const message = String(body.message ?? '').trim();
         if (!message) return send(res, 400, { error: 'message obrigatória' });
         if (message.length > MAX_MESSAGE) return send(res, 400, { error: `message excede ${MAX_MESSAGE} caracteres` });
+
+        const pre = await preRota(ctx, message);
+        if (pre) return send(res, 200, { type: 'reply', reply: pre.reply });
 
         // Fase 2: com a chave ligada, o dono conversa no app sobre o mesmo fio da DM (senão, o histórico em RAM de sempre).
         const fio = await fioCompartilhado(ctx);
@@ -719,7 +738,13 @@ export function createApiServer({
 
       if (route === 'DELETE /v1/memory') {
         if (!isMemoryEnabled()) return send(res, 503, { error: 'memória desativada' });
-        return send(res, 200, { removed: memory.forgetAll(ctx) });
+        const removed = memory.forgetAll(ctx);
+        // Apagar tudo vale também para as falas recentes: o histórico em RAM do app e o contexto por horas desta pessoa.
+        histories.delete(ctx.userId);
+        descartarContinuidade(ctx.userId);
+        aoApagarMemoria?.(ctx.userId);
+        await forgetUserContext(ctx.userId);
+        return send(res, 200, { removed });
       }
 
       return send(res, 404, { error: 'rota não encontrada' });
@@ -781,6 +806,9 @@ export function startApi(client = null, overrides = {}) {
     health: overrides.health ?? (() => ({ discord: { online: client?.isReady?.() ?? null } })),
     // Etapa 10: o cérebro passa o seletor de perfil de IA dele (o app usa o MESMO seletor determinístico). Sem ele, o chat do app não passa perfil.
     selecionarPerfil: overrides.selecionarPerfil ?? null,
+    // pedido de lembrete pelo app que mexe na entrega (reenviar/descartar): o cérebro dispara uma passada na hora
+    lembretesMudaram: overrides.lembretesMudaram ?? null,
+    aoApagarMemoria: overrides.aoApagarMemoria ?? null,
     identidade,
   });
   server.listen(port, host, () =>

@@ -4,6 +4,7 @@ import { makeEmbed, chunkLines, clampText } from '../embedLimits.js';
 import { checkBan } from '../../handlers/banHandler.js';
 import { contextFromDiscord, isMemoryEnabled } from '../../core/discordAdapter.js';
 import { memory, audit } from '../../core/index.js';
+import { descartarContinuidade } from '../../core/continuidade.js';
 import { forgetUserContext } from '../../core/context/contextStore.js';
 import { logger } from '../../utils/logger.js';
 
@@ -66,6 +67,8 @@ export const memoriaCommand = {
 
     const sub = interaction.options.getSubcommand();
     const userId = interaction.user.id;
+
+    if (sub === 'apagar-tudo') descartarContinuidade(userId); // um "sim" depois não regrava o que foi apagado
 
     // O contexto por horas é apagável mesmo com a memória desligada ou para quem está bloqueado.
     const removedContext = sub === 'apagar-tudo' ? await wipeConversationContext(userId) : 0;

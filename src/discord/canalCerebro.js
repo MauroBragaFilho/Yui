@@ -6,6 +6,7 @@
 //    - memória (core/memory/facade.js): memory.* pelo canal;
 //    - contexto por horas: só o apagar (context.forgetUser e context.forgetGuild);
 //    - lembretes por conversa: reminders.route e reminders.list;
+//    - listas por conversa (só com YUI_APP_COMANDOS=true): lists.route;
 //    - a CONVERSA (etapa 5, discord/turnoCerebro.js): cada pedido da fila do llmHandler e cada /yui viram um turno do cérebro (chat.turn e
 //      chat.commit); o cérebro é o dono do contexto por horas e do histórico.
 //    Cérebro fora: a memória responde "indisponível agora" e a conversa responde "a Yui está indisponível agora" (sem prender a fila).
@@ -25,6 +26,8 @@ import { createPersistentIdemStore, efeitoUnico } from '../core/channel/idemPers
 import { setMemoryRemote } from '../core/memory/facade.js';
 import { setContextRemote } from '../core/context/contextStore.js';
 import { setRemindersRemote } from '../reminders/assistant.js';
+import { descartarContinuidade } from '../core/continuidade.js';
+import { setListsRemote } from '../handlers/listAssistant.js';
 import { setChatRemote } from './turnoCerebro.js';
 import { buildContext, isOwnerId, ROLES } from '../core/permissions.js';
 import { splitForDiscord } from '../core/alerts.js';
@@ -260,12 +263,15 @@ export function startBotChannel({ getClient, logger = defaultLogger, connect = c
     route: (params) => channel.request('reminders.route', params, { idem: effect('reminders.route') }),
     list: (params) => channel.request('reminders.list', params),
   });
+  setListsRemote({ route: (params) => channel.request('lists.route', params, { idem: effect('lists.route') }) });
   // A conversa do Discord pelo cérebro (etapa 5): o llmHandler passa a montar turnos (chat.turn/chat.commit) em vez de chamar a IA daqui.
   setChatRemote(channel, { logger });
   channel.onState(({ state }) => {
     if (state === 'open') logger.info('[Cérebro] Bot ligado ao cérebro: conversa, memória, lembretes e pesquisa pelo canal.');
   });
   // O painel (no cérebro) mudou as chaves/provedores de IA ou zerou os descansos: a cadeia de IA do bot acompanha.
+  // "Apagar tudo" feito no cérebro (app): a proposta de continuidade da DM vive na memória deste processo.
+  channel.on('continuidade.descartar', (p) => { if (p?.userId) descartarContinuidade(String(p.userId)); });
   channel.on('ai.settingsChanged', (payload) => { applyAiSettingsChange(payload, logger); });
   return channel;
 }

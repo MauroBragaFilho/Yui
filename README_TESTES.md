@@ -52,6 +52,7 @@ npm run test:memperm     # memória permanente (MEMORY_RETENTION_DAYS=0), conte�
 npm run test:memret      # conversar renova o prazo da memória pública (1x/hora, só quem já tem memória); desligada não renova
 npm run test:audiencia   # política de audiência (módulo puro): matriz completa de voz/texto, falha fechado, revalidação, ferramentas deny-by-default, auditoria sem texto
 npm run test:gatewaychecagem # provedor proprio remoto fora (ex.: OmniRoute noutro PC) e pulado rapido, volta sozinho, e continua como ultimo recurso
+npm run test:fase2        # comandos no chat do app (YUI_APP_COMANDOS) e projetos/decisoes com confirmacao (YUI_CONTINUIDADE); desligado nada muda
 npm run test:histcomp     # chat do app do dono no mesmo fio da DM (YUI_HISTORICO_COMPARTILHADO): desligado nao le nem grava; outra pessoa nunca ve o fio
 npm run test:vozaudaux    # auditoria politica.audiencia (sem texto, hash encadeado) e linha de latencia da voz (so numeros)
 npm run test:vozaudcerebro # voz unificada no cerebro: privado valido, todo rebaixamento, invalidacao no meio do turno, fio dm com fonte=voz, chave desligada identica

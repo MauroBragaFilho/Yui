@@ -16,6 +16,8 @@ import * as memoryStore from '../core/memory/store.js';
 import { getPolicyEngine, originFor } from '../core/security/policyEngine.js';
 import { forgetUserContext, forgetGuildContext } from '../core/context/contextStore.js';
 import { routeReminders, getReminderStore, scopedReminderStore } from '../reminders/assistant.js';
+import { descartarContinuidade } from '../core/continuidade.js';
+import { routeLists } from '../handlers/listAssistant.js';
 import { researchSlots, RESEARCH_BUSY_REPLY } from '../core/ai/manager.js';
 import { ChannelError } from '../core/channel/protocol.js';
 import { authorizeAdminWipe, AdminWipeError } from '../core/memory/adminWipe.js';
@@ -118,6 +120,7 @@ export function registerCerebroMethods(server, deps = {}) {
   handle('memory.forgetAll', async (p, meta) => {
     const ctx = contextFromWire(p?.ctx, meta);
     gateAction(engine, 'memory.wipe_own', ctx, meta);
+    descartarContinuidade(ctx.userId); // a proposta do app vive neste processo
     return store.forgetAll(ctx);
   });
   handle('memory.touch', async (p, meta) => {
@@ -165,6 +168,7 @@ export function registerCerebroMethods(server, deps = {}) {
     const userId = optionalId(p?.userId, 'Usuário');
     if (!userId) throw bad('Usuário ausente.');
     gateAction(engine, 'memory.wipe_own', buildContext({ platform: 'discord', userId, isDM: true }), meta);
+    descartarContinuidade(userId);
     return forgetUserContext(userId);
   });
   handle('context.forgetGuild', async (p) => {
@@ -189,6 +193,13 @@ export function registerCerebroMethods(server, deps = {}) {
     const userId = optionalId(p?.userId, 'Usuário');
     if (!userId) throw bad('Usuário ausente.');
     return scopedReminderStore(reminderStore(), userId, isOwnerId(userId)).list();
+  });
+
+  // ── Listas pessoais: com YUI_APP_COMANDOS ligado o cérebro é o único escritor (o app e o bot passam por aqui) ──
+  handle('lists.route', async (p) => {
+    const userId = optionalId(p?.userId, 'Usuário');
+    if (!userId) return { handled: false };
+    return routeLists({ text: String(p?.text ?? '').slice(0, 4000), userId }, deps.listStore ? { store: deps.listStore } : {});
   });
 
   // ── Pesquisa (adaptador do Core, sem a ponte do bot) ──

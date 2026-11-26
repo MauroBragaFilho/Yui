@@ -174,6 +174,17 @@ function store() {
   return sharedStore;
 }
 
+// Cérebro separado com YUI_APP_COMANDOS=true: o app grava listas no cérebro, então o cérebro vira o ÚNICO escritor e o bot pede a ele
+// (dois processos gravando o mesmo arquivo perdem itens). Com a chave desligada o remoto é ignorado e o bot grava como sempre.
+export const LISTS_UNAVAILABLE_TEXT = 'Não consegui mexer nas listas agora. Confira a lista e tente de novo daqui a pouco.';
+let listsRemote = null;
+export function setListsRemote(remote) {
+  listsRemote = remote && typeof remote.route === 'function' ? remote : null;
+}
+export function appComandosLigado(env = process.env) {
+  return String(env?.YUI_APP_COMANDOS ?? '').trim().toLowerCase() === 'true';
+}
+
 /**
  * Se a mensagem é um pedido de lista, executa e devolve { handled: true, text, researched: true }
  * (researched: true = a troca NÃO vai ao contexto/histórico: o conteúdo da lista é dado pessoal).
@@ -182,6 +193,15 @@ function store() {
 export async function routeLists({ text, userId } = {}, { store: injected = null, env = process.env } = {}) {
   if (String(env?.YUI_LISTS_ENABLED ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
   if (!userId || !/^\d{5,25}$/.test(String(userId))) return { handled: false };
+  if (listsRemote && !injected && appComandosLigado(env)) {
+    if (!parseListRequest(text)) return { handled: false };
+    try {
+      const out = await listsRemote.route({ text: String(text ?? ''), userId: String(userId) });
+      return out && out.handled === true ? { handled: true, text: String(out.text ?? ''), researched: true } : { handled: false };
+    } catch {
+      return { handled: true, text: LISTS_UNAVAILABLE_TEXT, researched: true }; // nunca grava localmente
+    }
+  }
   const reply = await runListRequest({ text, userId: String(userId), store: injected || store() });
   return reply === null ? { handled: false } : { handled: true, text: reply, researched: true };
 }
