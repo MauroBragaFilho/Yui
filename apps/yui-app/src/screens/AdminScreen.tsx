@@ -314,19 +314,9 @@ function Servidores({ client }: Props) {
         <Card key={g.id} style={styles.card}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>{g.name}</Text>
-            <Badge label={g.tosAccepted ? 'TOS aceito' : 'TOS pendente'} color={g.tosAccepted ? colors.success : colors.warning} />
+            <Badge label={g.tosAccepted ? 'Termos aceitos' : 'Termos pendentes'} color={g.tosAccepted ? colors.success : colors.warning} />
           </View>
           <Text style={styles.hint}>ID {g.id}{g.members !== null ? ` • ${g.members} membros` : ''}</Text>
-          <Button
-            testID={`guild-detail-${g.id}`}
-            label={open === g.id ? 'Ocultar detalhes' : 'Ver detalhes'}
-            variant="ghost"
-            onPress={() => setOpen(open === g.id ? null : g.id)}
-            style={styles.smallBtn}
-          />
-          {open === g.id ? (
-            <GuildDetail client={client} id={g.id} onTosChange={(aceito) => setData((list) => (list ? list.map((x) => (x.id === g.id ? { ...x, tosAccepted: aceito } : x)) : list))} />
-          ) : null}
           <Text style={styles.label}>AutoMod</Text>
           <View style={styles.chips}>
             {AUTOMOD.map((o) => (
@@ -340,6 +330,16 @@ function Servidores({ client }: Props) {
               </Pressable>
             ))}
           </View>
+          <Button
+            testID={`guild-detail-${g.id}`}
+            label={open === g.id ? 'Ocultar detalhes' : 'Ver detalhes'}
+            variant="ghost"
+            onPress={() => setOpen(open === g.id ? null : g.id)}
+            style={styles.smallBtn}
+          />
+          {open === g.id ? (
+            <GuildDetail client={client} id={g.id} onTosChange={(aceito) => setData((list) => (list ? list.map((x) => (x.id === g.id ? { ...x, tosAccepted: aceito } : x)) : list))} />
+          ) : null}
         </Card>
       ))}
     </View>

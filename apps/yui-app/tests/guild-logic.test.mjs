@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as g from '../src/guildLogic.ts';
+import { filtrarAjustes, gruposDosAjustes } from '../src/configLogic.ts';
 import { createClient } from '../src/api/client.ts';
 
 test('ferramentas: avisos nas sensíveis e rótulo sem emoji', () => {
@@ -105,4 +106,16 @@ test('ajustes: confirmação só no valor que afrouxa, e o cliente leva o confir
   await admin.configRemove('YUI_ALERTS', true);
   await admin.configRemove('YUI_FUSO');
   assert.deepEqual(corpos, [{ valor: 'false', confirm: true }, { valor: 'true' }, { confirm: true }, undefined]);
+});
+
+test('configuração: grupos e busca sem acento em todos os grupos', () => {
+  const itens = [
+    { chave: 'YUI_A', rotulo: 'Relatório da manhã', grupo: 'Relatório', descricao: 'Resumo diário' },
+    { chave: 'YUI_B', rotulo: 'Voz', grupo: 'Voz', descricao: 'Fala em call' },
+  ];
+  assert.deepEqual(gruposDosAjustes(itens), ['Relatório', 'Voz']);
+  assert.equal(filtrarAjustes(itens, 'Voz', '').length, 1);
+  assert.equal(filtrarAjustes(itens, null, '').length, 2);
+  assert.equal(filtrarAjustes(itens, 'Voz', 'relatorio')[0].chave, 'YUI_A');
+  assert.equal(filtrarAjustes(itens, null, 'nada disso').length, 0);
 });

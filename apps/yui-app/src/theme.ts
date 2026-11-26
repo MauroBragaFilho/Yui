@@ -12,20 +12,20 @@ const web = Platform.OS === 'web';
 const v = (name: string, dark: string) => (web ? `var(--${name})` : dark);
 
 export const colors = {
-  bg: v('bg', '#0b0912'),
-  surface: v('card', '#14101d'),
-  surfaceAlt: v('card-2', '#1c1628'),
-  border: v('line', '#2c2339'),
-  text: v('text', '#f4f0fa'),
-  muted: v('muted', '#a79fbd'),
-  /** Destaque (vermelho). `accentText` é a versão legível sobre as superfícies. */
+  bg: v('bg', '#0e0e10'),
+  surface: v('card', '#161619'),
+  surfaceAlt: v('card-2', '#1e1e22'),
+  border: v('line', '#2b2b31'),
+  text: v('text', '#f2f2f4'),
+  muted: v('muted', '#a1a1aa'),
+  /** Destaque (roxo). `accentText` é a versão legível sobre as superfícies. */
   accent: v('accent', '#8a3fe6'),
   accentText: v('accent-text', '#c9a0ff'),
   accentLight: v('accent-light', 'rgba(138,63,230,0.24)'),
   /** Botão primário em pílula, no roxo da Yui com texto branco. */
   btnBg: v('btn-bg', '#8a3fe6'),
   btnFg: v('btn-fg', '#ffffff'),
-  inputBg: v('input-bg', '#1c1628'),
+  inputBg: v('input-bg', '#1e1e22'),
   danger: v('danger', '#ff7a7f'),
   dangerBg: v('danger-bg', 'rgba(255,90,95,0.14)'),
   dangerSolid: v('danger-solid', '#b42318'),
@@ -35,7 +35,7 @@ export const colors = {
   primary: v('accent', '#8a3fe6'),
   primaryDim: v('accent-light', 'rgba(138,63,230,0.24)'),
   userBubble: v('btn-bg', '#ffffff'),
-  yuiBubble: v('card-2', '#221a30'),
+  yuiBubble: v('card-2', '#1e1e22'),
 } as const;
 
 /** Raio único: controles e cartões usam o mesmo (md); pill só para marcadores e barras. */

@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ApiError, type AdminOverview, type GatewayStatus, type Me, type ReminderView, type YuiClient } from '../api/client.ts';
 import { Badge, Button, Card, Icon, PageHeader, SectionHeading, StateView, type TabKey } from '../components/ui.tsx';
-import { buildAlerts, chartBars, formatUptime, greetingFor, groupEvents, levelForFree, percent, relativeTime, systemSummary, type Level } from '../overviewLogic.ts';
+import { buildAlerts, chartBars, formatUptime, groupEvents, levelForFree, percent, relativeTime, systemSummary, type Level } from '../overviewLogic.ts';
 import { groupReminders, summarizeReminders } from '../remindersLogic.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 
@@ -28,7 +28,7 @@ function rotuloAtividade(label: string): string {
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Não consegui carregar a visão geral.');
 
 /**
- * Visão Geral (só o dono): estado da Yui, números do dia, saúde do computador, atividade recente e atalhos.
+ * Visão Geral (só o dono): estado da Yui, números do dia, saúde do computador e atividade recente.
  * Tudo vem da API; o que ela não mede (custo de IA, Yui Live) não aparece com número inventado.
  */
 export function OverviewScreen({ client, onNavigate }: Props) {
@@ -79,7 +79,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
     <View style={styles.root}>
       <PageHeader
         title="Início"
-        subtitle="Estado da Yui e atalhos"
+        subtitle="Estado da Yui"
         right={<Button testID="overview-refresh" label="Atualizar" variant="ghost" onPress={load} loading={loading} />}
       />
       <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -88,13 +88,10 @@ export function OverviewScreen({ client, onNavigate }: Props) {
 
         {data && summary ? (
           <>
-            <Card style={styles.hero}>
-              <Image source={require('../../assets/yui-avatar.webp')} style={styles.avatar} accessibilityLabel="Yui" />
-              <View style={styles.heroText}>
-                <Text style={styles.greeting}>{greetingFor(new Date().getHours())}{data.ownerName ? `, ${data.ownerName}` : ''}.</Text>
-                <Text testID="overview-summary" style={[styles.summary, !summary.ok && { color: colors.warning }]}>{summary.text}</Text>
-              </View>
-            </Card>
+            <View style={styles.status}>
+              <View style={[styles.dot, { backgroundColor: summary.ok ? colors.success : colors.warning }]} />
+              <Text testID="overview-summary" style={styles.summary}>{summary.text}</Text>
+            </View>
 
             <SectionHeading title="Saúde" hint="Cérebro, bot, IA e voz de relance." />
             <View style={styles.health}>
@@ -114,22 +111,13 @@ export function OverviewScreen({ client, onNavigate }: Props) {
               <HealthCard icon="graphic_eq" title="Voz" level="unknown" text="Sem leitura aqui. Veja em Admin > Rádio." />
             </View>
 
-            <SectionHeading title="Atalhos" />
-            <View style={styles.badges}>
-              <Shortcut testID="go-chat" icon="chat_bubble" label="Chat" onPress={() => onNavigate('chat')} />
-              <Shortcut testID="go-files" icon="folder" label="Arquivos" onPress={() => onNavigate('files')} />
-              <Shortcut testID="go-memory" icon="psychology" label="Memória" onPress={() => onNavigate('memory')} />
-              <Shortcut testID="go-admin" icon="admin_panel_settings" label="Admin" onPress={() => onNavigate('admin')} />
-              <Shortcut testID="go-status" icon="monitor_heart" label="Status" onPress={() => onNavigate('status')} />
-            </View>
-
             <SectionHeading title="Números do dia" />
             <View style={styles.grid}>
-              <Kpi testID="kpi-servers" icon="dns" value={String(data.discord.guilds)} label="Servidores ativos" />
-              <Kpi testID="kpi-memory-users" icon="psychology" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} label="Pessoas com memória" />
-              <Kpi testID="kpi-interactions" icon="forum" value={data.interactions ? String(data.interactions.total) : '—'} label="Respostas da IA (24 h)" />
-              <Kpi testID="kpi-uptime" icon="schedule" value={formatUptime(data.uptimeSeconds)} label="Tempo ligada" />
-              <Kpi testID="kpi-ram" icon="memory" value={`${data.memoryMB} MB`} label="Memória da Yui" />
+              <Kpi testID="kpi-servers" value={String(data.discord.guilds)} label="Servidores ativos" />
+              <Kpi testID="kpi-memory-users" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} label="Pessoas com memória" />
+              <Kpi testID="kpi-interactions" value={data.interactions ? String(data.interactions.total) : '—'} label="Respostas da IA (24 h)" />
+              <Kpi testID="kpi-uptime" value={formatUptime(data.uptimeSeconds)} label="Tempo ligada" />
+              <Kpi testID="kpi-ram" value={`${data.memoryMB} MB`} label="Memória da Yui" />
             </View>
 
             <Card style={styles.card}>
@@ -250,7 +238,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
 function SectionTitle({ icon, title }: { icon: string; title: string }) {
   return (
     <View style={styles.sectionTitle}>
-      <Icon name={icon} size={20} color={colors.accentText} />
+      <Icon name={icon} size={18} color={colors.muted} />
       <Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>
     </View>
   );
@@ -262,23 +250,25 @@ const LEVEL_PT: Record<Level, string> = { ok: 'Normal', warn: 'Atenção', dange
 function HealthCard({ icon, title, level, text }: { icon: string; title: string; level: Level; text: string }) {
   const color = LEVEL_COLOR[level];
   return (
-    <View style={[styles.healthCard, { borderLeftColor: level === 'unknown' ? colors.border : color }]} accessibilityLabel={`${title}: ${LEVEL_PT[level]}. ${text}`}>
+    <View style={styles.healthCard} accessibilityLabel={`${title}: ${LEVEL_PT[level]}. ${text}`}>
       <View style={styles.rowBetween}>
         <View style={styles.sectionTitle}>
           <Icon name={icon} size={18} color={colors.muted} />
           <Text style={styles.healthTitle}>{title}</Text>
         </View>
-        <Text style={[styles.healthState, { color }]}>{LEVEL_PT[level]}</Text>
+        <View style={styles.sectionTitle}>
+          <View style={[styles.dot, { backgroundColor: color }]} />
+          <Text style={styles.healthState}>{LEVEL_PT[level]}</Text>
+        </View>
       </View>
       <Text style={styles.healthText}>{text}</Text>
     </View>
   );
 }
 
-function Kpi({ icon, value, label, testID }: { icon: string; value: string; label: string; testID?: string }) {
+function Kpi({ value, label, testID }: { value: string; label: string; testID?: string }) {
   return (
     <Card style={styles.kpi}>
-      <Icon name={icon} size={20} color={colors.muted} />
       <Text testID={testID} style={styles.kpiValue}>{value}</Text>
       <Text style={styles.kpiLabel}>{label}</Text>
     </Card>
@@ -314,15 +304,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md, width: '100%', maxWidth: 1100, alignSelf: 'center' },
   health: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  healthCard: { flexGrow: 1, flexBasis: 220, gap: spacing.xs, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 4, backgroundColor: colors.surface },
+  healthCard: { flexGrow: 1, flexBasis: 220, gap: spacing.xs, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   healthTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: '600' },
-  healthState: { fontSize: 12, lineHeight: 16, fontWeight: '700' },
+  healthState: { color: colors.muted, fontSize: 12, lineHeight: 16 },
   healthText: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, flexWrap: 'wrap', padding: spacing.lg, borderRadius: radius.md },
-  avatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 1, borderColor: colors.border },
-  heroText: { flex: 1, minWidth: 220, gap: spacing.sm },
-  greeting: { color: colors.text, fontSize: 20, fontFamily: fonts.title, fontWeight: '700' },
-  summary: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  status: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  summary: { color: colors.text, fontSize: 16, lineHeight: 22, flexShrink: 1 },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   kpi: { flexGrow: 1, flexBasis: 150, gap: spacing.xs, padding: spacing.lg },
@@ -334,7 +321,7 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' },
   meterLabel: { color: colors.text, fontSize: 13 },
   meterValue: { fontSize: 13, fontWeight: '600' },
-  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 96 },
+  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 96 },
   barCol: { flex: 1, height: '100%', justifyContent: 'flex-end', backgroundColor: colors.surfaceAlt, borderRadius: 3, overflow: 'hidden' },
   bar: { width: '100%', backgroundColor: colors.accent, borderRadius: 3 },
   track: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
@@ -347,7 +334,7 @@ const styles = StyleSheet.create({
   memTitle: { color: colors.muted, fontSize: 12 },
   memValue: { color: colors.text, fontSize: 18, fontFamily: fonts.title, fontWeight: '700' },
   shortcut: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
-  dot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 4 },
   shortcutText: { color: colors.text, fontSize: 13 },
   hint: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger },

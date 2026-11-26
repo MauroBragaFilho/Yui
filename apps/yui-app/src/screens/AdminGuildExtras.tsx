@@ -309,35 +309,22 @@ function Canal({ client, guild, reload }: { client: YuiClient; guild: AdminGuild
   );
 }
 
-type Secao = 'ferramentas' | 'termos' | 'canal';
-const SECOES: { key: Secao; label: string }[] = [
-  { key: 'ferramentas', label: 'Ferramentas' },
-  { key: 'termos', label: 'Termos de uso' },
-  { key: 'canal', label: 'Canal' },
-];
+export type Secao = 'ferramentas' | 'termos' | 'canal';
 
-/** Configurações por servidor. Cada seção só carrega quando aberta. */
-export function GuildExtras({ client, guild, reload, onTosChange }: {
-  client: YuiClient; guild: AdminGuildDetail; reload: () => Promise<void>; onTosChange?: (aceito: boolean) => void;
+/** Uma seção das configurações do servidor. Só é montada (e só carrega) quando a aba está aberta. */
+export function GuildExtras({ secao, client, guild, reload, onTosChange }: {
+  secao: Secao; client: YuiClient; guild: AdminGuildDetail; reload: () => Promise<void>; onTosChange?: (aceito: boolean) => void;
 }) {
-  const [secao, setSecao] = useState<Secao | null>(null);
-  return (
-    <View style={styles.body}>
-      <View style={styles.row}>
-        {SECOES.map((s) => <Chip key={s.key} testID={`guild-secao-${s.key}`} label={s.label} on={secao === s.key} onPress={() => setSecao(secao === s.key ? null : s.key)} />)}
-      </View>
-      {secao === 'ferramentas' ? <Ferramentas client={client} guildId={guild.id} /> : null}
-      {secao === 'termos' ? <Termos client={client} guild={guild} onChanged={(aceito) => { onTosChange?.(aceito); reload(); }} /> : null}
-      {secao === 'canal' ? <Canal client={client} guild={guild} reload={reload} /> : null}
-    </View>
-  );
+  if (secao === 'ferramentas') return <Ferramentas client={client} guildId={guild.id} />;
+  if (secao === 'termos') return <Termos client={client} guild={guild} onChanged={(aceito) => { onTosChange?.(aceito); reload(); }} />;
+  return <Canal client={client} guild={guild} reload={reload} />;
 }
 
 const styles = StyleSheet.create({
   body: { gap: spacing.sm },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   box: { gap: spacing.sm, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: spacing.md },
-  title: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: '700', marginTop: spacing.sm },
+  title: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: '600', marginTop: spacing.sm },
   value: { color: colors.text, fontSize: 14, lineHeight: 20, flexShrink: 1 },
   hint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   warn: { color: colors.warning, fontSize: 12, lineHeight: 17 },

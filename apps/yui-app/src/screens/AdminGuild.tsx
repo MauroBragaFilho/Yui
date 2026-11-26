@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError, type AdminGuildDetail, type ChannelRef, type GuildChannelType, type YoutubeLiveMode, type YuiClient } from '../api/client.ts';
 import { ChannelPicker } from '../components/ChannelPicker.tsx';
 import { confirmAction } from '../components/confirm.ts';
 import { Button, Chip } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
-import { GuildExtras } from './AdminGuildExtras.tsx';
+import { GuildExtras, type Secao } from './AdminGuildExtras.tsx';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu errado.');
 const chan = (c: ChannelRef | null) => (c ? (c.name ? `#${c.name}` : `ID ${c.id}`) : 'não definido');
@@ -14,6 +14,14 @@ const CHANNEL_TYPES: { type: Exclude<GuildChannelType, 'atualizacoes'>; label: s
   { type: 'noticias', label: 'Notícias' },
   { type: 'diario', label: 'Reset diário' },
   { type: 'semanal', label: 'Evento semanal' },
+];
+
+type Aba = 'publicacoes' | Secao;
+const ABAS: { key: Aba; label: string }[] = [
+  { key: 'publicacoes', label: 'Publicações' },
+  { key: 'ferramentas', label: 'Ferramentas' },
+  { key: 'termos', label: 'Termos de uso' },
+  { key: 'canal', label: 'Conversa' },
 ];
 
 function RolePicker({ roles, value, onPick }: { roles: { id: string; name: string }[]; value: string | null; onPick: (id: string | null) => void }) {
@@ -51,6 +59,13 @@ function LiveModeChips({ value, onPick, testID }: { value: YoutubeLiveMode; onPi
 /** Canais do servidor, avisos de YouTube/Twitch e configurações do servidor, com edição. */
 export function GuildEditor({ client, data, reload, onTosChange }: { client: YuiClient; data: AdminGuildDetail; reload: () => Promise<void>; onTosChange?: (aceito: boolean) => void }) {
   const id = data.id;
+  const [aba, setAba] = useState<Aba>('publicacoes');
+  // Aba já aberta continua montada (escondida): canal escolhido e texto não salvo não se perdem.
+  const [visitadas, setVisitadas] = useState<Secao[]>([]);
+  const abrir = (a: Aba) => {
+    setAba(a);
+    if (a !== 'publicacoes' && !visitadas.includes(a)) setVisitadas([...visitadas, a]);
+  };
   const [editing, setEditing] = useState<GuildChannelType | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -107,6 +122,19 @@ export function GuildEditor({ client, data, reload, onTosChange }: { client: Yui
 
   return (
     <View style={styles.box}>
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {ABAS.map((a) => (
+          <Pressable key={a.key} testID={`guild-secao-${a.key}`} accessibilityRole="tab" accessibilityState={{ selected: aba === a.key }} aria-selected={aba === a.key} onPress={() => abrir(a.key)} style={[styles.tab, aba === a.key && styles.tabOn]}>
+            <Text style={[styles.tabText, aba === a.key && styles.tabTextOn]}>{a.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {visitadas.map((s) => (
+        <View key={s} style={aba === s ? null : styles.hidden}>
+          <GuildExtras secao={s} client={client} guild={data} reload={reload} onTosChange={onTosChange} />
+        </View>
+      ))}
+      <View style={aba === 'publicacoes' ? styles.publicacoes : styles.hidden}>
       <Text style={styles.label}>Canais de publicação</Text>
       {CHANNEL_TYPES.map(({ type, label }) => (
         <View key={type} style={{ gap: spacing.sm }}>
@@ -226,15 +254,20 @@ export function GuildEditor({ client, data, reload, onTosChange }: { client: Yui
       )}
 
       {msg ? <Text style={msg.ok ? styles.ok : styles.error}>{msg.text}</Text> : null}
-
-      <Text style={styles.label}>Configurações do servidor</Text>
-      <GuildExtras client={client} guild={data} reload={reload} onTosChange={onTosChange} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   box: { gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
+  tabs: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  tab: { minHeight: 44, justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabOn: { borderBottomColor: colors.accent },
+  tabText: { color: colors.muted, fontSize: 14, fontWeight: '600' },
+  tabTextOn: { color: colors.text },
+  hidden: { display: 'none' },
+  publicacoes: { gap: spacing.sm },
   kv: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   label: { color: colors.muted, fontSize: 13 },
   value: { color: colors.text, fontSize: 14, flexShrink: 1 },

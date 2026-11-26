@@ -17,17 +17,17 @@ const CSS = `
 
 :root, [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b0912; --card: #14101d; --card-2: #1c1628; --line: #2c2339;
-  --text: #f4f0fa; --muted: #a79fbd;
-  --btn-bg: #8a3fe6; --btn-fg: #ffffff; --input-bg: #100c19;
+  --bg: #0e0e10; --card: #161619; --card-2: #1e1e22; --line: #2b2b31;
+  --text: #f2f2f4; --muted: #a1a1aa;
+  --btn-bg: #8a3fe6; --btn-fg: #ffffff; --input-bg: #121214;
   --accent: #8a3fe6; --accent-text: #c9a0ff; --accent-light: rgba(138,63,230,0.24);
   --danger: #ff7a7f; --danger-bg: rgba(255,90,95,0.14); --danger-solid: #b42318;
   --success: #3fb27f; --warning: #f59e0b;
 }
 [data-theme="light"] {
   color-scheme: light;
-  --bg: #f6f3fb; --card: #ffffff; --card-2: #efeaf8; --line: #ded6ee;
-  --text: #15101f; --muted: #655d7a;
+  --bg: #f6f6f7; --card: #ffffff; --card-2: #eeeef0; --line: #dedee3;
+  --text: #161618; --muted: #62626b;
   --btn-bg: #6a28c0; --btn-fg: #ffffff; --input-bg: #ffffff;
   --accent: #7b34d6; --accent-text: #6a28c0; --accent-light: rgba(123,52,214,0.10);
   --danger: #c20000; --danger-bg: rgba(194,0,0,0.08); --danger-solid: #c62828;
@@ -60,7 +60,7 @@ export function setTheme(mode: ThemeMode): void {
   if (Platform.OS !== 'web') return;
   document.documentElement.setAttribute('data-theme', mode);
   const meta = document.querySelector('meta[name="theme-color"]');
-  meta?.setAttribute('content', mode === 'light' ? '#f6f3fb' : '#0b0912');
+  meta?.setAttribute('content', mode === 'light' ? '#f6f6f7' : '#0e0e10');
   try {
     localStorage.setItem(KEY, mode);
   } catch {

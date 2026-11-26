@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError, type ConfigItem, type ConfigOverview, type YuiClient } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
+import { filtrarAjustes, gruposDosAjustes } from '../configLogic.ts';
 import { perguntaDoAjuste } from '../guildLogic.ts';
 import { Badge, Button, Card, Chip, FieldLabel, Icon, SectionHeading, StateView } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
@@ -71,7 +72,7 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
   const estado = item.secreto && !item.definido ? { label: 'Não definida', color: colors.warning } : origem;
   const campoTexto = item.tipo === 'int' || item.tipo === 'texto' || item.tipo === 'segredo';
   const voltar = editable && item.origem === 'painel' ? (
-    <Button label="Voltar ao .env" variant="ghost" compact onPress={() => confirmAction('Voltar ao .env?', `"${item.rotulo}" volta ao valor do .env (ou ao padrão); o valor salvo no painel será apagado.`, removeNow, 'Voltar')} loading={busy} style={styles.smallBtn} testID={`config-remove-${item.chave}`} />
+    <Button label="Desfazer ajuste" variant="ghost" compact onPress={() => confirmAction('Desfazer o ajuste?', `"${item.rotulo}" volta ao valor do .env (ou ao padrão); o valor salvo no painel será apagado.`, removeNow, 'Desfazer')} loading={busy} style={styles.smallBtn} testID={`config-remove-${item.chave}`} />
   ) : null;
 
   return (
@@ -79,7 +80,7 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
       <View style={styles.rowBetween}>
         <Text style={styles.cardTitle}>{item.rotulo}</Text>
         <View style={styles.badges}>
-          <Badge label={estado.label} color={estado.color} />
+          {item.origem === 'painel' || estado.color === colors.warning ? <Badge label={estado.label} color={estado.color} /> : <Text style={styles.hint}>{estado.label}</Text>}
           {item.reinicio ? <Badge label="Pede reinício" color={colors.warning} /> : null}
         </View>
       </View>
@@ -140,6 +141,10 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
   const [data, setData] = useState<ConfigOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [grupo, setGrupo] = useState<string | null | undefined>(undefined); // undefined = primeiro grupo; null = todos
+  const [busca, setBusca] = useState('');
+  const [sobre, setSobre] = useState(false);
+
   const reload = useCallback(async () => {
     try {
       setData(await client.admin.config());
@@ -157,7 +162,9 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
   if (error) return <StateView kind="error" testID="config-error" title="Não consegui abrir a configuração" message={error} onRetry={reload} />;
   if (!data) return <StateView kind="loading" title="Abrindo a configuração…" />;
 
-  const grupos = [...new Set(data.itens.map((i) => i.grupo))];
+  const grupos = gruposDosAjustes(data.itens);
+  const escolhido = grupo === undefined ? (grupos[0] ?? null) : grupo;
+  const visiveis = filtrarAjustes(data.itens, escolhido, busca);
   const editavel = data.edicaoLigada && data.problema !== 'cofre-ilegivel';
   return (
     <View style={styles.section}>
@@ -168,14 +175,20 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
           <Text testID="config-cofre-ilegivel" style={[styles.error, { flex: 1 }]}>O cofre de configuração existe mas não abriu (arquivo quebrado ou protegido por outra conta). Nada será alterado até você conferir o arquivo secrets/painel-config.json e a cópia .bak.</Text>
         </View>
       ) : null}
+      {data.edicaoLigada && !data.protegido ? (
+        <Text testID="config-sem-protecao" style={styles.warn}>O arquivo das chaves ainda não é criptografado (YUI_PAINEL_CONFIG_DPAPI=true liga a proteção no Windows).</Text>
+      ) : null}
       {data.edicaoLigada ? (
+        <Button testID="config-sobre" label={sobre ? 'Ocultar explicação' : 'Como isso funciona'} variant="ghost" compact onPress={() => setSobre(!sobre)} />
+      ) : null}
+      {data.edicaoLigada && !sobre ? null : data.edicaoLigada ? (
         <Card style={styles.intro}>
           <View style={{ gap: spacing.sm }}>
             {[
               'O que você salvar aqui fica só neste computador (pasta secrets/, fora do Git) e vale por cima do .env. Uma chave nunca volta do servidor: só os 4 últimos caracteres aparecem.',
               'O token do Discord, a senha do painel e as regras de segurança continuam só no .env.',
               'A mudança vale na hora no cérebro; o bot (voz, semanal, avisos) só relê ao reiniciar: itens marcados "Pede reinício" só valem depois disso.',
-              data.protegido ? 'O arquivo é gravado protegido (DPAPI do Windows).' : 'O arquivo ainda NÃO é criptografado (YUI_PAINEL_CONFIG_DPAPI=true liga a proteção no Windows).',
+              ...(data.protegido ? ['O arquivo é gravado protegido (DPAPI do Windows).'] : []),
             ].map((t) => (
               <View key={t} style={styles.bulletRow}>
                 <Text style={styles.bullet}>•</Text>
@@ -190,11 +203,26 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
         </Card>
       )}
       {data.itens.length === 0 ? <StateView kind="empty" title="Nenhum ajuste disponível" message="Este servidor não listou ajustes para o painel." /> : null}
+      {data.itens.length > 0 ? (
+        <>
+          <TextInput testID="config-busca" accessibilityLabel="Buscar ajuste" style={styles.input} value={busca} onChangeText={setBusca} placeholder="Buscar ajuste" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} />
+          {busca.trim() ? null : (
+            <View style={styles.chips}>
+              {grupos.map((g) => <Chip key={g} testID={`config-grupo-${g}`} label={g} on={escolhido === g} onPress={() => setGrupo(g)} />)}
+              <Chip testID="config-grupo-todos" label="Todos" on={escolhido === null} onPress={() => setGrupo(null)} />
+            </View>
+          )}
+        </>
+      ) : null}
+      {data.itens.length > 0 && visiveis.length === 0 ? <StateView kind="empty" title="Nenhum ajuste com esse texto" /> : null}
+      {/* Os cartões fora do filtro ficam só escondidos: o que foi digitado e o aviso de "Salvo" não se perdem. */}
       {grupos.map((g) => (
-        <View key={g} style={styles.section}>
+        <View key={g} style={visiveis.some((i) => i.grupo === g) ? styles.section : styles.hidden}>
           <SectionHeading title={g} />
           {data.itens.filter((i) => i.grupo === g).map((i) => (
-            <ConfigCard key={i.chave} item={i} editable={editavel} client={client} reload={reload} />
+            <View key={i.chave} style={visiveis.includes(i) ? null : styles.hidden}>
+              <ConfigCard item={i} editable={editavel} client={client} reload={reload} />
+            </View>
           ))}
         </View>
       ))}
@@ -204,11 +232,13 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
 
 const styles = StyleSheet.create({
   section: { gap: spacing.md },
+  hidden: { display: 'none' },
+  warn: { color: colors.warning, fontSize: 13, lineHeight: 18 },
   card: { gap: spacing.sm },
   intro: { backgroundColor: colors.surfaceAlt },
   valueBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surfaceAlt, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   alertBox: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.danger, backgroundColor: colors.dangerBg },
-  cardTitle: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: '700', flexShrink: 1 },
+  cardTitle: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: '600', flexShrink: 1 },
   value: { color: colors.text, fontSize: 14, flexShrink: 1 },
   hint: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
@@ -219,7 +249,7 @@ const styles = StyleSheet.create({
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
   smallBtn: { minHeight: 44, paddingHorizontal: spacing.md },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  bullet: { color: colors.accentText, fontSize: 14, lineHeight: 20 },
+  bullet: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   introText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 13, lineHeight: 19 },
   input: {
     backgroundColor: colors.inputBg,
