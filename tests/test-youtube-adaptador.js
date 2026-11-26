@@ -55,12 +55,14 @@ function cerebroFalso({ texto = 'Oi! Tudo bem por aqui.', assunto = 'Falando em 
   return c;
 }
 
+// os tetos por janela têm teste próprio em test-youtube-servico.js
+const FOLGA = { maxPorJanela: 100, maxPedidosPorJanela: 100, maxPedidosPorAutor: 100 };
 /** Monta o adaptador contra o servidor falso. */
 function montar({ ligado = true, canalDaYui = YUI, config = {}, cerebro = cerebroFalso(), semPuxarAssunto = false } = {}) {
   const avisos = [];
   const logs = [];
   const cerebroFinal = semPuxarAssunto ? { responder: cerebro.responder } : cerebro;
-  const ad = criarAdaptadorYoutube({ ligado, cliente: clienteDe(), cerebro: cerebroFinal, agora, avisarDono: async (a) => { avisos.push(a); }, log: (c) => logs.push(c), config: { canalDaYui, ...config } });
+  const ad = criarAdaptadorYoutube({ ligado, cliente: clienteDe(), cerebro: cerebroFinal, agora, avisarDono: async (a) => { avisos.push(a); }, log: (c) => logs.push(c), config: { canalDaYui, ...config, limitesDaFala: { ...FOLGA, ...config.limitesDaFala } } });
   return { ad, cerebro, avisos, logs };
 }
 const entrarComoDono = (ad, extra = {}) => ad.entrar({ link: LINK, canal: 'discord_dm', papel: 'dono', ...extra });

@@ -115,6 +115,8 @@ export const SUITES = [
   // pacote de revisão), a sonda de hardware com saídas simuladas e o ponto de ligação da IA local (perfil `local` continua recusado). Nenhuma abre programa nem fala com serviço de verdade (~5 s no total).
   'test:canais',
   'test:canalyoutube',
+  // A live ligada de ponta a ponta (YouTube e OAuth FALSOS em loopback, IA falsa): comandos do dono, laço, avisos, reinício, credencial e o script de autorização.
+  'test:youtubeservico',
   'test:devtarefas',
   'test:sondahardware',
   'test:ialocal',

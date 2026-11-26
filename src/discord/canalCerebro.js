@@ -36,6 +36,8 @@ import { createAdmin, AdminError } from '../core/api/admin.js';
 import { ownerUserId } from '../core/api/auth.js';
 import { carregarServidorDoBot } from './painelServidor.js';
 import { planosLigados } from '../core/planos/pedido.js';
+import { youtubeLigado } from '../adaptadores/youtube/adaptador.js';
+import { definirPortaDaLive } from '../adaptadores/youtube/porta.js';
 import { definirPortaDePlanos } from '../core/planos/porta.js';
 import { applyAiSettings } from '../core/aiSettings.js';
 import { recarregarAoVivo } from '../core/painelConfig.js';
@@ -289,6 +291,9 @@ export function startBotChannel({ getClient, logger = defaultLogger, connect = c
       rotear: ({ userId, texto, idem, digitado }) => channel.request('planos.pedir', { userId, texto, digitado: digitado === true }, { idem: idem ? `planos.pedir:${idem}` : effect('planos.pedir'), timeoutMs: 125_000 }),
       decidir: (p) => channel.request('planos.decidir', p, { idem: effect('planos.decidir') }),
     });
+  }
+  if (youtubeLigado(process.env)) {
+    definirPortaDaLive({ rotear: ({ userId, texto, idem }) => channel.request('youtube.comando', { userId, texto }, { idem: idem ? `youtube.comando:${idem}` : effect('youtube.comando'), timeoutMs: 65_000 }) });
   }
   channel.onState(({ state }) => {
     if (state !== 'open') return;

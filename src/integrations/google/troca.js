@@ -20,5 +20,5 @@ export async function trocarCodigoPorTokens({ hosts = hostsDoGoogle(), fetchImpl
   if (!r.ok) return { ok: false, motivo: r.motivo, erro: r.erro };
   const refresh = typeof r.json.refresh_token === 'string' && r.json.refresh_token ? r.json.refresh_token : null;
   const escopos = typeof r.json.scope === 'string' ? r.json.scope.split(/\s+/).filter(Boolean) : [];
-  return { ok: true, refreshToken: refresh, escopos, expiraEmS: Number(r.json.expires_in) || 0 };
+  return { ok: true, refreshToken: refresh, accessToken: typeof r.json.access_token === 'string' ? r.json.access_token : null, escopos, expiraEmS: Number(r.json.expires_in) || 0 };
 }

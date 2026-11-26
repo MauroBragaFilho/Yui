@@ -35,6 +35,12 @@ export const ESCOPOS_ACEITOS = Object.freeze({
   gmail: Object.freeze(['https://www.googleapis.com/auth/gmail.readonly']),
 });
 
+/**
+ * O escopo da CONTA DO CANAL DA YUI na live (scripts/youtube-autorizar.mjs, num arquivo separado). NÃO é somente leitura: escrever no chat ao vivo exige
+ * youtube.force-ssl (ou youtube); o Google não oferece um escopo só de chat.
+ */
+export const ESCOPO_DO_YOUTUBE = 'https://www.googleapis.com/auth/youtube.force-ssl';
+
 const ESCOPO_RE = /^https:\/\/www\.googleapis\.com\/auth\/[A-Za-z0-9._/-]{1,120}$/;
 /** O texto tem a forma de um identificador de escopo do Google? */
 export function ehEscopoDoGoogle(texto) {

@@ -1,8 +1,8 @@
 // COTA DE UNIDADES DA API DO YOUTUBE (docs/PROPOSTA_CEREBRO_UNICO_YUI.md §7.5; docs/CANAIS_NOVOS.md §3.4). PURA: conta no código, nunca chama a API.
 //
 // A API do YouTube Data cobra em UNIDADES por projeto Google, por dia (o padrão de um projeto novo é 10.000 unidades; o contador zera à meia-noite do
-// fuso do Pacífico). Ler o chat e enviar uma mensagem gastam unidades, e ENVIAR gasta bem mais que LER. Os custos abaixo são o que o dono conhece hoje e
-// PRECISAM ser conferidos na documentação oficial antes de ligar (a Yui não confia nesta tabela como verdade: ela só decide quando falar menos e quando
+// fuso do Pacífico). Ler o chat e enviar uma mensagem gastam unidades, e ENVIAR gasta bem mais que LER. Os custos abaixo foram conferidos na página
+// determine_quota_cost em 26/11/2026 e podem mudar (a Yui não confia nesta tabela como verdade: ela só decide quando falar menos e quando
 // parar; o gasto REAL fica no painel do projeto Google).
 //
 // Contas rápidas com esta tabela (leitura de 5 unidades, envio de 20):

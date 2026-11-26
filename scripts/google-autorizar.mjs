@@ -124,7 +124,7 @@ export function abrirNoNavegador(url) {
  * Espera o retorno do Google no servidor local. Resolve { codigo } ou { erro }.
  * Só uma requisição com o Host certo, a rota "/" e o `state` igual vale; qualquer outra recebe 400/404 e a espera continua.
  */
-function esperarRetorno(servidor, { porta, state, tempoS }) {
+export function esperarRetorno(servidor, { porta, state, tempoS }) {
   return new Promise((resolve) => {
     let fim = false;
     const terminar = (r) => { if (fim) return; fim = true; clearTimeout(timer); resolve(r); };

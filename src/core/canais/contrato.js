@@ -82,9 +82,13 @@ const ehObjetoSimples = (v) => v !== null && typeof v === 'object' && !Array.isA
 
 // ── Detectores de estilo (usados pela validação e por src/core/canais/estilo.js) ─────────────────────────────────────────────────────
 
+// Endereço http(s) ou www; IP; domínio com um final conhecido; ou qualquer "nome.xx/caminho".
+const FINAIS = 'com|net|org|br|io|gg|tv|me|co|app|dev|xyz|ly|be|link|site|online|shop|store|ru|su|info|biz|club|top|click|win|vip|live|pro|tech|space|website|icu|monster|rest|bet|casino|porn|xxx|gift|stream|zip|mov|fun|gl|ai|sh|fm|to|cc|ws|tk|ml|ga|cf|gq|pw|us|uk|de|fr|es|pt|in|cn|onion';
+export const PADRAO_DE_LINK = String.raw`(?:https?:\/\/|www\.)\S+|(?<![\p{L}\p{N}.])(?:\d{1,3}\.){3}\d{1,3}(?![\p{L}\p{N}])(?::\d+)?(?:\/\S*)?|(?<![\p{L}\p{N}\-])[\p{L}\p{N}][\p{L}\p{N}\-]*(?:\.[\p{L}\p{N}\-]+)*\.(?:(?:${FINAIS})(?![\p{L}\p{N}\-])(?:\/\S*)?|\p{L}{2,24}\/\S*)`;
+
 /** O texto tem um link (endereço http(s), www, ou um domínio com final comum, como "youtu.be/x" ou "discord.gg/x")? */
 export function temLink(texto) {
-  return /(?:https?:\/\/|www\.)\S+|\b[a-z0-9][a-z0-9-]*\.(?:com|net|org|br|io|gg|tv|me|co|app|dev|xyz|ly|be|link|site|online|shop|store)\b(?:\/\S*)?/i.test(String(texto ?? ''));
+  return new RegExp(PADRAO_DE_LINK, 'iu').test(String(texto ?? ''));
 }
 /** O texto tem um item de lista no começo de alguma linha ("- x", "* x", "• x", "1. x", "1) x")? */
 export function temLista(texto) {

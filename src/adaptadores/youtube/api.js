@@ -69,7 +69,7 @@ export function criarClienteYoutube({ ligado, obterToken, baseUrl = BASE_PADRAO,
     if (!base.ok) throw new ErroYoutube('BASE_INVALIDA', { permanente: true });
     if (typeof fetchImpl !== 'function' || typeof obterToken !== 'function') throw new ErroYoutube('SEM_CREDENCIAL', { permanente: true });
     let token;
-    try { token = await obterToken(); } catch { token = null; }
+    try { token = await obterToken(); } catch (e) { if (e instanceof ErroYoutube) throw e; token = null; } // falha passageira da renovação não vira erro permanente
     if (typeof token !== 'string' || !token) throw new ErroYoutube('NAO_AUTENTICADO', { permanente: true });
     const url = new URL(`${base.base}${caminho}`);
     for (const [k, v] of Object.entries(consulta)) if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));

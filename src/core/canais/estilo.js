@@ -3,7 +3,7 @@
 //
 // YouTube Live: uma mensagem de até 200 caracteres, uma ideia só, sem lista, sem link, sem Markdown, sem menção (@), sem hashtag e no máximo um emoji.
 // Discord, app e PC: o texto fica como está (quem divide em várias mensagens é o adaptador do Discord, como hoje); acima do teto de resposta do canal, corta com reticências.
-import { REGRAS_DO_CANAL, temLink } from './contrato.js';
+import { REGRAS_DO_CANAL, PADRAO_DE_LINK, temLink } from './contrato.js';
 
 const RETICENCIAS = '…';
 
@@ -57,9 +57,7 @@ export function removerMarcadoresDeLista(texto) {
 
 /** Apaga os links (e as palavras "link"/"site" ficam: o texto continua entendível). */
 export function removerLinks(texto) {
-  return String(texto ?? '')
-    .replace(/(?:https?:\/\/|www\.)\S+/gi, '')
-    .replace(/\b[a-z0-9][a-z0-9-]*\.(?:com|net|org|br|io|gg|tv|me|co|app|dev|xyz|ly|be|link|site|online|shop|store)\b(?:\/\S*)?/gi, '');
+  return String(texto ?? '').replace(new RegExp(PADRAO_DE_LINK, 'giu'), '');
 }
 
 /** Deixa no máximo `max` emojis (o resto some). */

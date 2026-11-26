@@ -1,7 +1,8 @@
 // Pré-rotas por código do chat do app/painel (POST /v1/agent e POST /v1/chat), antes da pesquisa e da IA:
 //  - continuidade (projetos e decisões), chave YUI_CONTINUIDADE: ver core/continuidade.js;
 //  - listas, lembretes/resumo do dia e memória por conversa, chave YUI_APP_COMANDOS: as MESMAS funções da DM do Discord.
-// As duas chaves nascem desligadas e só valem para o DONO na memória pessoal. A resposta daqui não entra no histórico, no fio
+//  - comandos da live do YouTube, chave YUI_YOUTUBE_LIVE (adaptadores/youtube/pedido.js).
+// As chaves nascem desligadas e só valem para o DONO na memória pessoal. A resposta daqui não entra no histórico, no fio
 // compartilhado nem na captura automática de memória; a auditoria leva só o tipo e o tamanho, nunca o texto.
 import * as memoryStore from '../memory/store.js';
 import { isMemoryEnabled } from '../discordAdapter.js';
@@ -11,6 +12,9 @@ import { rotearContinuidade, descartarContinuidade } from '../continuidade.js';
 import { routeLists, parseListRequest, appComandosLigado } from '../../handlers/listAssistant.js';
 import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, clearForgetAllPending } from '../../handlers/chatIntents.js';
 import { routeReminders, parseReminderRequest, getReminderStore } from '../../reminders/assistant.js';
+import { youtubeLigado } from '../../adaptadores/youtube/adaptador.js';
+import { pedidoDeLive } from '../../adaptadores/youtube/pedido.js';
+import { portaDaLive } from '../../adaptadores/youtube/porta.js';
 import { logger as defaultLogger } from '../../utils/logger.js';
 
 export const FALHA_LEMBRETES = 'Não consegui mexer nos lembretes agora. Confira com "meus lembretes" e tente de novo daqui a pouco.';
@@ -42,6 +46,15 @@ export async function preRotaDoApp({ ctx, message, histories }, {
   const cont = await rotearContinuidade({ text: message, ctx, interfaceId: 'app', memory, enabled: isMemoryEnabled(), env });
   if (cont.handled) {
     return { kind: `continuidade.${cont.kind}`, reply: cont.text };
+  }
+  // Comandos da live do YouTube (chave própria, YUI_YOUTUBE_LIVE). Erro nunca cai na IA (ela poderia fingir que entrou ou saiu).
+  if (youtubeLigado(env) && pedidoDeLive(message)) {
+    try {
+      const live = portaDaLive() ? await portaDaLive().rotear({ userId, texto: message, canal: 'app' }) : { handled: true, text: 'A live está indisponível agora.' };
+      if (live.handled) return { kind: 'live', reply: live.text };
+    } catch (err) {
+      return falha('live', err, 'Não consegui falar com o serviço da live agora.');
+    }
   }
   if (!appComandosLigado(env)) return null;
 

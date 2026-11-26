@@ -28,6 +28,8 @@ export const CONFIG_PADRAO = Object.freeze({
   falhasSeguidasMax: 5, // erros passageiros seguidos na leitura antes de desistir e avisar o dono
   vistasMax: 2000,
   recentesMax: 20,
+  pendentesMax: 3,
+  pendenteValeMs: 90_000,
 });
 
 /**
@@ -41,7 +43,7 @@ export const CONFIG_PADRAO = Object.freeze({
  *   config?: { canalDaYui?: string } & Partial<typeof CONFIG_PADRAO> & { limitesDaFala?: object, cota?: object },
  * }} o
  */
-export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cerebro, agora = Date.now, avisarDono = async () => {}, log = () => {}, config = {} } = {}) {
+export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cerebro, agora = Date.now, avisarDono = async () => {}, log = () => {}, proibido = () => false, config = {} } = {}) {
   const C = { ...CONFIG_PADRAO, ...config };
   const cota = criarCota({ agora, ...(config.cota ?? {}) });
   let estado = 'desligado';
@@ -84,7 +86,7 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
     if (aplicar('entrar').ok !== true) return { ok: false, codigo: 'ja-esta-numa-live' };
     live = {
       videoId: id.videoId, liveChatId: null, titulo: '', conversa: `yt:${id.videoId}`, guarda: criarGuardaDeFala({ limites: C.limitesDaFala, agora }),
-      vistas: new Set(), recentes: [], pagina: null, primeiraLeitura: true, falhas: 0, ultimaTentativaDeAssuntoEm: null,
+      vistas: new Set(), recentes: [], pendentes: [], pagina: null, primeiraLeitura: true, falhas: 0, ultimaTentativaDeAssuntoEm: null,
     };
     if (!cota.podeGastar('videos.list')) { aplicar('erro_permanente'); return { ok: false, codigo: 'cota-esgotada' }; }
     let achada;
@@ -159,6 +161,7 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
     if ((Array.isArray(resposta.acoes) && resposta.acoes.length) || (resposta.confirmacao !== undefined && resposta.confirmacao !== null)) { contar('descartadas', 'acoes-no-youtube'); return false; }
     const ajustado = ajustarTextoAoCanal('youtube_live', resposta.texto);
     if (!ajustado.texto) { contar('descartadas', 'texto-vazio'); return false; }
+    if (proibido(ajustado.texto)) { contar('descartadas', 'proibida'); return false; } // no texto FINAL: o ajuste pode remontar a palavra
     if (!validarResposta('youtube_live', { texto: ajustado.texto }).ok) { contar('descartadas', 'fora-do-contrato'); return false; }
     if (live.guarda.repetido(ajustado.texto)) { contar('descartadas', 'repetida'); return false; }
     // a guarda e a cota são conferidas de novo aqui: entre pedir ao cérebro e enviar o tempo passou
@@ -178,14 +181,22 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
     return true;
   }
 
-  async function responderA(msg) {
+  /** Quem chamou cedo demais (intervalo entre mensagens) espera a próxima rodada, por pouco tempo. */
+  function adiar(msg, em = agora()) { if (live && live.pendentes.length < C.pendentesMax) live.pendentes.push({ msg, em }); }
+
+  async function responderA(msg, em) {
     const minha = live;
-    const av = live.guarda.avaliar({ tipo: 'resposta', nivelDaCota: cota.nivel() });
-    if (!av.ok) { contar('puladas', av.motivo); return; }
+    const av = live.guarda.avaliar({ tipo: 'resposta', nivelDaCota: cota.nivel(), autor: msg.autorId });
+    if (!av.ok) {
+      if (av.motivo === 'intervalo-minimo') adiar(msg, em);
+      else contar('puladas', av.motivo);
+      return;
+    }
     if (!cota.podeGastar('liveChatMessages.insert')) { contar('puladas', 'cota'); return; }
     // O papel NÃO vai no pedido: o cérebro decide (e no YouTube todo mundo é público).
     const pedido = validarPedido({ canal: 'youtube_live', pessoa: msg.autorId, conversa: live.conversa, texto: msg.texto, anexos: [], capacidades: ['youtube.chat.enviar'] });
     if (!pedido.ok) { contar('descartadas', 'pedido-invalido'); return; }
+    live.guarda.registrarPedido(msg.autorId); // conta a chamada à IA, mesmo que a resposta seja descartada
     let resposta;
     try { resposta = await cerebro.responder(pedido.pedido); } catch { contar('falhas', 'cerebro'); return; }
     await entregar(resposta, 'resposta', minha);
@@ -201,6 +212,7 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
     if (!cota.podeGastar('liveChatMessages.insert')) { contar('puladas', 'cota'); return; }
     live.ultimaTentativaDeAssuntoEm = t;
     let resposta;
+    live.guarda.registrarPedido();
     try { resposta = await cerebro.puxarAssunto({ conversa: live.conversa, ...montarContextoDeAssunto({ titulo: live.titulo, mensagens: live.recentes }) }); } catch { contar('falhas', 'cerebro'); return; }
     if (resposta) await entregar(resposta, 'espontanea', minha);
   }
@@ -236,6 +248,13 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
       live.pagina = pagina.proximaPagina ?? live.pagina;
 
       let respostas = 0;
+      minha.pendentes = minha.pendentes.filter((p) => agora() - p.em <= C.pendenteValeMs);
+      const atrasada = minha.pendentes.shift();
+      if (atrasada) {
+        respostas += 1;
+        await responderA(atrasada.msg, atrasada.em);
+        if (!aindaAqui()) return { ok: true, ativo: false, proximoEmMs: null };
+      }
       for (const item of pagina.mensagens) {
         const id = typeof item?.id === 'string' ? item.id : null;
         if (!id || live.vistas.has(id)) continue;
@@ -249,7 +268,8 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
         live.guarda.registrarMensagemDeOutro({ autor: msg.autorId });
         live.recentes.push({ texto: msg.texto });
         if (live.recentes.length > C.recentesMax) live.recentes.shift();
-        if (cls.acao === 'responder' && respostas < C.maxRespostasPorPasso) {
+        if (cls.acao === 'responder') {
+          if (respostas >= C.maxRespostasPorPasso) { adiar(msg); continue; }
           respostas += 1;
           await responderA(msg);
           if (!aindaAqui()) return { ok: true, ativo: false, proximoEmMs: null };

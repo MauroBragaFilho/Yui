@@ -35,6 +35,9 @@ import { routeLibrary } from './libraryIntent.js';
 import { routeLists } from './listAssistant.js';
 import { planosLigados, pedidoDePlano } from '../core/planos/pedido.js';
 import { portaDePlanos } from '../core/planos/porta.js';
+import { youtubeLigado } from '../adaptadores/youtube/adaptador.js';
+import { pedidoDeLive } from '../adaptadores/youtube/pedido.js';
+import { portaDaLive } from '../adaptadores/youtube/porta.js';
 import { routeReminders, formatReminderList, scopedReminderStore, getReminderStore, reminderTextFromTool, isRemindersRemote, listRemindersFor } from '../reminders/assistant.js';
 import { logger } from '../utils/logger.js';
 import { getMediaUserMessage, formatDeezerDelivery, codeSafe, isUploadTooLargeError, MEDIA_MESSAGES } from '../utils/mediaUrls.js';
@@ -2731,6 +2734,23 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             }
             if (plano?.handled) {
                 await unifiedReply(plano.text);
+                return;
+            }
+        }
+        // Porta Y (live do YouTube, YUI_YOUTUBE_LIVE): "entra na live <link>", "sai da live", "como está a live". Só o dono, na DM, em mensagem comum digitada por ele.
+        if (youtubeLigado() && directToYui && !isVoice && interaction?.isVoice !== true && !guildId && !options.guildId && isOwnerId(userId) && options.radioMode !== true && options.thirdPartyPrompt !== true && options.disableTools !== true && !options.attachmentBlock && !(interaction?.attachments?.size > 0) && pedidoDeLive(ownQuestion)) {
+            const digitado = type === 'mention' && interaction?.author?.id === userId && interaction.author.bot !== true && !interaction.webhookId
+                && interaction.reference?.type !== 1 && !(interaction.messageSnapshots?.size > 0) && !(interaction.stickers?.size > 0);
+            let live = { handled: true, text: 'Os comandos da live só valem em mensagem comum, digitada por você na DM.' };
+            if (digitado) {
+                try {
+                    live = portaDaLive() ? await portaDaLive().rotear({ userId, texto: ownQuestion, canal: 'discord_dm', idem: interaction?.id }) : { handled: true, text: 'A live está indisponível agora.' };
+                } catch (_) {
+                    live = { handled: true, text: 'Não consegui falar com o serviço da live agora.' };
+                }
+            }
+            if (live?.handled) {
+                await unifiedReply(live.text);
                 return;
             }
         }

@@ -310,6 +310,29 @@ async function bootstrap() {
       logger.warn(`[Bootstrap] Planos indisponíveis: ${String(err?.message ?? err).slice(0, 100)}`);
     }
   }
+  // Live do YouTube (YUI_YOUTUBE_LIVE): no processo único o serviço roda aqui; separado, roda no cérebro. Depois de um reinício ela não volta: só avisa.
+  if (!SEPARADO) {
+    try {
+      const { youtubeLigado } = await import('./adaptadores/youtube/adaptador.js');
+      if (youtubeLigado()) {
+        const { criarServicoDaLive } = await import('./core/live/servico.js');
+        const { definirPortaDaLive } = await import('./adaptadores/youtube/porta.js');
+        const { isOwnerId } = await import('./core/permissions.js');
+        const live = criarServicoDaLive({
+          logger, ehDono: (id) => isOwnerId(id) || id === String(alertOwnerId),
+          avisarDono: async (texto) => {
+            if (!client.isReady?.() || !alertOwnerId) return false;
+            await (await client.users.fetch(alertOwnerId)).send({ content: texto, allowedMentions: { parse: [] } });
+            return true;
+          },
+        });
+        definirPortaDaLive(live);
+        live.avisarReinicio();
+      }
+    } catch (err) {
+      logger.warn(`[Bootstrap] Live do YouTube indisponível: ${String(err?.message ?? err).slice(0, 100)}`);
+    }
+  }
   alertOwner('boot', 'Estou no ar', 'A Yui acabou de iniciar (ou reiniciar) e já está conectada ao Discord.', { level: 'info', cooldownMinutes: 5 });
   if (mediaStatus && !mediaStatus.opusOk) {
     alertOwner(

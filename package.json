@@ -80,6 +80,8 @@
     "test:googleautorizar": "node tests/test-google-autorizar.js",
     "test:canais": "node tests/test-canais-contrato.js",
     "test:canalyoutube": "node tests/test-youtube-adaptador.js",
+    "test:youtubeservico": "node tests/test-youtube-servico.js",
+    "youtube:autorizar": "node scripts/youtube-autorizar.mjs",
     "test:devtarefas": "node tests/test-dev-tarefas.js",
     "test:sondahardware": "node tests/test-sonda-hardware.js",
     "test:ialocal": "node tests/test-ia-local.js",

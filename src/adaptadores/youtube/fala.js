@@ -13,6 +13,10 @@ import { temLink } from '../../core/canais/contrato.js';
 export const LIMITES_DA_FALA = Object.freeze({
   maxPorMinuto: 6, // no máximo 6 mensagens da Yui por minuto, somando respostas e comentários
   intervaloMinimoMs: 5000, // e pelo menos 5 s entre duas mensagens dela
+  janelaMs: 15 * 60_000, // a janela dos três tetos abaixo (curta: o silêncio de quem estourou não passa de 15 min)
+  maxPorJanela: 5, // envios por janela, 20 por hora (cada envio gasta cota)
+  maxPedidosPorJanela: 10, // chamadas à IA por janela, contando as respostas descartadas
+  maxPedidosPorAutor: 3, // chamadas por pessoa por janela: um só não cala a Yui para os outros
   intervaloEspontaneaMs: 5 * 60_000, // entre dois comentários espontâneos
   maxEspontaneasPorLive: 12, // teto de comentários espontâneos em cada live
   chatAtivoJanelaMs: 2 * 60_000, // "outras pessoas falaram há pouco": nos últimos 2 minutos...
@@ -131,6 +135,13 @@ export function criarGuardaDeFala({ limites = {}, agora = Date.now } = {}) {
   let espontaneaSemAlguemNoMeio = false; // a última mensagem dela foi espontânea e ninguém falou depois
   let quieta = false;
   let modoLentoMs = 0;
+  const envios = []; // instantes dos envios da janela
+  const pedidos = []; // { em, autor } das chamadas à IA na janela
+  const podarJanela = () => {
+    const corte = agora() - L.janelaMs;
+    while (envios.length && envios[0] <= corte) envios.shift();
+    while (pedidos.length && pedidos[0].em <= corte) pedidos.shift();
+  };
   const recentes = []; // { em, autor } das mensagens de OUTRAS pessoas
   const ditas = []; // o que ela já disse (normalizado), para não repetir
 
@@ -145,10 +156,13 @@ export function criarGuardaDeFala({ limites = {}, agora = Date.now } = {}) {
     registrarEnvio({ tipo, texto }) {
       const t = agora();
       porMinuto.registrar();
+      envios.push(t);
       ultimoEnvioEm = t;
       if (tipo === 'espontanea') { ultimaEspontaneaEm = t; espontaneas += 1; espontaneaSemAlguemNoMeio = true; }
       if (typeof texto === 'string') { ditas.push(normalizar(texto).replace(/\s+/g, ' ').trim()); if (ditas.length > 20) ditas.shift(); }
     },
+    /** A Yui pediu uma resposta à IA (por causa de `autor`, ou para puxar assunto). */
+    registrarPedido(autor = null) { pedidos.push({ em: agora(), autor }); },
     /** O texto repete algo que ela já disse nesta live? */
     repetido(texto) { return ditas.includes(normalizar(texto).replace(/\s+/g, ' ').trim()); },
     /** O modo lento da live (ms entre mensagens de cada pessoa; a Yui espera o mesmo entre as dela). 0 desliga. */
@@ -160,7 +174,7 @@ export function criarGuardaDeFala({ limites = {}, agora = Date.now } = {}) {
      * Pode falar agora? `tipo`: 'resposta' (chamaram a Yui) ou 'espontanea' (puxar assunto). `nivelDaCota`: o nível de cota/cota.js.
      * @returns {{ ok: true } | { ok: false, motivo: string, esperarMs: number }}
      */
-    avaliar({ tipo, nivelDaCota = 'ok' }) {
+    avaliar({ tipo, nivelDaCota = 'ok', autor = null }) {
       const t = agora();
       if (tipo === 'resposta') {
         if (nivelDaCota === 'esgotada') return negar('cota-esgotada');
@@ -174,13 +188,21 @@ export function criarGuardaDeFala({ limites = {}, agora = Date.now } = {}) {
       } else {
         return negar('tipo-invalido');
       }
+      podarJanela();
+      if (envios.length >= L.maxPorJanela) return negar('teto-de-mensagens', envios[0] + L.janelaMs - t);
+      if (pedidos.length >= L.maxPedidosPorJanela) return negar('limite-de-pedidos', pedidos[0].em + L.janelaMs - t);
+      if (autor !== null && pedidos.filter((p) => p.autor === autor).length >= L.maxPedidosPorAutor) return negar('limite-por-autor');
       const intervalo = Math.max(L.intervaloMinimoMs, modoLentoMs);
       if (ultimoEnvioEm !== null && t - ultimoEnvioEm < intervalo) return negar(modoLentoMs > L.intervaloMinimoMs ? 'modo-lento' : 'intervalo-minimo', intervalo - (t - ultimoEnvioEm));
       if (!porMinuto.permitir()) return negar('limite-por-minuto', porMinuto.esperaMs());
       return { ok: true };
     },
     /** Retrato SEM texto de ninguém: só números e marcas. */
-    retrato() { return { espontaneas, quieta, modoLentoMs, enviosNoUltimoMinuto: porMinuto.usadas, chatAtivo: chatAtivo(), limites: { ...L } }; },
+    retrato() {
+      podarJanela();
+      const cheia = envios.length >= L.maxPorJanela ? envios[0] : pedidos.length >= L.maxPedidosPorJanela ? pedidos[0].em : null;
+      return { esperaDoTetoMs: cheia === null ? 0 : cheia + L.janelaMs - agora(), espontaneas, quieta, modoLentoMs, enviosNoUltimoMinuto: porMinuto.usadas, chatAtivo: chatAtivo(), limites: { ...L } };
+    },
   };
 }
 

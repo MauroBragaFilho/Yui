@@ -46,6 +46,10 @@ import { startCerebroReminders } from './cerebro/lembretes.js';
 import { planosLigados } from './core/planos/pedido.js';
 import { criarStoreDePlanos } from './core/planos/store.js';
 import { registrarPlanos } from './cerebro/planos.js';
+import { youtubeLigado } from './adaptadores/youtube/adaptador.js';
+import { definirPortaDaLive } from './adaptadores/youtube/porta.js';
+import { criarServicoDaLive } from './core/live/servico.js';
+import { isOwnerId } from './core/permissions.js';
 import { iniciarMonitores } from './cerebro/monitores/index.js';
 import { iniciarEventos } from './cerebro/eventos.js';
 import { activateFakeAi } from './cerebro/iaFalsa.js';
@@ -71,6 +75,7 @@ let monitores = null; // etapa 16 (proatividade, YUI_MONITORES): os monitores "m
 let eventos = null; // etapa 16 (YUI_ALERTAS_EVENTOS): os alertas por evento (disco, memória, internet, religadas do supervisor)
 let descarga = null; // a descarga da fila dos avisos (YUI_AVISOS_FILTRO=ligar)
 let planos = null; // planos com aprovação (YUI_PLANOS; null = desligados)
+let live = null; // a live do YouTube (YUI_YOUTUBE_LIVE; null = desligada)
 let shuttingDown = false;
 const startedAt = Date.now();
 
@@ -298,6 +303,15 @@ async function bootstrap() {
     if (planosLigados(process.env)) planos = registrarPlanos({ channel, logger });
     else criarStoreDePlanos().limpar();
   } catch (err) { planos = null; logger.error(`[Cérebro] os planos não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
+  // Live do YouTube (YUI_YOUTUBE_LIVE, padrão desligado): o serviço roda aqui; o bot pede pelo canal (youtube.comando). Depois de um reinício ela não volta: só avisa.
+  try {
+    if (youtubeLigado(process.env)) {
+      live = criarServicoDaLive({ logger, ehDono: (id) => isOwnerId(id) || id === String(ownerId), avisarDono: async (texto) => { const r = await dmThroughBot(ownerId, texto, 'alerta'); return r?.sent !== false && r?.incerto !== true; } });
+      definirPortaDaLive(live);
+      channel.handle('youtube.comando', async (p) => live.rotear({ userId: String(p?.userId ?? ''), texto: String(p?.texto ?? '').slice(0, 400), canal: 'discord_dm' }), { roles: ['bot'], timeoutMs: 60_000 });
+      live.avisarReinicio();
+    }
+  } catch (err) { live = null; logger.error(`[Cérebro] a live não subiu (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem ela.`); }
   // 5b. Alertas por evento (etapa 16; YUI_ALERTAS_EVENTOS, padrão desligado = null): disco, memória, internet e religadas do supervisor, pelo alertOwner.
   try { eventos = iniciarEventos({ logger }); } catch (err) { eventos = null; logger.error(`[Cérebro] os alertas por evento não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
 
@@ -347,6 +361,7 @@ async function shutdown(reason) {
   try { reminders?.stop(); } catch { /* */ }
   try { descarga?.parar(); } catch { /* */ }
   try { planos?.parar(); } catch { /* */ }
+  try { live?.parar(); } catch { /* */ }
   try { monitores?.parar(); } catch { /* */ }
   try { eventos?.parar(); } catch { /* */ }
   try { cotaHora?.parar(); } catch { /* */ }
