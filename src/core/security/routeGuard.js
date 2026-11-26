@@ -23,6 +23,13 @@ const ROUTES = [
   // administração (só dono)
   ['PUT', /^\/v1\/admin\/guilds\/\d+\/channels$/, 'admin.guild_configure'],
   ['POST', /^\/v1\/admin\/guilds\/\d+\/automod$/, 'admin.guild_configure'],
+  ['PUT', /^\/v1\/admin\/guilds\/\d+\/mcp-tools\/[a-z0-9_]+$/, 'admin.guild_configure'],
+  ['POST', /^\/v1\/admin\/guilds\/\d+\/mcp-tools\/reset$/, 'admin.guild_configure'],
+  ['POST', /^\/v1\/admin\/guilds\/\d+\/tos$/, 'admin.guild_configure'],
+  ['DELETE', /^\/v1\/admin\/guilds\/\d+\/tos$/, 'admin.guild_configure'],
+  ['PUT', /^\/v1\/admin\/guilds\/\d+\/channels\/\d+\/(persona|espontaneo)$/, 'admin.guild_configure'],
+  ['DELETE', /^\/v1\/admin\/guilds\/\d+\/channels\/\d+\/persona$/, 'admin.guild_configure'],
+  ['PUT', /^\/v1\/admin\/guilds\/\d+\/mentions$/, 'admin.guild_configure'],
   ['POST', /^\/v1\/admin\/guilds\/\d+\/(youtube|twitch)$/, 'admin.follow_social'],
   ['PUT', /^\/v1\/admin\/guilds\/\d+\/youtube\/[\w-]+\/\d+$/, 'admin.follow_social'],
   ['DELETE', /^\/v1\/admin\/guilds\/\d+\/(youtube|twitch)\/[\w-]+\/\d+$/, 'admin.follow_social'],

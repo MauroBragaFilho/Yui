@@ -19,6 +19,7 @@ import {
 } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
 import { confirmacaoDeReinicio } from '../restartLogic.ts';
+import { avisoDeRecarga } from '../guildLogic.ts';
 import { AiProviders } from './AdminAi.tsx';
 import { ConfigPainel } from './AdminConfig.tsx';
 import { GuildEditor } from './AdminGuild.tsx';
@@ -113,7 +114,14 @@ function Status({ loading, error }: { loading: boolean; error: string | null }) 
 
 const capital = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 
-const AUDIT_ACTIONS: Record<string, string> = { login: 'Entrou no painel', logout: 'Saiu do painel' };
+const AUDIT_ACTIONS: Record<string, string> = {
+  login: 'Entrou no painel', logout: 'Saiu do painel',
+  'admin.guild.tool': 'Mudou uma ferramenta do servidor', 'admin.guild.tools.reset': 'Restaurou as ferramentas do servidor',
+  'admin.guild.tos.accept': 'Aceitou os termos pelo painel', 'admin.guild.tos.revoke': 'Revogou o aceite dos termos',
+  'admin.guild.persona': 'Mudou a persona de um canal', 'admin.guild.persona.reset': 'Restaurou a persona de um canal',
+  'admin.guild.chatter': 'Mudou as falas espontâneas', 'admin.guild.mentions': 'Mudou a resposta a @everyone',
+  'admin.guild.channel': 'Mudou um canal do servidor',
+};
 const auditAction = (event: string) => AUDIT_ACTIONS[event] ?? capital(String(event ?? '').replace(/[_.-]+/g, ' ').trim());
 const ROLE_LABEL: Record<string, string> = { OWNER: 'Dono', MEMBER: 'Membro' };
 const roleLabel = (role: string) => ROLE_LABEL[role] ?? capital(String(role).toLowerCase());
@@ -269,11 +277,17 @@ function Integracoes({ client }: Props) {
   );
 }
 
-/** Canais, avisos sociais e ferramentas de um servidor (com edição). */
-function GuildDetail({ client, id }: { client: YuiClient; id: string }) {
+/** Canais, avisos sociais e configurações de um servidor (com edição). */
+function GuildDetail({ client, id, onTosChange }: { client: YuiClient; id: string; onTosChange: (aceito: boolean) => void }) {
   const { data, error, loading, reload } = useLoad<AdminGuildDetail>(() => client.admin.guildDetail(id));
   if (!data) return <Status loading={loading} error={error} />;
-  return <GuildEditor client={client} data={data} reload={reload} />;
+  const aviso = avisoDeRecarga(true, error);
+  return (
+    <>
+      {aviso ? <Text accessibilityRole="alert" style={styles.error}>{aviso}</Text> : null}
+      <GuildEditor client={client} data={data} reload={reload} onTosChange={onTosChange} />
+    </>
+  );
 }
 
 function Servidores({ client }: Props) {
@@ -310,7 +324,9 @@ function Servidores({ client }: Props) {
             onPress={() => setOpen(open === g.id ? null : g.id)}
             style={styles.smallBtn}
           />
-          {open === g.id ? <GuildDetail client={client} id={g.id} /> : null}
+          {open === g.id ? (
+            <GuildDetail client={client} id={g.id} onTosChange={(aceito) => setData((list) => (list ? list.map((x) => (x.id === g.id ? { ...x, tosAccepted: aceito } : x)) : list))} />
+          ) : null}
           <Text style={styles.label}>AutoMod</Text>
           <View style={styles.chips}>
             {AUTOMOD.map((o) => (

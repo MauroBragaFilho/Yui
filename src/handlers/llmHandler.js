@@ -172,7 +172,7 @@ function loadMcpTools() {
     }
 }
 loadMcpTools();
-const serverToolsPath = path.join(__dirname, '../data/server_tools.json');
+const serverToolsPath = process.env.YUI_SERVER_TOOLS_FILE || path.join(__dirname, '../data/server_tools.json'); // o desvio existe para os testes não gravarem no arquivo real
 let serverToolsConfig = {};
 function loadServerTools() {
     if (fs.existsSync(serverToolsPath)) {
@@ -187,8 +187,10 @@ function loadServerTools() {
 function saveServerTools() {
     try {
         fs.writeFileSync(serverToolsPath, JSON.stringify(serverToolsConfig, null, 2));
+        return true;
     } catch (error) {
         console.error('[MCP] Erro ao salvar server_tools.json:', error);
+        return false;
     }
 }
 function isToolDisabled(guildId, toolName) {
@@ -262,17 +264,18 @@ function setServerToolEnabled(guildId, toolName, enabled) {
         delete serverToolsConfig[guildId];
     }
 
-    saveServerTools();
+    const gravou = saveServerTools();
     if (toolName === 'voice_tts' && !enabled) stopSpeechOfSwitchedOffGuild(guildId);
-    return true;
+    return gravou;
 }
 
 function resetServerTools(guildId) {
     // O padrão do voice_tts é DESLIGADO: se estava ligado, voltar ao padrão também corta a fala em curso.
     const voiceWasOn = ALL_MCP_TOOLS.some((t) => t.function.name === 'voice_tts') && isToolDisabled(guildId, 'voice_tts') === false;
     delete serverToolsConfig[guildId];
-    saveServerTools();
+    const gravou = saveServerTools();
     if (voiceWasOn) stopSpeechOfSwitchedOffGuild(guildId);
+    return gravou;
 }
 // Desligar a resposta por voz corta a fala em curso NA HORA (e descarta a fila de fala do servidor), por qualquer caminho que mude o
 // interruptor (painel, /yui-ferramentas, painel do dono). Sem isso a frase que está tocando terminava. Nunca lança.
@@ -421,7 +424,7 @@ const painelMaxTokens = {};
 // O max_tokens de cada provedor ANTES do primeiro ajuste do painel (o padrão da cadeia e o YUI_REPLY_MAX_TOKENS): é o que o APP usa pela
 // cadeia do bot (o app nunca herda o ajuste do painel do Discord; segunda revisão da Liz, §12).
 const maxTokensAntesDoPainel = {};
-const channelSettingsPath = path.join(__dirname, '../data/channel_settings.json');
+const channelSettingsPath = process.env.YUI_CHANNEL_SETTINGS_FILE || path.join(__dirname, '../data/channel_settings.json'); // idem (testes)
 let channelSettings = {};
 function loadChannelSettings() {
     if (fs.existsSync(channelSettingsPath)) {
@@ -441,8 +444,10 @@ function loadChannelSettings() {
 function saveChannelSettings() {
     try {
         fs.writeFileSync(channelSettingsPath, JSON.stringify(channelSettings, null, 2));
+        return true;
     } catch (error) {
         console.error('Erro ao salvar channel_settings.json:', error);
+        return false;
     }
 }
 loadChannelSettings();
@@ -496,8 +501,10 @@ function loadServerSettings() {
 function saveServerSettings() {
     try {
         fs.writeFileSync(serverSettingsPath, JSON.stringify(serverSettings, null, 2));
+        return true;
     } catch (error) {
         console.error('Erro ao salvar server_settings.json:', error);
+        return false;
     }
 }
 
@@ -508,13 +515,13 @@ function getServerSettings(guildId) {
 function setServerEveryoneMention(guildId, active) {
     if (!serverSettings[guildId]) serverSettings[guildId] = {};
     serverSettings[guildId].respondToEveryone = active;
-    saveServerSettings();
+    return saveServerSettings();
 }
 
 function setServerUpdateChannel(guildId, channelId) {
     if (!serverSettings[guildId]) serverSettings[guildId] = {};
     serverSettings[guildId].updateChannelId = channelId;
-    saveServerSettings();
+    return saveServerSettings();
 }
 
 function setServerLastChannel(guildId, channelId) {
@@ -543,7 +550,7 @@ function setChannelPersona(channelId, { instruction, mood, reset }) {
         if (instruction !== undefined) channelSettings[channelId].instruction = instruction;
         if (mood !== undefined) channelSettings[channelId].mood = mood;
     }
-    saveChannelSettings();
+    return saveChannelSettings();
 }
 function setChannelChatter(channelId, { active, frequency, percentage }) {
     if (!channelSettings[channelId]) channelSettings[channelId] = {};
@@ -559,7 +566,7 @@ function setChannelChatter(channelId, { active, frequency, percentage }) {
         channelSettings[channelId].chatter.frequency = frequency;
         delete channelSettings[channelId].chatter.percentage;
     }
-    saveChannelSettings();
+    return saveChannelSettings();
 }
 const processingQueue = [];
 let isProcessing = false;

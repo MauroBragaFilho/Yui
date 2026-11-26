@@ -29,6 +29,19 @@ export const PANEL_ACTIONS = Object.freeze({
   radio: false,
   radioAction: true,
   integrations: false,
+  // Configurações por servidor (quem grava os arquivos é o bot).
+  guildTools: false,
+  setGuildTool: true,
+  resetGuildTools: true,
+  tosTerms: false,
+  guildTos: false,
+  acceptGuildTos: true,
+  revokeGuildTos: true,
+  channelConfig: false,
+  setPersona: true,
+  resetPersona: true,
+  setChatter: true,
+  setMentions: true,
 });
 
 const UNAVAILABLE = new Set(['NOT_CONNECTED', 'CONNECTION_LOST', 'TIMEOUT', 'CLOSED']);
@@ -127,9 +140,9 @@ export function createCerebroAdmin({ channel, timeoutMs = 20_000, base = null, d
       requireOwner(ctx);
       return call('guild.get', { userId: ctx.userId, guildId: String(guildId ?? '') });
     },
-    async setGuildChannel(ctx, guildId, type, channelId) {
+    async setGuildChannel(ctx, guildId, type, channelId, confirm) {
       requireOwner(ctx);
-      return call('guild.setChannel', { userId: ctx.userId, guildId: String(guildId ?? ''), type, channelId: channelId ?? null }, true);
+      return call('guild.setChannel', { userId: ctx.userId, guildId: String(guildId ?? ''), type, channelId: channelId ?? null, confirm: confirm === true }, true);
     },
   };
   for (const action of Object.keys(PANEL_ACTIONS)) wrapped[action] = panel(action);

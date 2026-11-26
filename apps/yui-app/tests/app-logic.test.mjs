@@ -439,15 +439,19 @@ test('chave por DM: limite de pedidos protege a DM do dono e a mensagem do app �
 
 
 
-test('endereço do painel do OmniRoute: mesmo computador da API, porta própria', async () => {
-  const { omniRouteUrl, OMNIROUTE_DEFAULT_PORT } = await import('../src/omniRouteUrl.ts');
-  assert.equal(OMNIROUTE_DEFAULT_PORT, 20128);
-  assert.equal(omniRouteUrl('http://192.168.15.12:3939'), 'http://192.168.15.12:20128/');
-  assert.equal(omniRouteUrl('http://192.168.15.12:3939/', '21000'), 'http://192.168.15.12:21000/');
-  assert.equal(omniRouteUrl('http://192.168.15.12:3939', 'abc'), 'http://192.168.15.12:20128/', 'porta inválida volta ao padrão');
-  assert.equal(omniRouteUrl('https://yui.exemplo.com'), 'https://yui.exemplo.com:20128/');
-  assert.equal(omniRouteUrl(''), null);
-  assert.equal(omniRouteUrl(null), null);
-  assert.equal(omniRouteUrl('javascript:alert(1)'), null);
-  assert.equal(omniRouteUrl('ftp://x'), null);
+test('endereço do painel do OmniRoute: vem do provedor cadastrado', async () => {
+  const { omniRouteUrl, findOmniRoute } = await import('../src/omniRouteUrl.ts');
+  const api = 'http://192.168.15.12:3939';
+  assert.equal(omniRouteUrl('http://192.168.15.20:20128/v1', api), 'http://192.168.15.20:20128/', 'outro computador: vale o do provedor');
+  assert.equal(omniRouteUrl('http://127.0.0.1:20128/v1', api), 'http://192.168.15.12:20128/', 'localhost é o computador da Yui');
+  assert.equal(omniRouteUrl('http://localhost:21000/v1', api), 'http://192.168.15.12:21000/');
+  assert.equal(omniRouteUrl('https://rota.exemplo.com/v1', api), 'https://rota.exemplo.com/');
+  assert.equal(omniRouteUrl('http://usuario:senha@10.0.0.2:20128/v1', api), 'http://10.0.0.2:20128/', 'sem credenciais no link');
+  assert.equal(omniRouteUrl('http://127.0.0.1:20128/v1', ''), null);
+  assert.equal(omniRouteUrl('javascript:alert(1)', api), null);
+  assert.equal(omniRouteUrl(null, api), null);
+  const lista = [{ id: 'lm', label: 'LM', baseUrl: 'a' }, { id: 'rota', label: 'OmniRoute do PC', baseUrl: 'b' }];
+  assert.equal(findOmniRoute(lista).id, 'rota');
+  assert.equal(findOmniRoute([...lista, { id: 'omniroute', label: 'x', baseUrl: 'c' }]).id, 'omniroute');
+  assert.equal(findOmniRoute([]), null);
 });

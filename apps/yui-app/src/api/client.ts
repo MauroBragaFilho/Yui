@@ -150,7 +150,20 @@ export interface AdminGuildDetail {
   twitch: { id: string; name: string; role: string | null; channel: ChannelRef | null }[];
   tools: { enabled: string[]; disabled: string[] } | null;
 }
-export type GuildChannelType = 'noticias' | 'diario' | 'semanal';
+export type GuildChannelType = 'noticias' | 'diario' | 'semanal' | 'atualizacoes';
+// ── Configurações por servidor ──
+export interface GuildTool { nome: string; rotulo: string; descricao: string; ligada: boolean; padraoLigada: boolean }
+export interface TosPage { titulo: string; texto: string }
+export interface GuildTosState { donoDoServidor: boolean; aceito: boolean; exigido: boolean; aceitoEm: string | null; aceitoPor: string | null; origem: 'discord' | 'painel' | null }
+export interface TosAcceptResult { ok: boolean; jaAceito: boolean; canalAtualizacoes: string | null; avisoEnviado: boolean; estado: GuildTosState }
+export interface ChannelConfig {
+  channelId: string; nome: string;
+  persona: { instrucao: string | null; humor: string | null };
+  espontaneo: { ativo: boolean; frequencia: 'low' | 'medium' | 'high' | 'custom' | null; porcentagem: number | null };
+  limites: { instrucao: number; humor: number };
+}
+export interface PersonaChange { instrucao?: string; humor?: string }
+export interface ChatterChange { ativo?: boolean; frequencia?: 'low' | 'medium' | 'high'; porcentagem?: number }
 /** Como os avisos de live saem: 'auto' (edita se a live começa logo), 'new' (mensagem nova a cada etapa) ou 'edit' (sempre a mesma mensagem). */
 export type YoutubeLiveMode = 'auto' | 'new' | 'edit';
 export interface FollowYoutubeInput { channel: string; discordChannelId: string; roleId?: string | null; videos: boolean; shorts: boolean; lives: boolean; liveMode?: YoutubeLiveMode }
@@ -169,7 +182,7 @@ export interface AiCustomInput { id: string; label: string; baseUrl: string; mod
 export interface AiTestResult { ok: boolean; ms: number; via?: string | null; error?: string }
 export interface ConfigItem {
   chave: string; rotulo: string; grupo: string; descricao: string; tipo: 'segredo' | 'bool' | 'int' | 'enum' | 'texto'; reinicio: boolean;
-  definido: boolean; origem: 'painel' | 'env' | 'padrao'; opcoes?: string[]; min?: number; max?: number; padrao?: string;
+  definido: boolean; origem: 'painel' | 'env' | 'padrao'; opcoes?: string[]; confirmar?: string[]; min?: number; max?: number; padrao?: string;
   secreto?: boolean; ultimos4?: string | null; valor?: string | null; alteradoEm?: string | null;
 }
 export interface ConfigOverview { edicaoLigada: boolean; protegido?: boolean; problema?: 'cofre-ilegivel'; itens: ConfigItem[] }
@@ -426,8 +439,24 @@ export function createClient(options: ClientOptions) {
       tools: () => request<{ readOnly: boolean; tools: AdminTool[] }>('GET', '/v1/admin/tools', undefined, 20_000),
       integrations: async () => (await request<{ groups: IntegrationGroup[] }>('GET', '/v1/admin/integrations', undefined, 20_000)).groups,
       guildDetail: (guildId: string) => request<AdminGuildDetail>('GET', `/v1/admin/guilds/${guildId}`, undefined, 20_000),
+      guildTools: (guildId: string) => request<{ ferramentas: GuildTool[] }>('GET', `/v1/admin/guilds/${guildId}/mcp-tools`, undefined, 20_000),
+      setGuildTool: (guildId: string, nome: string, ligada: boolean) =>
+        request<{ ok: boolean; ferramentas: GuildTool[] }>('PUT', `/v1/admin/guilds/${guildId}/mcp-tools/${encodeURIComponent(nome)}`, { ligada, confirm: true }, 30_000),
+      resetGuildTools: (guildId: string) => request<{ ok: boolean; ferramentas: GuildTool[] }>('POST', `/v1/admin/guilds/${guildId}/mcp-tools/reset`, { confirm: true }, 30_000),
+      tosTerms: () => request<{ paginas: TosPage[] }>('GET', '/v1/admin/tos', undefined, 20_000),
+      guildTos: (guildId: string) => request<GuildTosState>('GET', `/v1/admin/guilds/${guildId}/tos`, undefined, 20_000),
+      acceptGuildTos: (guildId: string, emNomeDeTerceiros = false) => request<TosAcceptResult>('POST', `/v1/admin/guilds/${guildId}/tos`, { confirm: true, ...(emNomeDeTerceiros ? { emNomeDeTerceiros: true } : {}) }, 30_000),
+      revokeGuildTos: (guildId: string) => request<{ ok: boolean; estado: GuildTosState }>('DELETE', `/v1/admin/guilds/${guildId}/tos`, { confirm: true }, 30_000),
+      channelConfig: (guildId: string, channelId: string) => request<ChannelConfig>('GET', `/v1/admin/guilds/${guildId}/channels/${channelId}`, undefined, 20_000),
+      setPersona: (guildId: string, channelId: string, change: PersonaChange) =>
+        request<ChannelConfig>('PUT', `/v1/admin/guilds/${guildId}/channels/${channelId}/persona`, { ...change, confirm: true }, 30_000),
+      resetPersona: (guildId: string, channelId: string) => request<ChannelConfig>('DELETE', `/v1/admin/guilds/${guildId}/channels/${channelId}/persona`, { confirm: true }, 30_000),
+      setChatter: (guildId: string, channelId: string, change: ChatterChange) =>
+        request<ChannelConfig>('PUT', `/v1/admin/guilds/${guildId}/channels/${channelId}/espontaneo`, { ...change, confirm: true }, 30_000),
+      setMentions: (guildId: string, respondToEveryone: boolean) =>
+        request<{ ok: boolean; respondToEveryone: boolean }>('PUT', `/v1/admin/guilds/${guildId}/mentions`, { respondToEveryone, confirm: true }, 30_000),
       setGuildChannel: (guildId: string, type: GuildChannelType, channelId: string | null) =>
-        request<{ ok: boolean }>('PUT', `/v1/admin/guilds/${guildId}/channels`, { type, channelId }, 20_000),
+        request<{ ok: boolean }>('PUT', `/v1/admin/guilds/${guildId}/channels`, { type, channelId, ...(type === 'atualizacoes' ? { confirm: true } : {}) }, 20_000),
       followYoutube: (guildId: string, input: FollowYoutubeInput) =>
         request<{ ok: boolean; added: boolean; name: string }>('POST', `/v1/admin/guilds/${guildId}/youtube`, input, 30_000),
       setYoutubeLiveMode: (guildId: string, youtubeId: string, discordChannelId: string, liveMode: YoutubeLiveMode) =>
@@ -449,8 +478,8 @@ export function createClient(options: ClientOptions) {
       aiRemoveCustom: (id: string) => request<{ ok: boolean }>('DELETE', `/v1/admin/ai/custom/${id}`, undefined, 20_000),
       aiTest: (provider: string) => request<AiTestResult>('POST', `/v1/admin/ai/test/${provider}`, {}, 60_000),
       config: () => request<ConfigOverview>('GET', '/v1/admin/config', undefined, 20_000),
-      configSet: (chave: string, valor: string) => request<{ ok: boolean; chave: string; reinicio: boolean }>('PUT', `/v1/admin/config/${chave}`, { valor }, 20_000),
-      configRemove: (chave: string) => request<{ ok: boolean; chave: string; reinicio: boolean }>('DELETE', `/v1/admin/config/${chave}`, undefined, 20_000),
+      configSet: (chave: string, valor: string, confirm = false) => request<{ ok: boolean; chave: string; reinicio: boolean }>('PUT', `/v1/admin/config/${chave}`, { valor, ...(confirm ? { confirm: true } : {}) }, 20_000),
+      configRemove: (chave: string, confirm = false) => request<{ ok: boolean; chave: string; reinicio: boolean }>('DELETE', `/v1/admin/config/${chave}`, confirm ? { confirm: true } : undefined, 20_000),
       sendDiscordDm: (message: string) => request<{ ok: boolean }>('POST', '/v1/admin/discord/dm', { message }, 30_000),
       radio: async () => (await request<{ sessions: RadioSession[] }>('GET', '/v1/admin/radio', undefined, 20_000)).sessions,
       radioAction: (guildId: string, action: RadioAction) => request<{ ok: boolean }>('POST', `/v1/admin/radio/${guildId}`, { action }, 30_000),

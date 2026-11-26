@@ -1,33 +1,20 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError, type AdminGuildDetail, type ChannelRef, type GuildChannelType, type YoutubeLiveMode, type YuiClient } from '../api/client.ts';
+import { ChannelPicker } from '../components/ChannelPicker.tsx';
 import { confirmAction } from '../components/confirm.ts';
 import { Button, Chip } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
+import { GuildExtras } from './AdminGuildExtras.tsx';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu errado.');
 const chan = (c: ChannelRef | null) => (c ? (c.name ? `#${c.name}` : `ID ${c.id}`) : 'não definido');
 
-const CHANNEL_TYPES: { type: GuildChannelType; label: string }[] = [
+const CHANNEL_TYPES: { type: Exclude<GuildChannelType, 'atualizacoes'>; label: string }[] = [
   { type: 'noticias', label: 'Notícias' },
   { type: 'diario', label: 'Reset diário' },
   { type: 'semanal', label: 'Evento semanal' },
 ];
-
-/** Lista de canais de texto do servidor para escolher um. */
-function ChannelPicker({ channels, value, onPick, allowNone = false, testID }: {
-  channels: { id: string; name: string }[]; value: string | null; onPick: (id: string | null) => void; allowNone?: boolean; testID?: string;
-}) {
-  return (
-    <ScrollView style={styles.picker} nestedScrollEnabled contentContainerStyle={styles.chips}>
-      {allowNone ? <Chip label="Nenhum" on={value === null} onPress={() => onPick(null)} /> : null}
-      {channels.map((c) => (
-        <Chip key={c.id} testID={testID ? `${testID}-${c.id}` : undefined} label={`#${c.name}`} on={value === c.id} onPress={() => onPick(c.id)} />
-      ))}
-      {channels.length === 0 ? <Text style={styles.hint}>A Yui não vê nenhum canal de texto neste servidor.</Text> : null}
-    </ScrollView>
-  );
-}
 
 function RolePicker({ roles, value, onPick }: { roles: { id: string; name: string }[]; value: string | null; onPick: (id: string | null) => void }) {
   return (
@@ -61,8 +48,8 @@ function LiveModeChips({ value, onPick, testID }: { value: YoutubeLiveMode; onPi
   );
 }
 
-/** Canais do servidor e avisos de YouTube/Twitch, com edição. */
-export function GuildEditor({ client, data, reload }: { client: YuiClient; data: AdminGuildDetail; reload: () => Promise<void> }) {
+/** Canais do servidor, avisos de YouTube/Twitch e configurações do servidor, com edição. */
+export function GuildEditor({ client, data, reload, onTosChange }: { client: YuiClient; data: AdminGuildDetail; reload: () => Promise<void>; onTosChange?: (aceito: boolean) => void }) {
   const id = data.id;
   const [editing, setEditing] = useState<GuildChannelType | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -139,10 +126,6 @@ export function GuildEditor({ client, data, reload }: { client: YuiClient; data:
           ) : null}
         </View>
       ))}
-      <View style={styles.kv}>
-        <Text style={styles.label}>Atualizações da Yui</Text>
-        <Text style={styles.value}>{chan(data.channels.atualizacoes)}</Text>
-      </View>
 
       <Text style={styles.label}>YouTube ({data.youtube.length})</Text>
       {data.youtube.length === 0 ? <Text style={styles.hint}>Nenhum canal seguido.</Text> : null}
@@ -244,12 +227,8 @@ export function GuildEditor({ client, data, reload }: { client: YuiClient; data:
 
       {msg ? <Text style={msg.ok ? styles.ok : styles.error}>{msg.text}</Text> : null}
 
-      <Text style={styles.label}>Ferramentas da IA neste servidor</Text>
-      <Text style={styles.hint}>
-        {data.tools
-          ? `Ativas: ${data.tools.enabled.join(', ') || 'nenhuma'}${data.tools.disabled.length ? ` • Desativadas: ${data.tools.disabled.join(', ')}` : ''}`
-          : 'Padrão da Yui.'}
-      </Text>
+      <Text style={styles.label}>Configurações do servidor</Text>
+      <GuildExtras client={client} guild={data} reload={reload} onTosChange={onTosChange} />
     </View>
   );
 }

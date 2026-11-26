@@ -102,7 +102,7 @@ const UNLISTED_TESTS = new Set([
 ]);
 
 // Nomes que o código lê mas que não são configuração de operação (internos, de teste ou de outro dono).
-const INTERNAL_ENV = new Set(['YUI_SAPI_VOICE', 'YUI_SAPI_RATE', 'YUI_LOG_DIR', 'YUI_ROOT_DIR']);
+const INTERNAL_ENV = new Set(['YUI_SAPI_VOICE', 'YUI_SAPI_RATE', 'YUI_LOG_DIR', 'YUI_ROOT_DIR', 'YUI_SERVER_TOOLS_FILE', 'YUI_CHANNEL_SETTINGS_FILE', 'YUI_ACCEPTED_SERVERS_FILE']);
 
 const pkg = JSON.parse(read('package.json'));
 const scripts = pkg.scripts || {};

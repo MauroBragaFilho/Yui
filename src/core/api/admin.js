@@ -6,7 +6,7 @@ import { listTools } from '../agent/tools.js';
 import { checkToolAccess, isOwnerId, isReadOnlyMode, ROLES } from '../permissions.js';
 import { isMemoryEnabled } from '../discordAdapter.js';
 import { audit, auditFilePath } from '../audit.js';
-import { descrever as descreverConfig, definir as definirConfig, remover as removerConfig, PainelConfigError } from '../painelConfig.js';
+import { descrever as descreverConfig, definir as definirConfig, remover as removerConfig, exigeConfirmacao, PainelConfigError } from '../painelConfig.js';
 import { interactionSeries } from '../interactionStats.js';
 import { parseWhen, describeWhen, describeRepeat } from '../../reminders/when.js';
 import { ReminderError } from '../../reminders/store.js';
@@ -45,6 +45,8 @@ const ID_RE = /^\d{15,25}$/;
 const AUTOMOD_MODES = ['off', 'trigger', 'mcp', 'both'];
 const BAN_TYPES = ['user', 'guild', 'channel'];
 const MAX_AUDIT = 500;
+const FREQUENCIAS = ['low', 'medium', 'high'];
+const SERVIDOR_FORA = 'As configurações por servidor só funcionam com o bot do Discord ligado a este processo.';
 
 // O reinício com o cérebro separado (etapa 10): o que o dono lê é a verdade sobre o que reinicia e, se o supervisor recusa, que NADA reiniciou.
 const RESTART_MESSAGE_BOTH = 'Reiniciando o cérebro e o bot do Discord, nesta ordem: o bot para, o cérebro para, o cérebro sobe e depois o bot. O app fica sem resposta até o cérebro voltar (de alguns segundos a cerca de um minuto) e o bot fica fora do Discord nesse intervalo.';
@@ -72,6 +74,47 @@ function requireLiveMode(value) {
   const mode = String(value ?? '').trim().toLowerCase();
   if (!LIVE_MODE_VALUES.includes(mode)) throw new AdminError(400, `Modo de live inválido. Use: ${LIVE_MODE_VALUES.join(', ')}.`);
   return mode;
+}
+
+function requireConfirm(body, oQue) {
+  if (body?.confirm !== true) throw new AdminError(400, `Confirmação necessária (confirm: true) para ${oQue}.`);
+}
+
+function requireBool(value, campo) {
+  if (typeof value !== 'boolean') throw new AdminError(400, `Informe ${campo}: true ou false.`);
+  return value;
+}
+
+// Caracteres de controle: o humor é de linha única (como no Discord); a instrução aceita quebra de linha e tabulação.
+const CONTROLE_LINHA_RE = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]');
+const CONTROLE_TEXTO_RE = new RegExp('[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u2028\\u2029]');
+
+/** Texto da persona: ausente/null = não muda; "" = limpa. Acima do limite é recusado (nada é cortado calado). */
+function textoDaPersona(value, campo, max, { multilinha = false } = {}) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') throw new AdminError(400, `O campo ${campo} precisa ser texto.`);
+  const texto = multilinha ? value.replace(/\r\n/g, '\n') : value;
+  if (texto.length > max) throw new AdminError(400, `O campo ${campo} passa de ${max} caracteres.`);
+  if ((multilinha ? CONTROLE_TEXTO_RE : CONTROLE_LINHA_RE).test(texto)) throw new AdminError(400, `O campo ${campo} não pode ter ${multilinha ? '' : 'quebra de linha nem '}caractere de controle.`);
+  return texto;
+}
+
+/** As funções de salvar do bot devolvem false quando o disco recusa: o painel não pode dizer que salvou. */
+function exigirGravacao(resultado) {
+  if (resultado === false) throw new AdminError(500, 'Não consegui gravar no disco: a mudança vale só até o próximo reinício. Confira o arquivo e tente de novo.');
+}
+
+/** Como o painel vê a configuração de um canal (o formato antigo, só texto, é a instrução). */
+function canalView(channel, settings, limites) {
+  const s = typeof settings === 'string' ? { instruction: settings } : (settings ?? {});
+  const c = s.chatter ?? {};
+  return {
+    channelId: channel.id,
+    nome: channel.name ?? null,
+    persona: { instrucao: s.instruction || null, humor: s.mood || null },
+    espontaneo: { ativo: c.active === true, frequencia: c.frequency ?? null, porcentagem: c.percentage ?? null },
+    limites: { ...limites },
+  };
 }
 
 /** Dependências reais do bot, carregadas só quando necessário (os testes injetam fakes). */
@@ -271,7 +314,14 @@ export function createAdmin({
   startedAt = Date.now(),
   // Monitores do dono (etapa 16, YUI_MONITORES; só o cérebro separado passa): `{ listar(), cancelar(id) }`. Sem eles a rota diz "desligado" e não faz nada.
   monitores = null,
+  // Configurações por servidor (src/discord/painelServidor.js): `() => Promise<ponte>`. Injetada pelo processo do bot; o Core não importa nada dele.
+  servidor = null,
 } = {}) {
+  let servidorCache = null;
+  const srv = async () => {
+    if (!servidor) throw new AdminError(503, SERVIDOR_FORA);
+    return (servidorCache ??= await servidor());
+  };
   let cached = deps;
   const d = async () => (cached ??= await defaultDeps());
   let remCache = reminders;
@@ -559,15 +609,152 @@ export function createAdmin({
       return deps?.guildDetail ? deps.guildDetail(guild) : loadGuildDetail(guild);
     },
 
-    // ── Canais do servidor e avisos de YouTube/Twitch ──
-    async setGuildChannel(ctx, guildId, type, channelId) {
+    // ── Ferramentas por servidor (as mesmas do /yui-ferramentas) ──
+    async guildTools(ctx, guildId) {
       requireOwner(ctx);
       const guild = findGuild(guildId);
-      const column = CHANNEL_COLUMNS[type];
-      if (!column) throw new AdminError(400, `Tipo de canal inválido. Use: ${Object.keys(CHANNEL_COLUMNS).join(', ')}.`);
+      return { guildId: guild.id, ferramentas: (await srv()).ferramentas(guild.id) };
+    },
+
+    async setGuildTool(ctx, guildId, nome, body = {}) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      const ligada = requireBool(body?.ligada, 'ligada');
+      const s = await srv();
+      // Lista fechada: só o que o /yui-ferramentas alterna.
+      if (!s.ferramentas(guild.id).some((f) => f.nome === nome)) throw new AdminError(404, 'Ferramenta desconhecida ou que não pode ser alterada.');
+      requireConfirm(body, 'mudar uma ferramenta do servidor');
+      exigirGravacao(s.definirFerramenta(guild.id, nome, ligada));
+      audit('admin.guild.tool', ctx, { guild: guild.id, tool: nome, enabled: ligada });
+      return { ok: true, ferramentas: s.ferramentas(guild.id) };
+    },
+
+    async resetGuildTools(ctx, guildId, body = {}) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      requireConfirm(body, 'restaurar as ferramentas do servidor');
+      const s = await srv();
+      exigirGravacao(s.restaurarFerramentas(guild.id));
+      audit('admin.guild.tools.reset', ctx, { guild: guild.id });
+      return { ok: true, ferramentas: s.ferramentas(guild.id) };
+    },
+
+    // ── Termos de Uso ──
+    async tosTerms(ctx) {
+      requireOwner(ctx);
+      return { paginas: (await srv()).paginasDosTermos() };
+    },
+
+    async guildTos(ctx, guildId) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      return { guildId: guild.id, donoDoServidor: guild.ownerId === ctx.userId, ...(await srv()).estadoDosTermos(guild.id) };
+    },
+
+    /** Aceite pelo painel: fica registrado com origem 'painel'. Já registrado = não regrava nem manda o aviso de novo. */
+    async acceptGuildTos(ctx, guildId, body = {}) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      requireConfirm(body, 'aceitar os Termos de Uso por este servidor');
+      const s = await srv();
+      const estado = () => ({ guildId: guild.id, donoDoServidor: guild.ownerId === ctx.userId, ...s.estadoDosTermos(guild.id) });
+      if (s.estadoDosTermos(guild.id).aceitoEm) return { ok: true, jaAceito: true, canalAtualizacoes: s.opcoes(guild.id)?.updateChannelId ?? null, avisoEnviado: false, estado: estado() };
+      // Servidor de terceiros: além do confirm, quem chama precisa reconhecer que aceita em nome de outra pessoa.
+      if (guild.ownerId !== ctx.userId && body.emNomeDeTerceiros !== true) throw new AdminError(400, 'Você não é o dono deste servidor: confirme que aceita em nome de terceiros (emNomeDeTerceiros: true).');
+      const r = await s.aceitarTermos(guild, ctx.userId);
+      audit('admin.guild.tos.accept', ctx, { guild: guild.id, donoDoServidor: guild.ownerId === ctx.userId });
+      return { ok: true, jaAceito: false, canalAtualizacoes: r.canalId, avisoEnviado: r.avisado, estado: estado() };
+    },
+
+    async revokeGuildTos(ctx, guildId, body = {}) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      requireConfirm(body, 'revogar o aceite dos Termos de Uso');
+      const s = await srv();
+      s.revogarTermos(guild.id);
+      audit('admin.guild.tos.revoke', ctx, { guild: guild.id });
+      return { ok: true, estado: { guildId: guild.id, donoDoServidor: guild.ownerId === ctx.userId, ...s.estadoDosTermos(guild.id) } };
+    },
+
+    // ── Persona e falas espontâneas por canal (as mesmas estruturas do /yui-servidor) ──
+    async channelConfig(ctx, guildId, channelId) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      const id = requireTextChannel(guild, channelId);
+      const s = await srv();
+      return canalView(guild.channels.cache.get(id), s.canal(id), s.limites);
+    },
+
+    async setPersona(ctx, guildId, channelId, body = {}) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      const id = requireTextChannel(guild, channelId);
+      const s = await srv();
+      const instruction = textoDaPersona(body?.instrucao, 'instrucao', s.limites.instrucao, { multilinha: true });
+      const mood = textoDaPersona(body?.humor, 'humor', s.limites.humor);
+      if (instruction === undefined && mood === undefined) throw new AdminError(400, 'Informe instrucao e/ou humor.');
+      requireConfirm(body, 'mudar a personalidade do canal');
+      exigirGravacao(s.definirPersona(id, { instruction, mood }));
+      // Auditoria sem conteúdo: só quais campos mudaram.
+      audit('admin.guild.persona', ctx, { guild: guild.id, channel: id, campos: [instruction !== undefined ? 'instrucao' : null, mood !== undefined ? 'humor' : null].filter(Boolean).join(',') });
+      return { ok: true, ...canalView(guild.channels.cache.get(id), s.canal(id), s.limites) };
+    },
+
+    async resetPersona(ctx, guildId, channelId, body = {}) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      const id = requireTextChannel(guild, channelId);
+      requireConfirm(body, 'restaurar a personalidade do canal');
+      const s = await srv();
+      exigirGravacao(s.definirPersona(id, { reset: true }));
+      audit('admin.guild.persona.reset', ctx, { guild: guild.id, channel: id });
+      return { ok: true, ...canalView(guild.channels.cache.get(id), s.canal(id), s.limites) };
+    },
+
+    async setChatter(ctx, guildId, channelId, body = {}) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      const id = requireTextChannel(guild, channelId);
+      const has = (v) => v !== undefined && v !== null;
+      const { ativo, frequencia, porcentagem } = body ?? {};
+      if (!has(ativo) && !has(frequencia) && !has(porcentagem)) throw new AdminError(400, 'Informe ativo, frequencia e/ou porcentagem.');
+      if (has(ativo)) requireBool(ativo, 'ativo');
+      if (has(frequencia) && has(porcentagem)) throw new AdminError(400, 'Use frequencia OU porcentagem, não as duas.');
+      if (has(frequencia) && !FREQUENCIAS.includes(frequencia)) throw new AdminError(400, `Frequência inválida. Use: ${FREQUENCIAS.join(', ')}.`);
+      if (has(porcentagem) && !(Number.isInteger(porcentagem) && porcentagem >= 0 && porcentagem <= 100)) throw new AdminError(400, 'Porcentagem inválida (número inteiro de 0 a 100).');
+      requireConfirm(body, 'mudar as falas espontâneas do canal');
+      const s = await srv();
+      exigirGravacao(s.definirEspontaneo(id, { active: has(ativo) ? ativo : undefined, frequency: has(frequencia) ? frequencia : undefined, percentage: has(porcentagem) ? porcentagem : undefined }));
+      audit('admin.guild.chatter', ctx, { guild: guild.id, channel: id, ativo: ativo ?? null, frequencia: frequencia ?? null, porcentagem: porcentagem ?? null });
+      return { ok: true, ...canalView(guild.channels.cache.get(id), s.canal(id), s.limites) };
+    },
+
+    /** Responder a @everyone/@here. */
+    async setMentions(ctx, guildId, body = {}) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      const ligado = requireBool(body?.respondToEveryone, 'respondToEveryone');
+      requireConfirm(body, 'mudar a resposta a @everyone/@here');
+      exigirGravacao((await srv()).definirMencoes(guild.id, ligado));
+      audit('admin.guild.mentions', ctx, { guild: guild.id, respondToEveryone: ligado });
+      return { ok: true, respondToEveryone: ligado };
+    },
+
+    // ── Canais do servidor e avisos de YouTube/Twitch ──
+    async setGuildChannel(ctx, guildId, type, channelId, confirm) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      // 'atualizacoes' (o canal_updates do /yui-servidor) mora no server_settings.json; os outros, no banco do bot.
+      const column = Object.hasOwn(CHANNEL_COLUMNS, type) ? CHANNEL_COLUMNS[type] : null;
+      if (!column && type !== 'atualizacoes') throw new AdminError(400, `Tipo de canal inválido. Use: ${[...Object.keys(CHANNEL_COLUMNS), 'atualizacoes'].join(', ')}.`);
       const target = channelId === null || channelId === '' || channelId === undefined ? null : requireTextChannel(guild, channelId);
-      const dep = await d();
-      await (dep.setGuildChannel ?? defaultSetGuildChannel)(guild.id, column, target);
+      if (type === 'atualizacoes') requireConfirm({ confirm }, 'mudar o canal de avisos do servidor');
+      if (column) {
+        const dep = await d();
+        await (dep.setGuildChannel ?? defaultSetGuildChannel)(guild.id, column, target);
+      } else {
+        exigirGravacao((await srv()).definirCanalDeUpdates(guild.id, target));
+      }
       audit('admin.guild.channel', ctx, { guild: guild.id, type, channel: target });
       return { ok: true };
     },
@@ -644,8 +831,9 @@ export function createAdmin({
       requireOwner(ctx);
       return descreverConfig();
     },
-    async configSet(ctx, chave, valor) {
+    async configSet(ctx, chave, valor, confirm) {
       requireOwner(ctx);
+      if (exigeConfirmacao(chave, valor ?? '')) requireConfirm({ confirm }, 'afrouxar um ajuste de privacidade ou segurança');
       try {
         const r = definirConfig(chave, valor);
         audit('admin.config.set', ctx, { chave: r.chave });
@@ -655,8 +843,9 @@ export function createAdmin({
         throw e;
       }
     },
-    async configRemove(ctx, chave) {
+    async configRemove(ctx, chave, confirm) {
       requireOwner(ctx);
+      if (exigeConfirmacao(chave)) requireConfirm({ confirm }, 'remover um ajuste de privacidade ou segurança');
       try {
         const r = removerConfig(chave);
         audit('admin.config.remove', ctx, { chave: r.chave });

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError, type ConfigItem, type ConfigOverview, type YuiClient } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
+import { perguntaDoAjuste } from '../guildLogic.ts';
 import { Badge, Button, Card, Chip, FieldLabel, Icon, SectionHeading, StateView } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
 
@@ -25,11 +26,18 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
-  async function save(valor: string) {
+  /** Valor que afrouxa privacidade ou segurança pede confirmação antes; os outros gravam direto. */
+  function save(valor: string) {
+    const pergunta = perguntaDoAjuste(item, valor);
+    if (pergunta) confirmAction('Tem certeza?', pergunta, () => gravar(valor, true), 'Confirmar');
+    else gravar(valor, false);
+  }
+
+  async function gravar(valor: string, confirm: boolean) {
     setBusy(true);
     setMsg(null);
     try {
-      const r = await client.admin.configSet(item.chave, valor);
+      const r = await client.admin.configSet(item.chave, valor, confirm);
       setText('');
       await reload();
       setMsg({ text: r.reinicio ? 'Salvo. Vale depois de reiniciar a Yui.' : 'Salvo. Já está valendo.', ok: true });
@@ -44,7 +52,7 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
     setBusy(true);
     setMsg(null);
     try {
-      const r = await client.admin.configRemove(item.chave);
+      const r = await client.admin.configRemove(item.chave, Boolean(item.confirmar));
       await reload();
       setMsg({ text: r.reinicio ? 'Removido do painel. Vale depois de reiniciar a Yui.' : 'Removido do painel. Já está valendo.', ok: true });
     } catch (e) {

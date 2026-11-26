@@ -31,13 +31,14 @@ import { splitForDiscord } from '../core/alerts.js';
 import { redact } from '../core/api/panelLogs.js';
 import { createAdmin, AdminError } from '../core/api/admin.js';
 import { ownerUserId } from '../core/api/auth.js';
+import { carregarServidorDoBot } from './painelServidor.js';
 import { applyAiSettings } from '../core/aiSettings.js';
 import { getGateway, resetGateway } from '../gateway/index.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 
 export const BOT_CAPABILITIES = Object.freeze(['discord.dm', 'discord.status', 'guild.admin', 'panel.admin']);
 /** As telas do painel que o cérebro pode pedir por panel.admin (a mesma lista do src/cerebro/painel.js). */
-export const BOT_PANEL_ACTIONS = Object.freeze(['setAutomod', 'bans', 'addBan', 'removeBan', 'addYoutubeFollow', 'setYoutubeLiveMode', 'removeYoutubeFollow', 'addTwitchFollow', 'removeTwitchFollow', 'radio', 'radioAction', 'integrations']);
+export const BOT_PANEL_ACTIONS = Object.freeze(['setAutomod', 'bans', 'addBan', 'removeBan', 'addYoutubeFollow', 'setYoutubeLiveMode', 'removeYoutubeFollow', 'addTwitchFollow', 'removeTwitchFollow', 'radio', 'radioAction', 'integrations', 'guildTools', 'setGuildTool', 'resetGuildTools', 'tosTerms', 'guildTos', 'acceptGuildTos', 'revokeGuildTos', 'channelConfig', 'setPersona', 'resetPersona', 'setChatter', 'setMentions']);
 const DM_MOTIVOS = new Set(['lembrete', 'relatorio', 'alerta', 'painel']);
 const MAX_DM_CHARS = 8000;
 const ID_RE = /^\d{5,25}$/;
@@ -130,7 +131,7 @@ export function registerBotActions(channel, { getClient, admin = null, getBans =
     if (cachedAdmin) return cachedAdmin;
     const client = getClient();
     if (!client) throw coded('DISCORD_OFFLINE', 'O cliente do Discord ainda não foi criado.');
-    cachedAdmin = createAdmin({ client });
+    cachedAdmin = createAdmin({ client, servidor: carregarServidorDoBot });
     return cachedAdmin;
   };
   const run = async (fn) => { try { return await fn(); } catch (err) { throw adminFailure(err); } };
@@ -231,7 +232,7 @@ export function registerBotActions(channel, { getClient, admin = null, getBans =
 
   channel.handle('guild.list', async (p) => run(() => adminFor().guilds(ownerContext(p))));
   channel.handle('guild.get', async (p) => run(() => adminFor().guildDetail(ownerContext(p), String(p?.guildId ?? ''))));
-  channel.handle('guild.setChannel', async (p) => run(() => adminFor().setGuildChannel(ownerContext(p), String(p?.guildId ?? ''), p?.type, p?.channelId ?? null)));
+  channel.handle('guild.setChannel', async (p) => run(() => adminFor().setGuildChannel(ownerContext(p), String(p?.guildId ?? ''), p?.type, p?.channelId ?? null, p?.confirm)));
   channel.handle('panel.admin', async (p) => {
     const action = String(p?.action ?? '');
     if (!BOT_PANEL_ACTIONS.includes(action)) throw coded('METHOD_NOT_ALLOWED', 'Tela do painel desconhecida.');

@@ -297,6 +297,23 @@ export function createApiServer({
     if (m === 'GET' && p === '/v1/admin/diagnostico') return admin.diagnostico(ctx);
     if (m === 'GET' && p === '/v1/admin/integrations') return admin.integrations(ctx);
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)$/)) && m === 'GET') return admin.guildDetail(ctx, r[1]);
+    // Configurações por servidor: ferramentas, Termos de Uso, persona e falas espontâneas por canal, menções.
+    if (m === 'GET' && p === '/v1/admin/tos') return admin.tosTerms(ctx);
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/mcp-tools$/)) && m === 'GET') return admin.guildTools(ctx, r[1]);
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/mcp-tools\/reset$/)) && m === 'POST') return admin.resetGuildTools(ctx, r[1], await readJson(req));
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/mcp-tools\/([a-z0-9_]{1,64})$/)) && m === 'PUT') return admin.setGuildTool(ctx, r[1], r[2], await readJson(req));
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/tos$/))) {
+      if (m === 'GET') return admin.guildTos(ctx, r[1]);
+      if (m === 'POST') return admin.acceptGuildTos(ctx, r[1], await readJson(req));
+      if (m === 'DELETE') return admin.revokeGuildTos(ctx, r[1], await readJson(req));
+    }
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/channels\/(\d+)$/)) && m === 'GET') return admin.channelConfig(ctx, r[1], r[2]);
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/channels\/(\d+)\/persona$/))) {
+      if (m === 'PUT') return admin.setPersona(ctx, r[1], r[2], await readJson(req));
+      if (m === 'DELETE') return admin.resetPersona(ctx, r[1], r[2], await readJson(req));
+    }
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/channels\/(\d+)\/espontaneo$/)) && m === 'PUT') return admin.setChatter(ctx, r[1], r[2], await readJson(req));
+    if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/mentions$/)) && m === 'PUT') return admin.setMentions(ctx, r[1], await readJson(req));
     if (m === 'GET' && p === '/v1/admin/radio') return admin.radio(ctx);
     if ((r = p.match(/^\/v1\/admin\/radio\/(\d+)$/)) && m === 'POST') {
       const body = await readJson(req);
@@ -308,7 +325,7 @@ export function createApiServer({
     }
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/channels$/)) && m === 'PUT') {
       const body = await readJson(req);
-      return admin.setGuildChannel(ctx, r[1], body.type, body.channelId ?? null);
+      return admin.setGuildChannel(ctx, r[1], body.type, body.channelId ?? null, body.confirm);
     }
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/youtube$/)) && m === 'POST') return admin.addYoutubeFollow(ctx, r[1], await readJson(req));
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/youtube\/([\w-]+)\/(\d+)$/)) && m === 'PUT') {
@@ -334,9 +351,9 @@ export function createApiServer({
     if (m === 'GET' && p === '/v1/admin/config') return admin.config(ctx);
     if ((r = p.match(/^\/v1\/admin\/config\/([A-Z0-9_]{3,80})$/)) && m === 'PUT') {
       const body = await readJson(req);
-      return admin.configSet(ctx, r[1], body.valor);
+      return admin.configSet(ctx, r[1], body.valor, body.confirm);
     }
-    if ((r = p.match(/^\/v1\/admin\/config\/([A-Z0-9_]{3,80})$/)) && m === 'DELETE') return admin.configRemove(ctx, r[1]);
+    if ((r = p.match(/^\/v1\/admin\/config\/([A-Z0-9_]{3,80})$/)) && m === 'DELETE') return admin.configRemove(ctx, r[1], (await readJson(req))?.confirm);
     if (m === 'GET' && p === '/v1/admin/ai') return admin.ai(ctx);
     if (m === 'POST' && p === '/v1/admin/ai/keys') {
       const body = await readJson(req);
@@ -754,7 +771,8 @@ export function startApi(client = null, overrides = {}) {
     tokens,
     panel,
     sessions: createSessionStore({ ttlMs: hours * 60 * 60 * 1000 }),
-    admin: overrides.admin ?? createAdmin({ client }),
+    // `servidor`: a ponte das configurações por servidor, que só o processo do bot passa (src/index.js).
+    admin: overrides.admin ?? createAdmin({ client, servidor: overrides.servidor ?? null }),
     dev: overrides.dev ?? createDev(),
     // Chave por DM: usa o próprio bot do Discord para falar com o dono em privado (fora de qualquer servidor).
     notify: overrides.notify ?? (client ? async (userId, text) => (await client.users.fetch(userId)).send(text) : null),

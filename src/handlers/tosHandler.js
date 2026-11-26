@@ -5,7 +5,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { checkAutoBan } from './banHandler.js';
 import config from '../config.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AuditLogEvent, WebhookClient } from 'discord.js';
-const TERMS_FILE = path.join(__dirname, '../data/accepted_servers.json');
+const TERMS_FILE = process.env.YUI_ACCEPTED_SERVERS_FILE || path.join(__dirname, '../data/accepted_servers.json'); // o desvio existe para os testes não gravarem no arquivo real
 if (!fs.existsSync(path.dirname(TERMS_FILE))) {
     fs.mkdirSync(path.dirname(TERMS_FILE), { recursive: true });
 }
@@ -63,14 +63,16 @@ function isServerAccepted(guildId) {
     if (!guildId) return true;
     return acceptedServers.some(s => s.guildId === guildId);
 }
-function saveAcceptedServer(guildName, guildId, ownerId, userId) {
+// `via` só é gravado quando o aceite NÃO veio do botão do Discord (ex.: 'painel').
+function saveAcceptedServer(guildName, guildId, ownerId, userId, via = null) {
     const existingIndex = acceptedServers.findIndex(s => s.guildId === guildId);
     const entry = {
         guildName,
         guildId,
         ownerId,
         authorizedBy: userId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        ...(via ? { via } : {})
     };
     if (existingIndex !== -1) {
         acceptedServers[existingIndex] = entry;
@@ -86,6 +88,39 @@ function removeAcceptedServer(guildId) {
     acceptedServers = acceptedServers.filter(s => s.guildId !== guildId);
     if (acceptedServers.length !== initialLen) {
         fs.writeFileSync(TERMS_FILE, JSON.stringify(acceptedServers, null, 2));
+    }
+}
+function getAcceptedServer(guildId) {
+    return acceptedServers.find(s => s.guildId === guildId) || null;
+}
+const termosExigidos = () => Boolean(config.requireTos);
+
+// Efeitos do aceite (botão do Discord e painel do dono): registra e, se faltar o canal de updates (ou ele sumiu), escolhe um.
+async function registrarAceite(guild, userId, { canalReserva = null, via = null } = {}) {
+    saveAcceptedServer(guild.name, guild.id, guild.ownerId, userId, via);
+    const { setServerUpdateChannel, getServerSettings } = await import('./llmHandler.js');
+    const settings = getServerSettings(guild.id);
+    let canal = null;
+    if (settings && settings.updateChannelId) {
+        canal = guild.channels.cache.get(settings.updateChannelId);
+    }
+    if (!canal) {
+        canal = findGeneralChannel(guild) || canalReserva;
+        if (canal) setServerUpdateChannel(guild.id, canal.id);
+    }
+    return canal || null;
+}
+// Aviso no canal de updates. Devolve se a mensagem saiu; nunca lança.
+async function anunciarCanalDeUpdates(canal) {
+    const updatesEmbed = new EmbedBuilder()
+        .setColor(0x7C3AED)
+        .setTitle('📢 Central de Updates Configurada')
+        .setDescription(`O canal <#${canal.id}> foi registrado para receber as novidades e atualizações da Yui.\n\nCaso um administrador queira alterar este canal, utilize o comando:\n\`/yui-servidor canal_updates:#canal\``);
+    try {
+        await canal.send({ embeds: [updatesEmbed] });
+        return true;
+    } catch (_) {
+        return false;
     }
 }
 const DEFAULT_TOS_PAGES = [
@@ -248,29 +283,15 @@ async function handleTosInteraction(interaction) {
         }
         if (interaction.customId === 'tos_accept') {
             const guild = interaction.guild;
-            console.log('[TOS-DEBUG] Salvando aceitação síncrona...');
-            saveAcceptedServer(guild.name, guild.id, guild.ownerId, interaction.user.id);
+            console.log('[TOS-DEBUG] Salvando aceitação...');
+            const targetUpdateChannel = await registrarAceite(guild, interaction.user.id, { canalReserva: interaction.channel });
             console.log('[TOS-DEBUG] Salvo com sucesso.');
-            const { setServerUpdateChannel, getServerSettings } = await import('./llmHandler.js');
-            const settings = getServerSettings(guild.id);
-            let targetUpdateChannel = null;
-            if (settings && settings.updateChannelId) {
-                targetUpdateChannel = guild.channels.cache.get(settings.updateChannelId);
-            }
-            if (!targetUpdateChannel) {
-                targetUpdateChannel = findGeneralChannel(guild) || interaction.channel;
-                setServerUpdateChannel(guild.id, targetUpdateChannel.id);
-            }
             await interaction.editReply({
                 content: `✅ **Termos de Uso aceitos por <@${interaction.user.id}>!** A Yui agora está liberada para este servidor. ✨`,
                 embeds: [],
                 components: []
             }).catch(err => console.error('[TOS-DEBUG] Erro no editReply (Accept):', err.message));
-            const updatesEmbed = new EmbedBuilder()
-                .setColor(0x7C3AED)
-                .setTitle('📢 Central de Updates Configurada')
-                .setDescription(`O canal <#${targetUpdateChannel.id}> foi registrado para receber as novidades e atualizações da Yui.\n\nCaso um administrador queira alterar este canal, utilize o comando:\n\`/yui-servidor canal_updates:#canal\``);
-            await targetUpdateChannel.send({ embeds: [updatesEmbed] }).catch(() => {});
+            if (targetUpdateChannel) await anunciarCanalDeUpdates(targetUpdateChannel);
             console.log(`[TOS-DEBUG] Servidor ${guild.id} aceitou.`);
         } else {
             if (interaction.guild) {
@@ -371,7 +392,7 @@ async function checkAndInitializeUpdateChannel(guild, channel) {
         }
     }
 }
-export { getTosPages, reportNewGuild, removeAcceptedServer, isServerAccepted, sendTermsOfService, handleTosInteraction, checkAndInitializeUpdateChannel };
+export { getAcceptedServer, termosExigidos, registrarAceite, anunciarCanalDeUpdates, getTosPages, reportNewGuild, removeAcceptedServer, isServerAccepted, sendTermsOfService, handleTosInteraction, checkAndInitializeUpdateChannel };
 
 export default {
     isServerAccepted,

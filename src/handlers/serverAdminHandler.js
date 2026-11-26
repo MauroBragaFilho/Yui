@@ -27,8 +27,8 @@ import { makeEmbed, chunkLines, clampText } from '../discord/embedLimits.js';
 
 // Tetos dos textos do canal (TG-19). A opção do comando de barra aceita até 6000 caracteres e o modal até 4000, e esses textos
 // entram no prompt da IA a cada resposta do canal: gravar só o que cabe e ecoar menos ainda (o eco passa por embed de 4096).
-const PERSONA_INSTRUCTION_MAX = 1500;
-const PERSONA_MOOD_MAX = 100;
+export const PERSONA_INSTRUCTION_MAX = 1500;
+export const PERSONA_MOOD_MAX = 100;
 const ECHO_MAX = 100;
 
 // Corte para GRAVAR: sem reticências (o texto continua sendo uma instrução utilizável) e sem partir emoji.

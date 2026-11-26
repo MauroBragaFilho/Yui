@@ -305,7 +305,8 @@ async function bootstrap() {
     logger.info('[Bootstrap] Yui API e Gateway: sobem no cérebro (node src/cerebro.js), não aqui.');
   } else {
     // 5. Yui API (opcional; YUI_API_ENABLED=true) — interface HTTP do Core para os apps
-    startApi(client);
+    const { carregarServidorDoBot } = await import('./discord/painelServidor.js');
+    startApi(client, { servidor: carregarServidorDoBot });
 
     // 6. Yui Gateway (servidor de IA compatível com OpenAI; opcional: YUI_GATEWAY_ENABLED=true)
     startGatewayServer();

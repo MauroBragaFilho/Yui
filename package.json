@@ -73,6 +73,7 @@
     "test:tts429": "node tests/test-tts-espera-429.js",
     "test:recusageral": "node tests/test-recusa-generica.js",
     "test:painelconfig": "node tests/test-painel-config.js",
+    "test:painelservidor": "node tests/test-painel-servidor.js",
     "test:google": "node tests/test-google-unidade.js",
     "test:googlecontinuacao": "node tests/test-google-continuacao.js",
     "test:googleautorizar": "node tests/test-google-autorizar.js",

@@ -56,6 +56,22 @@ await test('todo item tem rótulo, grupo, tipo válido e se precisa de reinício
   assert.ok(cfg.CATALOGO.filter((c) => c.secreto).length >= 4);
 });
 
+await test('os ajustes liberados em 26/11 estão no catálogo; o que ficou de fora de propósito continua de fora; privacidade com aviso', () => {
+  for (const c of ['YUI_VOZ_UNIFICADA', 'YUI_VOZ_GOOGLE', 'YUI_VOZ_PRAZO_S', 'YUI_HISTORICO_COMPARTILHADO', 'YUI_CONTEXT_ENABLED', 'YUI_MONITORES', 'YUI_ALERTS', 'YUI_ALERTAS_EVENTOS', 'YUI_MORNING_REPORT', 'YUI_CLIMA', 'YUI_PESQUISA_POR_INTENCAO', 'YUI_TTS_ENABLED', 'YUI_DL_MAX_CONCURRENT']) assert.ok(item(c), c);
+  for (const c of ['YUI_VOZ_TOOLS', 'YUI_VOICE_TOOLS', 'YUI_CONTEXT_SCOPE', 'YUI_TTS_OMNIROUTE_SENSIVEL', 'YUI_TTS_PROVIDERS', 'YUI_PRIVATE_SEARCH', 'YUI_GOOGLE_SEM_ROTA_PRIVADA']) assert.ok(!item(c), c);
+  for (const c of ['YUI_VOZ_UNIFICADA', 'YUI_VOZ_GOOGLE']) assert.match(item(c).descricao, /PRIVACIDADE/, c);
+  assert.equal(item('YUI_HISTORICO_COMPARTILHADO').reinicio, false);
+});
+await test('o padrão de cada item passa na própria validação; os tetos de mídia não aceitam 0 (sem limite); alvo e nomes de voz com formato', () => {
+  for (const c of cfg.CATALOGO) if (c.padrao) assert.equal(cfg.validarValor(c, c.padrao), c.padrao, c.chave);
+  for (const c of ['YUI_DL_MAX_MINUTES', 'YUI_DL_MAX_FILESIZE_MB', 'YUI_DL_MAX_CONCURRENT', 'YUI_IMAGE_PER_HOUR']) assert.throws(() => cfg.validarValor(item(c), 0), cfg.PainelConfigError, c);
+  const alvo = item('YUI_ALERTA_INTERNET_ALVO');
+  for (const bom of ['1.1.1.1', 'exemplo.com:443', '']) assert.equal(cfg.validarValor(alvo, bom), bom);
+  for (const ruim of ['http://exemplo.com', 'exemplo.com:70000', 'exemplo.com:0', 'a b', '-x']) assert.throws(() => cfg.validarValor(alvo, ruim), cfg.PainelConfigError, ruim);
+  assert.throws(() => cfg.validarValor(item('YUI_TTS_EDGE_VOICE'), '"/><voz'), cfg.PainelConfigError);
+  assert.throws(() => cfg.validarValor(item('YUI_PESQUISA_POR_INTENCAO'), 'tudo'), cfg.PainelConfigError);
+});
+
 section('B. A validação');
 await test('segredo: de 10 a 512 caracteres visíveis, sem espaço e sem vírgula; o erro nunca repete o valor', () => {
   const k = item('AZURE_SPEECH_KEY');
@@ -313,6 +329,22 @@ try {
     assert.equal((await call('PUT', '/v1/admin/config/YUI_FUSO', { token: OWNER, body: {} })).status, 400, 'sem valor');
     assert.ok(!fs.existsSync(ARQ));
   });
+  await test('ajuste que afrouxa privacidade ou segurança exige confirm: true para gravar e para remover', async () => {
+    const perigosos = [['YUI_VOZ_UNIFICADA', 'true', 'false'], ['YUI_VOZ_GOOGLE', 'true', 'false'], ['YUI_CONTEXT_ENABLED', 'true', 'false'], ['YUI_HISTORICO_COMPARTILHADO', 'true', 'false'], ['YUI_ALERTS', 'false', 'true']];
+    const lista = (await call('GET', '/v1/admin/config', { token: OWNER })).json.itens;
+    for (const [chave, perigoso, seguro] of perigosos) {
+      assert.deepEqual(lista.find((i) => i.chave === chave).confirmar, [perigoso], chave);
+      const rota = `/v1/admin/config/${chave}`;
+      for (const body of [{ valor: perigoso }, { valor: perigoso === 'true' }, { valor: ` ${perigoso.toUpperCase()} ` }, { valor: perigoso, confirm: 'true' }]) {
+        assert.equal((await call('PUT', rota, { token: OWNER, body })).status, 400, `${chave} ${JSON.stringify(body)}`);
+      }
+      assert.equal((await call('PUT', rota, { token: OWNER, body: { valor: seguro } })).status, 200, `${chave}: o lado seguro não pergunta`);
+      assert.equal((await call('PUT', rota, { token: OWNER, body: { valor: perigoso, confirm: true } })).status, 200, chave);
+      assert.equal((await call('DELETE', rota, { token: OWNER })).status, 400, `${chave}: remover sem confirm`);
+      assert.equal((await call('DELETE', rota, { token: OWNER, body: { confirm: true } })).status, 200, chave);
+    }
+  });
+
   await test('YUI_PAINEL_CONFIG_EDIT=false trava a edição pela API (a leitura continua)', async () => {
     limpar();
     process.env.YUI_PAINEL_CONFIG_EDIT = 'false';

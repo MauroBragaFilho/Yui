@@ -4,7 +4,7 @@ import { ApiError, type AiCustomProvider, type AiKeyHint, type AiOverview, type 
 import { confirmAction } from '../components/confirm.ts';
 import { Badge, Button, Card, Chip } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
-import { omniRouteUrl } from '../omniRouteUrl.ts';
+import { findOmniRoute, omniRouteUrl } from '../omniRouteUrl.ts';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu errado.');
 
@@ -335,10 +335,20 @@ function AddCustom({ data, client, reload }: { data: AiOverview; client: YuiClie
   );
 }
 
-/** Atalho para o painel do OmniRoute (o roteador de IA do notebook). Abre em outra aba: ele não aceita ser embutido numa página. */
-function OmniRouteCard({ client }: { client: YuiClient }) {
-  const url = omniRouteUrl(client.baseUrl, process.env.EXPO_PUBLIC_OMNIROUTE_PORT);
-  if (!url) return null;
+/** Atalho para o painel do OmniRoute (o roteador de IA), no endereço do provedor cadastrado. Abre em outra aba: ele não aceita ser embutido numa página. */
+function OmniRouteCard({ client, custom }: { client: YuiClient; custom: AiCustomProvider[] }) {
+  const provider = findOmniRoute(custom);
+  const url = provider ? omniRouteUrl(provider.baseUrl, client.baseUrl) : null;
+  if (!url) {
+    return (
+      <Card style={styles.card}>
+        <Text style={styles.cardTitle}>OmniRoute</Text>
+        <Text testID="omniroute-ausente" style={styles.hint}>
+          {provider ? 'O endereço do provedor OmniRoute não é válido; corrija-o para abrir o painel daqui.' : 'Nenhum provedor OmniRoute cadastrado. Adicione-o em provedores próprios para abrir o painel dele daqui.'}
+        </Text>
+      </Card>
+    );
+  }
   const open = () => { if (Platform.OS === 'web') window.open(url, '_blank', 'noopener'); else Linking.openURL(url).catch(() => {}); };
   return (
     <Card style={styles.card}>
@@ -376,7 +386,7 @@ export function AiProviders({ client, onChanged }: { client: YuiClient; onChange
 
   return (
     <View style={styles.section}>
-      <OmniRouteCard client={client} />
+      <OmniRouteCard client={client} custom={data.custom} />
       <Text style={styles.sectionTitle}>Provedores e chaves</Text>
       {data.editable ? (
         <Text style={styles.hint}>As chaves que você colar aqui ficam só neste computador (pasta secrets/, fora do Git) e valem na hora. Elas nunca voltam para a tela: só os 4 últimos caracteres aparecem.</Text>
