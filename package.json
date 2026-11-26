@@ -113,6 +113,7 @@
     "test:vozaudaux": "node tests/test-voz-audiencia-aux.js",
     "test:vozaudcerebro": "node tests/test-voz-audiencia-cerebro.js",
     "test:vozaudbot": "node tests/test-voz-audiencia-bot.js",
+    "test:histcomp": "node tests/test-historico-compartilhado.js",
     "test:hybrid": "node tests/test-hybrid-tools.js",
     "panel:password": "node scripts/panel-password.mjs",
     "tts:testar": "node scripts/tts-testar.mjs",

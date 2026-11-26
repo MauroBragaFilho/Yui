@@ -19,6 +19,7 @@ import { startLocalApprovalChannel } from '../security/localChannel.js';
 import { getApprovalManager } from '../security/approvalManager.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
 import { perfilDoApp } from './perfilDoApp.js';
+import { fioCompartilhado } from './historicoCompartilhado.js';
 import { criarIdentidade } from './identidade.js';
 
 // Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
@@ -597,7 +598,9 @@ export function createApiServer({
         if (!message) return send(res, 400, { error: 'message obrigatória' });
         if (message.length > MAX_MESSAGE) return send(res, 400, { error: `message excede ${MAX_MESSAGE} caracteres` });
 
-        const history = histories.get(ctx.userId) || [];
+        // Fase 2: com a chave ligada, o dono conversa no app sobre o mesmo fio da DM (senão, o histórico em RAM de sempre).
+        const fio = await fioCompartilhado(ctx);
+        const history = fio ? fio.ler() : (histories.get(ctx.userId) || []);
         const memoryBlock = buildMemoryBlock(ctx, message);
         // Pesquisa na web do app (mesmo agente da fila; o app é conversa PRIVADA e vale o YUI_PRIVATE_SEARCH): ver chatTurn no AI Manager.
         // Perfil de IA (etapa 10): `{}` sem seletor ou sem perfil configurado (a chamada fica idêntica à de antes); com o perfil privado fechado a pessoa lê a mensagem curta.
@@ -614,6 +617,7 @@ export function createApiServer({
         // Resposta de pesquisa vai ao histórico em RAM como uma linha neutra (nunca o texto derivado da web).
         history.push({ role: 'user', content: message.slice(0, 500) }, { role: 'assistant', content: String(turn.historyLine ?? reply).slice(0, 800) });
         histories.set(ctx.userId, history.slice(-MAX_HISTORY_TURNS * 2));
+        if (fio && !turn.researched) fio.gravar(message, reply); // turno que pesquisou nunca entra no fio
         captureFromUserText(ctx, message);
         audit('api.chat', ctx, { chars: message.length, ...(turn.researched ? { research: turn.kind } : {}) });
         return send(res, 200, { reply, memoryScope: ctx.memoryScope });
@@ -625,18 +629,22 @@ export function createApiServer({
         if (!message) return send(res, 400, { error: 'message obrigatória' });
         if (message.length > MAX_MESSAGE) return send(res, 400, { error: `message excede ${MAX_MESSAGE} caracteres` });
 
-        const history = histories.get(ctx.userId) || [];
+        // Fase 2: com a chave ligada, o dono conversa no app sobre o mesmo fio da DM (senão, o histórico em RAM de sempre).
+        const fio = await fioCompartilhado(ctx);
+        const history = fio ? fio.ler() : (histories.get(ctx.userId) || []);
         const memoryBlock = buildMemoryBlock(ctx, message);
         // É esta a rota que o app usa. Pesquisa na web (mesmo agente da fila, conversa PRIVADA): a pré-rota responde sem consultar o agente de
         // ferramentas; uma resposta de conversa que só PROMETE pesquisar passa pela guarda de promessa. Ação de ferramenta nunca é mexida.
         let out;
         let historyLine = null;
+        let pesquisou = false;
         // Perfil de IA (etapa 10): o mesmo seletor do cérebro; `{}` sem seletor ou sem perfil configurado (nenhum campo novo na chamada de IA).
         const campoPerfil = perfilDoApp(selecionarPerfil, { ctx, texto: message, history });
         const routed = await ai.appResearchRoute({ ctx, text: message });
         if (routed.handled) {
           out = { type: 'reply', reply: routed.text };
           historyLine = routed.historyLine;
+          pesquisou = true;
         } else {
           try {
             out = await runAgent(ctx, message, { history: [...history], memoryBlock, origin: isLocalRequest(req) ? 'LOCAL_PC' : 'REMOTE', ...campoPerfil });
@@ -650,11 +658,14 @@ export function createApiServer({
             const reviewed = await ai.appReviewReply({ ctx, text: message, reply: out.reply, history: [...history], memoryBlock, ...campoPerfil });
             out = { ...out, reply: reviewed.text };
             historyLine = reviewed.historyLine;
+            if (reviewed.researched) pesquisou = true;
           }
         }
 
         history.push({ role: 'user', content: message.slice(0, 500) }, { role: 'assistant', content: String(historyLine ?? out.reply).slice(0, 800) });
         histories.set(ctx.userId, history.slice(-MAX_HISTORY_TURNS * 2));
+        // só conversa vai ao fio: ação de ferramenta, pedido de aprovação e turno que pesquisou ficam de fora
+        if (fio && !pesquisou && out?.type === 'reply') fio.gravar(message, out.reply);
         captureFromUserText(ctx, message);
         return send(res, 200, out);
       }

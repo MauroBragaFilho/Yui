@@ -66,6 +66,7 @@ const NEW_VARS = [
   ['YUI_VOZ_GOOGLE', 'false'],
   ['YUI_VOZ_TOOLS', 'false'],
   ['YUI_VOZ_PRAZO_S', '8'],
+  ['YUI_HISTORICO_COMPARTILHADO', 'false'],
 ];
 
 // Scripts novos desta rodada e o arquivo de teste de cada um.

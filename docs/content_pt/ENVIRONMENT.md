@@ -246,6 +246,7 @@ Voz do Windows (SAPI): roda na própria máquina da Yui (hoje, o notebook servid
 | `YUI_VOZ_GOOGLE` | `true` deixa o dono, sozinho na call, consultar a agenda por voz (só leitura, resposta curta). Só vale com `YUI_VOZ_UNIFICADA=true`. Padrão: `false` |
 | `YUI_VOZ_TOOLS` | RESERVADA nesta fase: o bloqueio deny-by-default por audiência já existe no executor, mas a oferta de ferramentas à voz continua fechada, então a chave ainda não abre nada. Mesmo no futuro só valerá com `YUI_VOZ_UNIFICADA=true` e com o dono sozinho na call; não muda o `YUI_VOICE_TOOLS` antigo. Padrão: `false` |
 | `YUI_VOZ_PRAZO_S` | Prazo, em segundos, da resposta de voz no modo unificado (de 3 a 12): passou disso, a Yui avisa que demorou e a resposta tardia NÃO é publicada. Padrão: `8` |
+| `YUI_HISTORICO_COMPARTILHADO` | `true` faz o chat do painel/app do dono usar o mesmo fio de conversa da DM do Discord (e da voz privada). Só o dono, só com o contexto por horas ligado (`YUI_CONTEXT_ENABLED=true`); turno que pesquisou na web não entra no fio. Padrão: `false` (o app guarda o histórico só em memória, como antes) |
 | `YUI_TTS_SAPI_VOICE` | Nome (ou parte do nome) da voz SAPI; vazio usa a primeira voz pt-BR instalada | — |
 | `YUI_TTS_SAPI_RATE` | Velocidade, de `-10` a `10` | `0` |
 | `YUI_TTS_MAX_CHARS` / `YUI_TTS_MAX_SENTENCES` / `YUI_TTS_MAX_SENTENCE_CHARS` / `YUI_TTS_MAX_SECONDS` | Quanto ela fala por resposta: caracteres (60 a 600), frases (1 a 6), caracteres por frase (60 a 400) e segundos (5 a 60) | `220` / `3` / `160` / `25` |
