@@ -240,7 +240,7 @@ export function createApprovalManager({ auditFn = audit, now = () => Date.now(),
 }
 
 let shared = null;
-/** Gerenciador único do processo (o canal local e o módulo Código usam o mesmo). */
+/** Gerenciador único do processo (o canal local e o agente usam o mesmo). */
 export function getApprovalManager() {
   shared ??= createApprovalManager();
   return shared;

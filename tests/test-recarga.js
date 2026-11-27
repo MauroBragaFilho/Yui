@@ -28,9 +28,23 @@ const mudo = { info() {}, warn() {}, error() {}, debug() {} };
 
 await test('a lista das chaves que valem na hora é fechada; privacidade de voz pede reinício', () => {
   const vivas = cfg.CATALOGO.filter((c) => !c.reinicio).map((c) => c.chave).sort();
-  assert.deepEqual(vivas, ['REDDIT_FETCH_MODE', 'YUI_ALERTS', 'YUI_AVISOS_FILTRO', 'YUI_AVISOS_POR_DIA', 'YUI_CLIMA', 'YUI_CLIMA_CIDADE_PADRAO', 'YUI_CONTEXT_MAX_CHARS', 'YUI_CONTEXT_MAX_TURNS',
+  // item 2 das lacunas do painel (26/11/2026): + YUI_AUTOMOD_AI_BAN, YUI_LISTS_ENABLED, YUI_MEMORY_ENABLED, YUI_REMINDERS_ENABLED, YUI_RESEARCH_ENABLED e YUI_VISION (lidas a cada uso nos dois processos)
+  // item 6 (26/11/2026): + a configuração da IA do painel do Discord (YUI_IA_*: lida a cada uso SÓ pelo bot) e os getters de src/config/index.js (YUI_AUTOMOD_PADRAO,
+  // YUI_AUTOMOD_MODO_PADRAO, YUI_CANAL_APELACOES, YUI_SALVAR_HISTORICO, YUI_MUSICA_MANTER_CARTAO); os leitores são conferidos em tests/test-painel-ia-discord.js
+  const IA = ['YUI_IA_CONTEXTO_DO_SERVIDOR', 'YUI_IA_GEMINI_MAX_TOKENS', 'YUI_IA_GEMINI_TEMPERATURA', 'YUI_IA_GEMINI_TIMEOUT_MS', 'YUI_IA_HF_MAX_TOKENS', 'YUI_IA_HF_TEMPERATURA', 'YUI_IA_HF_TIMEOUT_MS',
+    'YUI_IA_HORDE_MAX_TOKENS', 'YUI_IA_HORDE_TEMPERATURA', 'YUI_IA_HORDE_TIMEOUT_MS', 'YUI_IA_LMSTUDIO_MAX_TOKENS', 'YUI_IA_LMSTUDIO_TEMPERATURA', 'YUI_IA_LMSTUDIO_TIMEOUT_MS', 'YUI_IA_MOSTRAR_MODELO',
+    'YUI_IA_MOSTRAR_MODELO_PENSANDO', 'YUI_IA_POLLINATIONS_MAX_TOKENS', 'YUI_IA_POLLINATIONS_TIMEOUT_MS', 'YUI_IA_RETENTATIVAS'];
+  assert.deepEqual(vivas, [...['REDDIT_FETCH_MODE', 'YUI_ALERTS', 'YUI_AUTOMOD_AI_BAN', 'YUI_AVISOS_FILTRO', 'YUI_AVISOS_POR_DIA', 'YUI_CLIMA', 'YUI_CLIMA_CIDADE_PADRAO', 'YUI_CONTEXT_MAX_CHARS', 'YUI_CONTEXT_MAX_TURNS',
     'YUI_CONTEXT_TTL_HOURS', 'YUI_CONTINUIDADE', 'YUI_DL_MAX_CONCURRENT', 'YUI_DL_MAX_FILESIZE_MB', 'YUI_DL_MAX_MINUTES', 'YUI_DL_TIMEOUT_SECONDS', 'YUI_GOOGLE', 'YUI_HISTORICO_COMPARTILHADO',
-    'YUI_IA_REFAZER_RECUSA', 'YUI_IMAGE_PER_HOUR', 'YUI_MONITORES_RESERVA', 'YUI_PESQUISA_POR_INTENCAO', 'YUI_SILENCIO', 'YUI_SKILLS', 'YUI_UPLOAD_LIMIT_MB', 'YUI_YT_LIVE_AUTO_EDIT_MIN']);
+    'YUI_IA_REFAZER_RECUSA', 'YUI_IMAGE_PER_HOUR', 'YUI_LISTS_ENABLED', 'YUI_MEMORY_ENABLED', 'YUI_MONITORES_RESERVA', 'YUI_PESQUISA_POR_INTENCAO', 'YUI_REMINDERS_ENABLED', 'YUI_RESEARCH_ENABLED',
+    // entrega E (27/11/2026, item 3 v2): YUI_PLANOS_PAINEL é lida a cada pedido só pela API do painel (o bot nunca a lê); conferida em tests/test-painel-acoes.js
+    'YUI_PLANOS_PAINEL',
+    // entrega F (27/11/2026, item 11): YUI_APP_IMAGEM é lida a cada pedido só pela API (a pré-rota e a ferramenta de imagem do chat); conferida em tests/test-imagem-app.js
+    'YUI_APP_IMAGEM',
+    // entrega F parte 2 (27/11/2026, item 14): YUI_GOOGLE_REAUTORIZAR_PAINEL é lida a cada pedido só pela API (as rotas de reautorizar o Google); conferida em tests/test-painel-google.js
+    'YUI_GOOGLE_REAUTORIZAR_PAINEL',
+    'YUI_SILENCIO', 'YUI_SKILLS', 'YUI_UPLOAD_LIMIT_MB', 'YUI_VISION', 'YUI_YT_LIVE_AUTO_EDIT_MIN'], ...IA,
+    'YUI_AUTOMOD_MODO_PADRAO', 'YUI_AUTOMOD_PADRAO', 'YUI_CANAL_APELACOES', 'YUI_MUSICA_MANTER_CARTAO', 'YUI_SALVAR_HISTORICO'].sort());
   assert.ok(cfg.CATALOGO.filter((c) => c.chave.startsWith('YUI_VOZ_')).every((c) => c.reinicio));
   for (const chave of ['YUI_CONTEXT_TTL_HOURS', 'YUI_CONTEXT_MAX_CHARS', 'YUI_CONTEXT_MAX_TURNS']) assert.match(cfg.CATALOGO.find((c) => c.chave === chave).descricao, /apaga de vez/);
 });

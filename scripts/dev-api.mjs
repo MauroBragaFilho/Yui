@@ -3,7 +3,6 @@
 //   npm run dev:api                  IA real (cadeia atual), banco temporário
 //   npm run dev:api -- --fake        IA simulada + ferramentas de demonstração
 //   opções: --port 3939 --host 127.0.0.1 --cors http://localhost:8081 --as owner|member --real-db
-//           --dev-write  libera gravar/rodar comandos no módulo de código simulado (sempre com aprovação)
 //           --panel   liga o login por usuário/senha (descartáveis) e um painel de administração SIMULADO
 //
 // Por padrão usa um BANCO TEMPORÁRIO e o papel "member", então nada do seu
@@ -143,38 +142,8 @@ ${text}
 `); }
   : undefined;
 
-// Módulo de código simulado: um projeto de demonstração e uma "IA" que segue um roteiro simples.
-// --dev-write libera gravação/comandos (como YUI_READ_ONLY=false), sempre com aprovação.
-let fakeDev;
-if (asOwner) {
-  const { createDev } = await import('../src/core/dev/index.js');
-  const demoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-dev-demo-'));
-  fs.mkdirSync(path.join(demoDir, 'src'));
-  fs.writeFileSync(path.join(demoDir, 'src', 'soma.js'), 'function soma(a, b) {\n  return a + b;\n}\nmodule.exports = { soma };\n');
-  fs.writeFileSync(path.join(demoDir, 'README.md'), '# Projeto de demonstração\nSomas e subtrações.\n');
-  if (flag('dev-write')) process.env.YUI_READ_ONLY = 'false';
-  const act = (action, params, thought = '') => JSON.stringify({ action, params, thought });
-  const script = {
-    async chat({ messages }) {
-      const last = String(messages.at(-1).content);
-      await new Promise((r) => setTimeout(r, 400));
-      if (last.includes('[RESULTADO de write_file')) return { text: 'Pronto: criei o arquivo notas.txt.', provider: 'simulada', model: 'demo' };
-      if (last.includes('[RESULTADO de read_file')) return { text: 'A função `soma` recebe dois números e devolve a soma deles.\n\n```js\nsoma(2, 3) // 5\n```', provider: 'simulada', model: 'demo' };
-      if (last.includes('[RESULTADO')) return { text: 'Feito.', provider: 'simulada', model: 'demo' };
-      if (/crie|grave|escreva/i.test(last)) return { text: act('write_file', { path: 'notas.txt', content: 'Anotações da Yui\n' }, 'criar o arquivo'), provider: 'simulada', model: 'demo' };
-      if (/soma|explique|ler|leia/i.test(last)) return { text: act('read_file', { path: 'src/soma.js' }, 'ver o código'), provider: 'simulada', model: 'demo' };
-      return { text: 'Oi! Eu sou a Yui. Pergunte sobre o projeto (ex.: "o que faz a soma?") ou peça uma mudança (ex.: "crie notas.txt"). (IA simulada)', provider: 'simulada', model: 'demo' };
-    },
-  };
-  fakeDev = createDev({
-    env: { ...process.env, YUI_DEV_ENABLED: 'true', YUI_PROJECTS: `Demonstração=${demoDir}`, YUI_DEV_PROJECTS_FILE: path.join(process.env.DATABASE_DIR || os.tmpdir(), 'dev-projects.json') },
-    llm: script,
-    historyDir: path.join(process.env.DATABASE_DIR || os.tmpdir(), 'dev-history'),
-    indexDir: path.join(process.env.DATABASE_DIR || os.tmpdir(), 'dev-index'),
-  });
-}
-
-const server = startApi(null, { ...(fakeAdmin ? { admin: fakeAdmin } : {}), ...(fakeNotify ? { notify: fakeNotify } : {}), ...(fakeDev ? { dev: fakeDev } : {}) });
+// (O módulo de código simulado saiu com os restos da aba Código em 27/11/2026.)
+const server = startApi(null, { ...(fakeAdmin ? { admin: fakeAdmin } : {}), ...(fakeNotify ? { notify: fakeNotify } : {}) });
 if (!server) {
   console.error('A API não iniciou (verifique YUI_API_TOKENS).');
   process.exit(1);

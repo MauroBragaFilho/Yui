@@ -3,6 +3,8 @@ import path from 'path';
 import { activeProviders, providerConfigured } from '../../search/providers.js';
 // Só os textos dos motivos (módulo puro): o serviço de voz NÃO sobe com a API; o estado vem sob demanda em loadIntegrationData.
 import { describeTtsReason } from '../../services/tts/reasons.js';
+// As vistas da live e do Google (lista fechada de campos): os itens "Google" e "YouTube Live" usam só o que elas deixam passar.
+import { vistaDaLive, vistaDoGoogle } from './leiturasDoPainel.js';
 
 /**
  * Estado das integrações da Yui para o painel (SOMENTE LEITURA).
@@ -174,6 +176,50 @@ export function buildIntegrations({ env = process.env, client = null, data = {},
   ];
 
   return { groups };
+}
+
+// ── Integrações: o grupo "Contas da Yui" (Google e live do YouTube) ─────────────────────────────────────────────────────────────────────────
+
+export const TITULO_DAS_CONTAS = 'Contas da Yui';
+const CHAVES_DAS_CONTAS = Object.freeze(['google', 'youtube-live']);
+const ERROS_DA_LIVE_PT = Object.freeze({
+  removida: 'o YouTube tirou o acesso ao chat', cota_esgotada: 'a cota do dia acabou', 'cota-esgotada': 'a cota do dia acabou', erro_permanente: 'um erro que não passa sozinho',
+  'leituras-falharam': 'as leituras do chat falharam várias vezes', 'nao-escreve': 'o YouTube não deixou escrever no chat', 'sem-credencial': 'falta a autorização do canal',
+  'nao-autenticado': 'o YouTube recusou a autorização', 'sem-permissao': 'o YouTube negou o acesso', 'sem-chat': 'chat não encontrado', 'live-acabou': 'a live acabou',
+});
+
+/** O item "Google" de Integrações (status ok, off ou missing, como os outros). */
+export function itemDoGoogle(g, agora = Date.now()) {
+  const v = g ?? vistaDoGoogle(null);
+  const nome = 'Google (Agenda e Tarefas)';
+  if (!v.ligado) return { key: 'google', name: nome, status: 'off', detail: 'desligado (YUI_GOOGLE)' };
+  if (v.motivoDeAutorizar === 'recusada') return { key: 'google', name: nome, status: 'missing', detail: 'o Google recusou a autorização: rode scripts/google-autorizar.mjs de novo' };
+  if (v.motivoDeAutorizar) return { key: 'google', name: nome, status: 'missing', detail: v.motivoDeAutorizar === 'sem-arquivo' ? 'falta autorizar (scripts/google-autorizar.mjs)' : 'o arquivo da autorização não pôde ser lido: autorize de novo' };
+  const escopos = v.escopos ? (v.escopos.length ? v.escopos.join(', ') : 'nenhum escopo conhecido') : 'escopos não informados';
+  const dias = v.venceEm ? Math.ceil((Date.parse(v.venceEm) - agora) / 86_400_000) : null;
+  const validade = dias === null ? 'validade não informada' : dias > 0 ? `em modo Testando vence em ${dias} dia${dias === 1 ? '' : 's'}` : 'em modo Testando já teria vencido';
+  if (v.renovacaoFalhou) return { key: 'google', name: nome, status: 'missing', detail: `${escopos}; a última renovação falhou (${v.ultimoErro?.codigo ?? 'erro'})` };
+  return { key: 'google', name: nome, status: 'ok', detail: `${escopos}; ${validade}` };
+}
+
+/** O item "YouTube Live" de Integrações. */
+export function itemDaLive(l) {
+  const v = l ?? vistaDaLive(null);
+  const nome = 'YouTube Live (chat)';
+  if (!v.ligado) return { key: 'youtube-live', name: nome, status: 'off', detail: 'desligada (YUI_YOUTUBE_LIVE)' };
+  if (!v.disponivel) return { key: 'youtube-live', name: nome, status: 'missing', detail: 'ligada, mas o serviço da live não subiu (veja os logs)' };
+  const cota = v.cota ? `cota de hoje ${v.cota.usado} de ${v.cota.limiteDiario}` : 'cota de hoje ainda não usada';
+  if (v.ativo) return { key: 'youtube-live', name: nome, status: 'ok', detail: `${v.estado === 'ouvindo' ? 'na live' : 'procurando o chat'}${v.live?.titulo ? ` "${v.live.titulo}"` : ''}; ${cota}` };
+  if (v.estado === 'interrompida') return { key: 'youtube-live', name: nome, status: 'missing', detail: `parou: ${ERROS_DA_LIVE_PT[v.ultimoErro?.codigo] ?? 'erro'}; ${cota}` };
+  return { key: 'youtube-live', name: nome, status: 'ok', detail: `ligada, fora de live; ${cota}` };
+}
+
+/** Põe (ou troca) o grupo "Contas da Yui" no resultado de buildIntegrations, tirando itens com as mesmas chaves que tenham vindo de outro processo. */
+export function comContasDaYui(resultado, { google = null, live = null } = {}, agora = Date.now()) {
+  const grupos = (Array.isArray(resultado?.groups) ? resultado.groups : [])
+    .filter((g) => g?.title !== TITULO_DAS_CONTAS)
+    .map((g) => ({ ...g, items: (Array.isArray(g.items) ? g.items : []).filter((i) => !CHAVES_DAS_CONTAS.includes(i?.key)) }));
+  return { ...resultado, groups: [...grupos, { title: TITULO_DAS_CONTAS, items: [itemDoGoogle(google, agora), itemDaLive(live)] }] };
 }
 
 /** Detalhes de um servidor: canais configurados, avisos de YouTube/Twitch e ferramentas liberadas. */

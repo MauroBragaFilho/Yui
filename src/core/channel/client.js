@@ -158,8 +158,8 @@ export function connectChannel({
           idPrefix: 'c',
           logger,
           resolveHandler: (method) => {
-            const fn = handlers.get(method);
-            return fn ? { fn } : { error: { code: 'METHOD_NOT_FOUND', message: `O adaptador ${role} não tem o método ${method}.` } };
+            const entry = handlers.get(method);
+            return entry ? { fn: entry.fn, timeoutMs: entry.timeoutMs } : { error: { code: 'METHOD_NOT_FOUND', message: `O adaptador ${role} não tem o método ${method}.` } };
           },
           meta: { role: 'cerebro', connectionId: hello.connectionId },
           idem,
@@ -221,12 +221,16 @@ export function connectChannel({
       }
       return peer.request(method, params, { idem: idemKey, timeoutMs });
     },
-    /** Atende um método chamado pelo cérebro (ação do canal). */
-    handle(method, fn) {
+    /**
+     * Atende um método chamado pelo cérebro (ação do canal). `timeoutMs` (opcional): o prazo deste método, quando ele precisa de mais que o do canal
+     * (ex.: imagem.gerar, que espera o provedor de imagem); sem ele vale o prazo do canal, como sempre.
+     */
+    handle(method, fn, { timeoutMs } = {}) {
       if (typeof method !== 'string' || !METHOD_RE.test(method)) throw new TypeError(`Nome de método inválido: ${method}`);
       if (typeof fn !== 'function') throw new TypeError('O handler precisa ser uma função.');
-      handlers.set(method, fn);
-      return () => { if (handlers.get(method) === fn) handlers.delete(method); };
+      const entry = { fn, timeoutMs: Number.isInteger(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined };
+      handlers.set(method, entry);
+      return () => { if (handlers.get(method) === entry) handlers.delete(method); };
     },
     /** Ouve um evento enviado pelo cérebro. Devolve a função que para de ouvir. */
     on(event, fn) {

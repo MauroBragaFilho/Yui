@@ -3,6 +3,7 @@
 //   YUI_GOOGLE_GMAIL=true        libera o código do Gmail (somente leitura), mas ele SÓ funciona com a rota privada de IA validada. Padrão: false.
 //   YUI_GOOGLE_TOKEN_ARQUIVO     o arquivo da autorização (padrão: secrets/google-token.json, pasta ignorada pelo git).
 //   YUI_GOOGLE_FUSO              o fuso dos "hoje", "amanhã" e "semana" (nome IANA). Se não existir (ou for inválido), vale o fuso do dono, YUI_FUSO (padrão America/Sao_Paulo).
+//   YUI_GOOGLE_REAUTORIZAR_PAINEL=true   libera reautorizar pelo painel web (reautorizar.js; só Agenda e Tarefas, nunca o Gmail). Padrão: false (só o script renova).
 import path from 'node:path';
 import { FUSO_PADRAO as FUSO_DO_CODIGO, fusoValido as fusoIanaValido, fusoDoDono } from '../../core/fuso.js';
 
@@ -32,6 +33,15 @@ export function gmailLigadoPelaChave(env = process.env) {
  */
 export function semRotaPrivadaPelaChave(env = process.env) {
   return googleLigado(env) && env?.YUI_GOOGLE_SEM_ROTA_PRIVADA === 'true';
+}
+
+/**
+ * Reautorizar o Google pelo painel web (lacunas do painel, entrega F, item 14; YUI_GOOGLE_REAUTORIZAR_PAINEL, padrão false): só o texto `true` liga (como as outras
+ * ações do painel). Lida A CADA PEDIDO só pela API do painel (o cérebro, com os dois processos; o processo único, sem eles). Não depende de YUI_GOOGLE: basta já
+ * existir um arquivo de autorização (a primeira vez continua pelo script).
+ */
+export function reautorizacaoPeloPainelLigada(env = process.env) {
+  return String(env?.YUI_GOOGLE_REAUTORIZAR_PAINEL ?? '').trim().toLowerCase() === 'true';
 }
 
 /** O caminho do arquivo da autorização. */

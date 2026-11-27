@@ -25,7 +25,9 @@ let dmOk = true;
 const reminders = { store, compose: async () => 'RELATÓRIO DE TESTE', send: async (t) => { sentDms.push(t); return dmOk; } };
 const OWNER = 'owner-token-0123456789';
 const MEMBER = 'member-token-0123456789';
-const server = createApiServer({ tokens: parseTokens(`${OWNER}=111,${MEMBER}=222`), admin: createAdmin({ reminders }) });
+// O freio de pedido repetido (correção C6) tem a suíte dele (test:painelescritas); aqui cada pedido chega "um minuto depois" do anterior.
+const relogioQueAnda = (() => { let t = 0; return () => (t += 60_000); })();
+const server = createApiServer({ tokens: parseTokens(`${OWNER}=111,${MEMBER}=222`), admin: createAdmin({ reminders, relogio: relogioQueAnda }) });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 

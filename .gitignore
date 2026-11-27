@@ -54,6 +54,8 @@ database/dev-index/
 !requirements-deemix.txt
 !requirements-spotdl.txt
 !requirements-spotdl.lock.txt
+# Licenças das fontes do painel (a OFL pede que a licença acompanhe as fontes; também entram no carimbo painel-web/.fonte)
+!apps/yui-app/public/fonts/OFL-*.txt
 
 # Mídia temporária dos downloads e do rádio (uma subpasta por pedido; apagada depois do envio)
 src/data/temp_audio/
@@ -88,3 +90,6 @@ src/data/user_pc_specs.json
 src/data/watchedUsers.json
 src/engines/gtao/systems/weekly/cache.json
 src/engines/gtao/systems/weekly/reddit-cookies-cache.json
+
+# Projeto Jarvis (abandonado, guardado dentro da Yui; reorganizar depois). Nunca vai para o GitHub.
+Projeto Jarvis/

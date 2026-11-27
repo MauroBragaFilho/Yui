@@ -12,6 +12,7 @@ import { checkBan } from '../handlers/banHandler.js';
 import { isOwnerId } from '../core/permissions.js';
 import legacyConfig from '../config.js';
 import { guardInteraction } from '../core/security/discordGuard.js';
+import { ferramentaDoComando, recusaSeDesligada } from '../handlers/ferramentaDesligada.js';
 
 // Mapeia o subcomando digitado (ex: "+yui diario") para o mesmo objeto
 // de comando usado pelos slash commands (/gta-diario). Aceita também
@@ -188,6 +189,21 @@ export async function handlePrefixCommand(message) {
   }
 
   const adapter = buildPrefixAdapter(message, { stringArgs, channelArg });
+
+  // Ferramenta desligada NESTE servidor (painel ou /yui-ferramentas): o "+yui musica" e o "+yui diario|semanal|noticias" recusam com a mesma
+  // frase do comando de barra e da conversa. Só em servidor; na DM nada muda. Os outros subcomandos não dependem de interruptor (ferramentaDesligada.js).
+  const guildDoPedido = message.guildId ?? message.guild?.id ?? null;
+  const nomeDoComando = command === baixarMusicaCommand ? 'baixar_musica' : command?.data?.name;
+  const ferramenta = guildDoPedido ? ferramentaDoComando(nomeDoComando, adapter.options) : null;
+  if (ferramenta) {
+    const { isToolDisabled } = await import('../handlers/llmHandler.js');
+    const recusa = recusaSeDesligada(guildDoPedido, ferramenta, isToolDisabled);
+    if (recusa) {
+      logger.info(`[PrefixCommands] "${prefix} ${subcommand}" recusado: ferramenta desativada no servidor.`);
+      await message.reply(recusa).catch(() => null);
+      return;
+    }
+  }
 
   try {
     await command.execute(adapter);

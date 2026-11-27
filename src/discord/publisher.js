@@ -58,12 +58,19 @@ function safeWeeklyPages(weeklyData) {
   return [buildMinimalWeeklyEmbed(weeklyData)];
 }
 
+// O painel (lacunas do painel, item 9 v2: republicar o diário, o semanal ou a notícia mais recentes) usa ESTAS MESMAS funções, com `opcoes`:
+//  - guildId: publica só nesse servidor, no canal daquele tipo configurado nele (o mesmo do agendador; nunca outro canal);
+//  - republicar: publica mesmo que já tenha saído lá (o registro novo entra em published_messages, como uma publicação qualquer).
+// Sem `opcoes`, tudo como sempre (todos os servidores, sem repetir). Cada uma devolve quantas mensagens saíram (o agendador ignora).
+const alvoDaPublicacao = (g, guildId) => !guildId || g.guild_id === guildId;
+
 export const discordPublisher = {
   /**
    * Publica uma lista de artigos novos em todos os servidores configurados
    */
-  async publishNews(client, articles) {
-    if (!articles || articles.length === 0) return;
+  async publishNews(client, articles, { guildId = null, republicar = false } = {}) {
+    if (!articles || articles.length === 0) return 0;
+    let published = 0;
 
     // O artigo identificado como "atualização semanal" não deve ser publicado
     // como notícia crua com link — ele já é coberto pelo embed paginado com
@@ -90,9 +97,10 @@ export const discordPublisher = {
 
       for (const g of guilds) {
         if (!g.news_channel_id) continue;
+        if (!alvoDaPublicacao(g, guildId)) continue;
 
         // Evitar republicação caso já tenha sido enviada para este servidor
-        if (publicationRepository.isPublished('news', article.id, g.guild_id)) {
+        if (!republicar && publicationRepository.isPublished('news', article.id, g.guild_id)) {
           continue;
         }
 
@@ -102,31 +110,35 @@ export const discordPublisher = {
             const msg = await channel.send({ embeds: [embed] });
             publicationRepository.recordPublication('news', article.id, g.guild_id, g.news_channel_id, msg.id);
             logger.info(`[Publisher] Notícia "${article.title}" publicada na guilda ${g.guild_id}`);
+            published++;
           }
         } catch (error) {
           logger.error(`[Publisher] Falha ao enviar notícia para canal ${g.news_channel_id} (Guild: ${g.guild_id}): ${error.message}`);
         }
       }
     }
+    return published;
   },
 
   /**
    * Publica o resumo do reset diário em todos os servidores configurados
    */
-  async publishDaily(client, dailyData) {
-    if (!dailyData) return;
+  async publishDaily(client, dailyData, { guildId = null, republicar = false } = {}) {
+    if (!dailyData) return 0;
 
     const guilds = guildRepository.getAll();
     const embed =
       tryBuild('Diário', () => createDailyEmbed(dailyData)) ||
       tryBuild('Diário (versão mínima)', () => createMinimalDailyEmbed(dailyData));
-    if (!embed) return;
+    if (!embed) return 0;
     const dateKey = dailyData.date || new Date().toISOString().split('T')[0];
+    let published = 0;
 
     for (const g of guilds) {
       if (!g.daily_channel_id) continue;
+      if (!alvoDaPublicacao(g, guildId)) continue;
 
-      if (publicationRepository.isPublished('daily', dateKey, g.guild_id)) {
+      if (!republicar && publicationRepository.isPublished('daily', dateKey, g.guild_id)) {
         continue;
       }
 
@@ -136,11 +148,13 @@ export const discordPublisher = {
           const msg = await channel.send({ embeds: [embed] });
           publicationRepository.recordPublication('daily', dateKey, g.guild_id, g.daily_channel_id, msg.id);
           logger.info(`[Publisher] Reset Diário [${dateKey}] publicado na guilda ${g.guild_id}`);
+          published++;
         }
       } catch (error) {
         logger.error(`[Publisher] Falha ao enviar diário para canal ${g.daily_channel_id}: ${error.message}`);
       }
     }
+    return published;
   },
 
   /**
@@ -149,8 +163,8 @@ export const discordPublisher = {
    * com a análise da IA já pré-calculada e salva em weeklyData pelo
    * gtaoEngine.collectWeekly() — não faz nenhuma chamada de IA aqui.
    */
-  async publishWeekly(client, weeklyData, weekKey) {
-    if (!weeklyData) return;
+  async publishWeekly(client, weeklyData, weekKey, { guildId = null, republicar = false } = {}) {
+    if (!weeklyData) return 0;
 
     const guilds = guildRepository.getAll();
 
@@ -159,11 +173,13 @@ export const discordPublisher = {
     }
 
     const pages = safeWeeklyPages(weeklyData);
+    let published = 0;
 
     for (const g of guilds) {
       if (!g.weekly_channel_id) continue;
+      if (!alvoDaPublicacao(g, guildId)) continue;
 
-      if (publicationRepository.isPublished('weekly', weekKey, g.guild_id)) {
+      if (!republicar && publicationRepository.isPublished('weekly', weekKey, g.guild_id)) {
         continue;
       }
 
@@ -177,6 +193,7 @@ export const discordPublisher = {
           });
           publicationRepository.recordPublication('weekly', weekKey, g.guild_id, g.weekly_channel_id, msg.id);
           logger.info(`[Publisher] Evento Semanal [${weekKey}] (enxuto + análise da IA) publicado na guilda ${g.guild_id}`);
+          published++;
 
           const collector = msg.createMessageComponentCollector({ time: WEEKLY_PAGINATION_ACTIVE_MS });
 
@@ -203,6 +220,7 @@ export const discordPublisher = {
         logger.error(`[Publisher] Falha ao enviar semanal para canal ${g.weekly_channel_id}: ${error.message}`);
       }
     }
+    return published;
   },
 
   /**

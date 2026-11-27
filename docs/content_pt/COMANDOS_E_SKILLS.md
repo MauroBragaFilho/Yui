@@ -29,7 +29,6 @@ YUI_COMMANDS=status-yui=git -C "D:/Projetos/Yui" status -s|limpar-dns=ipconfig /
 - `commands.list` mostra o que está cadastrado (leitura).
 - Fica na auditoria (nome da ferramenta, nunca a saída).
 
-Para programar no seu projeto, com mais liberdade e aprovação por ação, use a aba [Código](CODIGO.md).
 
 ---
 

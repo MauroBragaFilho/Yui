@@ -2,8 +2,8 @@
 //   M3   rádio: sendNotify, mensagem da fila e adaptador de resposta de voz não notificam @everyone/@here/cargo/outro usuário
 //        (o título e a busca vêm de fora); só o autor do comando continua sendo marcado.
 //   B9   imageHandler: o prompt de imagem (texto do usuário) não vai para o log nem para o console, só o tamanho.
-//   Reg 6 painel de configuração: o texto de persistência "json" é honesto (aplicado agora, gravado no config.json, mas o arquivo não é
-//        lido ao iniciar e o .env tem prioridade).
+//   Reg 6 painel de configuração: o texto de persistência é honesto. Desde o item 6 das lacunas do painel (26/11/2026) quase tudo grava no
+//        cofre do painel (sobrevive ao reinício); prefixo, nome e prompt ficam na memória (voltam ao .env ao reiniciar); os endereços, só no .env.
 //   Reg 4 messageCreate: foto/vídeo/PDF junto de uma fala com texto NÃO leva a ordem "Você NÃO leu... Avise isso"; sem texto próprio, ou
 //        com .txt/.md/.log que não foi lido, o aviso continua.
 // Rodam SEM Discord, SEM rede e SEM bancos reais: as dependências pesadas (llmHandler, rádio, logger, banHandler...) são trocadas por
@@ -390,27 +390,33 @@ for (let n = 1; n <= 200; n++) {
   pages.push(e);
 }
 
-await test('o painel tem páginas runtime e páginas json (a conta não é vazia)', () => {
-  const kinds = pages.map((e) => (field(e, '💽 Persistência')?.value ?? '').startsWith('⚡') ? 'runtime' : 'json');
+// Lacunas do painel, item 6 (26/11/2026): as páginas "runtime" e "json" deram lugar ao COFRE do painel (sobrevive ao reinício), à memória do bot (prefixo,
+// nome e prompt, até o desenho da Liz) e ao .env (os endereços, só leitura). O texto continua honesto sobre o que sobrevive ao reinício.
+const tipoDa = (e) => { const v = field(e, '💽 Persistência')?.value ?? ''; return v.startsWith('🔐') ? 'cofre' : v.startsWith('⏳') ? 'memoria' : v.startsWith('📄') ? 'env' : '?'; };
+await test('o painel tem páginas do cofre, da memória e do .env (a conta não é vazia)', () => {
+  const kinds = pages.map(tipoDa);
   assert.ok(pages.length >= 30, `${pages.length} páginas`);
-  assert.ok(kinds.filter((k) => k === 'runtime').length >= 10 && kinds.filter((k) => k === 'json').length >= 10);
+  assert.ok(kinds.filter((k) => k === 'cofre').length >= 20);
+  assert.equal(kinds.filter((k) => k === 'memoria').length, 3);
+  assert.equal(kinds.filter((k) => k === 'env').length, 5);
+  assert.ok(!kinds.includes('?'));
 });
-await test('páginas json: "aplicado agora", gravado no config.json, o arquivo não é lido ao iniciar e o .env manda; nunca "salvo em disco"', () => {
-  const jsonFields = pages.map((e) => field(e, '💽 Persistência')).filter((f) => f && !f.value.startsWith('⚡'));
-  assert.ok(jsonFields.length >= 10);
-  for (const f of jsonFields) {
-    assert.ok(f.value.includes('Aplicado agora'), f.value);
-    assert.ok(f.value.includes('src/config/config.json'));
-    assert.ok(f.value.includes('esse arquivo ainda não é lido ao iniciar'));
-    assert.ok(f.value.includes('.env') && f.value.includes('prioridade') && f.value.includes('padrão'));
-    assert.ok(!/salvo em disco|permanente/i.test(f.value), f.value);
+await test('páginas do cofre: dizem que é o cofre do painel (o mesmo do painel web), se já está salvo e quando vale; nunca o config.json', () => {
+  const doCofre = pages.filter((e) => tipoDa(e) === 'cofre').map((e) => field(e, '💽 Persistência'));
+  assert.ok(doCofre.length >= 20);
+  for (const f of doCofre) {
+    assert.ok(f.value.includes('Cofre do painel') && f.value.includes('painel web'), f.value);
+    assert.ok(/Salvo no cofre: sobrevive ao reinício|Ainda não ajustado no painel: vale (o \.env|o padrão)/.test(f.value), f.value);
+    assert.ok(/Mudança vale (na hora|depois de reiniciar a Yui)\./.test(f.value), f.value);
+    assert.ok(!/config\.json|permanente/i.test(f.value), f.value);
     assert.ok(f.value.length <= 1024);
   }
 });
-await test('páginas runtime continuam como antes ("volta ao padrão no restart")', () => {
-  const rt = pages.map((e) => field(e, '💽 Persistência')).filter((f) => f && f.value.startsWith('⚡'));
-  assert.ok(rt.length >= 10);
-  for (const f of rt) assert.equal(f.value, '⚡ Runtime (volta ao padrão no restart)');
+await test('páginas da memória (prefixo, nome e prompt): "volta ao valor do .env ou ao padrão" ao reiniciar; os endereços: só no .env', () => {
+  const mem = pages.filter((e) => tipoDa(e) === 'memoria');
+  assert.deepEqual(mem.map((e) => e.footer.text.split(' • ')[1]).sort(), ['botName', 'prefix', 'systemPrompt']);
+  for (const e of mem) assert.match(field(e, '💽 Persistência').value, /^⏳ Só na memória do bot: vale na hora e, ao reiniciar, volta ao valor do \.env ou ao padrão\./);
+  for (const e of pages.filter((p) => tipoDa(p) === 'env')) assert.match(field(e, '💽 Persistência').value, /Só no \.env \(`[A-Z_]+_URL`\)/);
 });
 await test('aviso do .env: variável que o código LÊ (COMMAND_PREFIX) avisa que o valor vale só até reiniciar; sem a variável, sem aviso', async () => {
   const idx = pages.findIndex((e) => /Prefixo de Comandos/.test(e.title)) + 1;
@@ -438,14 +444,14 @@ await test('aviso do .env: nomes antigos que nada lê (PREFIX, BOT_NAME, SAVE_HI
   process.env.SAVE_HISTORY = 'false';
   try { assert.equal(field(await panelPage(idx), '⚠️ Aviso de Ambiente'), undefined); } finally { delete process.env.SAVE_HISTORY; }
 });
-await test('updateConfigJson: aplica na hora (em memória) e grava o arquivo indicado; nada lê o config.json na subida (não foi implementado)', () => {
-  const file = path.join(tmp, 'config-copia.json');
-  fs.writeFileSync(file, '{ "prefix": "_", "botName": "Yui" }\n');
-  assert.equal(cfg.updateConfigJson('botName', 'Outra', file), true);
-  assert.equal(appConfig.botName, 'Outra', 'aplicado agora');
-  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).botName, 'Outra', 'gravado no arquivo');
+await test('o config.json foi aposentado (item 6): o painel não o grava mais e nada o lê na subida; prefixo e nome ainda mudam na memória', async () => {
+  assert.equal(cfg.updateConfigJson, undefined);
+  assert.ok(!/writeFileSync|updateConfigJson|CONFIG_JSON_PATH/.test(read('src/handlers/configPanelHandler.js')), 'o painel não grava arquivo nenhum');
+  assert.ok(!/config\.json/.test(read('src/config/index.js')), 'nada lê o config.json na subida');
+  const idx = pages.findIndex((e) => /Nome do Bot/.test(e.title));
+  await cfg.handleConfigModal({ customId: `cfgmodal_${idx}`, fields: { getTextInputValue: () => 'Outra' }, reply: async () => {} });
+  assert.equal(appConfig.botName, 'Outra', 'aplicado agora, só na memória');
   appConfig.botName = 'Yui';
-  assert.ok(!/config\.json/.test(read('src/config/index.js')), 'a leitura do config.json na subida NÃO faz parte deste pacote');
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════

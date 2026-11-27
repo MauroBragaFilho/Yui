@@ -1,4 +1,5 @@
-// Ponte do painel para o que é POR SERVIDOR (ferramentas, Termos de Uso, persona e falas espontâneas por canal, menções e canal de updates).
+// Ponte do painel para o que é POR SERVIDOR (ferramentas, Termos de Uso, persona e falas espontâneas por canal, menções e canal de updates) e para o
+// GTA (o que saiu e onde, e republicar o mais recente; os bancos do GTA também são do bot).
 // Mora no lado do bot de propósito: quem grava esses arquivos é o processo do Discord (llmHandler e tosHandler guardam uma cópia em memória),
 // então o createAdmin (src/core/api) não importa nada daqui: recebe este carregador pronto (processo único: src/index.js; cérebro separado:
 // src/discord/canalCerebro.js). Só chama as MESMAS funções dos comandos /yui-ferramentas, /yui-servidor e dos botões; a validação fica no admin.
@@ -54,5 +55,11 @@ export async function carregarServidorDoBot() {
     opcoes: (guildId) => llm.getServerSettings(guildId),
     definirMencoes: (guildId, ligado) => llm.setServerEveryoneMention(guildId, ligado),
     definirCanalDeUpdates: (guildId, channelId) => llm.setServerUpdateChannel(guildId, channelId),
+
+    // GTA (lacunas do painel, item 9 v1): o que saiu, onde e o estado das fontes. Os bancos do GTA são do bot; SÓ LEITURA (src/discord/gtaPainel.js).
+    gta: async () => (await import('./gtaPainel.js')).lerGtaDoBot(),
+    // Item 9 v2: republicar o mais recente de um tipo num servidor, no canal daquele tipo configurado nele (as MESMAS funções do agendador). A validação, o
+    // limite de repetição e a auditoria ficam no admin; o cliente do Discord é o do admin (o deste processo).
+    republicarGta: async (tipo, guildId, client) => (await import('./gtaPainel.js')).republicarGtaNoBot({ tipo, guildId, client }),
   };
 }

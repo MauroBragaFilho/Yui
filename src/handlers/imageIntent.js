@@ -156,3 +156,18 @@ export function __resetImageQuotaForTests() { hits.clear(); }
 export function imagePreRouteEnabled(env = process.env) {
     return String(env.YUI_IMAGE_PRE_ROUTE ?? 'true').trim().toLowerCase() !== 'false';
 }
+
+// ── Conteúdo impróprio: a MESMA lista do despachante do Discord (generate_image no llmHandler). O chat do app (src/core/imagemDoApp.js) usa esta;
+// o tests/test-imagem-app.js confere que a lista do llmHandler continua igual a esta (uma não anda sem a outra). ──
+export const IMAGE_NSFW_KEYWORDS = Object.freeze([
+    'nude', 'naked', 'nsfw', 'porn', 'sex', 'hentai', 'gore', 'blood',
+    'explicit', 'adult', 'r18', 'r34', 'erotic', 'lewd', 'topless',
+    'nua', 'pelada', 'sexo', 'pornô', 'porno', 'violento', 'sangrento',
+    'decapitad', 'tortura', 'mutilad', 'genitali', 'vagina', 'penis', 'pênis', 'cp', 'pornografia'
+]);
+
+/** O pedido de imagem tem conteúdo impróprio? Mesma regra do despachante: alguma palavra da lista aparece no texto (minúsculo). */
+export function pedidoDeImagemImproprio(prompt) {
+    const lower = String(prompt ?? '').toLowerCase();
+    return IMAGE_NSFW_KEYWORDS.some(kw => lower.includes(kw));
+}

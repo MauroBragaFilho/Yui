@@ -7,6 +7,7 @@
 //  - reminders.route / reminders.list: os lembretes são do cérebro (lembretes.json); o pedido por conversa no Discord
 //    ("me lembra amanhã às 9h de ...") é interpretado e gravado aqui.
 //  - research.run: o adaptador de pesquisa do Core (src/core/ai/research.js), com as vagas simultâneas do manager.
+//  - painel.config.discord: o painel de configuração do Discord grava no cofre do painel, que é do cérebro (lacunas do painel, item 6).
 //  - health: a situação do cérebro (bancos, travas, canal).
 // Todo pedido COM EFEITO passa pelo motor de políticas (policyEngine.gate) com a origem do contexto (Discord DM ou servidor)
 // e o papel do canal no alvo; em `observe` (o padrão) só registra, em `enforce` DENY e CRITICAL recusam (ASK segue: o fluxo do
@@ -22,6 +23,8 @@ import { researchSlots, RESEARCH_BUSY_REPLY } from '../core/ai/manager.js';
 import { ChannelError } from '../core/channel/protocol.js';
 import { authorizeAdminWipe, AdminWipeError } from '../core/memory/adminWipe.js';
 import { audit } from '../core/audit.js';
+import { gravarAjusteDoDiscord } from '../core/ajustesPeloDiscord.js';
+import { PainelConfigError } from '../core/painelConfig.js';
 
 const ID_RE = /^\d{5,25}$/;
 const BOT_ONLY = { roles: ['bot'] };
@@ -226,6 +229,27 @@ export function registerCerebroMethods(server, deps = {}) {
     } finally {
       release();
     }
+  });
+
+  // ── Cofre do painel a pedido do painel do Discord (lacunas do painel, item 6, 26/11/2026: "gravar no mesmo cofre") ──
+  // O cérebro é o dono do cofre: o bot só pede. A MESMA regra do processo único (core/ajustesPeloDiscord.js): só o dono (o contexto é montado AQUI a partir
+  // da origem), lista fechada das chaves do Discord, a validação do cofre, a confirmação dos valores sensíveis e a auditoria só com o nome. Antes, a política
+  // com a ação da interação de origem (painel: admin.bot_config; /yui-config_ia: admin.ai_configure; /yui-criador modelo: admin.guild_configure). Depois de gravar, avisa o bot (sem valores) para reler o cofre.
+  // A mesma ação que o guarda do Discord (core/security/discordGuard.js) usou no bot para a interação de origem.
+  const ACAO_DA_VIA = { painel: 'admin.bot_config', comando: 'admin.ai_configure', criador: 'admin.guild_configure' };
+  const gravarAjuste = deps.gravarAjuste ?? ((pedido) => gravarAjusteDoDiscord(pedido, { audit: deps.audit ?? audit }));
+  handle('painel.config.discord', async (p, meta) => {
+    const ctx = contextFromWire(p?.ctx, meta);
+    gateAction(engine, Object.hasOwn(ACAO_DA_VIA, String(p?.via)) ? ACAO_DA_VIA[p.via] : 'admin.bot_config', ctx, meta);
+    let r;
+    try {
+      r = gravarAjuste({ ctx, chave: String(p?.chave ?? ''), valor: p?.valor, tirar: p?.tirar === true, confirm: p?.confirm === true, versao: p?.versao ?? undefined });
+    } catch (err) {
+      if (err instanceof PainelConfigError) throw new ChannelError(`ADMIN_${err.status}`, err.message);
+      throw err;
+    }
+    try { server.emit?.('painel.settingsChanged', {}, { role: 'bot' }); } catch { /* o aviso nunca desfaz a gravação; o bot relê ao reconectar */ }
+    return r;
   });
 
   // ── Saúde ──

@@ -74,30 +74,30 @@ export function criarFerramentasDePlano({ env = process.env, deps = {} } = {}) {
 
   const lista = [
     {
-      name: 'biblioteca_buscar', auto: true, action: 'bds.read', descricao: 'procura arquivos pelo nome na biblioteca (filmes, séries, importações)',
+      name: 'biblioteca_buscar', auto: true, action: 'bds.read', servico: 'Biblioteca (BDS)', saida: 'rede-local', fraseSegura: () => 'Procurar um nome na biblioteca', descricao: 'procura arquivos pelo nome na biblioteca (filmes, séries, importações)',
       params: { nome: { type: 'string', required: true, max: 80 } }, disponivel: temBds,
       preparar: (a) => { if (/[\\/]/.test(a.nome) || a.nome.includes('..')) return null; const nome = semControle(a.nome, 80); return nome.length >= 2 ? { nome } : null; },
       frase: (a) => `Procurar "${limpo(a.nome, 80)}" na biblioteca`,
       run: (a) => daBiblioteca(() => searchLibrary(a.nome, bds())),
     },
     {
-      name: 'biblioteca_listar', auto: true, action: 'bds.read', descricao: 'lista uma pasta da biblioteca',
+      name: 'biblioteca_listar', auto: true, action: 'bds.read', servico: 'Biblioteca (BDS)', saida: 'rede-local', descricao: 'lista uma pasta da biblioteca',
       params: { pasta: { type: 'string', required: true, max: 20, enum: Object.keys(FOLDER_ALIASES) } }, disponivel: temBds,
       frase: (a) => `Listar a pasta "${a.pasta}" da biblioteca`,
       run: (a) => daBiblioteca(() => listLibraryFolder(a.pasta, bds())),
     },
     {
-      name: 'biblioteca_recentes', auto: true, action: 'bds.read', descricao: 'últimos arquivos que chegaram na biblioteca', params: {}, disponivel: temBds,
+      name: 'biblioteca_recentes', auto: true, action: 'bds.read', servico: 'Biblioteca (BDS)', saida: 'rede-local', descricao: 'últimos arquivos que chegaram na biblioteca', params: {}, disponivel: temBds,
       frase: () => 'Ver o que chegou por último na biblioteca',
       run: () => daBiblioteca(() => recentLibrary(bds())),
     },
     {
-      name: 'biblioteca_estado', auto: true, action: 'bds.read', descricao: 'se o servidor de arquivos está no ar e o espaço livre', params: {}, disponivel: temBds,
+      name: 'biblioteca_estado', auto: true, action: 'bds.read', servico: 'Biblioteca (BDS)', saida: 'rede-local', descricao: 'se o servidor de arquivos está no ar e o espaço livre', params: {}, disponivel: temBds,
       frase: () => 'Ver a situação do servidor de arquivos',
       run: () => daBiblioteca(() => statusLibrary(bds())),
     },
     {
-      name: 'agenda', auto: true, action: 'plan.agenda_read', descricao: 'compromissos da agenda do Google',
+      name: 'agenda', auto: true, action: 'plan.agenda_read', servico: 'Google Agenda', saida: 'google', descricao: 'compromissos da agenda do Google',
       params: { periodo: { type: 'string', required: true, max: 10, enum: ['hoje', 'amanha', 'semana'] } }, disponivel: () => googleLigado(env),
       frase: (a) => `Ler a sua agenda do Google (${PERIODOS[a.periodo]})`,
       async run(a) {
@@ -110,7 +110,7 @@ export function criarFerramentasDePlano({ env = process.env, deps = {} } = {}) {
       },
     },
     {
-      name: 'tarefas', auto: true, action: 'plan.tasks_read', descricao: 'tarefas pendentes do Google',
+      name: 'tarefas', auto: true, action: 'plan.tasks_read', servico: 'Google Tarefas', saida: 'google', descricao: 'tarefas pendentes do Google',
       params: { periodo: { type: 'string', required: true, max: 10, enum: Object.keys(PERIODOS) } }, disponivel: () => googleLigado(env),
       frase: (a) => `Ler as suas tarefas do Google (${PERIODOS[a.periodo]})`,
       async run(a) {
@@ -128,7 +128,7 @@ export function criarFerramentasDePlano({ env = process.env, deps = {} } = {}) {
       },
     },
     {
-      name: 'pesquisa', action: 'plan.web_search', descricao: 'pesquisa na web (devolve links)',
+      name: 'pesquisa', action: 'plan.web_search', servico: 'Pesquisa na web', saida: 'internet', fraseSegura: () => 'Pesquisar na web (as palavras saem para o buscador)', descricao: 'pesquisa na web (devolve links)',
       params: { consulta: { type: 'string', required: true, max: 120 } },
       disponivel: () => readResearchConfig(env).enabled && privateSearchAllowed(readResearchConfig(env).privateSearch, { isOwner: true }),
       preparar: (a) => { const consulta = consultaDaPesquisa(a.consulta); return consulta ? { consulta } : null; },
@@ -148,7 +148,7 @@ export function criarFerramentasDePlano({ env = process.env, deps = {} } = {}) {
       },
     },
     {
-      name: 'lembretes', auto: true, action: 'plan.reminders_read', descricao: 'seus lembretes', params: {}, disponivel: () => true,
+      name: 'lembretes', auto: true, action: 'plan.reminders_read', servico: 'Lembretes', saida: 'nao', descricao: 'seus lembretes', params: {}, disponivel: () => true,
       frase: () => 'Ler os seus lembretes',
       async run() {
         const bruto = lerJson(defaultReminderFile(env));
@@ -162,7 +162,7 @@ export function criarFerramentasDePlano({ env = process.env, deps = {} } = {}) {
       },
     },
     {
-      name: 'listas', auto: true, action: 'plan.lists_read', descricao: 'suas listas salvas (sem "lista": só os nomes)',
+      name: 'listas', auto: true, action: 'plan.lists_read', servico: 'Listas', saida: 'nao', fraseSegura: () => 'Ler uma das suas listas', descricao: 'suas listas salvas (sem "lista": só os nomes)',
       params: { lista: { type: 'string', max: 60 } }, disponivel: () => true,
       preparar: (a) => (a.lista === undefined ? {} : listSlug(a.lista) ? { lista: semControle(a.lista, 60) } : null),
       frase: (a) => (a.lista ? `Ler a lista "${limpo(a.lista, 60)}"` : 'Ver os nomes das suas listas'),
@@ -178,7 +178,7 @@ export function criarFerramentasDePlano({ env = process.env, deps = {} } = {}) {
       },
     },
     {
-      name: 'computador', auto: true, action: 'system.info', descricao: 'estado do computador da Yui',
+      name: 'computador', auto: true, action: 'system.info', servico: 'Computador da Yui', saida: 'nao', descricao: 'estado do computador da Yui',
       params: { parte: { type: 'string', max: 10, enum: ['all', 'cpu', 'memory', 'disk', 'uptime'] } },
       disponivel: () => String(env.YUI_TOOLS_PC_ENABLED ?? '').trim().toLowerCase() === 'true',
       frase: (a) => `Ver o estado do computador${a.parte && a.parte !== 'all' ? ` (${a.parte})` : ''}`,
@@ -186,6 +186,55 @@ export function criarFerramentasDePlano({ env = process.env, deps = {} } = {}) {
     },
   ];
   return new Map(lista.map((f) => [f.name, Object.freeze({ access: TOOL_ACCESS.READ, auto: false, preparar: (a) => a, ...f })]));
+}
+
+// ── O resumo SEGURO de um passo (correção C1 do parecer da Liz, docs/PLANO_LACUNAS_PAINEL_CORRECOES.md) ──
+// É o que o painel web mostra para o dono aprovar sem ver os argumentos (os textos livres nunca saem do servidor). Montado por CÓDIGO, a partir do MESMO
+// passo guardado que será executado (o hash continua conferido na aprovação e antes de cada passo). Os valores de lista fechada (período, pasta, parte
+// do computador) aparecem, porque não são da pessoa; o texto livre (o nome buscado, a consulta, o nome da lista) aparece só como "N caracteres".
+
+/** Para onde o passo leva a informação. */
+export const SAIDAS_DO_PASSO = Object.freeze({
+  internet: 'Sim: as palavras saem para o buscador',
+  google: 'Lê da sua conta Google',
+  'rede-local': 'Fica na rede de casa (o servidor de arquivos)',
+  nao: 'Não sai do computador da Yui',
+});
+const ROTULOS_DO_TEXTO_LIVRE = Object.freeze({ nome: 'nome buscado', consulta: 'texto da pesquisa', lista: 'nome da lista' });
+/** Os parâmetros de texto livre de uma ferramenta (texto sem lista fechada): os que nunca aparecem no painel. */
+export const parametrosLivres = (ferramenta) => Object.entries(ferramenta?.params ?? {}).filter(([, p]) => p?.type === 'string' && !Array.isArray(p.enum)).map(([k]) => k);
+
+/** O resumo de um passo que a ferramenta não conhece (o painel não aprova: só pela DM). */
+export const RESUMO_DESCONHECIDO = Object.freeze({
+  acao: 'Ferramenta que este painel não conhece', servico: 'Desconhecido', acesso: 'desconhecido', saida: 'desconhecida', textoLivre: [], soPelaDm: true,
+});
+
+/**
+ * @param {object|undefined} ferramenta  da lista fechada (criarFerramentasDePlano)
+ * @param {object} args                   os argumentos GUARDADOS do passo
+ * @returns {{ acao: string, servico: string, acesso: string, saida: string, textoLivre: { campo: string, caracteres: number }[], soPelaDm: boolean }}
+ *   soPelaDm: o passo manda texto da pessoa para fora do computador (a pesquisa); o painel não mostra esse texto, então a aprovação é só pela DM.
+ *   Nunca devolve o texto livre. Nunca lança: o que não der para resumir vira RESUMO_DESCONHECIDO.
+ */
+export function resumoSeguroDoPasso(ferramenta, args) {
+  try {
+    if (!ferramenta || typeof ferramenta.frase !== 'function') return { ...RESUMO_DESCONHECIDO, textoLivre: [] };
+    const a = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+    const livres = parametrosLivres(ferramenta).filter((k) => a[k] !== undefined && a[k] !== null && String(a[k]) !== '');
+    // Sem texto livre nos argumentos, a frase do plano só tem valores fechados; com ele, a frase segura (sem o texto).
+    const acao = livres.length ? (typeof ferramenta.fraseSegura === 'function' ? ferramenta.fraseSegura() : RESUMO_DESCONHECIDO.acao) : ferramenta.frase(a);
+    const saida = Object.hasOwn(SAIDAS_DO_PASSO, ferramenta.saida) ? ferramenta.saida : 'desconhecida';
+    return {
+      acao: semControle(acao, 120),
+      servico: semControle(ferramenta.servico || ferramenta.name, 40),
+      acesso: ferramenta.access === TOOL_ACCESS.READ ? 'leitura' : 'desconhecido',
+      saida,
+      textoLivre: livres.map((k) => ({ campo: ROTULOS_DO_TEXTO_LIVRE[k] ?? 'texto', caracteres: String(a[k]).length })),
+      soPelaDm: (saida === 'internet' && livres.length > 0) || saida === 'desconhecida' || ferramenta.access !== TOOL_ACCESS.READ || (livres.length > 0 && typeof ferramenta.fraseSegura !== 'function'),
+    };
+  } catch {
+    return { ...RESUMO_DESCONHECIDO, textoLivre: [] };
+  }
 }
 
 /** Argumentos conferidos contra o esquema fechado (nada de objeto, lista ou chave a mais). null = não vale. */

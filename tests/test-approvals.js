@@ -21,7 +21,9 @@ for (const k of ['YUI_PANEL_USER', 'YUI_PANEL_PASSWORD', 'YUI_PANEL_PASSWORD_HAS
 
 const { createApprovalManager, canonicalJson, hashParams, TTL_MS, LEVELS, STATUS } = await import('../src/core/security/approvalManager.js');
 const { startLocalApprovalChannel, nonceFilePath } = await import('../src/core/security/localChannel.js');
-const { createDev } = await import('../src/core/dev/index.js');
+const { getApprovalManager } = await import('../src/core/security/approvalManager.js');
+const ai = await import('../src/core/ai/manager.js');
+const tools = await import('../src/core/agent/tools.js');
 const { createApiServer, parseTokens } = await import('../src/core/api/server.js');
 const { buildContext } = await import('../src/core/permissions.js');
 const { initMemory } = await import('../src/core/index.js');
@@ -287,71 +289,69 @@ await test('CLI yui-aprovar: lista, aprova e nega pelo canal (id inteiro ou pref
   await assert.rejects(run(process.execPath, [...process.execArgv, 'scripts/yui-aprovar.mjs', 'lista'], { env: { ...process.env, YUI_APPROVAL_NONCE_FILE: path.join(tmp, 'nao-existe.json') }, cwd: path.resolve(import.meta.dirname, '..') }), (e) => e.code === 2 && /Não consegui ler/.test(e.stderr));
 });
 
-console.log('Fluxo completo (API + módulo Código + canal local)');
-await test('a API principal NÃO aprova ação crítica (nem "parecendo local"); o canal local aprova; grava uma vez; replay é recusado', async () => {
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-appr-proj-'));
-  const act = JSON.stringify({ action: 'write_file', params: { path: 'novo.txt', content: 'oi\n' }, thought: '' });
-  const llm = { async chat({ messages }) { return { text: String(messages.at(-1).content).includes('[RESULTADO') ? 'Pronto.' : act, provider: 'f', model: 'm' }; } };
-  const flow = fresh();
-  const dev = createDev({ env: { YUI_DEV_ENABLED: 'true', YUI_PROJECTS: `P=${project}`, YUI_DEV_PROJECTS_FILE: path.join(tmp, 'p.json') }, llm, historyDir: path.join(tmp, 'h'), indexDir: path.join(tmp, 'i'), approvals: flow.manager });
+// O fluxo completo era o da aba Código (/v1/dev, removida em 27/11/2026). O mesmo canal e os mesmos tickets valem hoje para as ações CRÍTICAS do agente
+// (YUI_POLICY_MODE=enforce; ex.: commands.run no próprio computador): a API principal nunca aprova, o canal local aprova, executa uma vez e o replay é recusado.
+console.log('Fluxo completo (API + agente + canal local)');
+await test('a API principal NÃO aprova a ação crítica do agente; o canal local aprova; executa UMA vez; replay e negar funcionam', async () => {
+  const executados = [];
+  tools.clearTools();
+  tools.registerTool({ name: 'commands.run', description: 'Roda um comando cadastrado.', params: { name: { type: 'string', required: true, max: 50 } }, minRole: 'OWNER', access: 'execute', confirm: true, async run({ name }) { executados.push(name); return `rodei ${name}`; } });
+  ai.registerBackend({ name: 'fake-aprov', local: false, async chat() { return '{"tool":"commands.run","args":{"name":"status"}}'; } }, { activate: true });
+  const modoAntes = process.env.YUI_POLICY_MODE;
+  process.env.YUI_POLICY_MODE = 'enforce';
+  const manager = getApprovalManager();
   const OWNER_TOKEN = 'owner-token-0123456789';
-  const server = createApiServer({ tokens: parseTokens(`${OWNER_TOKEN}=111`), dev });
+  const server = createApiServer({ tokens: parseTokens(`${OWNER_TOKEN}=111`) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const api = async (method, p, body) => { const r = await fetch(base + p, { method, headers: { Authorization: `Bearer ${OWNER_TOKEN}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, json: await r.json() }; };
-  const flowChannel = await startLocalApprovalChannel({ manager: flow.manager, env: { ...process.env, YUI_APPROVAL_NONCE_FILE: path.join(tmp, 'flow', 'canal.json'), YUI_OWNER_ID: '111' }, port: 0, auditFn: () => {} });
+  const flowChannel = await startLocalApprovalChannel({ manager, env: { ...process.env, YUI_APPROVAL_NONCE_FILE: path.join(tmp, 'flow', 'canal.json'), YUI_OWNER_ID: '111' }, port: 0, auditFn: () => {} });
   const viaChannel = (route, body) => new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
-    const req = http.request({ host: '127.0.0.1', port: flowChannel.port, path: route, method: body ? 'POST' : 'GET', headers: { 'X-Yui-Local-Nonce': flowChannel.nonce, ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {}) } }, (res) => { let s = ''; res.on('data', (c) => { s += c; }); res.on('end', () => resolve({ status: res.statusCode, json: JSON.parse(s) })); });
+    const req = http.request({ host: '127.0.0.1', port: flowChannel.port, path: route, method: body ? 'POST' : 'GET', headers: { 'X-Yui-Local-Nonce': flowChannel.nonce, ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {}) } }, (res) => { let s2 = ''; res.on('data', (c) => { s2 += c; }); res.on('end', () => resolve({ status: res.statusCode, json: JSON.parse(s2) })); });
     req.on('error', reject); if (data) req.write(data); req.end();
   });
   try {
-    const start = await api('POST', '/v1/dev/projects/p/runs', { message: 'grave novo.txt' });
-    assert.equal(start.status, 200, JSON.stringify(start.json));
-    assert.equal(start.json.approval, 'ask');
-    let approval;
-    for (let i = 0; i < 150 && !approval; i++) { approval = (await api('GET', `/v1/dev/runs/${start.json.runId}/events?after=0`)).json.events.find((e) => e.type === 'approval'); await sleep(20); }
-    assert.ok(approval, 'pedido aparece');
-    assert.equal(approval.level, 'CRITICAL');
-    assert.equal(approval.via, 'local');
-    assert.equal(fs.existsSync(path.join(project, 'novo.txt')), false);
+    const pedido = await api('POST', '/v1/agent', { message: 'roda o status' });
+    assert.equal(pedido.status, 200, JSON.stringify(pedido.json));
+    assert.equal(pedido.json.type, 'needs_confirmation');
+    assert.match(pedido.json.reply, /yui-aprovar/);
+    const ticket = manager.list().find((t) => t.action === 'commands.run' && t.status === STATUS.PENDING);
+    assert.ok(ticket, 'o ticket crítico aparece');
+    assert.equal(ticket.levelRequired, 'CRITICAL');
 
-    // a API (mesmo por loopback, sem cabeçalhos: o "local" antigo) NÃO aprova
-    for (const headers of [undefined]) {
-      const denied = await api('POST', `/v1/dev/runs/${start.json.runId}/approvals/${approval.id}`, { approve: true });
-      assert.equal(denied.status, 403);
-      assert.match(denied.json.error, /yui-aprovar/);
-    }
-    assert.equal(fs.existsSync(path.join(project, 'novo.txt')), false);
-    assert.equal(flow.manager.get(approval.id).status, STATUS.PENDING);
-    assert.ok(flow.events.some((e) => e.violationType === 'aprovacao_critica_fora_do_pc'));
+    // a API (mesmo por loopback, sem cabeçalhos: o "local" antigo) NÃO aprova: confirmar antes do canal só diz que falta a aprovação
+    const cedo = await api('POST', '/v1/agent/confirm', { id: pedido.json.pendingId });
+    assert.equal(cedo.json.type, 'needs_confirmation');
+    assert.match(cedo.json.reply, /Ainda não foi aprovado/);
+    assert.deepEqual(executados, []);
+    assert.equal(manager.get(ticket.id).status, STATUS.PENDING);
 
-    // o canal local aprova
-    const pending = await viaChannel('/v1/local/pending');
-    assert.equal(pending.json.approvals[0].id, approval.id);
-    assert.equal((await viaChannel('/v1/local/decide', { id: approval.id, approve: true })).json.status, 'APPROVED');
-    let done;
-    for (let i = 0; i < 200 && !done; i++) { done = (await api('GET', `/v1/dev/runs/${start.json.runId}/events?after=0`)).json.events.find((e) => e.type === 'done'); await sleep(20); }
-    assert.equal(done?.ok, true);
-    assert.equal(fs.readFileSync(path.join(project, 'novo.txt'), 'utf8'), 'oi\n');
-    assert.equal(flow.manager.get(approval.id).status, STATUS.CONSUMED);
-    assert.deepEqual(done.changed, ['novo.txt']);
-    assert.equal((await viaChannel('/v1/local/decide', { id: approval.id, approve: true })).status, 409, 'replay recusado');
-    assert.ok(flow.events.some((e) => e.event === 'policy.enacted'));
+    // o canal local aprova; a confirmação no app executa UMA vez
+    const pendentes = await viaChannel('/v1/local/pending');
+    assert.ok(pendentes.json.approvals.some((a) => a.id === ticket.id));
+    assert.equal((await viaChannel('/v1/local/decide', { id: ticket.id, approve: true })).json.status, 'APPROVED');
+    const feito = await api('POST', '/v1/agent/confirm', { id: pedido.json.pendingId });
+    assert.equal(feito.json.type, 'tool_result');
+    assert.deepEqual(executados, ['status']);
+    assert.equal(manager.get(ticket.id).status, STATUS.CONSUMED);
+    const replay = await api('POST', '/v1/agent/confirm', { id: pedido.json.pendingId });
+    assert.equal(replay.json.type, 'denied', 'replay pela API recusado');
+    assert.equal((await viaChannel('/v1/local/decide', { id: ticket.id, approve: true })).status, 409, 'replay pelo canal recusado');
+    assert.deepEqual(executados, ['status']);
 
-    // negar pela API é permitido e não grava
-    fs.rmSync(path.join(project, 'novo.txt'));
-    const second = await api('POST', '/v1/dev/projects/p/runs', { message: 'grave novo.txt de novo' });
-    let a2;
-    for (let i = 0; i < 150 && !a2; i++) { a2 = (await api('GET', `/v1/dev/runs/${second.json.runId}/events?after=0`)).json.events.find((e) => e.type === 'approval'); await sleep(20); }
-    assert.equal((await api('POST', `/v1/dev/runs/${second.json.runId}/approvals/${a2.id}`, { approve: false })).status, 200);
-    for (let i = 0; i < 200; i++) { if ((await api('GET', `/v1/dev/runs/${second.json.runId}/events?after=0`)).json.events.some((e) => e.type === 'done')) break; await sleep(20); }
-    assert.equal(fs.existsSync(path.join(project, 'novo.txt')), false);
-    assert.equal(flow.manager.get(a2.id).status, STATUS.REJECTED);
+    // negar pela API é permitido e não executa
+    const segundo = await api('POST', '/v1/agent', { message: 'roda o status de novo' });
+    assert.equal(segundo.json.type, 'needs_confirmation');
+    const t2 = manager.list().find((t) => t.action === 'commands.run' && t.status === STATUS.PENDING);
+    assert.equal((await api('POST', '/v1/agent/confirm', { id: segundo.json.pendingId, approve: false })).json.reply, 'Ação cancelada.');
+    assert.equal(manager.get(t2.id).status, STATUS.REJECTED);
+    assert.deepEqual(executados, ['status']);
   } finally {
+    if (modoAntes === undefined) delete process.env.YUI_POLICY_MODE; else process.env.YUI_POLICY_MODE = modoAntes;
+    tools.clearTools();
     server.close();
     await flowChannel.close();
-    fs.rmSync(project, { recursive: true, force: true });
   }
 });
 

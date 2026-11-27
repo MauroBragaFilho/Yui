@@ -19,7 +19,7 @@ const CHANNEL_TYPES: { type: Exclude<GuildChannelType, 'atualizacoes'>; label: s
 type Aba = 'publicacoes' | Secao;
 const ABAS: { key: Aba; label: string }[] = [
   { key: 'publicacoes', label: 'Publicações' },
-  { key: 'ferramentas', label: 'Ferramentas' },
+  { key: 'funcoes', label: 'Funções' },
   { key: 'termos', label: 'Termos de uso' },
   { key: 'canal', label: 'Conversa' },
 ];
@@ -131,7 +131,7 @@ export function GuildEditor({ client, data, reload, onTosChange }: { client: Yui
       </View>
       {visitadas.map((s) => (
         <View key={s} style={aba === s ? null : styles.hidden}>
-          <GuildExtras secao={s} client={client} guild={data} reload={reload} onTosChange={onTosChange} />
+          <GuildExtras secao={s} client={client} guild={data} reload={reload} onTosChange={onTosChange} irParaCanais={() => abrir('publicacoes')} />
         </View>
       ))}
       <View style={aba === 'publicacoes' ? styles.publicacoes : styles.hidden}>

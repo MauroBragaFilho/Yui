@@ -42,6 +42,7 @@ import { ligarCotaHora, estadoDaCotaHora } from './search/cotaHora.js';
 import { tabelaDeLimites, tetoGlobal, ajustesDoCerebro, avisarConfigDosLimites, diagnosticoDosLimites } from './core/ai/limitesTokens.js';
 import { loadProviders } from './gateway/providers.js';
 import { createCerebroAdmin } from './cerebro/painel.js';
+import { registrarGeradorDeImagem, geradorPeloBot, cotaPeloBot } from './core/imagemDoApp.js';
 import { startCerebroReminders } from './cerebro/lembretes.js';
 import { planosLigados } from './core/planos/pedido.js';
 import { criarStoreDePlanos } from './core/planos/store.js';
@@ -316,12 +317,16 @@ async function bootstrap() {
   try { eventos = iniciarEventos({ logger }); } catch (err) { eventos = null; logger.error(`[Cérebro] os alertas por evento não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
 
   // 6. Yui API sem o cliente do Discord: as telas do Discord viram pedidos ao bot; o aviso por DM vai pelo bot.
+  // A imagem do Chat do app (lacunas do painel, item 11; YUI_APP_IMAGEM) também: o gerador mora no bot e a entrega volta pela pasta temporária (core/imagemDoApp.js).
+  // O limite por hora também é contado no bot, na mesma memória do Discord (correção C4: um limite só por pessoa, somando Discord e app).
+  registrarGeradorDeImagem(geradorPeloBot({ channel }), { cota: cotaPeloBot({ channel }) });
   api = startApi(null, {
     lembretesMudaram,
     aoApagarMemoria: (userId) => { try { channel?.emit('continuidade.descartar', { userId: String(userId) }, { role: 'bot' }); } catch { /* o aviso nunca derruba o apagamento */ } },
     // `reinicio` (etapa 10, piloto do app): "Reiniciar a Yui" pede ao SUPERVISOR o reinício dos dois processos (bot e cérebro); sem supervisor o pedido é recusado
     // e nada reinicia (o `process.exit` de sempre nunca é usado aqui: ninguém religaria o cérebro, e o bot ficaria sem ele).
-    admin: createCerebroAdmin({ channel, diagnostico: cerebroParaDiagnostico, reinicio: (pedido) => supervisor.pedirReinicio(pedido), monitores }),
+    // `planos` (lacunas do painel, entrega E): aprovar e recusar pelo painel chama a MESMA decidir() do serviço que os botões da DM (com YUI_PLANOS_PAINEL).
+    admin: createCerebroAdmin({ channel, diagnostico: cerebroParaDiagnostico, reinicio: (pedido) => supervisor.pedirReinicio(pedido), monitores, planos }),
     notify: (id, text) => dmThroughBot(id, text, 'painel'),
     // Etapa 10 (piloto do app): o chat do app escolhe o perfil de IA com o MESMO seletor determinístico do Discord (a conversa do dono vai pelo privado se ele estiver
     // declarado e verificado; a escalada para o raciocínio pelos sinais de sempre). Sem nenhum perfil configurado o seletor devolve null e a chamada fica idêntica à de antes.

@@ -165,7 +165,7 @@ await test('um "system" explícito do chamador prevalece sobre a persona automá
 
 console.log('Personalidade comum (YUI_PERSONA_FILE)');
 const { corePersonaText, resolveCorePersonaFile, publicPersonaText } = await import('../src/core/persona.js');
-const { loadPersona } = await import('../src/core/dev/modes.js');
+// (o módulo Código, src/core/dev/modes.js, saiu com a aba Código em 27/11/2026: a conferência dele saiu daqui)
 const CORE_MARK = 'PERSONALIDADE DA YUI';
 await test('o arquivo padrão (persona/yui-personalidade.md) vem em TODOS os contextos que respondem', () => {
   delete process.env.YUI_PERSONA_FILE;
@@ -173,7 +173,6 @@ await test('o arquivo padrão (persona/yui-personalidade.md) vem em TODOS os con
   assert.ok(buildPersonaPrompt(ownerDm).includes(CORE_MARK), 'dono (DM/privado/app)');
   assert.ok(buildPersonaPrompt(memberApi).includes(CORE_MARK), 'outros usuários da API');
   assert.ok(publicPersonaText().includes(CORE_MARK), 'Discord público');
-  assert.ok(loadPersona(path.resolve(here, '..')).includes(CORE_MARK), 'módulo Código');
   assert.ok(buildPersonaPrompt(ownerDm).indexOf(CORE_MARK) < buildPersonaPrompt(ownerDm).indexOf('HONESTIDADE E LIMITES'), 'a personalidade vem antes das regras');
 });
 await test('as regras de segurança continuam junto da personalidade (DM, links, texto é dado)', () => {

@@ -16,6 +16,7 @@ export const TABELA = Object.freeze({
   // Crítico (chave desconhecida também é crítica)
   'lock-key': CRITICO,
   'lock-login': CRITICO,
+  'lock-confirmacao': CRITICO, // correção C2: chaves de confirmação pela DM erradas demais (a mesma classe das travas do login)
   'audit.write.fail': CRITICO,
   'memory.backup.fail': CRITICO,
   'ia-rota-privada-bloqueada': CRITICO,
@@ -63,6 +64,17 @@ export function classeDaChave(chave) {
 export function rotuloDaChave(chave) {
   const c = String(chave ?? '');
   return Object.hasOwn(TABELA, c) || prefixoDe(c) ? c.split(':')[0] : 'desconhecida';
+}
+
+/**
+ * O ASSUNTO que o painel pode mostrar (GET /v1/admin/avisos): a chave inteira só quando ela é uma das chaves FIXAS da tabela; numa família de final variável
+ * ("provider:", "crash:"), só o nome da família, porque o final é conteúdo; qualquer outra coisa é null (o painel mostra só a classe).
+ */
+export function assuntoDaChave(chave) {
+  const c = String(chave ?? '');
+  if (Object.hasOwn(TABELA, c)) return c;
+  const p = prefixoDe(c);
+  return p ? p.slice(0, -1) : null;
 }
 
 /** "23-07" -> { inicio: 23, fim: 7 }. Inválido ou vazio vale o padrão. Início igual ao fim = sem silêncio (null). */

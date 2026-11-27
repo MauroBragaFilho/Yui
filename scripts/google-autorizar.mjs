@@ -20,9 +20,13 @@ import { hostsDoGoogle, hostsDeBaseLocal, ESCOPOS, temEscopo, ehEscopoDoGoogle }
 import { arquivoDoTokenPadrao } from '../src/integrations/google/config.js';
 import { gravarArquivoDeToken } from '../src/integrations/google/arquivoToken.js';
 import { trocarCodigoPorTokens } from '../src/integrations/google/troca.js';
+// O PKCE, o link de consentimento e a comparação do `state` vivem num módulo compartilhado com a reautorização pelo painel (src/integrations/google/consentimento.js);
+// o comportamento é o mesmo de antes, e o script continua exportando criarPkce e montarUrlDeConsentimento.
+import { criarPkce, montarUrlDeConsentimento, iguaisEmTempoConstante as iguais, CODIGO_DE_AUTORIZACAO_RE as CODIGO_RE } from '../src/integrations/google/consentimento.js';
+
+export { criarPkce, montarUrlDeConsentimento };
 
 const TEMPO_PADRAO_S = 300;
-const CODIGO_RE = /^[A-Za-z0-9._~/+-]{10,1024}$/;
 
 const AJUDA = `Autorização única do Google para a Yui (somente leitura).
 
@@ -83,28 +87,6 @@ export function lerClienteOAuth(arquivo) {
   }
   return { ok: true, clientId: c.client_id.trim(), clientSecret: c.client_secret.trim() };
 }
-
-const base64url = (buf) => Buffer.from(buf).toString('base64url');
-
-/** O PKCE (S256): o verificador fica só aqui; o desafio vai na URL. */
-export function criarPkce() {
-  const verificador = base64url(crypto.randomBytes(48));
-  return { verificador, desafio: base64url(crypto.createHash('sha256').update(verificador).digest()) };
-}
-
-/** A URL de consentimento. */
-export function montarUrlDeConsentimento({ hosts, clientId, redirectUri, escopos, desafio, state }) {
-  const q = new URLSearchParams({
-    client_id: clientId, redirect_uri: redirectUri, response_type: 'code', scope: escopos.join(' '),
-    code_challenge: desafio, code_challenge_method: 'S256', state, access_type: 'offline', prompt: 'consent',
-  });
-  return `${hosts.autorizacao}?${q}`;
-}
-
-const iguais = (a, b) => {
-  const x = Buffer.from(String(a ?? '')); const y = Buffer.from(String(b ?? ''));
-  return x.length === y.length && crypto.timingSafeEqual(x, y);
-};
 
 const PAGINA = (titulo, texto) => `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Yui</title></head>
 <body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem"><h1 style="font-size:1.4rem">${titulo}</h1><p>${texto}</p></body></html>`;

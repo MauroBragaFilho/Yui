@@ -112,6 +112,30 @@ await test('muitos Bearer inválidos travam a origem; um token certo não passa 
   s2.close();
 });
 
+// A origem (LOCAL_PC ou REMOTE) que o guarda das rotas e o agente usam. Morava no módulo da aba Código (src/core/dev/routes.js) e foi para o canal
+// local de aprovação (a mesma lista de cabeçalhos de proxy) quando os restos da aba saíram (27/11/2026). O teste veio junto do tests/dev/dev-core.test.js.
+await test('isLocalRequest: loopback sem cabeçalhos de proxy; qualquer sinal de proxy conta como remoto', async () => {
+  const { isLocalRequest } = await import('../src/core/security/localChannel.js');
+  const req = (addr, headers = {}) => ({ socket: { remoteAddress: addr }, headers });
+  assert.equal(isLocalRequest(req('127.0.0.1')), true);
+  assert.equal(isLocalRequest(req('::1')), true);
+  assert.equal(isLocalRequest(req('::ffff:127.0.0.1')), true);
+  assert.equal(isLocalRequest(req('192.168.0.5')), false);
+  assert.equal(isLocalRequest(req('127.0.0.1', { 'x-forwarded-for': '1.2.3.4' })), false);
+  assert.equal(isLocalRequest(req('127.0.0.1', { 'tailscale-user-login': 'a@b' })), false);
+  for (const h of ['x-real-ip', 'x-forwarded-proto', 'via', 'tailscale-user-profile-pic', 'tailscale-user-name', 'forwarded', 'x-forwarded-host']) assert.equal(isLocalRequest(req('127.0.0.1', { [h]: '1' })), false, h);
+  assert.equal(isLocalRequest({}), false, 'sem socket = remoto');
+});
+
+await test('a aba Código saiu (27/11/2026): /v1/dev/* responde 404 para o dono e para o membro, sem tocar em nada', async () => {
+  for (const [method, rota] of [['GET', '/v1/dev/status'], ['POST', '/v1/dev/projects'], ['POST', '/v1/dev/projects/p/runs'], ['GET', '/v1/dev/runs/x/events']]) {
+    for (const token of [OWNER, MEMBER]) {
+      const r = await fetch(base + rota, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: method === 'POST' ? '{}' : undefined });
+      assert.equal(r.status, 404, `${method} ${rota}`);
+    }
+  }
+});
+
 delete process.env.YUI_POLICY_MODE;
 delete process.env.YUI_READ_ONLY;
 server.close();

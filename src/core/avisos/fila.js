@@ -13,7 +13,7 @@ import { logger as loggerPadrao } from '../../utils/logger.js';
 import { redact } from '../api/panelLogs.js';
 import { writeJsonAtomic } from '../channel/idemPersistente.js';
 import { chaveDoDia, fusoDoDono } from '../fuso.js';
-import { CLASSES, classeDaChave, decidir, emSilencio, lerSilencio, lerTeto, rotuloDaChave } from './regras.js';
+import { CLASSES, assuntoDaChave, classeDaChave, decidir, emSilencio, lerSilencio, lerTeto, rotuloDaChave } from './regras.js';
 import { modoDoFiltro } from './observar.js';
 
 export const METODO_DO_CANAL = 'avisos.entregar';
@@ -292,6 +292,36 @@ export function criarFiltroDeAvisos({ env = process.env, file = null, now = () =
     passada,
     status: () => { const s = ler(); return s ? { guardados: s.itens.length, resumoPendente: Boolean(s.resumo) } : { ilegivel: true }; },
   };
+}
+
+/**
+ * A fila para o PAINEL (GET /v1/admin/avisos; só leitura, só o dono). Lê o arquivo do disco sem cache e sem nunca o criar nem gravar (nem com o filtro desligado).
+ * Devolve só o assunto já limpo (assuntoDaChave: chave fixa, nome da família ou null), a classe, o motivo, até quando, o estado e quando entrou: NUNCA o texto
+ * do aviso. O adiado pelo silêncio (liberaEm 0) sai quando o silêncio acaba: o "até quando" é o fim do silêncio de agora (null se já acabou).
+ * @returns {{ existe: boolean, ilegivel: boolean, resumoPendente: boolean, total: number, itens: object[] }}
+ */
+export function lerFilaParaPainel({ env = process.env, file = null, now = Date.now(), max = 50 } = {}) {
+  const arquivo = file ?? arquivoDaFila(env);
+  const vazio = { existe: false, ilegivel: false, resumoPendente: false, total: 0, itens: [] };
+  let bruto;
+  try { bruto = JSON.parse(fs.readFileSync(arquivo, 'utf8')); } catch (err) {
+    return err?.code === 'ENOENT' ? vazio : { ...vazio, existe: true, ilegivel: true };
+  }
+  if (!bruto || !Array.isArray(bruto.itens)) return { ...vazio, existe: true, ilegivel: true };
+  const iso = (t) => (Number.isFinite(t) && t > 0 ? new Date(t).toISOString() : null);
+  const fimDoSilencio = () => {
+    const d = decidir({ classe: CLASSES.INFORMATIVO, agora: now, usoDoDia: { total: 0 } }, { silencio: lerSilencio(env.YUI_SILENCIO), teto: lerTeto(env.YUI_AVISOS_POR_DIA), fuso: fusoDoDono(env) });
+    return d.motivo === 'silencio' && d.ate ? d.ate.getTime() : null;
+  };
+  const validos = bruto.itens.filter(itemValido);
+  const itens = validos.slice(0, max).map((i) => {
+    const libera = Number(i.liberaEm) > 0 ? Number(i.liberaEm) : i.motivo === 'silencio' ? fimDoSilencio() : null;
+    return {
+      assunto: assuntoDaChave(i.chave), classe: classeDaChave(i.chave), motivo: String(i.motivo ?? ''), ate: iso(libera),
+      estado: i.estado === 'enviando' ? 'enviando' : 'pendente', criadoEm: iso(Number(i.criadoEm)),
+    };
+  });
+  return { existe: true, ilegivel: false, resumoPendente: Boolean(bruto.resumo && typeof bruto.resumo.dia === 'string'), total: validos.length, itens };
 }
 
 /** Liga a descarga periódica. Devolve { passada, parar }. Sem fila nem resumo pendente, a passada não faz nada. */

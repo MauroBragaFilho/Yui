@@ -803,27 +803,13 @@ await test(`há mais configurações (${NPAGES}) do que cabem num menu (24 + Hom
   assert.ok(NPAGES > WIN, `só ${NPAGES} páginas: o teste de janelas não prova nada`);
 });
 
-await test('__dirname: o caminho do config.json aponta para src/config/config.json e o arquivo existe', () => {
-  assert.equal(path.resolve(cfg.CONFIG_JSON_PATH), path.join(repoRoot, 'src', 'config', 'config.json'));
-  assert.ok(fs.existsSync(cfg.CONFIG_JSON_PATH));
-});
-await test('updateConfigJson grava no arquivo indicado (sem ReferenceError), preserva as outras chaves e atualiza o config em memória', () => {
-  resetState();
-  const file = path.join(tmp, 'config-copia.json');
-  fs.writeFileSync(file, '{\n  // comentário que o painel descarta\n  "prefix": "_", "url": "http://exemplo.test/x", "botName": "Yui"\n}\n');
-  assert.equal(cfg.updateConfigJson('botName', 'Outra', file), true);
-  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.deepEqual(saved, { prefix: '_', url: 'http://exemplo.test/x', botName: 'Outra' });
-  assert.equal(appConfig.botName, 'Outra');
-  delete appConfig.botName;
-});
-await test('updateConfigJson: arquivo inexistente ou inválido → false e erro no log (não lança)', () => {
-  resetState();
-  assert.equal(cfg.updateConfigJson('k', 'v', path.join(tmp, 'nao-existe.json')), false);
-  const bad = path.join(tmp, 'ruim.json');
-  fs.writeFileSync(bad, '{ isto não é json');
-  assert.equal(cfg.updateConfigJson('k', 'v', bad), false);
-  assert.equal(state.logs.filter(([l, m]) => l === 'error' && m.includes('ConfigPanel')).length, 2);
+// Lacunas do painel, item 6 (26/11/2026): o painel grava no cofre do painel (tests/test-painel-ia-discord.js); o src/config/config.json foi aposentado como fonte.
+await test('o config.json foi aposentado: o painel não tem mais caminho nem função para gravá-lo, e o arquivo continua no disco', () => {
+  assert.equal(cfg.CONFIG_JSON_PATH, undefined);
+  assert.equal(cfg.updateConfigJson, undefined);
+  assert.ok(fs.existsSync(path.join(repoRoot, 'src', 'config', 'config.json')), 'o arquivo não é apagado');
+  const src = fs.readFileSync(path.join(repoRoot, 'src/handlers/configPanelHandler.js'), 'utf8');
+  assert.ok(!/writeFileSync|readFileSync/.test(src), 'nenhuma leitura ou gravação de arquivo no painel');
 });
 await test('"Ir Para" a partir da última página: janela final, Home, página atual marcada e botões de janela', async () => {
   const last = NPAGES;
@@ -906,10 +892,14 @@ await test('modal de edição: valor atual maior que 4000 abre vazio (sem setVal
   }
 });
 await test('modal de edição numérico: continua com 1 a 20 caracteres e o valor atual', async () => {
-  const it = fakeInteraction({ customId: 'cfgpanel_input_2' });
-  await cfg.handleConfigButton(it);
-  const input = json(it.log.showModal[0]).components[0].components[0];
-  assert.deepEqual([input.value, input.min_length, input.max_length], ['3', 1, 20]);
+  // Item 6: o valor vem do cofre do painel (aqui, sem cofre, do ambiente), o mesmo que o painel web mostra.
+  process.env.YUI_IA_RETENTATIVAS = '3';
+  try {
+    const it = fakeInteraction({ customId: 'cfgpanel_input_2' });
+    await cfg.handleConfigButton(it);
+    const input = json(it.log.showModal[0]).components[0].components[0];
+    assert.deepEqual([input.value, input.min_length, input.max_length], ['3', 1, 20]);
+  } finally { delete process.env.YUI_IA_RETENTATIVAS; }
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
@@ -977,10 +967,11 @@ await test('M3 rádio: título/artista com @everyone, @here, cargo ou outro usu�
   await radioMCP.handleRadioMCPCall('radio_show_queue', {}, OWNER, 'g1', queueChannel, {});
   assert.equal(queueChannel.sent.length, 1);
 });
-await test('o painel de configuração não promete persistência que não existe: o JSON ainda não é lido ao iniciar', () => {
+await test('o painel de configuração não promete persistência que não existe: só o cofre sobrevive ao reinício; o que fica na memória diz que volta', () => {
   const src = fs.readFileSync(path.join(repoRoot, 'src/handlers/configPanelHandler.js'), 'utf8');
   assert.ok(!src.includes('JSON Permanente'), 'a página dizia "permanente", mas nada lê o config.json na subida');
-  assert.ok(src.includes('esse arquivo ainda não é lido ao iniciar'));
+  assert.ok(src.includes('Salvo no cofre: sobrevive ao reinício.'), 'o cofre do painel (item 6) é o que sobrevive');
+  assert.ok(src.includes('Só na memória do bot: vale na hora e, ao reiniciar, volta ao valor do .env ou ao padrão.'), 'prefixo, nome e prompt: honesto sobre o reinício');
 });
 await test('botão "Fila" e radio_show_queue com 150 faixas: o embed é enviado (antes lançava)', async () => {
   resetState();

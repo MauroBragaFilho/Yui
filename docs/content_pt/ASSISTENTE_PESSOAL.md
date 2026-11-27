@@ -101,7 +101,7 @@ src/core/
 ├── context/            contextStore.js: contexto das conversas por horas (opcional, desligado por padrão)
 ├── ai/manager.js       AI Manager: backends plugáveis (legacy-chain, openai-compatible, gateway)
 ├── agent/              agent.js (laço de decisão) e tools.js (registro, allowlists, ponte MCP)
-├── dev/                Código (o que era do Jarvis): projetos, arquivos, comandos, laço do agente, execuções com aprovação
+├── dev/                o que ficou do código (a aba Código saiu): regras do terminal e do workspace e as tarefas do Yui Dev (preparadas, desligadas)
 └── api/                server.js (rotas), auth.js (login, sessões, chave por DM), admin.js (painel), integrations.js, panelLogs.js e radioAdmin.js
 src/gateway/            Yui Gateway (servidor de IA): providers, router, server
 apps/yui-app/           App Android e web
@@ -192,6 +192,7 @@ A Yui **não pode apagar, gravar nem mover arquivos, nem executar programas**, e
 | `apps.open` | execute | 🚫 bloqueada (inicia programas) |
 | `commands.list` | read | ✅ lista os comandos cadastrados (`YUI_COMMANDS`) |
 | `commands.run` | execute | 🚫 bloqueada; roda um comando cadastrado **pelo nome**, sem shell, com confirmação |
+| `imagem.gerar` | read | ✅ gera uma imagem nova pelo Chat do app (o mesmo `generate_image` do Discord: filtro de conteúdo e limite por hora; o dono sem limite). Membro ou acima; só aparece com `YUI_APP_IMAGEM=true`. A imagem volta por um link curto de 10 min ([Imagem no Chat do app](YUI_API.md#imagem-no-chat-do-app)) |
 | `bds.buscar`, `bds.listar`, `bds.recentes`, `bds.status` | read | ✅ consultam a biblioteca de arquivos do **BDS Server** (só `GET`; busca por nome, pasta de uma lista fixa, últimos arquivos, espaço livre). Só com `YUI_BDS_URL` |
 
 **Skills** (`skills/`): receitas em texto do dono que a Yui segue quando o pedido combina; só dono em DM/canal privado, sem ferramentas. Veja [Comandos e skills](COMANDOS_E_SKILLS.md).
@@ -202,20 +203,20 @@ As ferramentas do PC só existem com `YUI_TOOLS_PC_ENABLED=true`; as da bibliote
 
 O Agent aceita ferramentas MCP, sempre como OWNER + canal privado + confirmação, e só as listadas em `YUI_MCP_ALLOW`. **O transporte MCP (stdio/HTTP) ainda não está implementado**: existe a ponte de permissões (`registerMcpTools`), falta o cliente.
 
-### 💻 Código: o Jarvis dentro da Yui
+### 🧪 Tarefas do Yui Dev (preparado, desligado)
 
-O Projeto Jarvis queria ser um assistente pessoal controlado pelo PC. Em vez de manter uma segunda assistente, as boas partes dele (laço de agente com ferramentas, edição por `SEARCH/REPLACE`, modos de trabalho, busca no código) foram **portadas para o Core** (`src/core/dev`), com os bugs e furos de segurança corrigidos (análise em `D:\Projetos\Projeto Jarvis\Yui Desktop\docs\ANALISE_JARVIS.md`). A interface é a **aba Código do mesmo app**; a **Yui Desktop** é só a janela dele no computador. Guia: [Código](CODIGO.md).
+A aba **Código** (o Projeto Jarvis portado para a Yui: ler e editar projetos pelas rotas `/v1/dev/*`) saiu do app em 11/11/2026, e os restos dela saíram do servidor em 27/11/2026: as rotas, o laço do agente de código, os projetos, o histórico e o índice. Ficaram em `src/core/dev/` só as regras que têm outro uso: o terminal sem shell (o ambiente sem segredos também serve ao `commands.run`), a lista de executáveis (`YUI_DEV_ALLOWED_EXECUTABLES`), o workspace que não sai da pasta nem lê arquivos sensíveis, e as **tarefas do Yui Dev**, a base da Fase 4.
 
-Diferenças deliberadas em relação ao Agent do chat (seção acima), porque ler e editar código exige vários passos:
+Está sendo preparado o modo em que a Yui recebe uma **tarefa**, trabalha nela sozinha e entrega um **pacote de revisão** para o dono aprovar ou rejeitar. **Hoje isso não faz nada:** `YUI_DEV_TAREFAS` (padrão `false`) só vale junto com `YUI_DEV_ENABLED=true`, e o executor ainda não existe (pedir a execução devolve "não implementado"). O que já está definido e testado (`npm run test:devtarefas`):
 
-| | Agent do chat | Código |
-|---|---------------|--------|
-| Passos por pedido | Uma ferramenta | Até `YUI_DEV_MAX_STEPS` (12) |
-| Resultado volta ao modelo | Não | **Sim**, marcado como **dado** (nunca como ordem) |
-| Onde atua | Ferramentas da allowlist | Só **projetos da lista**, sem sair da pasta, sem arquivos sensíveis |
-| Gravar / rodar comando | Exige confirmação (e `YUI_READ_ONLY=false`) | Exige **aprovação a cada ação, no computador** (e `YUI_READ_ONLY=false`) |
-| Quem usa | OWNER em DM/canal privado | **Só o dono**, pelo app |
-| IA | Cadeia da Yui | LM Studio e Gateway, sempre `sensitive` (nunca provedor anônimo) |
+- só o **dono** cria tarefas, pelo app, pelo PC ou pela DM, e só em projetos da **lista** (por nome, nunca por caminho);
+- o trabalho acontece **sempre numa branch própria** (`yui/<id>-<assunto>`) e num **worktree isolado** dentro do projeto (`.yui/worktrees/<id>`), **nunca na `main`**;
+- o `git push` só leva a branch da própria tarefa, sem força, sem apagar e sem outro destino; quem leva o trabalho para a `main` é o dono;
+- cada tarefa tem **tempo máximo** (30 minutos por padrão, de 1 minuto a 2 horas);
+- só valem os executáveis da lista do terminal (sem shell); instalar pacote, fazer push e descartar trabalho pedem a **aprovação do dono no computador**;
+- o **pacote de revisão** traz resumo, lista de arquivos, diff limitado (100 KB, sem segredos), resultado dos testes e a branch.
+
+Uma tarefa passa pelos estados `pendente`, `preparando`, `rodando`, `revisao`, `aprovada`, `rejeitada`, `falhou` e `cancelada`. As chaves estão em [Variáveis de ambiente](ENVIRONMENT.md#-13-canais-novos-e-agente-de-código).
 
 Mantém o princípio 5: **somente leitura por padrão**, imposto no backend.
 
@@ -284,9 +285,6 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 | ARL do Deezer ou chaves vazando para processos filhos e logs | O ARL vai por variável de ambiente (nunca na linha de comando nem no log); o ambiente do filho não leva variáveis com TOKEN, KEY, SECRET, PASSWORD, COOKIE ou PRIVATE; o usuário só vê mensagens curtas |
 | `/chat_resumo` tratando mensagens de terceiros como ordem | O log do canal entra como registro de terceiros (dado), sem ferramentas, sem memória e sem gravar no `historico.txt` |
 | Execução ou alteração arbitrária no PC | Somente leitura imposto no backend; allowlists; sem shell livre; vigia de código nos testes; auditoria |
-| Código: instrução escondida em arquivo, página ou saída de comando | Tudo isso entra marcado como dado; comandos perigosos negados sempre; gravar e rodar comando exigem aprovação a cada vez; a política é do backend, não do modelo |
-| Código: aprovar de longe (celular, sessão roubada) | Aprovação e cadastro de projetos só valem se o pedido vier **do próprio computador onde a Yui roda** (pedido por proxy/Tailscale conta como remoto e fica somente leitura) |
-| Código: ler segredos ou sair do projeto | `.env`, chaves e certificados nunca lidos; `path.relative` + `realpath`; projeto não pode ser a raiz do disco, a pasta pessoal nem `.ssh`/`.aws`; conteúdo vai só para IA marcada `sensitive` |
 | Força bruta no login | Hash scrypt, bloqueio global, atraso, erro genérico, sessões que expiram |
 | Encher a DM do dono com chaves | Máximo de 3 pedidos por 10 min; a chave nunca volta na API |
 | Painel comprometido | Não altera somente leitura, senha nem chaves; não bane o dono; ações auditadas |
@@ -312,7 +310,7 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 | 8 | App Android e web | ✅ `apps/yui-app` (chat com confirmação, memória, status, painel) |
 | 9 | Tailscale e acesso remoto | ✅ API publicada em HTTPS só na tailnet |
 | + | Somente leitura, persona, login e chave por DM, painel, Gateway de IA, Core único no computador do dono (hoje, o notebook servidor) | ✅ |
-| 10 | Código (Jarvis dentro da Yui) + Yui Desktop | ✅ aba Código, `/v1/dev/*`, janela Electron. Testado com IA simulada e na tela; o uso com modelo real depende do seu LM Studio/Gateway |
+| 10 | Código (Jarvis dentro da Yui) + Yui Desktop | Removido: a aba Código saiu em 11/11/2026 e os restos do servidor (`/v1/dev/*`) em 27/11/2026. Ficaram as regras do terminal e as tarefas do Yui Dev (Fase 4, desligadas) |
 
 **Em produção no notebook servidor** (Windows 10, desde 03/11/2026): bot do Discord, memória, API (`127.0.0.1:3939`), app web (`127.0.0.1:8081`) e Gateway (`127.0.0.1:20130`), com reinício automático. No mesmo notebook roda o **OmniRoute** (gateway de IA externo, `127.0.0.1:20128`), que entra na Yui como provedor próprio pelo painel (**Admin → IA**, modelo pronto "OmniRoute"). Veja [Operação](OPERACAO.md).
 

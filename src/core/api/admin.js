@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import fs from 'fs';
+import { ACOES_COM_CHAVE, ConfirmacaoError, confirmacoesDoPainel, sessaoDe } from './confirmacao.js';
 import os from 'os';
 import path from 'path';
 import * as memory from '../memory/store.js';
@@ -10,9 +12,14 @@ import { descrever as descreverConfig, definir as definirConfig, remover as remo
 import { interactionSeries } from '../interactionStats.js';
 import { parseWhen, describeWhen, describeRepeat } from '../../reminders/when.js';
 import { ReminderError } from '../../reminders/store.js';
-import { listRadio, RADIO_ACTIONS, defaultRadioDeps } from './radioAdmin.js';
+import { listRadio, RADIO_ACTIONS, RADIO_ESCOLHA_MS, MAX_OPCOES_DO_RADIO, buscaDoRadio, canaisDoRadio, defaultRadioDeps, faixaCurta, opcoesDoRadio } from './radioAdmin.js';
 import { readLogs } from './panelLogs.js';
-import { buildIntegrations, loadGuildDetail, loadIntegrationData } from './integrations.js';
+import { buildIntegrations, comContasDaYui, loadGuildDetail, loadIntegrationData } from './integrations.js';
+import {
+  criarLeiturasPadrao, linhaCurta, montarVistaDoGta, vistaDaContinuidade, vistaDaLive, vistaDasListas, vistaDasSkills, vistaDoGoogle, vistaDosAvisos, vistaDosObservados, vistaDosPlanos,
+} from './leiturasDoPainel.js';
+import { planosLigados, planosPeloPainel } from '../planos/pedido.js';
+import { apagarDaContinuidade, continuidadeLigada, listarContinuidade, podeContinuidade } from '../continuidade.js';
 import { montarDiagnostico } from '../diagnostico.js';
 import { criarPedidoDeVerificacao } from '../ai/verificacaoRotaPrivada.js';
 import { addCustom, addCustomKey, setCustomOptions, addKey, AiSettingsError, describeAi, isEditEnabled, removeCustom, removeKey, setCloudflareAccount, setEnabled } from '../aiSettings.js';
@@ -68,6 +75,37 @@ const RESTART_REFUSALS = Object.freeze({
 
 function requireOwner(ctx) {
   if (ctx?.role !== ROLES.OWNER) throw new AdminError(403, 'Apenas o dono pode usar o painel de administração.');
+}
+
+// Entrega E das lacunas do painel (aprovar planos e entrar na live pelo painel): um limite simples de repetição, só na memória (a API é só do dono).
+// "Sair da live" fica de fora de propósito: a parada tem de funcionar sempre.
+export const LIMITE_DAS_DECISOES = Object.freeze({ max: 20, janelaMs: 60_000 });
+export const LIMITE_DAS_ENTRADAS = Object.freeze({ max: 10, janelaMs: 60_000 });
+// Entrega E, parte 2 (item 9 v2): republicar o GTA. Uma republicação do MESMO tipo no MESMO servidor a cada 10 minutos (o duplo clique e a repetição não
+// enchem o canal). Só conta o que chegou a publicar: servidor sem canal, nada salvo e falha do Discord não prendem o próximo pedido.
+export const LIMITE_DA_REPUBLICACAO = Object.freeze({ janelaMs: 10 * 60_000 });
+export const TIPOS_DA_REPUBLICACAO = Object.freeze(['diario', 'semanal', 'noticia']);
+const NOME_DO_TIPO = Object.freeze({ diario: 'diário', semanal: 'semanal', noticia: 'de notícias' });
+const LIVE_DESLIGADA = 'A live do YouTube está desligada ("Yui no chat de uma live do YouTube" em Configuração e chaves).';
+// Entrega F, parte 2 (item 14): reautorizar o Google pelo painel (YUI_GOOGLE_REAUTORIZAR_PAINEL; desligada = 404).
+const GOOGLE_PAINEL_DESLIGADO = 'Reautorizar o Google pelo painel está desligado ("Reautorizar o Google pelo painel" em Configuração e chaves).';
+const GOOGLE_FORA_DO_PROCESSO = 'Reautorizar o Google só funciona no processo que serve o painel.';
+const LINK_DA_LIVE_INVALIDO = 'Esse link não parece de uma live do YouTube.';
+/** true = passou do limite (e o pedido não conta); false = conta e segue. */
+function passouDoLimite(marcas, { max, janelaMs }, agora = Date.now()) {
+  while (marcas.length && agora - marcas[0] >= janelaMs) marcas.shift();
+  if (marcas.length >= max) return true;
+  marcas.push(agora);
+  return false;
+}
+/** Só "está numa live" e "desde quando", do painel() do serviço (para saber se a entrada ou a saída valeu). */
+function retratoDaLive(servico) {
+  try {
+    const p = servico?.painel?.();
+    return { ativo: p?.ativo === true, desde: p?.desde ?? null };
+  } catch {
+    return { ativo: false, desde: null };
+  }
 }
 
 function requireId(value, label = 'ID') {
@@ -323,7 +361,96 @@ export function createAdmin({
   monitores = null,
   // Configurações por servidor (src/discord/painelServidor.js): `() => Promise<ponte>`. Injetada pelo processo do bot; o Core não importa nada dele.
   servidor = null,
+  // Qual processo é este: 'unico' (processo único), 'cerebro' (serve a API com os dois processos) ou 'bot' (o bot separado, que só atende o cérebro pelo canal).
+  // No bot separado as Integrações não montam o grupo "Contas da Yui" (a live e o Google rodam no cérebro, que o acrescenta).
+  processo = 'unico',
+  // As leituras das entregas B e D das lacunas do painel (live, Google, planos, avisos, listas, skills; src/core/api/leiturasDoPainel.js). Injetáveis para teste.
+  leituras = null,
+  // Entrega E (itens 3 v2 e 4 v2): os serviços que as AÇÕES do painel chamam. `planos`: o serviço dos planos (o cérebro passa o dele); sem ele, a porta dos
+  // planos, que no processo único É o serviço. `live`: o serviço da live; sem ele, a porta da live, que no cérebro e no processo único É o serviço.
+  planos = null,
+  live = null,
+  // O relógio do freio de pedido repetido (correção C6). Injetável para teste.
+  relogio = () => Date.now(),
+  // Correção C2: as chaves de confirmação (o padrão é o lugar compartilhado deste processo, src/core/api/confirmacao.js) e quem manda a DM ao dono
+  // (o padrão é o sendOwnerMessage das alertas: no cérebro separado, pelo bot). Injetáveis para teste.
+  confirmacoes = null,
+  enviarDmAoDono = null,
 } = {}) {
+  let leiturasCache = leituras;
+  const chavesDeConfirmacao = () => confirmacoes ?? confirmacoesDoPainel();
+  async function dmAoDono(texto) {
+    const enviar = enviarDmAoDono ?? (await import('../alerts.js')).sendOwnerMessage;
+    return enviar(texto);
+  }
+  /**
+   * Correção C2: confere e consome a chave de confirmação pela DM desta ação neste alvo, nesta sessão. Lança AdminError (428 sem chave, 422 inválida ou
+   * vencida, 429 travada). Auditoria só com a ação e o resultado, nunca a chave; a trava avisa o dono.
+   */
+  async function exigirChave(ctx, acao, alvo, chave) {
+    try {
+      chavesDeConfirmacao().conferir({ userId: String(ctx?.userId ?? ''), sessao: sessaoDe(ctx), acao, alvo, chave });
+    } catch (e) {
+      if (!(e instanceof ConfirmacaoError)) throw e;
+      audit('admin.confirmacao.recusada', ctx, { acao, status: e.status });
+      if (e.travou) {
+        try {
+          const { alertOwner } = await import('../alerts.js');
+          alertOwner('lock-confirmacao', 'Chaves de confirmação bloqueadas', 'Houve várias chaves de confirmação erradas seguidas no painel. A confirmação ficou travada por 15 minutos. Se não foi você, troque a senha do painel e saia das outras sessões.', { level: 'error' });
+        } catch { /* o aviso nunca muda a recusa */ }
+      }
+      throw new AdminError(e.status, e.message);
+    }
+    audit('admin.confirmacao.usada', ctx, { acao });
+  }
+  const ler = () => (leiturasCache ??= criarLeiturasPadrao());
+  // O bot separado não serve a API: as ações nunca usam a porta dele (que é o pedido ao cérebro pelo canal).
+  async function servicoDosPlanos() {
+    if (planos) return planos;
+    if (processo === 'bot') return null;
+    const { portaDePlanos } = await import('../planos/porta.js');
+    return portaDePlanos();
+  }
+  async function servicoDaLive() {
+    const s = live ?? (processo === 'bot' ? null : (await import('../../adaptadores/youtube/porta.js')).portaDaLive());
+    if (typeof s?.rotear !== 'function') throw new AdminError(503, 'A live está indisponível agora (o serviço não subiu neste processo).');
+    return s;
+  }
+  const decisoesRecentes = [];
+  const entradasRecentes = [];
+  // Entrega F, parte 2 (item 14): a reautorização do Google (src/integrations/google/reautorizar.js). A sessão, com o verificador do PKCE, vive SÓ na memória
+  // deste processo (o que serve a API e lê o arquivo da autorização). `deps.googleReautorizar` só existe para teste (relógio, permissão restrita).
+  let reautorizacao = null;
+  let moduloDaReautorizacao = null;
+  async function reautorizacaoDoGoogle() {
+    moduloDaReautorizacao ??= await import('../../integrations/google/reautorizar.js');
+    reautorizacao ??= moduloDaReautorizacao.criarReautorizacao(deps?.googleReautorizar ?? {});
+    return { r: reautorizacao, textos: moduloDaReautorizacao.TEXTOS_DAS_FALHAS };
+  }
+  /** Só o dono, só no processo da API e só com a chave ligada (desligada: descarta a sessão em andamento e responde 404). */
+  async function exigirReautorizacaoLigada(ctx) {
+    requireOwner(ctx);
+    if (processo === 'bot') throw new AdminError(503, GOOGLE_FORA_DO_PROCESSO);
+    const { reautorizacaoPeloPainelLigada } = await import('../../integrations/google/config.js');
+    if (!reautorizacaoPeloPainelLigada()) {
+      reautorizacao?.descartar();
+      throw new AdminError(404, GOOGLE_PAINEL_DESLIGADO);
+    }
+    return reautorizacaoDoGoogle();
+  }
+  // Item 9 v2: a última republicação de cada tipo em cada servidor ("tipo:guildId" -> ms). O relógio é injetável só para teste (deps.agora).
+  const republicacoes = new Map();
+  const agoraMs = () => (typeof deps?.agora === 'function' ? Number(deps.agora()) : Date.now());
+  // Item 10: as opções de uma busca ambígua do rádio ficam AQUI (no processo do rádio), por servidor e por pouco tempo. O painel só devolve o NÚMERO da
+  // opção: uma faixa (com o link dela) escolhida ou montada pelo painel nunca chega ao player.
+  const escolhasDoRadio = new Map();
+  /** O grupo "Contas da Yui" de Integrações: o Google e a live, lidos aqui (nunca derruba a tela: sem leitura, o item diz que está desligado). */
+  async function contasDaYui() {
+    const seguro = async (fn) => { try { return await fn(); } catch { return null; } };
+    const live = await seguro(() => ler().live());
+    const google = await seguro(() => ler().google());
+    return { live: live ? vistaDaLive(live.bruto ?? null, { ligado: live.ligado === true }) : null, google: google ? vistaDoGoogle(google) : null };
+  }
   let servidorCache = null;
   const srv = async () => {
     const carregar = servidor ?? servidorRegistrado;
@@ -356,7 +483,48 @@ export function createAdmin({
     return g;
   };
 
-  return {
+  // ── Rádio pelo painel (item 10): o que a fila respondeu, em palavras fixas, e a busca (gênero, música ou link) que pode virar uma escolha ──
+  const respostaDaFila = (entrou) => {
+    if (!entrou || !(Number(entrou.count) > 0)) return { resultado: 'nao-encontrado' };
+    const resultado = entrou.playing === true ? 'tocando' : 'na-fila';
+    return entrou.kind === 'playlist' ? { resultado, adicionadas: Number(entrou.count) } : { resultado, adicionadas: 1, faixa: faixaCurta(entrou.track) };
+  };
+  async function tocarNoRadio(ctx, id, r, busca) {
+    let achado = null;
+    try { achado = await r.resolve(busca, id); } catch { achado = null; }
+    if (!achado || achado.type === 'not_found') return { resultado: 'nao-encontrado' };
+    if (achado.type === 'ambiguous' && Array.isArray(achado.results) && achado.results.length > 1) {
+      const opcoes = achado.results.slice(0, MAX_OPCOES_DO_RADIO);
+      escolhasDoRadio.set(id, { opcoes, ate: agoraMs() + RADIO_ESCOLHA_MS });
+      return { resultado: 'escolher', opcoes: opcoesDoRadio(opcoes) };
+    }
+    escolhasDoRadio.delete(id);
+    return respostaDaFila(await r.enqueue(id, achado, String(ctx.userId ?? ''), client));
+  }
+  /**
+   * Iniciar sem ninguém na call: só canais DESTE servidor, de voz (em que a Yui pode entrar e falar) e de texto (em que ela pode escrever). O gênero ou a
+   * música vêm depois, pelo `play` (cada pedido cabe no prazo do canal entre o cérebro e o bot: entrar na call e buscar a música, juntos, podem passar dele).
+   */
+  async function iniciarRadio(ctx, id, body, r) {
+    const guild = findGuild(id);
+    const voiceId = requireId(body?.voiceChannelId, 'Canal de voz');
+    const textId = requireId(body?.textChannelId, 'Canal de texto');
+    const { voz, texto } = canaisDoRadio(guild);
+    const v = voz.find((c) => c.id === voiceId);
+    if (!v) throw new AdminError(400, 'Esse canal de voz não é deste servidor (ou não é um canal de voz).');
+    if (!v.pode) throw new AdminError(409, v.motivo === 'cheio' ? 'Esse canal de voz está cheio.' : 'A Yui não tem permissão para entrar e falar nesse canal de voz.');
+    const t = texto.find((c) => c.id === textId);
+    if (!t) throw new AdminError(400, 'Esse canal de texto não é deste servidor (ou não é um canal de texto).');
+    if (!t.pode) throw new AdminError(409, 'A Yui não tem permissão para escrever (com embeds) nesse canal de texto.');
+    const cache = guild.channels.cache;
+    const st = await r.start(cache.get(voiceId), cache.get(textId), client);
+    if (st?.success !== true) throw new AdminError(409, linhaCurta(st?.error, 200) || 'Não consegui ligar o rádio.');
+    escolhasDoRadio.delete(id);
+    audit('admin.radio', ctx, { guild: id, action: 'start' });
+    return { ok: true, iniciado: true };
+  }
+
+  const metodos = {
     /** Visão geral: estado da Yui e das proteções. */
     async overview(ctx) {
       requireOwner(ctx);
@@ -598,7 +766,7 @@ export function createAdmin({
     async integrations(ctx) {
       requireOwner(ctx);
       const data = deps?.integrationData ? await deps.integrationData() : await loadIntegrationData();
-      return buildIntegrations({
+      const out = buildIntegrations({
         env: process.env,
         client,
         data,
@@ -606,6 +774,310 @@ export function createAdmin({
         memoryEnabled: isMemoryEnabled(),
         tools: listTools().length,
       });
+      // Google e live do YouTube (entrega B das lacunas do painel): só onde elas rodam. No bot separado, quem acrescenta é o cérebro.
+      return processo === 'bot' ? out : comContasDaYui(out, await contasDaYui());
+    },
+
+    /** O grupo "Contas da Yui" (Google e live), para o cérebro juntar às Integrações que o bot montou. Só o dono. */
+    async contasDaYui(ctx) {
+      requireOwner(ctx);
+      return contasDaYui();
+    },
+
+    // ── Lacunas do painel, entrega B (26/11/2026): SÓ LEITURA, só o dono. Cada resposta passa por uma vista com lista fechada de campos
+    //    (src/core/api/leiturasDoPainel.js): nada de token, segredo, código, texto do chat, nome de quem escreveu, argumentos ou resultados de plano, texto de aviso. ──
+    /** A live do YouTube: ligada, em qual live, desde quando, mensagens lidas e respondidas, cota do dia e último erro (código fixo). */
+    async live(ctx) {
+      requireOwner(ctx);
+      const r = await ler().live();
+      return vistaDaLive(r?.bruto ?? null, { ligado: r?.ligado === true });
+    },
+    /** A autorização do Google: ligada, escopos em nome curto, validade em modo Testando, última renovação, último erro e se precisa autorizar de novo. */
+    async google(ctx) {
+      requireOwner(ctx);
+      return vistaDoGoogle(await ler().google());
+    },
+    /** Os últimos 20 planos: estado, datas e, dos passos, só a ferramenta e o estado. */
+    async planos(ctx) {
+      requireOwner(ctx);
+      const r = await ler().planos();
+      // Correção C1: o resumo seguro de cada passo, montado pelo código das próprias ferramentas de plano a partir do passo GUARDADO (sem o texto livre).
+      const { criarFerramentasDePlano, resumoSeguroDoPasso } = await import('../planos/ferramentas.js');
+      const ferramentas = criarFerramentasDePlano({ env: process.env });
+      const resumir = (s) => resumoSeguroDoPasso(ferramentas.get(String(s?.ferramenta ?? '')), s?.args);
+      return vistaDosPlanos(r?.lista, { ligado: r?.ligado === true, auto: r?.auto === true, ilegivel: r?.ilegivel === true, painel: r?.painel === true, resumir });
+    },
+    /** A fila de avisos e o que o modo observar registrou neste processo (o cérebro junta o que o bot registrou: src/cerebro/painel.js). */
+    async avisos(ctx) {
+      requireOwner(ctx);
+      const r = await ler().avisos();
+      let obs = null;
+      try { obs = await ler().observados(); } catch { obs = null; }
+      const origem = processo === 'cerebro' ? 'cerebro' : 'unico';
+      return vistaDosAvisos({ modo: r?.modo, fila: r?.fila, observados: [obs ? { ...vistaDosObservados(obs, origem) } : { origem, indisponivel: true }] });
+    },
+    /** Só o que o modo observar registrou NESTE processo (o cérebro pede ao bot separado por panel.admin). */
+    async avisosObservados(ctx) {
+      requireOwner(ctx);
+      return vistaDosObservados(await ler().observados(), processo === 'bot' ? 'bot' : processo === 'cerebro' ? 'cerebro' : 'unico');
+    },
+
+    // ── Lacunas do painel, entrega D (27/11/2026): SÓ O DONO. Leituras com lista fechada de campos (leiturasDoPainel.js) e um único apagar (continuidade). ──
+    /**
+     * GTA (item 9 v1, só leitura): o último diário, o último semanal válido, a última notícia, onde cada um saiu e o estado das fontes. Os bancos do GTA são
+     * do bot: lê pela ponte do painel (src/discord/painelServidor.js -> gtaPainel.js), que só existe no processo do bot (o único ou o bot separado; com os
+     * dois processos o cérebro pede ao bot por panel.admin e limpa de novo a vista). Os nomes de servidor e canal vêm do cliente do Discord daqui.
+     */
+    async gta(ctx) {
+      requireOwner(ctx);
+      const s = await srv();
+      if (typeof s.gta !== 'function') throw new AdminError(503, SERVIDOR_FORA);
+      return montarVistaDoGta(await s.gta(), {
+        nomeDoServidor: (id) => client?.guilds?.cache?.get?.(id)?.name ?? null,
+        nomeDoCanal: (id) => client?.channels?.cache?.get?.(id)?.name ?? null,
+      });
+    },
+    /**
+     * Republica (item 9 v2, entrega E parte 2) o diário, o semanal ou a notícia MAIS RECENTES num servidor, com `{ tipo, guildId, confirm: true }`. Sempre no
+     * canal daquele tipo configurado no servidor (o mesmo do agendador; o painel nunca escolhe nem digita um canal) e pelas MESMAS funções de publicação do
+     * agendador (src/discord/gtaPainel.js: republicarGtaNoBot -> src/discord/publisher.js). Roda no processo do bot (o único ou o bot separado, pedido pelo
+     * cérebro por panel.admin). Uma republicação do mesmo tipo no mesmo servidor a cada 10 minutos. A auditoria guarda só o tipo, o servidor e se saiu.
+     */
+    async republicarGta(ctx, body = {}) {
+      requireOwner(ctx);
+      const tipo = String(body?.tipo ?? '');
+      if (!TIPOS_DA_REPUBLICACAO.includes(tipo)) throw new AdminError(400, `Tipo inválido. Use: ${TIPOS_DA_REPUBLICACAO.join(', ')}.`);
+      const id = requireId(body?.guildId, 'ID do servidor');
+      requireConfirm(body, 'republicar no Discord');
+      const s = await srv();
+      if (typeof s.republicarGta !== 'function') throw new AdminError(503, SERVIDOR_FORA);
+      findGuild(id);
+      const chave = `${tipo}:${id}`;
+      const agora = agoraMs();
+      const ultima = republicacoes.get(chave);
+      if (ultima !== undefined && agora - ultima < LIMITE_DA_REPUBLICACAO.janelaMs) {
+        const min = Math.max(1, Math.ceil((LIMITE_DA_REPUBLICACAO.janelaMs - (agora - ultima)) / 60_000));
+        // começa com "Muito": o app mostra a frase do servidor no 429 só quando ela começa assim (src/api/client.ts: messageForStatus)
+        throw new AdminError(429, `Muito cedo para republicar: isso saiu nesse servidor há pouco. Espere ${min} min.`);
+      }
+      republicacoes.set(chave, agora); // marca antes de publicar: dois cliques seguidos não publicam duas vezes
+      let r;
+      try {
+        r = await s.republicarGta(tipo, id, client);
+      } catch {
+        r = { situacao: 'falhou' };
+      }
+      if (r?.situacao !== 'ok') republicacoes.delete(chave);
+      if (r?.situacao === 'sem-canal') throw new AdminError(409, `Esse servidor não tem canal ${NOME_DO_TIPO[tipo]} configurado (escolha em Servidores > Canais).`);
+      if (r?.situacao === 'sem-conteudo') throw new AdminError(404, 'Ainda não há nada salvo desse tipo para republicar.');
+      if (r?.situacao === 'e-o-semanal') throw new AdminError(409, 'Essa notícia é o próprio evento semanal (ela sai pelo semanal): republique o semanal.');
+      audit('admin.gta.republicar', ctx, { tipo, guild: id, ok: r?.situacao === 'ok' });
+      if (r?.situacao !== 'ok') throw new AdminError(502, 'Não consegui publicar no Discord (confira se a Yui pode escrever no canal configurado).');
+      return { ok: true, tipo, guildId: id, canalId: /^\d{15,25}$/.test(String(r.canalId ?? '')) ? String(r.canalId) : null };
+    },
+    /** As listas pessoais do DONO da sessão (item 12, só leitura): o arquivo é escolhido pelo id da sessão, nunca por um parâmetro do pedido. */
+    async listas(ctx) {
+      requireOwner(ctx);
+      let r;
+      try { r = await ler().listas(String(ctx.userId ?? '')); } catch { r = { situacao: 'ilegivel', listas: [] }; }
+      return vistaDasListas(r, { ligado: r?.ligado !== false });
+    },
+    /** As skills instaladas e quais estão permitidas (item 12, só leitura; ligar e desligar cada uma fica para uma v2). */
+    async skills(ctx) {
+      requireOwner(ctx);
+      return vistaDasSkills(await ler().skills());
+    },
+    /**
+     * Continuidade (item 12): os projetos e as decisões registrados na memória pessoal do dono. Mora com a memória (o cérebro, com os dois processos).
+     * Com a memória desligada nada é lido (`memoria: false`).
+     */
+    async continuidade(ctx) {
+      requireOwner(ctx);
+      if (!podeContinuidade(ctx)) throw new AdminError(403, 'Só na memória pessoal do dono.');
+      const ligado = continuidadeLigada();
+      if (!isMemoryEnabled()) return vistaDaContinuidade({ ligado, memoria: false, itens: [] });
+      return vistaDaContinuidade({ ligado, memoria: true, itens: await listarContinuidade(ctx, deps?.memoria ?? memory) });
+    },
+    /** Apaga UM projeto ou UMA decisão (com `confirm: true`). Outra lembrança nunca sai por aqui (404). A auditoria guarda só o tipo, nunca o texto. */
+    async removerContinuidade(ctx, id, body = {}) {
+      requireOwner(ctx);
+      if (!podeContinuidade(ctx)) throw new AdminError(403, 'Só na memória pessoal do dono.');
+      const n = Number(id);
+      if (!Number.isInteger(n) || n < 1) throw new AdminError(400, 'Número do item inválido.');
+      requireConfirm(body, 'apagar um projeto ou uma decisão');
+      if (!isMemoryEnabled()) throw new AdminError(503, 'A memória está desativada: não há o que apagar agora.');
+      const r = await apagarDaContinuidade(ctx, deps?.memoria ?? memory, n);
+      if (!r.apagado) throw new AdminError(404, 'Projeto ou decisão não encontrado (ou já apagado).');
+      audit('admin.continuidade.remove', ctx, { tipo: r.tipo === 'project' ? 'projeto' : 'decisao' });
+      return { ok: true };
+    },
+
+    // ── Lacunas do painel, entrega E (27/11/2026; itens 3 v2 e 4 v2): AÇÕES sobre o que roda no processo da API. SÓ O DONO, no routeGuard. Nenhuma regra nova:
+    //    o painel chama a MESMA função do serviço que a DM e o chat do app chamam. Nada de argumentos, resultados, link nem texto do chat na resposta ou na auditoria. ──
+    /**
+     * Aprova ou recusa UM plano (item 3 v2; YUI_PLANOS_PAINEL, desligada = 404). Chama a MESMA decidir() dos botões da DM (src/core/planos/servico.js) com o
+     * dono da sessão: plano dele, mesma versão, mesmo hash (prefixo de 16 ou mais), aguardando e dentro da validade. A primeira decisão gravada vale (a DM depois
+     * responde "já foi respondido"). A auditoria é a da decidir() (plan.approved / plan.rejected com a origem "painel"). Devolve só ok, final e a frase dela.
+     */
+    /**
+     * Correção C2: pede a chave de confirmação de UMA ação crítica do painel. Ela chega só pela DM do dono (6 dígitos, 5 minutos, uma vez, presa a esta
+     * sessão, à ação e ao alvo); a resposta nunca a traz. Corpo: { acao: 'plano.aprovar', plano: { id, versao, hash } } ou { acao: 'google.reautorizar' }.
+     */
+    async pedirConfirmacao(ctx, body = {}) {
+      requireOwner(ctx);
+      const acao = String(body?.acao ?? '');
+      if (!Object.hasOwn(ACOES_COM_CHAVE, acao)) throw new AdminError(400, 'Ação de confirmação desconhecida.');
+      let alvo = 'google';
+      let paraQue = 'reautorizar o Google pelo painel';
+      if (acao === 'plano.aprovar') {
+        const p = body?.plano && typeof body.plano === 'object' ? body.plano : {};
+        const id = String(p.id ?? '');
+        const versao = Number(p.versao);
+        const hash = typeof p.hash === 'string' ? p.hash : '';
+        if (!/^[0-9a-f]{6,32}$/.test(id) || !Number.isInteger(versao) || versao < 1 || versao > 1000 || !/^[0-9a-f]{16,128}$/.test(hash)) {
+          throw new AdminError(400, 'Informe o plano (id, versão e hash) para pedir a chave.');
+        }
+        alvo = alvoDoPlano(id, versao, hash);
+        paraQue = `aprovar o plano ${id.slice(0, 12)}${versao > 1 ? ` (versão ${versao})` : ''}`;
+      } else if (processo === 'bot') {
+        throw new AdminError(503, GOOGLE_FORA_DO_PROCESSO);
+      }
+      let emitida;
+      try {
+        emitida = chavesDeConfirmacao().emitir({ userId: String(ctx.userId ?? ''), sessao: sessaoDe(ctx), acao, alvo });
+      } catch (e) {
+        if (e instanceof ConfirmacaoError) throw new AdminError(e.status, e.message);
+        throw e;
+      }
+      const minutos = Math.max(1, Math.round(emitida.expiraEmSegundos / 60));
+      const texto = [
+        '🔐 **Confirmação no painel da Yui**',
+        '',
+        `\`${emitida.codigo}\``,
+        '',
+        `Serve só para: **${paraQue}**.`,
+        `Digite no painel. Vale por **${minutos} minutos** e só pode ser usada **uma vez**.`,
+        'Se não foi você que pediu, não digite em lugar nenhum e troque a senha do painel.',
+      ].join('\n');
+      let saiu = false;
+      try { saiu = (await dmAoDono(texto)) === true; } catch { saiu = false; }
+      if (!saiu) {
+        emitida.revogar(); // não deixa uma chave que o dono nunca recebeu
+        audit('admin.confirmacao.falhou', ctx, { acao });
+        throw new AdminError(502, 'Não consegui mandar a chave pela DM. Confira se a Yui pode te mandar mensagem privada e tente de novo.');
+      }
+      audit('admin.confirmacao.pedida', ctx, { acao });
+      return { ok: true, acao, expiraEmSegundos: emitida.expiraEmSegundos };
+    },
+
+    async decidirPlano(ctx, id, body = {}) {
+      requireOwner(ctx);
+      if (!planosPeloPainel()) throw new AdminError(404, 'Aprovar planos pelo painel está desligado ("Aprovar e recusar planos pelo painel" em Configuração e chaves).');
+      const planoId = String(id ?? '');
+      if (!/^[0-9a-f]{6,32}$/.test(planoId)) throw new AdminError(400, 'Plano inválido.');
+      const versao = Number(body?.versao);
+      if (!Number.isInteger(versao) || versao < 1 || versao > 1000) throw new AdminError(400, 'Informe a versão do plano.');
+      const hash = typeof body?.hash === 'string' ? body.hash : '';
+      if (!/^[0-9a-f]{16,128}$/.test(hash)) throw new AdminError(400, 'Informe o hash do plano (16 caracteres ou mais).');
+      if (typeof body?.aprovar !== 'boolean') throw new AdminError(400, 'Informe aprovar: true ou false.');
+      // o limite conta só o pedido que chegaria à decidir() (o corpo fora do formato já parou acima)
+      if (passouDoLimite(decisoesRecentes, LIMITE_DAS_DECISOES)) throw new AdminError(429, 'Muitas decisões seguidas. Espere um minuto e tente de novo.');
+      // Correção C2: APROVAR pelo painel pede a chave de confirmação pela DM, presa a este plano (id, versão e hash). Recusar não pede.
+      if (body.aprovar === true) await exigirChave(ctx, 'plano.aprovar', alvoDoPlano(planoId, versao, hash), body?.confirmacao);
+      const servico = await servicoDosPlanos();
+      if (typeof servico?.decidir !== 'function') {
+        throw planosLigados() ? new AdminError(503, 'Os planos estão indisponíveis agora (o serviço não subiu neste processo).') : new AdminError(409, 'Os planos estão desligados.');
+      }
+      const r = await servico.decidir({ userId: String(ctx.userId ?? ''), id: planoId, versao, hash, aprovar: body.aprovar, origem: 'painel' });
+      // Correção C1: plano que manda texto da pessoa para fora só se aprova pela DM (o serviço decide; o painel recebe 409 e o plano segue aguardando).
+      if (r?.codigo === 'so-pela-dm') throw new AdminError(409, linhaCurta(r.text, 200));
+      return { ok: r?.ok === true, final: r?.final !== false, texto: linhaCurta(r?.text, 200) || 'Não consegui decidir agora.' };
+    },
+    /**
+     * Entra numa live do YouTube (item 4 v2; YUI_YOUTUBE_LIVE, desligada = 404). Monta o MESMO comando da conversa ("entra na live <link> [por N horas]") e o
+     * passa ao MESMO rotear() do serviço, pelo canal do app: as mesmas validações do link, o mesmo ritmo pela duração, a mesma autorização do canal da Yui e os
+     * mesmos limites de cota. Devolve a frase do serviço e se ela entrou. A auditoria leva só as horas e o resultado (nunca o link).
+     */
+    async entrarNaLive(ctx, body = {}) {
+      requireOwner(ctx);
+      const { youtubeLigado } = await import('../../adaptadores/youtube/adaptador.js');
+      if (!youtubeLigado()) throw new AdminError(404, LIVE_DESLIGADA);
+      const endereco = typeof body?.endereco === 'string' ? body.endereco.trim() : '';
+      if (!endereco || endereco.length > 300 || /[\s<>\u0000-\u001f\u007f-\u009f]/.test(endereco)) throw new AdminError(400, LINK_DA_LIVE_INVALIDO);
+      let horas = null;
+      if (body?.horas !== undefined && body?.horas !== null && body?.horas !== '') {
+        horas = Number(body.horas);
+        if (!Number.isInteger(horas) || horas < 1 || horas > 99) throw new AdminError(400, 'A duração vai em horas inteiras, de 1 a 99 (ou deixe em branco).');
+      }
+      const { pedidoDeLive } = await import('../../adaptadores/youtube/pedido.js');
+      const texto = `entra na live ${endereco}${horas ? ` por ${horas} horas` : ''}`;
+      const pedido = pedidoDeLive(texto);
+      if (pedido?.tipo !== 'entrar' || (pedido.horas ?? null) !== horas) throw new AdminError(400, LINK_DA_LIVE_INVALIDO);
+      // o limite conta só o pedido que chegaria ao serviço (o link fora do formato já parou acima)
+      if (passouDoLimite(entradasRecentes, LIMITE_DAS_ENTRADAS)) throw new AdminError(429, 'Muitos pedidos de entrar seguidos. Espere um minuto e tente de novo.');
+      const servico = await servicoDaLive();
+      const antes = retratoDaLive(servico);
+      const r = await servico.rotear({ userId: String(ctx.userId ?? ''), texto, canal: 'app' });
+      if (r?.handled !== true) throw new AdminError(503, 'A live está indisponível agora.');
+      const depois = retratoDaLive(servico);
+      const ok = depois.ativo && depois.desde !== null && depois.desde !== antes.desde;
+      audit('admin.live.enter', ctx, { origem: 'painel', ...(horas ? { horas } : {}), ok });
+      return { ok, texto: linhaCurta(r.text, 600) };
+    },
+    /** Sai da live (item 4 v2): o MESMO "sai da live" da conversa, pelo canal do app. Sem limite de repetição (a parada tem de funcionar sempre). */
+    async sairDaLive(ctx) {
+      requireOwner(ctx);
+      const { youtubeLigado } = await import('../../adaptadores/youtube/adaptador.js');
+      if (!youtubeLigado()) throw new AdminError(404, LIVE_DESLIGADA);
+      const servico = await servicoDaLive();
+      const antes = retratoDaLive(servico);
+      const r = await servico.rotear({ userId: String(ctx.userId ?? ''), texto: 'sai da live', canal: 'app' });
+      if (r?.handled !== true) throw new AdminError(503, 'A live está indisponível agora.');
+      const ok = antes.ativo && !retratoDaLive(servico).ativo;
+      audit('admin.live.leave', ctx, { origem: 'painel', ok });
+      return { ok, texto: linhaCurta(r.text, 300) };
+    },
+
+    // ── Lacunas do painel, entrega F, parte 2 (27/11/2026; item 14; docs/DESENHO_PAINEL_APROVACAO_E_GOOGLE.md seção 2): REAUTORIZAR O GOOGLE pelo painel, com
+    //    YUI_GOOGLE_REAUTORIZAR_PAINEL (desligada = 404). SÓ O DONO, no routeGuard (admin.google_reauth) e fora do PANEL_ACTIONS: o Google vive no processo da API.
+    //    A resposta e a auditoria nunca levam token, client_secret, código, verificador, `state` (fora do link) nem corpo de resposta do Google: só códigos fixos. ──
+    /**
+     * Começa uma reautorização: só com um arquivo de autorização que já existe (a primeira vez continua pelo script). Devolve SÓ o link de consentimento (Agenda e
+     * Tarefas, somente leitura; nunca o Gmail), até quando ele vale (10 min) e se o Gmail do arquivo atual fica para o script. 5 inícios por hora (429).
+     */
+    async googleReautorizarInicio(ctx, body = {}) {
+      const { r: reaut, textos } = await exigirReautorizacaoLigada(ctx);
+      // Correção C2: começar a reautorização (que vai gravar credencial) pede a chave de confirmação pela DM.
+      await exigirChave(ctx, 'google.reautorizar', 'google', body?.confirmacao);
+      const r = reaut.iniciar({ userId: String(ctx.userId ?? '') });
+      if (!r.ok) {
+        audit('google.reauth.fail', ctx, { etapa: 'inicio', codigo: r.codigo });
+        // começa com "Muitas": o app mostra a frase do servidor no 429 só quando ela começa assim (src/api/client.ts: messageForStatus)
+        if (r.codigo === 'limite') throw new AdminError(429, textos.limite);
+        return { ok: false, codigo: r.codigo, texto: textos[r.codigo] ?? textos.erro };
+      }
+      audit('google.reauth.start', ctx, { gmailFicaNoScript: r.gmailFicaNoScript === true });
+      return { ok: true, link: r.link, expiraEm: r.expiraEm, gmailFicaNoScript: r.gmailFicaNoScript === true };
+    },
+    /**
+     * Conclui com o endereço colado (`{ endereco }`, o da página 127.0.0.1 que não abriu). A sessão é apagada na primeira tentativa, certa ou errada. Devolve só
+     * "autorizado" com a nova validade (7 dias em modo Testando) e o que o Google não concedeu, ou um código fixo de falha com a frase dele.
+     */
+    async googleReautorizarRetorno(ctx, body = {}) {
+      const { r: reaut, textos } = await exigirReautorizacaoLigada(ctx);
+      let r;
+      try {
+        r = await reaut.concluir({ userId: String(ctx.userId ?? ''), endereco: body?.endereco });
+      } catch {
+        r = { ok: false, codigo: 'erro' };
+      }
+      if (!r?.ok) {
+        const codigo = typeof r?.codigo === 'string' && Object.hasOwn(textos, r.codigo) ? r.codigo : 'erro';
+        audit('google.reauth.fail', ctx, { etapa: 'retorno', codigo });
+        return { ok: false, codigo, texto: textos[codigo] };
+      }
+      audit('google.reauth.ok', ctx, { faltam: r.faltam.length ? r.faltam.join(',') : null, gmailFicaNoScript: r.gmailFicaNoScript === true });
+      return { ok: true, codigo: 'autorizado', venceEm: r.venceEm, escopos: r.escopos, faltam: r.faltam, gmailFicaNoScript: r.gmailFicaNoScript === true };
     },
 
     /** Detalhes de um servidor: canais, avisos de YouTube/Twitch e ferramentas liberadas. */
@@ -839,11 +1311,12 @@ export function createAdmin({
       requireOwner(ctx);
       return descreverConfig();
     },
-    async configSet(ctx, chave, valor, confirm) {
+    // `versao`: a que a tela viu (correção C5 do parecer da Liz). Se o Discord ou outra aba gravou no meio, o cofre recusa com 409 e nada é sobrescrito.
+    async configSet(ctx, chave, valor, confirm, versao) {
       requireOwner(ctx);
       if (exigeConfirmacao(chave, valor ?? '')) requireConfirm({ confirm }, 'afrouxar um ajuste de privacidade ou segurança');
       try {
-        const r = definirConfig(chave, valor);
+        const r = definirConfig(chave, valor, process.env, { versao });
         audit('admin.config.set', ctx, { chave: r.chave });
         return { ok: true, ...r };
       } catch (e) {
@@ -851,11 +1324,11 @@ export function createAdmin({
         throw e;
       }
     },
-    async configRemove(ctx, chave, confirm) {
+    async configRemove(ctx, chave, confirm, versao) {
       requireOwner(ctx);
       if (exigeConfirmacao(chave)) requireConfirm({ confirm }, 'remover um ajuste de privacidade ou segurança');
       try {
-        const r = removerConfig(chave);
+        const r = removerConfig(chave, process.env, { versao });
         audit('admin.config.remove', ctx, { chave: r.chave });
         return { ok: true, ...r };
       } catch (e) {
@@ -923,20 +1396,63 @@ export function createAdmin({
       return { sessions };
     },
 
-    async radioAction(ctx, guildId, action) {
+    /**
+     * Uma ação no rádio de um servidor. `pause`, `resume`, `stop` e `leave` (as de sempre) e, do item 10: `start` ({ voiceChannelId, textChannelId }: liga
+     * o rádio sem ninguém na call), `skip` (próxima faixa), `play` ({ query }: gênero, música ou link) e `choose` ({ opcao }: o número de uma das opções de
+     * uma busca ambígua). A auditoria guarda só a ação e o servidor, NUNCA a busca digitada nem a faixa.
+     */
+    async radioAction(ctx, guildId, action, body = {}) {
       requireOwner(ctx);
       const id = requireId(guildId, 'ID do servidor');
       if (!RADIO_ACTIONS.includes(action)) throw new AdminError(400, `Ação inválida. Use: ${RADIO_ACTIONS.join(', ')}.`);
+      const b = body && typeof body === 'object' ? body : {};
       const r = await radioDeps();
+      if (action === 'start') return iniciarRadio(ctx, id, b, r);
       if (!r.getSession(id)) throw new AdminError(404, 'Não há sessão de rádio nesse servidor.');
+      if (action === 'play') {
+        const busca = buscaDoRadio(b.query);
+        if (!busca) throw new AdminError(400, 'Diga o gênero, a música ou o link (2 a 200 caracteres, numa linha só).');
+        const out = await tocarNoRadio(ctx, id, r, busca);
+        audit('admin.radio', ctx, { guild: id, action });
+        return { ok: true, ...out };
+      }
+      if (action === 'choose') {
+        const pendente = escolhasDoRadio.get(id);
+        if (!pendente || pendente.ate <= agoraMs()) {
+          escolhasDoRadio.delete(id);
+          throw new AdminError(409, 'Não há opções esperando escolha nesse servidor (ou elas venceram). Busque de novo.');
+        }
+        const n = b.opcao;
+        if (!Number.isInteger(n) || n < 0 || n >= pendente.opcoes.length) throw new AdminError(400, 'Opção inválida.');
+        escolhasDoRadio.delete(id);
+        const out = respostaDaFila(await r.enqueue(id, { type: 'track', track: pendente.opcoes[n] }, String(ctx.userId ?? ''), client));
+        audit('admin.radio', ctx, { guild: id, action });
+        return { ok: true, ...out };
+      }
+      if (action === 'skip') {
+        const proxima = await r.skip(id, client);
+        audit('admin.radio', ctx, { guild: id, action });
+        return proxima ? { ok: true, resultado: 'tocando', faixa: faixaCurta(proxima) } : { ok: true, resultado: 'fim-da-fila' };
+      }
       let ok = true;
       if (action === 'pause') ok = await r.pause(id);
       else if (action === 'resume') ok = await r.resume(id);
       else if (action === 'stop') await r.stopMusic(id);
       else await r.leave(id);
       if (ok === false) throw new AdminError(409, 'Não há nada tocando agora.');
+      if (action === 'stop' || action === 'leave') escolhasDoRadio.delete(id);
       audit('admin.radio', ctx, { guild: id, action });
       return { ok: true };
+    },
+
+    /**
+     * Os canais de um servidor para iniciar o rádio (item 10; só leitura, fora do routeGuard como as outras leituras): os de voz (nome, pessoas na call e se
+     * a Yui pode entrar e falar) e os de texto (se ela pode escrever com embeds). Só canais deste servidor.
+     */
+    async radioCanais(ctx, guildId) {
+      requireOwner(ctx);
+      const guild = findGuild(guildId);
+      return { guildId: guild.id, ...canaisDoRadio(guild) };
     },
 
     /** Últimas linhas dos logs (segredos mascarados). Só leitura. */
@@ -1024,6 +1540,61 @@ export function createAdmin({
       return { ok: true, escopo: 'processo-unico', message: 'Reiniciando… volto em alguns segundos.' };
     },
   };
+  return comFreioDeRepeticao(metodos, { agora: relogio });
+}
+
+/**
+ * Correção C6 do parecer da Liz (docs/PLANO_LACUNAS_PAINEL_CORRECOES.md): as ações do painel que NÃO são idempotentes (repetir faz de novo: cria outro
+ * lembrete, manda outra DM, reinicia de novo, pula outra faixa, chama o provedor de novo) ganham um freio contra o clique duplo: o MESMO pedido (mesma
+ * pessoa, mesma ação, mesmos argumentos) enquanto o primeiro roda ou até FREIO_DE_REPETICAO_MS depois que ele deu certo é recusado com 429, e nada é feito
+ * de novo. Um pedido diferente passa na hora; um pedido que FALHOU não segura o próximo (nada foi feito, então tentar de novo é seguro).
+ * As outras ações de escrita já são idempotentes (gravar um valor, tirar algo que já saiu) ou já têm limite próprio (planos, live, GTA, Google, rota
+ * privada, DM de teste); sair da live fica sem freio de propósito (a parada tem de funcionar sempre). A lista é conferida em tests/test-painel-escritas.js.
+ * Só o resumo (hash) dos argumentos fica na memória, por FREIO_DE_REPETICAO_MS: nunca o conteúdo (uma chave de IA, por exemplo).
+ */
+// Fora de propósito (já são idempotentes ou recusam a duplicata com a mensagem própria): seguir canal (a segunda vez só diz que já segue), banir
+// (o mesmo banimento de novo), cadastrar chave ou provedor de IA (a mesma chave ou o mesmo ID dá 409 "já está cadastrada").
+export const ACOES_COM_FREIO = Object.freeze(['addReminder', 'snoozeReminder', 'morningSend', 'restart', 'aiTest', 'radioAction']);
+/**
+ * Ações em que só ALGUNS pedidos levam o freio. Rádio: só o tocar (a mesma busca de novo entraria duas vezes na fila). Pular duas faixas seguidas é de
+ * propósito; iniciar de novo o rádio já recusa sozinho ("já estou em outro canal"); escolher vale uma vez; parar é idempotente.
+ */
+const FREIO_SO_QUANDO = Object.freeze({ radioAction: (_guildId, acao) => acao === 'play' });
+export const FREIO_DE_REPETICAO_MS = 5_000;
+
+/** Correção C2: o alvo da chave de aprovar um plano (o mesmo id, versão e prefixo de 16 do hash que a decisão manda). */
+export const alvoDoPlano = (id, versao, hash) => `${String(id)}:${Number(versao)}:${String(hash).slice(0, 16)}`;
+export const TEXTO_PEDIDO_REPETIDO = 'Muitos pedidos iguais seguidos: espere alguns segundos e confira se o primeiro já foi feito.';
+
+function comFreioDeRepeticao(metodos, { agora = () => Date.now(), janelaMs = FREIO_DE_REPETICAO_MS } = {}) {
+  const vistos = new Map(); // resumo do pedido -> quando
+  for (const nome of ACOES_COM_FREIO) {
+    const original = metodos[nome];
+    if (typeof original !== 'function') continue;
+    metodos[nome] = async function freado(ctx, ...args) {
+      // Só o dono passa por estas ações: para os outros, o próprio método responde 403 (o freio nunca troca a recusa de permissão por um 429).
+      if (ctx?.role !== ROLES.OWNER) return original.call(this, ctx, ...args);
+      if (FREIO_SO_QUANDO[nome] && !FREIO_SO_QUANDO[nome](...args)) return original.call(this, ctx, ...args);
+      const t = agora();
+      for (const [k, quando] of vistos) if (t - quando >= janelaMs) vistos.delete(k);
+      let resumo;
+      try { resumo = crypto.createHash('sha256').update(JSON.stringify([nome, String(ctx?.userId ?? ''), args])).digest('hex'); } catch { resumo = null; }
+      if (resumo && vistos.has(resumo)) {
+        audit('admin.negado', ctx, { acao: nome, status: 429, motivo: 'repetido' });
+        throw new AdminError(429, TEXTO_PEDIDO_REPETIDO);
+      }
+      // A marca vale enquanto o primeiro pedido roda (o clique duplo simultâneo também é barrado) e depois que ele DEU CERTO. Se ele falhou (recusa,
+      // erro, Discord fora), a marca sai: corrigir o problema e tentar de novo funciona na hora, porque nada foi feito.
+      if (resumo) vistos.set(resumo, t);
+      try {
+        return await original.call(this, ctx, ...args);
+      } catch (err) {
+        if (resumo) vistos.delete(resumo);
+        throw err;
+      }
+    };
+  }
+  return metodos;
 }
 
 function safeIsPermanent() {

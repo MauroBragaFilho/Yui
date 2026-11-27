@@ -30,6 +30,8 @@ export class PainelConfigError extends Error {
 
 const bool = (v) => ({ tipo: 'bool', ...v });
 const inteiro = (v) => ({ tipo: 'int', ...v });
+// Número com casas decimais (lacunas do painel, item 6: a temperatura da IA). `casas`: quantas casas depois do ponto (padrão 2); aceita vírgula.
+const decimal = (v) => ({ tipo: 'decimal', casas: 2, ...v });
 const opcao = (v) => ({ tipo: 'enum', ...v });
 const texto = (v) => ({ tipo: 'texto', ...v });
 const segredo = (v) => ({ tipo: 'segredo', secreto: true, ...v });
@@ -57,15 +59,60 @@ export const CATALOGO = Object.freeze([
   // Inteligência
   bool({ chave: 'YUI_IA_REFAZER_RECUSA', rotulo: 'Refazer recusa genérica em perguntas de jogo', grupo: 'Inteligência', descricao: 'Se um modelo só disser "não posso ajudar" a uma pergunta de GTA Online, tenta uma vez de novo com o contexto do jogo.', reinicio: false, padrao: 'false' }),
   bool({ chave: 'YUI_SKILLS', rotulo: 'Skills no padrão aberto', grupo: 'Inteligência', descricao: 'Liga o carregador de skills (só o dono, só no privado; nunca executa nada vindo de uma skill).', reinicio: false, padrao: 'false' }),
+  // Lacunas do painel, item 2 (26/11/2026): as chaves que só existiam no .env. O padrão de cada uma é o do código (sem o cofre nada muda).
+  bool({ chave: 'YUI_VISION', rotulo: 'Ver imagens anexadas', grupo: 'Inteligência', descricao: 'A Yui olha as imagens anexadas à mensagem (por um modelo com visão: Gemini e, de reserva, Groq) e responde com base nelas. Desligado, ela ignora as imagens.', reinicio: false, padrao: 'true' }),
+  // Lacunas do painel, item 6 (26/11/2026; decisão do dono: "gravar no mesmo cofre"): a configuração da IA que só existia no painel do Discord (/yui-criador
+  // bot_config e /yui-config_ia). O Discord e o painel web gravam AQUI (src/core/ajustesPeloDiscord.js). O padrão de cada um é o do código (sem o cofre nada muda).
+  //  - mostrar o modelo, novas tentativas e temperatura/prazo/tamanho por provedor da cadeia do bot: lidos a CADA USO só pelo bot (src/core/ai/ajustesIa.js); o
+  //    cérebro não os lê (o tamanho chega a ele pelo fato do canal que o bot manda a cada turno). Por isso valem na hora;
+  //  - os modelos: lidos na SUBIDA pelos dois processos (src/config/index.js e o Gateway): pedem reinício;
+  //  - os endereços (URLs) ficam de fora de propósito: decidem para onde vão a chave e a conversa.
+  bool({ chave: 'YUI_IA_MOSTRAR_MODELO', rotulo: 'Mostrar qual modelo respondeu', grupo: 'Inteligência', descricao: 'No Discord, o rodapé da resposta mostra o nome do modelo de IA que respondeu. Bom para conferir; polui um pouco a conversa.', reinicio: false, padrao: 'false' }),
+  bool({ chave: 'YUI_IA_MOSTRAR_MODELO_PENSANDO', rotulo: 'Mostrar o modelo enquanto pensa', grupo: 'Inteligência', descricao: 'No Discord, a mensagem de "pensando..." mostra qual modelo está tentando responder naquele momento.', reinicio: false, padrao: 'false' }),
+  inteiro({ chave: 'YUI_IA_RETENTATIVAS', rotulo: 'Novas tentativas quando a resposta vem quebrada', grupo: 'Inteligência', descricao: 'Quantas vezes a Yui pede de novo ao modelo quando a resposta vem com erro (ferramenta escrita como texto, formato inválido). 0 = nenhuma. Muitas tentativas deixam a resposta lenta.', reinicio: false, min: 0, max: 10, padrao: '0' }),
+  bool({ chave: 'YUI_IA_CONTEXTO_DO_SERVIDOR', rotulo: 'Contar à IA o servidor e o canal', grupo: 'Inteligência', descricao: 'Manda à IA o nome do servidor e do canal da conversa, para ela saber onde está. Desligado, economiza um pouco de cota.', reinicio: false, padrao: 'true' }),
+  texto({ chave: 'GEMINI_MODEL', rotulo: 'Gemini: modelo principal', grupo: 'Inteligência', descricao: 'Nome do modelo do Google Gemini, por exemplo gemini-flash-lite-latest. Nome aposentado pelo Google é trocado sozinho pelo apelido atual.', reinicio: true, max: 120, padrao: 'gemini-flash-lite-latest', formato: /^[A-Za-z0-9][\w.:@/-]{0,119}$/ }),
+  texto({ chave: 'GEMINI_MODEL_FALLBACK', rotulo: 'Gemini: modelo reserva', grupo: 'Inteligência', descricao: 'Modelo do Gemini tentado quando o principal falha em todas as chaves. Use um diferente do principal.', reinicio: true, max: 120, padrao: 'gemini-flash-latest', formato: /^[A-Za-z0-9][\w.:@/-]{0,119}$/ }),
+  texto({ chave: 'GROQ_MODEL', rotulo: 'Groq: modelo', grupo: 'Inteligência', descricao: 'Nome do modelo no Groq, por exemplo openai/gpt-oss-120b.', reinicio: true, max: 120, padrao: 'openai/gpt-oss-120b', formato: /^[A-Za-z0-9][\w.:@/-]{0,119}$/ }),
+  texto({ chave: 'HF_MODEL', rotulo: 'Hugging Face: modelo', grupo: 'Inteligência', descricao: 'Nome completo do modelo no Hugging Face (Organização/Modelo), por exemplo Qwen/Qwen2.5-72B-Instruct.', reinicio: true, max: 120, padrao: 'Qwen/Qwen2.5-72B-Instruct', formato: /^[A-Za-z0-9][\w.:@/-]{0,119}$/ }),
+  texto({ chave: 'LOCAL_LLM_MODEL', rotulo: 'LM Studio: modelo', grupo: 'Inteligência', descricao: 'Nome do modelo carregado no LM Studio ou no Ollama. Sem valor, vale o AI_MODEL do .env ou local-model.', reinicio: true, max: 120, padrao: 'local-model', formato: /^[A-Za-z0-9][\w.:@/-]{0,119}$/ }),
+  decimal({ chave: 'YUI_IA_LMSTUDIO_TEMPERATURA', rotulo: 'LM Studio: temperatura', grupo: 'Inteligência', descricao: 'Criatividade do modelo local: perto de 0 responde de forma previsível; acima de 1 fica mais solto e pode se perder.', reinicio: false, min: 0, max: 2, padrao: '0.7' }),
+  inteiro({ chave: 'YUI_IA_LMSTUDIO_TIMEOUT_MS', rotulo: 'LM Studio: prazo (milissegundos)', grupo: 'Inteligência', descricao: 'Quanto a Yui espera o modelo local antes de passar para o próximo provedor. 60000 = 1 minuto.', reinicio: false, min: 5000, max: 300000, padrao: '60000' }),
+  inteiro({ chave: 'YUI_IA_LMSTUDIO_MAX_TOKENS', rotulo: 'LM Studio: tamanho máximo da resposta (tokens)', grupo: 'Inteligência', descricao: 'Limite de tokens da resposta do modelo local (1 token é cerca de 3/4 de palavra). Sem ajuste, vale o padrão (ou o YUI_REPLY_MAX_TOKENS do .env).', reinicio: false, min: 64, max: 8192, padrao: '1024' }),
+  decimal({ chave: 'YUI_IA_GEMINI_TEMPERATURA', rotulo: 'Gemini: temperatura', grupo: 'Inteligência', descricao: 'Criatividade do Gemini: perto de 0 responde de forma previsível; acima de 1 fica mais solto.', reinicio: false, min: 0, max: 2, padrao: '0.7' }),
+  inteiro({ chave: 'YUI_IA_GEMINI_TIMEOUT_MS', rotulo: 'Gemini: prazo (milissegundos)', grupo: 'Inteligência', descricao: 'Quanto a Yui espera o Gemini antes de passar para o próximo provedor. 60000 = 1 minuto.', reinicio: false, min: 5000, max: 300000, padrao: '60000' }),
+  inteiro({ chave: 'YUI_IA_GEMINI_MAX_TOKENS', rotulo: 'Gemini: tamanho máximo da resposta (tokens)', grupo: 'Inteligência', descricao: 'Limite de tokens da resposta do Gemini no Discord (vale também com o cérebro separado). O app não herda este ajuste. Sem ajuste, vale o padrão (ou o YUI_REPLY_MAX_TOKENS do .env).', reinicio: false, min: 64, max: 8192, padrao: '2048' }),
+  inteiro({ chave: 'YUI_IA_POLLINATIONS_TIMEOUT_MS', rotulo: 'Pollinations: prazo (milissegundos)', grupo: 'Inteligência', descricao: 'Quanto a Yui espera o Pollinations (gratuito, anônimo e às vezes lento) antes de desistir dele.', reinicio: false, min: 5000, max: 300000, padrao: '60000' }),
+  inteiro({ chave: 'YUI_IA_POLLINATIONS_MAX_TOKENS', rotulo: 'Pollinations: tamanho máximo da resposta (tokens)', grupo: 'Inteligência', descricao: 'Limite de tokens da resposta do Pollinations quando a conversa do Discord passa pelo cérebro separado. Sem ajuste, vale o padrão (ou o YUI_REPLY_MAX_TOKENS do .env).', reinicio: false, min: 64, max: 4096, padrao: '1024' }),
+  decimal({ chave: 'YUI_IA_HF_TEMPERATURA', rotulo: 'Hugging Face: temperatura', grupo: 'Inteligência', descricao: 'Criatividade do modelo do Hugging Face: valores baixos para assuntos técnicos, altos para conversa solta.', reinicio: false, min: 0, max: 2, padrao: '0.7' }),
+  inteiro({ chave: 'YUI_IA_HF_TIMEOUT_MS', rotulo: 'Hugging Face: prazo (milissegundos)', grupo: 'Inteligência', descricao: 'Quanto a Yui espera o Hugging Face antes de passar para o próximo provedor. Modelos grandes podem precisar de 90000.', reinicio: false, min: 5000, max: 300000, padrao: '60000' }),
+  inteiro({ chave: 'YUI_IA_HF_MAX_TOKENS', rotulo: 'Hugging Face: tamanho máximo da resposta (tokens)', grupo: 'Inteligência', descricao: 'Limite de tokens da resposta do Hugging Face. O plano gratuito pode cortar antes. Sem ajuste, vale o padrão (ou o YUI_REPLY_MAX_TOKENS do .env).', reinicio: false, min: 64, max: 4096, padrao: '512' }),
+  decimal({ chave: 'YUI_IA_HORDE_TEMPERATURA', rotulo: 'AI Horde: temperatura', grupo: 'Inteligência', descricao: 'Criatividade dos modelos do AI Horde (GPUs voluntárias, qualidade variável). Valores moderados ajudam.', reinicio: false, min: 0, max: 2, padrao: '0.7' }),
+  inteiro({ chave: 'YUI_IA_HORDE_TIMEOUT_MS', rotulo: 'AI Horde: prazo (milissegundos)', grupo: 'Inteligência', descricao: 'Quanto a Yui espera a fila do AI Horde (o pedido e a espera pelo resultado). 120000 = 2 minutos.', reinicio: false, min: 10000, max: 300000, padrao: '60000' }),
+  inteiro({ chave: 'YUI_IA_HORDE_MAX_TOKENS', rotulo: 'AI Horde: tamanho máximo da resposta (tokens)', grupo: 'Inteligência', descricao: 'Limite de tokens da resposta do AI Horde. Muitos voluntários aceitam no máximo 256 a 512. Sem ajuste, vale o padrão (ou o YUI_REPLY_MAX_TOKENS do .env, até 512).', reinicio: false, min: 64, max: 2048, padrao: '256' }),
   // Geral
   texto({ chave: 'YUI_FUSO', rotulo: 'Fuso horário do dono', grupo: 'Geral', descricao: 'Por exemplo America/Cuiaba. Sem valor, vale o horário de Brasília. Só muda como as horas são mostradas e lidas.', reinicio: true, max: 60, padrao: '', validar: (v) => { new Intl.DateTimeFormat('pt-BR', { timeZone: v }); } }),
   texto({ chave: 'YUI_CLIMA_CIDADE_PADRAO', rotulo: 'Cidade padrão do clima', grupo: 'Geral', descricao: 'Por exemplo Cuiaba-MT.', reinicio: false, max: 80, padrao: '' }),
   opcao({ chave: 'REDDIT_FETCH_MODE', rotulo: 'Semanal: consulta ao Reddit', grupo: 'Geral', descricao: '"off" não abre o navegador (recomendado em máquina de pouca memória).', reinicio: false, opcoes: ['browser', 'cookies', 'off'], padrao: 'browser' }),
+  bool({ chave: 'GTA_WEEKLY_ENABLED', rotulo: 'Semanal do GTA: conferir e publicar sozinho', grupo: 'Geral', descricao: 'Confere o evento semanal do GTA Online de tempos em tempos e publica nos canais configurados. Desligado, o /gta-semanal continua funcionando.', reinicio: true, padrao: 'true' }),
+  bool({ chave: 'NEWSWIRE_ENABLED', rotulo: 'Notícias da Rockstar: conferir e publicar sozinho', grupo: 'Geral', descricao: 'Confere o Rockstar Newswire de tempos em tempos e publica as notícias novas nos canais de notícias. Desligado, o /gta-noticias continua funcionando.', reinicio: true, padrao: 'false' }),
   bool({ chave: 'YUI_GOOGLE', rotulo: 'Google Agenda e Tarefas (somente leitura)', grupo: 'Geral', descricao: 'Liga a leitura de Agenda e Tarefas. A autorização (token) continua sendo feita à parte.', reinicio: false, padrao: 'false' }),
+  // Lacunas do painel, item 14 (entrega F, 27/11/2026; decisão do dono: "reautorizar o Google pelo painel"): lida A CADA PEDIDO só pela API do painel (o cérebro,
+  // com os dois processos; o bot nunca a lê), por isso vale na hora. Desligada, as duas rotas respondem 404 e só o script renova.
+  bool({ chave: 'YUI_GOOGLE_REAUTORIZAR_PAINEL', confirmar: ['true'], rotulo: 'Reautorizar o Google pelo painel', grupo: 'Geral', descricao: 'Em Admin > Integrações aparece o botão "Reautorizar o Google": a Yui gera o link de consentimento (só Agenda e Tarefas, somente leitura; o Gmail continua só pelo script), você autoriza no navegador e cola de volta o endereço da página que não abre. Só funciona quando já existe a autorização feita pelo script. Desligado, só o script renova.', reinicio: false, padrao: 'false' }),
   // Voz na call e privacidade (na dúvida, deixe desligado)
   bool({ chave: 'YUI_VOZ_UNIFICADA', confirmar: ['true'], rotulo: 'Voz unificada (memória pessoal na call)', grupo: 'Privacidade', descricao: 'ATENÇÃO, PRIVACIDADE: com você sozinho na call, a Yui usa na voz a sua memória pessoal e a persona, e fala isso em voz alta. Quem estiver perto do alto-falante ouve.', reinicio: true, padrao: 'false' }),
   bool({ chave: 'YUI_VOZ_GOOGLE', confirmar: ['true'], rotulo: 'Agenda do Google por voz', grupo: 'Privacidade', descricao: 'ATENÇÃO, PRIVACIDADE: com você sozinho na call, a Yui pode falar os compromissos da sua agenda em voz alta. Só vale com a voz unificada e o Google ligados.', reinicio: true, padrao: 'false' }),
   inteiro({ chave: 'YUI_VOZ_PRAZO_S', rotulo: 'Prazo da resposta na voz unificada (segundos)', grupo: 'Privacidade', descricao: 'Passou desse tempo, a Yui avisa que demorou e não publica a resposta atrasada.', reinicio: true, min: 3, max: 12, padrao: '8' }),
+  bool({ chave: 'YUI_SALVAR_HISTORICO', confirmar: ['true'], rotulo: 'Guardar os pedidos e as respostas num arquivo', grupo: 'Privacidade', descricao: 'ATENÇÃO, PRIVACIDADE: guarda cada pedido feito à Yui por escrito no Discord, a resposta dela, o nome e o ID de quem pediu e o servidor no arquivo historico.txt do computador da Yui (a fala da call nunca entra). Serve para conferir depois; o arquivo só cresce.', reinicio: false, padrao: 'true' }),
+  // Moderação (o dono nunca é banido; a lista de bans continua na aba Bans)
+  bool({ chave: 'REQUIRE_TOS', confirmar: ['false'], rotulo: 'Exigir os Termos de Uso nos servidores', grupo: 'Moderação', descricao: 'ATENÇÃO: desligado, a Yui passa a responder em servidores que nunca aceitaram os Termos de Uso.', reinicio: true, padrao: 'true' }),
+  opcao({ chave: 'YUI_AUTOMOD_AI_BAN', confirmar: ['auto'], rotulo: 'Ban decidido pela IA (AutoMod)', grupo: 'Moderação', descricao: '"review": a IA só propõe o ban e você decide pelo botão do aviso. "auto": ATENÇÃO, a IA bane sozinha, na hora, sem passar por você.', reinicio: false, opcoes: ['review', 'auto'], padrao: 'review' }),
+  // Item 6 (26/11/2026): os ajustes de moderação do painel do Discord, lidos a cada uso pelo bot (getters de src/config/index.js). Nomes YUI_* novos de propósito:
+  // os antigos (DEFAULT_AUTOMOD, AUTOMOD_MODE, APPEAL_CHANNEL_ID...) nunca foram lidos, e reaproveitá-los ligaria de surpresa um valor esquecido num .env.
+  bool({ chave: 'YUI_AUTOMOD_PADRAO', confirmar: ['false'], rotulo: 'AutoMod nos servidores sem ajuste próprio', grupo: 'Moderação', descricao: 'Vale para servidor novo e para todo servidor onde o AutoMod nunca foi ajustado. ATENÇÃO: desligado, esses servidores ficam sem moderação automática.', reinicio: false, padrao: 'true' }),
+  opcao({ chave: 'YUI_AUTOMOD_MODO_PADRAO', confirmar: ['off'], rotulo: 'Modo do AutoMod nos servidores sem ajuste próprio', grupo: 'Moderação', descricao: '"both": ferramentas perigosas da IA e palavras proibidas; "mcp": só as ferramentas; "trigger": só as palavras; "off": ATENÇÃO, nenhum. Servidor com ajuste próprio não muda.', reinicio: false, opcoes: ['both', 'mcp', 'trigger', 'off'], padrao: 'both' }),
+  texto({ chave: 'YUI_CANAL_APELACOES', rotulo: 'Canal das apelações de banimento', grupo: 'Moderação', descricao: 'ID do canal do Discord que recebe os pedidos de revisão de quem foi bloqueado. Vazio: o pedido não chega a canal nenhum.', reinicio: false, max: 20, padrao: '', formato: /^\d{17,20}$/ }),
   // Contexto das conversas, pesquisa e clima
   bool({ chave: 'YUI_CONTEXT_ENABLED', confirmar: ['true'], rotulo: 'Contexto das conversas por horas', grupo: 'Conversa', descricao: 'A Yui lembra as últimas falas de cada conversa por algumas horas (ficam guardadas no computador). O alcance (só você ou todos) continua no .env.', reinicio: true, padrao: 'false' }),
   inteiro({ chave: 'YUI_CONTEXT_TTL_HOURS', rotulo: 'Por quantas horas lembrar', grupo: 'Conversa', descricao: 'Depois desse tempo a fala é descartada. Vale na hora: diminuir apaga de vez as falas mais antigas que o novo prazo.', reinicio: false, min: 1, max: 48, padrao: '6' }),
@@ -75,9 +122,16 @@ export const CATALOGO = Object.freeze([
   bool({ chave: 'YUI_APP_COMANDOS', confirmar: ['true'], rotulo: 'Listas, lembretes e memória pelo chat do app', grupo: 'Conversa', descricao: 'O seu chat no painel e no app entende os pedidos de lista, lembrete, resumo do dia e memória, como a sua DM.', reinicio: true, soNaSubida: true, padrao: 'false' }),
   bool({ chave: 'YUI_PLANOS', confirmar: ['true'], rotulo: 'Planos com aprovação (só leitura)', grupo: 'Conversa', descricao: 'Na sua DM, "monta um plano: ..." gera um plano de leituras que só começa quando você toca em Aprovar. Cada leitura passa pelas regras de segurança.', reinicio: true, soNaSubida: true, padrao: 'false' }),
   bool({ chave: 'YUI_PLANOS_AUTO', confirmar: ['true'], rotulo: 'Aprovar planos automaticamente', grupo: 'Conversa', descricao: 'ATENÇÃO: o plano que você pedir na DM começa sem o botão Aprovar (a pesquisa na web continua pedindo). "só o plano: ..." mantém os botões. Só vale com os planos ligados.', reinicio: true, soNaSubida: true, padrao: 'false' }),
+  // Lacunas do painel, item 3 v2 (27/11/2026; decisão do dono: "ver e aprovar"): lida A CADA PEDIDO só pela API do painel (o cérebro, com os dois processos;
+  // o bot nunca a lê), por isso vale na hora. Desligada, a rota de decisão responde 404 e a tela só mostra.
+  bool({ chave: 'YUI_PLANOS_PAINEL', confirmar: ['true'], rotulo: 'Aprovar e recusar planos pelo painel', grupo: 'Conversa', descricao: 'Os planos que esperam a sua aprovação ganham os botões Aprovar e Recusar em Admin > Planos e avisos, com as mesmas regras dos botões da DM (o mesmo plano, a mesma versão, dentro dos 30 minutos; o primeiro a decidir vale). Desligado, o painel só mostra. Só vale com os planos ligados.', reinicio: false, padrao: 'false' }),
   bool({ chave: 'YUI_YOUTUBE_LIVE', confirmar: ['true'], rotulo: 'Yui no chat de uma live do YouTube', grupo: 'Conversa', descricao: 'ATENÇÃO: a Yui escreve em público. Na sua DM ou no app: "entra na live <link>", "sai da live", "como está a live". Precisa da autorização do canal dela (docs/GUIA_YOUTUBE_LIVE.md).', reinicio: true, soNaSubida: true, padrao: 'false' }),
   bool({ chave: 'YUI_CONTINUIDADE', confirmar: ['true'], rotulo: 'Registrar projetos e decisões', grupo: 'Conversa', descricao: 'Na sua DM e no app, guarda projetos e decisões quando você pede, sempre perguntando antes.', reinicio: false, padrao: 'false' }),
   opcao({ chave: 'YUI_PESQUISA_POR_INTENCAO', rotulo: 'Pesquisar sozinha quando a pergunta pede', grupo: 'Conversa', descricao: '"off" nunca; "servidor" só nos servidores; "dono" nos servidores e na sua DM (a DM ainda depende da pesquisa privada liberada no .env).', reinicio: false, opcoes: ['off', 'servidor', 'dono'], padrao: 'dono' }),
+  bool({ chave: 'YUI_RESEARCH_ENABLED', rotulo: 'Agente de pesquisa na web', grupo: 'Conversa', descricao: 'O agente pesquisa, lê as páginas e responde citando as fontes. Desligado, volta o jeito antigo da busca (uma resposta simples sobre os resultados), sem a pré-rota e sem transformar um "vou pesquisar" em pesquisa.', reinicio: false, padrao: 'true' }),
+  bool({ chave: 'YUI_MEMORY_ENABLED', confirmar: ['false'], rotulo: 'Memória por usuário', grupo: 'Conversa', descricao: 'A Yui guarda o que cada pessoa conta e usa nas respostas. ATENÇÃO: desligado, ela para de usar e de guardar lembranças (desligar não apaga nada).', reinicio: false, padrao: 'false' }),
+  bool({ chave: 'YUI_LISTS_ENABLED', rotulo: 'Listas pessoais pela conversa', grupo: 'Conversa', descricao: '"anota na lista de compras: leite", "mostra a lista de compras". Cada pessoa só mexe nas próprias listas.', reinicio: false, padrao: 'true' }),
+  bool({ chave: 'YUI_REMINDERS_ENABLED', rotulo: 'Lembretes pela conversa', grupo: 'Conversa', descricao: '"me lembra amanhã às 9h de ...", "meus lembretes". Desligado, a conversa não cria nem muda lembretes; os já marcados continuam chegando.', reinicio: false, padrao: 'true' }),
   bool({ chave: 'YUI_CLIMA', rotulo: 'Consulta de clima e previsão', grupo: 'Conversa', descricao: 'Responde perguntas de tempo e previsão consultando o Open-Meteo.', reinicio: false, padrao: 'true' }),
   // Monitores, alertas e relatório matinal
   bool({ chave: 'YUI_MONITORES', rotulo: 'Monitores de busca ("me avisa quando...")', grupo: 'Monitores', descricao: 'Só com o cérebro separado. Gasta cota de busca e avisa só você, por DM.', reinicio: true, padrao: 'false' }),
@@ -96,6 +150,7 @@ export const CATALOGO = Object.freeze([
   inteiro({ chave: 'YUI_AVISOS_POR_DIA', rotulo: 'Teto de avisos por dia', grupo: 'Alertas', descricao: 'Avisos importantes e informativos.', reinicio: false, min: 0, max: 100, padrao: '8' }),
   bool({ chave: 'YUI_MORNING_REPORT', rotulo: 'Relatório matinal por DM', grupo: 'Relatório', descricao: 'Lembretes do dia, pendências e a saúde da Yui. Desligado, volta o relatório só de saúde.', reinicio: true, padrao: 'true' }),
   inteiro({ chave: 'YUI_MORNING_REPORT_HOUR', rotulo: 'Hora do relatório matinal', grupo: 'Relatório', descricao: 'No seu fuso horário.', reinicio: true, min: 0, max: 23, padrao: '8' }),
+  bool({ chave: 'YUI_HEALTH_REPORT', rotulo: 'Relatório de saúde diário', grupo: 'Relatório', descricao: 'Só vale com o relatório matinal desligado: uma DM por dia com o estado da Yui (memória, disco, erros, reconexões).', reinicio: true, padrao: 'true' }),
   // Ajustes finos da voz (o texto sensível na nuvem e a lista de provedores continuam só no .env)
   bool({ chave: 'YUI_TTS_ENABLED', rotulo: 'Yui fala na call', grupo: 'Voz', descricao: 'Desligado, a Yui responde só por texto.', reinicio: true, padrao: 'true' }),
   texto({ chave: 'YUI_TTS_OMNIROUTE_MODELO', rotulo: 'Modelo de voz no OmniRoute', grupo: 'Voz', descricao: 'Nome do modelo exatamente como o OmniRoute mostra.', reinicio: true, max: 120, padrao: 'google/gemini-3.8-flash-tts', formato: /^[A-Za-z0-9][\w.:@/-]{0,119}$/ }),
@@ -122,6 +177,9 @@ export const CATALOGO = Object.freeze([
   inteiro({ chave: 'YUI_DL_MAX_CONCURRENT', rotulo: 'Downloads ao mesmo tempo', grupo: 'Mídia', descricao: 'O dono nunca é barrado por esse teto.', reinicio: false, min: 1, max: 50, padrao: '3' }),
   inteiro({ chave: 'YUI_UPLOAD_LIMIT_MB', rotulo: 'Limite de anexo do Discord (MB)', grupo: 'Mídia', descricao: 'Acima do que o Discord aceita, o envio falha.', reinicio: false, min: 1, max: 100, padrao: '10' }),
   inteiro({ chave: 'YUI_IMAGE_PER_HOUR', rotulo: 'Imagens por pessoa por hora', grupo: 'Mídia', descricao: 'O dono não tem limite.', reinicio: false, min: 1, max: 100, padrao: '6' }),
+  // Lacunas do painel, item 11: lida a cada pedido só pela API (a pré-rota e a ferramenta de imagem do chat, src/core/imagemDoApp.js), então vale na hora.
+  bool({ chave: 'YUI_APP_IMAGEM', rotulo: 'Gerar imagem pelo Chat do app', grupo: 'Mídia', descricao: 'Pedidos como "gera uma imagem de um gato" no Chat do app viram imagem, com o mesmo filtro de conteúdo e o mesmo limite por hora do Discord. A imagem chega por um link curto que vence em minutos.', reinicio: false, padrao: 'false' }),
+  bool({ chave: 'YUI_MUSICA_MANTER_CARTAO', rotulo: 'Manter o cartão da música junto do arquivo', grupo: 'Mídia', descricao: 'Ao terminar um download de música, a mensagem mantém o cartão com capa, artista e álbum junto do arquivo. Desligado, fica só o texto e o arquivo.', reinicio: false, padrao: 'true' }),
   inteiro({ chave: 'YUI_YT_LIVE_AUTO_EDIT_MIN', rotulo: 'Janela para editar aviso de live (minutos)', grupo: 'Mídia', descricao: 'Tempo em que o aviso ainda é atualizado sozinho.', reinicio: false, min: 5, max: 1440, padrao: '120' }),
   inteiro({ chave: 'YOUTUBE_INTERVAL_MINUTES', rotulo: 'Conferir o YouTube a cada (minutos)', grupo: 'Mídia', descricao: 'Intervalos curtos gastam mais cota da API.', reinicio: true, min: 1, max: 59, padrao: '5' }),
   inteiro({ chave: 'TWITCH_INTERVAL_MINUTES', rotulo: 'Conferir a Twitch a cada (minutos)', grupo: 'Mídia', descricao: 'Entre 1 e 2 minutos é o recomendado.', reinicio: true, min: 1, max: 59, padrao: '2' }),
@@ -139,7 +197,10 @@ export function edicaoLigada(env = process.env) {
   return String(env.YUI_PAINEL_CONFIG_EDIT ?? 'true').trim().toLowerCase() !== 'false';
 }
 
-const vazio = () => ({ version: 1, valores: {}, alteradoEm: {} });
+// `versoes`: um número por ajuste que só cresce (correção C5 do parecer da Liz, docs/PLANO_LACUNAS_PAINEL_CORRECOES.md). Cada gravação e cada remoção
+// sobem o número; a remoção NÃO zera (o número continua no arquivo). Quem edita manda a versão que viu; se outro (o painel web ou o Discord) gravou
+// no meio, a gravação é recusada com 409 e nada é sobrescrito sem ninguém ver.
+const vazio = () => ({ version: 1, valores: {}, alteradoEm: {}, versoes: {} });
 
 // ── Proteção em repouso (DPAPI do Windows) ──────────────────────────────────────────────────
 const ESCOPO_DPAPI = 'CurrentUser';
@@ -161,10 +222,10 @@ export function protecaoLigada(env = process.env) {
 }
 
 function conteudoProtegido(estado) {
-  return JSON.stringify({ valores: estado.valores, alteradoEm: estado.alteradoEm }, null, 2);
+  return JSON.stringify({ valores: estado.valores, alteradoEm: estado.alteradoEm, versoes: estado.versoes }, null, 2);
 }
 function serializar(estado, env = process.env) {
-  if (!protecaoLigada(env)) return JSON.stringify({ version: 1, valores: estado.valores, alteradoEm: estado.alteradoEm }, null, 2);
+  if (!protecaoLigada(env)) return JSON.stringify({ version: 1, valores: estado.valores, alteradoEm: estado.alteradoEm, versoes: estado.versoes }, null, 2);
   return JSON.stringify({ version: 2, protecao: protetor.rotulo, dados: protetor.proteger(conteudoProtegido(estado)) }, null, 2);
 }
 
@@ -177,7 +238,28 @@ function limparEstado(raw) {
     const quando = raw?.alteradoEm?.[k];
     if (typeof quando === 'string' && !Number.isNaN(Date.parse(quando))) alteradoEm[k] = new Date(quando).toISOString();
   }
-  return { version: 1, valores, alteradoEm };
+  const versoes = {};
+  for (const [k, n] of Object.entries(raw?.versoes ?? {})) {
+    if (POR_CHAVE.has(k) && Number.isSafeInteger(n) && n > 0) versoes[k] = n;
+  }
+  return { version: 1, valores, alteradoEm, versoes };
+}
+
+/** A frase do 409 (a mesma no painel web e no Discord). */
+export const TEXTO_VERSAO_MUDOU = 'Esse ajuste mudou enquanto você editava (no painel web ou no Discord). Confira o valor atual e salve de novo';
+
+/** A versão atual de um ajuste (0 = nunca gravado pelo painel nem pelo Discord). */
+const versaoDe = (estado, chave) => estado.versoes?.[chave] ?? 0;
+
+/**
+ * Confere a versão que a tela viu. Sem versão (`undefined`/`null`): não confere (pedidos antigos e scripts). Com versão: precisa ser a atual,
+ * senão 409. A conferência e a gravação acontecem juntas, no mesmo passo síncrono (ler, conferir e gravar sem nada no meio).
+ */
+function conferirVersao(estado, chave, versao) {
+  if (versao === undefined || versao === null) return;
+  const n = typeof versao === 'string' && /^\d{1,15}$/.test(versao) ? Number(versao) : versao;
+  if (!Number.isSafeInteger(n) || n < 0) throw new PainelConfigError(400, 'Versão do ajuste inválida.');
+  if (n !== versaoDe(estado, chave)) throw new PainelConfigError(409, TEXTO_VERSAO_MUDOU);
 }
 
 /** Lê o arquivo: { estado, situacao: 'ok' | 'ausente' | 'ilegivel' }. 'ilegivel' = existe mas não abre (JSON quebrado, protegido por outra conta ou máquina): NUNCA se sobrescreve. */
@@ -237,6 +319,14 @@ export function validarValor(item, bruto) {
     case 'int': {
       const t = s.trim();
       if (!/^-?\d{1,9}$/.test(t)) throw new PainelConfigError(400, `${item.rotulo}: use um número inteiro.`);
+      const n = Number(t);
+      if (n < item.min || n > item.max) throw new PainelConfigError(400, `${item.rotulo}: use um número de ${item.min} a ${item.max}.`);
+      return String(n);
+    }
+    case 'decimal': {
+      const casas = Number.isInteger(item.casas) && item.casas > 0 ? item.casas : 2;
+      const t = s.trim().replace(',', '.');
+      if (!new RegExp(`^-?\\d{1,6}(?:\\.\\d{1,${casas}})?$`).test(t)) throw new PainelConfigError(400, `${item.rotulo}: use um número com até ${casas} casas depois da vírgula.`);
       const n = Number(t);
       if (n < item.min || n > item.max) throw new PainelConfigError(400, `${item.rotulo}: use um número de ${item.min} a ${item.max}.`);
       return String(n);
@@ -335,36 +425,42 @@ export function exigeConfirmacao(chave, valor) {
   return valor === undefined || lista.includes(String(valor).trim().toLowerCase());
 }
 
-export function definir(chave, valor, env = process.env) {
+/** Grava um ajuste. `versao`: a que a tela viu (C5); diferente da atual = 409. Devolve a versão nova. */
+export function definir(chave, valor, env = process.env, { versao } = {}) {
   const item = POR_CHAVE.get(String(chave));
   if (!item) throw new PainelConfigError(404, 'Esse ajuste não existe no painel.');
   if (!edicaoLigada(env)) throw new PainelConfigError(403, 'A edição de configuração pelo painel está desligada (YUI_PAINEL_CONFIG_EDIT=false no .env).');
   const v = validarValor(item, valor);
   const estado = estadoParaAlterar();
+  conferirVersao(estado, item.chave, versao);
   estado.valores[item.chave] = v;
   estado.alteradoEm[item.chave] = new Date().toISOString();
+  estado.versoes[item.chave] = versaoDe(estado, item.chave) + 1;
   gravar(estado, env);
   aplicarPainelConfig(env, { emExecucao: true });
-  return { chave: item.chave, reinicio: item.reinicio };
+  return { chave: item.chave, reinicio: item.reinicio, versao: estado.versoes[item.chave] };
 }
 
-export function remover(chave, env = process.env) {
+/** Tira um ajuste do cofre (volta ao .env ou ao padrão). `versao` como em definir; a versão sobe também aqui (nunca volta a 0). */
+export function remover(chave, env = process.env, { versao } = {}) {
   const item = POR_CHAVE.get(String(chave));
   if (!item) throw new PainelConfigError(404, 'Esse ajuste não existe no painel.');
   if (!edicaoLigada(env)) throw new PainelConfigError(403, 'A edição de configuração pelo painel está desligada (YUI_PAINEL_CONFIG_EDIT=false no .env).');
   const estado = estadoParaAlterar();
+  conferirVersao(estado, item.chave, versao);
   if (!Object.hasOwn(estado.valores, item.chave)) throw new PainelConfigError(404, 'Esse ajuste não está salvo no painel.');
   delete estado.valores[item.chave];
   delete estado.alteradoEm[item.chave];
+  estado.versoes[item.chave] = versaoDe(estado, item.chave) + 1;
   gravar(estado, env);
   aplicarPainelConfig(env, { emExecucao: true });
-  return { chave: item.chave, reinicio: item.reinicio };
+  return { chave: item.chave, reinicio: item.reinicio, versao: estado.versoes[item.chave] };
 }
 
 /** O estado para a tela: NUNCA devolve um segredo (só "definido" e os 4 últimos caracteres do que veio do painel). */
 export function descrever(env = process.env) {
   const { estado, situacao } = lerCofre();
-  const { valores, alteradoEm } = estado;
+  const { valores, alteradoEm, versoes } = estado;
   return {
     edicaoLigada: edicaoLigada(env),
     protegido: protecaoLigada(env),
@@ -377,6 +473,7 @@ export function descrever(env = process.env) {
       const origem = doPainel ? 'painel' : definido ? 'env' : 'padrao';
       const base = {
         chave: c.chave, rotulo: c.rotulo, grupo: c.grupo, descricao: c.descricao, tipo: c.tipo, reinicio: c.reinicio, definido, origem, alteradoEm: doPainel ? (alteradoEm[c.chave] ?? null) : null,
+        versao: versoes[c.chave] ?? 0,
         ...(c.opcoes ? { opcoes: [...c.opcoes] } : {}), ...(c.confirmar ? { confirmar: [...c.confirmar] } : {}), ...(c.min !== undefined ? { min: c.min, max: c.max } : {}), ...(c.padrao !== undefined ? { padrao: c.padrao } : {}),
       };
       if (c.secreto) return { ...base, secreto: true, ultimos4: doPainel ? valores[c.chave].slice(-4) : null };
@@ -385,5 +482,39 @@ export function descrever(env = process.env) {
   };
 }
 
+// A tela do Discord (lacunas do painel, item 6) abre o cofre só quando o arquivo mudou: com a DPAPI cada abertura é uma chamada ao PowerShell.
+let cacheDaTela = { texto: undefined, valores: {}, versoes: {}, situacao: 'ausente' };
+function valoresParaTela() {
+  const texto = textoDoCofre();
+  if (texto !== null && texto === cacheDaTela.texto) return cacheDaTela;
+  const { estado, situacao } = lerCofre();
+  cacheDaTela = { texto, valores: estado.valores, versoes: estado.versoes, situacao };
+  return cacheDaTela;
+}
+
+/**
+ * UM ajuste como a tela do painel web mostra (lacunas do painel, item 6: o painel do Discord mostra o MESMO valor): o salvo no cofre; sem ele, o do .env
+ * (o original, de antes de o painel mexer); sem os dois, o padrão. Lê o cofre do ARQUIVO porque, no bot separado, os itens que pedem reinício não mudam o
+ * ambiente dele em execução. NUNCA devolve um segredo (só se está definido). Item fora do catálogo = null. Nunca lança.
+ */
+export function descreverItem(chave, env = process.env) {
+  const c = POR_CHAVE.get(String(chave));
+  if (!c) return null;
+  try {
+    const { valores, versoes, situacao } = valoresParaTela();
+    const doPainel = Object.hasOwn(valores, c.chave);
+    const original = originais.has(c.chave) ? originais.get(c.chave) : env[c.chave];
+    const doEnv = original !== undefined && String(original).trim() !== '';
+    const origem = doPainel ? 'painel' : doEnv ? 'env' : 'padrao';
+    const valor = doPainel ? valores[c.chave] : doEnv ? String(original) : (c.padrao ?? '');
+    return {
+      chave: c.chave, rotulo: c.rotulo, tipo: c.tipo, reinicio: c.reinicio, origem, edicaoLigada: edicaoLigada(env), versao: versoes?.[c.chave] ?? 0,
+      valor: c.secreto ? null : valor, ...(c.secreto ? { definido: doPainel || doEnv } : {}), ...(situacao === 'ilegivel' ? { problema: 'cofre-ilegivel' } : {}),
+    };
+  } catch {
+    return { chave: c.chave, rotulo: c.rotulo, tipo: c.tipo, reinicio: c.reinicio, origem: 'padrao', edicaoLigada: false, valor: c.secreto ? null : (c.padrao ?? ''), problema: 'cofre-ilegivel' };
+  }
+}
+
 /** Só para teste: esquece o que o módulo lembra do ambiente. */
-export function esquecerParaTeste() { originais.clear(); }
+export function esquecerParaTeste() { originais.clear(); cacheDaTela = { texto: undefined, valores: {}, versoes: {}, situacao: 'ausente' }; }

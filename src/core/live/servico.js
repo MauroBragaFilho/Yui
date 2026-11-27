@@ -48,6 +48,16 @@ const MOTIVO_DA_PARADA = Object.freeze({
 export const SAUDACOES_DA_LIVE = Object.freeze(['Cheguei, galera!', 'Cheguei, galera! Bora de live?', 'Oi, galera, cheguei!']);
 
 /**
+ * Os códigos FIXOS do "último erro" que o painel mostra (GET /v1/admin/live): os da entrada (TEXTOS), os das paradas (MOTIVO_DA_PARADA), os do adaptador e
+ * os do laço. Qualquer outro vira "outro": nenhum texto de erro, do YouTube ou do chat sai daqui.
+ */
+export const CODIGOS_DE_ERRO_DA_LIVE = Object.freeze([
+  ...Object.keys(TEXTOS), ...Object.keys(MOTIVO_DA_PARADA),
+  'leituras-falharam', 'nao-escreve', 'desligado', 'cancelada', 'sem-canal-da-yui', 'chat-desligado', 'base-invalida', 'nao-esta-numa-live', 'outro',
+]);
+const codigoDeErro = (c) => (CODIGOS_DE_ERRO_DA_LIVE.includes(c) ? c : 'outro');
+
+/**
  * @param {{ env?: object, ai?: object, avisarDono: (texto: string) => Promise<unknown>, ehDono: (id: string) => boolean, logger?: object, agora?: () => number,
  *   baseUrl?: string, tokenUrl?: string, fetchImpl?: typeof fetch, config?: object, agendar?: Function, cancelar?: Function }} o
  */
@@ -64,6 +74,12 @@ export function criarServicoDaLive({
   let timerDoAviso = null;
   let geracao = 0; // muda a cada entrar/sair/parar: um laço antigo nunca continua
   let entrando = false;
+  // Para o painel (só leitura): quando entrou na live atual, os contadores do adaptador naquela hora (os números do painel são DESTA live) e o último erro
+  // como código fixo com a hora. Nada disso leva texto do chat, nome de quem escreveu nem texto de erro.
+  let desdeEm = null;
+  let baseDosContadores = null;
+  let ultimoErro = null;
+  const anotarErro = (codigo) => { ultimoErro = { codigo: codigoDeErro(codigo), em: agora() }; };
 
   const avisar = async (texto) => {
     try { return (await avisarDono(texto)) !== false; } catch { logger.warn?.('[Live] não consegui avisar o dono.'); return false; }
@@ -92,7 +108,7 @@ export function criarServicoDaLive({
       cliente: criarClienteYoutube({ ligado, obterToken, baseUrl, fetchImpl }),
       cerebro: criarPonteDoCerebro({ ...(ai ? { ai } : {}), agora }),
       agora,
-      avisarDono: ({ evento }) => notificar(`Saí da live: ${MOTIVO_DA_PARADA[evento] ?? 'algo deu errado'}.`),
+      avisarDono: ({ evento }) => { anotarErro(evento); return notificar(`Saí da live: ${MOTIVO_DA_PARADA[evento] ?? 'algo deu errado'}.`); },
       proibido: temPalavraProibida,
       log: (codigo) => logger.info?.(`[Live] ${codigo}`),
       config: { ...PADROES_DA_LIVE, ...config, canalDaYui: canalId },
@@ -110,6 +126,8 @@ export function criarServicoDaLive({
         logger.warn?.(`[Live] a rodada falhou (${String(e?.code ?? e?.name ?? 'erro').slice(0, 40)}).`);
         if (minha !== geracao) return;
         if (quebras < 4) { laco(minha, 30_000, quebras + 1); return; }
+        anotarErro('leituras-falharam');
+        desdeEm = null;
         adaptador.sair({ canal: 'app', papel: 'dono' });
         await notificar('Saí da live: as leituras do chat falharam várias vezes seguidas.');
         return;
@@ -123,18 +141,21 @@ export function criarServicoDaLive({
   async function entrar(link, canal, horas) {
     if (entrando) return 'Já estou tentando entrar. Um instante.';
     const lida = lerCredencial(arquivo);
-    if (!lida.ok) return TEXTOS['sem-credencial'];
+    if (!lida.ok) { anotarErro('sem-credencial'); return TEXTOS['sem-credencial']; }
     entrando = true;
     try {
       const ad = criar(lida.dados.canalId);
       const ritmo = ritmoDaLive(horas);
       const r = await ad.entrar({ link, canal, papel: 'dono', intervaloLeituraMs: ritmo.segundos * 1000 });
-      if (!r.ok) return TEXTOS[r.codigo] ?? 'Não consegui entrar na live.';
+      if (!r.ok) { anotarErro(r.codigo); return TEXTOS[r.codigo] ?? 'Não consegui entrar na live.'; }
       pararLaco();
       titulo = r.titulo;
+      desdeEm = agora();
+      const c = ad.retrato().contadores;
+      baseDosContadores = { lidas: c.lidas, respondidas: c.respondidas, espontaneas: c.espontaneas };
       gravarMarca();
       await ad.saudar(SAUDACOES_DA_LIVE[Math.floor(Math.random() * SAUDACOES_DA_LIVE.length)]);
-      if (ad.estado !== 'ouvindo') return 'Entrei no chat, mas o YouTube não me deixou escrever e eu saí. Confira se a conta pode falar nesse chat.';
+      if (ad.estado !== 'ouvindo') { anotarErro('nao-escreve'); desdeEm = null; return 'Entrei no chat, mas o YouTube não me deixou escrever e eu saí. Confira se a conta pode falar nesse chat.'; }
       laco(geracao, 0);
       return `Entrei no chat da live${titulo ? ` "${titulo}"` : ''}. Respondo quando me chamarem pelo nome. Leio o chat a cada ${ritmo.segundos} s, o que dá para cerca de ${ritmo.cabemHoras} h${horas > ritmo.cabemHoras ? `; as ${horas} h que você disse podem estourar a cota antes do fim` : ''}. Para parar: "sai da live".`;
     } finally {
@@ -147,7 +168,30 @@ export function criarServicoDaLive({
     if (!r?.ok) return 'Não estou em nenhuma live.';
     pararLaco();
     apagarMarca();
+    desdeEm = null;
     return 'Saí da live.';
+  }
+
+  /**
+   * O retrato para o painel (GET /v1/admin/live; só leitura, só o dono): estado, qual live (id e título), desde quando, mensagens lidas e respondidas DESTA live,
+   * a cota do dia e o último erro como código fixo. NUNCA o texto de uma mensagem do chat nem o nome de quem escreveu (o adaptador nem guarda isso no retrato).
+   */
+  function painel() {
+    const r = adaptador ? adaptador.retrato() : null;
+    const ativo = Boolean(r?.ativo);
+    const c = r?.contadores ?? {};
+    const desta = (k) => Math.max(0, (Number(c[k]) || 0) - (Number(baseDosContadores?.[k]) || 0));
+    return {
+      ligado: youtubeLigado(env),
+      estado: r?.estado ?? null,
+      ativo,
+      videoId: ativo ? r.videoId : null,
+      titulo: ativo ? titulo : null,
+      desde: ativo && desdeEm ? new Date(desdeEm).toISOString() : null,
+      mensagens: baseDosContadores ? { lidas: desta('lidas'), respondidas: desta('respondidas'), espontaneas: desta('espontaneas') } : null,
+      cota: r?.cota ? { dia: r.cota.dia, usado: r.cota.usado, limiteDiario: r.cota.limiteDiario, reserva: r.cota.reserva, restante: r.cota.restante, nivel: r.cota.nivel } : null,
+      ultimoErro: ultimoErro ? { codigo: ultimoErro.codigo, em: new Date(ultimoErro.em).toISOString() } : null,
+    };
   }
 
   function status() {
@@ -185,5 +229,7 @@ export function criarServicoDaLive({
       adaptador?.desligar();
     },
     estado: () => adaptador?.estado ?? null,
+    /** Só leitura, para o painel do dono (veja `painel` acima). */
+    painel,
   };
 }

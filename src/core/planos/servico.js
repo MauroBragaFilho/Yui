@@ -16,7 +16,7 @@ import { isolatedChat } from '../ai/manager.js';
 import { splitForDiscord } from '../alerts.js';
 import { planosLigados, planosAuto, pedidoDePlano, MARCA_RESULTADO } from './pedido.js';
 import { criarStoreDePlanos, geracaoDeApagamento } from './store.js';
-import { criarFerramentasDePlano, argumentosValidos, MAX_SAIDA_POR_PASSO } from './ferramentas.js';
+import { criarFerramentasDePlano, argumentosValidos, MAX_SAIDA_POR_PASSO, resumoSeguroDoPasso } from './ferramentas.js';
 
 export const MAX_PASSOS = 5;
 export const VALIDADE_MS = 30 * 60_000;
@@ -35,6 +35,8 @@ export const FRASES = Object.freeze({
   entregaIncerta: 'Não consegui confirmar que o plano chegou até você, então não executei nada. Peça de novo.',
   cancelado: 'Plano cancelado.',
   apagado: 'Você pediu para apagar a sua memória enquanto eu montava o plano, então descartei.',
+  // Correção C1: o painel não mostra o texto livre, então o plano que manda texto da pessoa para fora (a pesquisa) só se aprova onde o texto aparece.
+  soPelaDm: 'Este plano manda palavras para o buscador, e o painel não mostra esse texto: aprove pela DM, onde ele aparece. Recusar pelo painel continua valendo.',
 });
 
 export const hashDoPlano = (p) => hashParams({ id: p.id, versao: p.versao, userId: p.userId, passos: p.passos.map((s) => ({ ferramenta: s.ferramenta, args: s.args })) });
@@ -193,9 +195,13 @@ export function criarServicoDePlanos({
     }
   }
 
-  /** O botão. `final`: os botões não servem mais. */
-  async function decidir({ userId, id, versao, hash, aprovar }) {
+  /**
+   * O botão. `final`: os botões não servem mais. `origem: 'painel'` (o painel web, lacunas do painel item 3 v2) só entra na auditoria: as regras são as mesmas
+   * para a DM e para o painel, e a primeira decisão gravada vale para os dois.
+   */
+  async function decidir({ userId, id, versao, hash, aprovar, origem }) {
     const nao = (text, final = true) => ({ ok: false, final, text });
+    const deOnde = origem === 'painel' ? { origem: 'painel' } : {};
     try {
       if (!planosLigados(env)) return nao('Os planos estão desligados.');
       if (!ehDono(userId)) return nao('Só o dono decide sobre os planos.', false);
@@ -207,12 +213,18 @@ export function criarServicoDePlanos({
       if (hashDoPlano(p) !== p.hash) { store.mudar(p.id, (x) => encerrar(x, 'falhou')); return nao('Esse plano foi alterado depois de criado; não vou executar.'); }
       if (aprovar !== true) {
         store.mudar(p.id, (x) => encerrar(x, 'recusado'));
-        anotar('plan.rejected', userId, { planId: p.id });
+        anotar('plan.rejected', userId, { planId: p.id, ...deOnde });
         return { ok: true, final: true, text: 'Plano recusado. Nada foi feito.' };
+      }
+      // Correção C1: pelo painel, o dono vê só o resumo seguro (sem o texto livre). Passo que manda texto da pessoa para fora (ou que o resumo não conhece):
+      // a aprovação é só pela DM. O plano continua aguardando (a DM ainda aprova; o painel ainda recusa).
+      if (origem === 'painel' && p.passos.some((s) => resumoSeguroDoPasso(ferramentas.get(s.ferramenta), s.args).soPelaDm)) {
+        anotar('plan.panel_blocked', userId, { planId: p.id, motivo: 'so-pela-dm' });
+        return { ok: false, final: false, codigo: 'so-pela-dm', text: FRASES.soPelaDm };
       }
       // Tudo síncrono até aqui: o segundo clique já encontra o estado "aprovado".
       store.mudar(p.id, (x) => { x.estado = 'aprovado'; x.aprovacao = { plano: x.id, versao: x.versao, hash: x.hash, validade: x.validade, em: now() }; });
-      anotar('plan.approved', userId, { planId: p.id });
+      anotar('plan.approved', userId, { planId: p.id, ...deOnde });
       iniciarExecucao(p.id);
       return { ok: true, final: true, text: 'Aprovado. Aviso aqui quando terminar.' };
     } catch (err) {

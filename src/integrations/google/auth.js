@@ -59,6 +59,9 @@ export function criarAutenticador(deps = {}) {
   let proximaEntrega = { impressao: null, ate: 0 }; // a reentrega do aviso só é adiada para a MESMA autorização
   const contadores = { renovacoes: 0, falhasDeRede: 0, autorizacaoPerdida: 0, avisos: 0, tentativasDeAviso: 0 };
   let ultimaRenovacaoEm = null;
+  // A última renovação que falhou, só com um código fixo ('rede', 'erro' ou 'precisa-autorizar') e a hora: o painel mostra (GET /v1/admin/google), sem texto do Google.
+  let ultimaFalha = null;
+  const anotarFalha = (motivo) => { ultimaFalha = { motivo, em: agora() }; };
 
   function aviso(texto) {
     try { log.warn?.(texto); } catch { /* o log nunca derruba a chamada */ }
@@ -119,8 +122,10 @@ export function criarAutenticador(deps = {}) {
     if (!r.ok) {
       if (r.status >= 400 && r.status < 500 && r.status !== 429 && CODIGOS_DE_AUTORIZACAO_PERDIDA.includes(r.erro)) {
         marcarPerdida(file, dados, impressao, r.erro);
+        anotarFalha('precisa-autorizar');
         return { ok: false, motivo: 'precisa-autorizar' };
       }
+      anotarFalha('rede');
       contadores.falhasDeRede += 1;
       falhaTransitoria = { impressao, ate: agora() + ESPERA_APOS_FALHA_MS };
       aviso(`[Google] não consegui renovar o acesso agora (${r.motivo}${r.status ? ` ${r.status}` : ''}); tento de novo em ${Math.round(ESPERA_APOS_FALHA_MS / 1000)} s.`);
@@ -128,6 +133,7 @@ export function criarAutenticador(deps = {}) {
     }
     const token = typeof r.json.access_token === 'string' ? r.json.access_token : '';
     if (!token || token.length > 4096 || /\s/.test(token)) {
+      anotarFalha('erro');
       contadores.falhasDeRede += 1;
       falhaTransitoria = { impressao, ate: agora() + ESPERA_APOS_FALHA_MS };
       aviso('[Google] a resposta da renovação veio sem um token utilizável.');
@@ -166,7 +172,7 @@ export function criarAutenticador(deps = {}) {
       if (cache && cache.impressao === impressao && cache.expiraEm - agora() > MARGEM_DO_TOKEN_MS) return { ok: true, token: cache.token, escopos: dados.escopos };
       if (falhaTransitoria && falhaTransitoria.impressao === impressao && agora() < falhaTransitoria.ate) return { ok: false, motivo: 'rede' };
       if (!emVoo) {
-        emVoo = renovar(file, dados, impressao).catch(() => ({ ok: false, motivo: 'erro' })).finally(() => { emVoo = null; });
+        emVoo = renovar(file, dados, impressao).catch(() => { anotarFalha('erro'); return { ok: false, motivo: 'erro' }; }).finally(() => { emVoo = null; });
       }
       return emVoo;
     },
@@ -185,6 +191,9 @@ export function criarAutenticador(deps = {}) {
         precisaAutorizar: Boolean(lido?.ok && (perdidaEmMemoria === impressao || lido.dados.invalido?.impressao === impressao)),
         avisoPendente: Boolean(lido?.ok && (perdidaEmMemoria === impressao || lido.dados.invalido?.impressao === impressao) && avisoConfirmado !== impressao && !(lido.dados.invalido?.impressao === impressao && lido.dados.invalido.avisadoEm)),
         ultimaRenovacaoEm: ultimaRenovacaoEm ? new Date(ultimaRenovacaoEm).toISOString() : null,
+        // Quando a autorização guardada foi feita (o script grava `criadoEm`; arquivo antigo: null) e a última renovação que falhou (código fixo e hora).
+        criadoEm: lido?.ok ? lido.dados.criadoEm : null,
+        ultimaFalha: ultimaFalha ? { motivo: ultimaFalha.motivo, em: new Date(ultimaFalha.em).toISOString() } : null,
         ...contadores,
       };
     },

@@ -24,11 +24,19 @@ import { AiProviders } from './AdminAi.tsx';
 import { ConfigPainel } from './AdminConfig.tsx';
 import { GuildEditor } from './AdminGuild.tsx';
 import { Logs, Radio } from './AdminOps.tsx';
+import { Monitores } from './AdminMonitores.tsx';
+import { PlanosEAvisos } from './AdminPlanos.tsx';
+import { LiveDoYoutube } from './AdminLive.tsx';
+import { Gta } from './AdminGta.tsx';
+import { Continuidade, Listas, Skills } from './AdminTransparencia.tsx';
+import { ReautorizarGoogle } from './AdminGoogle.tsx';
 import { Badge, Button, Card, Chip, PageHeader, SectionHeading, StateView } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
 
 type Props = { client: YuiClient };
-type Section = 'config' | 'geral' | 'integracoes' | 'servidores' | 'radio' | 'logs' | 'bans' | 'memoria' | 'ia' | 'auditoria' | 'ferramentas';
+type Section =
+  | 'config' | 'geral' | 'integracoes' | 'servidores' | 'gta' | 'radio' | 'monitores' | 'planos' | 'live' | 'logs' | 'bans' | 'memoria' | 'continuidade' | 'listas' | 'skills'
+  | 'ia' | 'auditoria' | 'ferramentas';
 
 const GROUPS: { title: string; sections: { key: Section; label: string }[] }[] = [
   {
@@ -36,7 +44,11 @@ const GROUPS: { title: string; sections: { key: Section; label: string }[] }[] =
     sections: [
       { key: 'geral', label: 'Geral' },
       { key: 'servidores', label: 'Servidores' },
+      { key: 'gta', label: 'GTA' },
       { key: 'radio', label: 'Rádio' },
+      { key: 'monitores', label: 'Monitores' },
+      { key: 'planos', label: 'Planos e avisos' },
+      { key: 'live', label: 'Live do YouTube' },
       { key: 'bans', label: 'Bans' },
     ],
   },
@@ -46,6 +58,9 @@ const GROUPS: { title: string; sections: { key: Section; label: string }[] }[] =
       { key: 'config', label: 'Configuração e chaves' },
       { key: 'ia', label: 'IA' },
       { key: 'memoria', label: 'Memória' },
+      { key: 'continuidade', label: 'Projetos e decisões' },
+      { key: 'listas', label: 'Listas' },
+      { key: 'skills', label: 'Skills' },
       { key: 'integracoes', label: 'Integrações' },
     ],
   },
@@ -121,6 +136,8 @@ const AUDIT_ACTIONS: Record<string, string> = {
   'admin.guild.persona': 'Mudou a persona de um canal', 'admin.guild.persona.reset': 'Restaurou a persona de um canal',
   'admin.guild.chatter': 'Mudou as falas espontâneas', 'admin.guild.mentions': 'Mudou a resposta a @everyone',
   'admin.guild.channel': 'Mudou um canal do servidor',
+  'admin.continuidade.remove': 'Apagou um projeto ou decisão',
+  'google.reauth.start': 'Começou a reautorizar o Google', 'google.reauth.ok': 'Reautorizou o Google', 'google.reauth.fail': 'A reautorização do Google não foi concluída',
 };
 const auditAction = (event: string) => AUDIT_ACTIONS[event] ?? capital(String(event ?? '').replace(/[_.-]+/g, ' ').trim());
 const ROLE_LABEL: Record<string, string> = { OWNER: 'Dono', MEMBER: 'Membro' };
@@ -274,6 +291,8 @@ function Integracoes({ client }: Props) {
           ))}
         </>
       ) : null}
+      {/* Entrega F, item 14: reautorizar o Google pelo painel (só aparece com YUI_GOOGLE_REAUTORIZAR_PAINEL). */}
+      <ReautorizarGoogle client={client} />
     </View>
   );
 }
@@ -508,7 +527,7 @@ function Memoria({ client }: Props) {
   );
 }
 
-function Ia({ client }: Props) {
+function Ia({ client, irParaConfig }: Props & { irParaConfig: () => void }) {
   const { data, error, loading, reload } = useLoad<GatewayStatus>(() => client.admin.gateway());
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -527,6 +546,12 @@ function Ia({ client }: Props) {
   return (
     <View style={styles.section}>
       <AiProviders client={client} onChanged={reload} />
+      {/* Lacunas do painel, item 6: modelos, temperatura, prazo e tamanho das respostas ficam no cofre (Configuração e chaves), o mesmo que o painel do Discord grava. */}
+      <Card style={styles.card}>
+        <Text style={styles.cardTitle}>Modelos e ajustes das respostas</Text>
+        <Text style={styles.hint}>Modelo de cada provedor, temperatura, prazo, tamanho das respostas e mostrar o modelo no rodapé ficam em Configuração e chaves, grupo Inteligência. É o mesmo lugar que o painel do Discord (/yui-criador e /yui-config_ia) grava.</Text>
+        <Button testID="ia-abrir-config" label="Abrir Configuração e chaves" variant="ghost" compact onPress={irParaConfig} />
+      </Card>
       <Text style={styles.sectionTitle}>Saúde do Yui Gateway</Text>
       <Text style={styles.hint}>O Yui Gateway tenta os provedores abaixo em ordem e passa para o próximo se um falhar. Aparece logo depois do LM Studio na cadeia da Yui.</Text>
       <Status loading={loading} error={error} />
@@ -623,6 +648,8 @@ function Ferramentas({ client }: Props) {
 
 export function AdminScreen({ client }: Props) {
   const [section, setSection] = useState<Section>('geral');
+  const [grupoDaConfig, setGrupoDaConfig] = useState<string | undefined>(undefined); // o atalho da aba IA abre a configuração em "Inteligência"
+  const abrirSecao = (s: Section) => { setGrupoDaConfig(undefined); setSection(s); };
   const { width } = useWindowDimensions();
   const narrow = width < 700;
   const grupoAtual = GROUPS.find((g) => g.sections.some((x) => x.key === section)) ?? GROUPS[0];
@@ -635,13 +662,13 @@ export function AdminScreen({ client }: Props) {
         <View style={styles.navNarrow}>
           <View style={styles.chips}>
             {GROUPS.map((g) => (
-              <Chip key={g.title} testID={`admin-grupo-${g.sections[0].key}`} label={g.title} on={grupoAtual.title === g.title} onPress={() => setSection(g.sections[0].key)} />
+              <Chip key={g.title} testID={`admin-grupo-${g.sections[0].key}`} label={g.title} on={grupoAtual.title === g.title} onPress={() => abrirSecao(g.sections[0].key)} />
             ))}
           </View>
           <View style={styles.navLine} />
           <View style={styles.chips}>
             {grupoAtual.sections.map((x) => (
-              <Chip key={x.key} testID={`admin-tab-${x.key}`} label={x.label} on={section === x.key} onPress={() => setSection(x.key)} />
+              <Chip key={x.key} testID={`admin-tab-${x.key}`} label={x.label} on={section === x.key} onPress={() => abrirSecao(x.key)} />
             ))}
           </View>
         </View>
@@ -652,7 +679,7 @@ export function AdminScreen({ client }: Props) {
               <Text style={styles.navTitle}>{g.title}</Text>
               <View style={styles.chips}>
                 {g.sections.map((x) => (
-                  <Chip key={x.key} testID={`admin-tab-${x.key}`} label={x.label} on={section === x.key} onPress={() => setSection(x.key)} />
+                  <Chip key={x.key} testID={`admin-tab-${x.key}`} label={x.label} on={section === x.key} onPress={() => abrirSecao(x.key)} />
                 ))}
               </View>
             </View>
@@ -660,15 +687,22 @@ export function AdminScreen({ client }: Props) {
         </View>
       )}
       <ScrollView contentContainerStyle={styles.content}>
-        {section === 'config' ? <ConfigPainel client={client} /> : null}
+        {section === 'config' ? <ConfigPainel client={client} grupoInicial={grupoDaConfig} /> : null}
         {section === 'geral' ? <Geral client={client} /> : null}
         {section === 'integracoes' ? <Integracoes client={client} /> : null}
         {section === 'servidores' ? <Servidores client={client} /> : null}
+        {section === 'gta' ? <Gta client={client} /> : null}
         {section === 'radio' ? <Radio client={client} /> : null}
+        {section === 'monitores' ? <Monitores client={client} /> : null}
+        {section === 'planos' ? <PlanosEAvisos client={client} /> : null}
+        {section === 'live' ? <LiveDoYoutube client={client} /> : null}
         {section === 'logs' ? <Logs client={client} /> : null}
         {section === 'bans' ? <Bans client={client} /> : null}
         {section === 'memoria' ? <Memoria client={client} /> : null}
-        {section === 'ia' ? <Ia client={client} /> : null}
+        {section === 'continuidade' ? <Continuidade client={client} /> : null}
+        {section === 'listas' ? <Listas client={client} /> : null}
+        {section === 'skills' ? <Skills client={client} /> : null}
+        {section === 'ia' ? <Ia client={client} irParaConfig={() => { setGrupoDaConfig('Inteligência'); setSection('config'); }} /> : null}
         {section === 'auditoria' ? <Auditoria client={client} /> : null}
         {section === 'ferramentas' ? <Ferramentas client={client} /> : null}
       </ScrollView>

@@ -2,15 +2,22 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   ApiError,
+  type AdminGuild,
   type LogKind,
   type LogLevel,
   type LogsResult,
   type RadioAction,
+  type RadioCanais,
+  type RadioFaixa,
+  type RadioResultado,
   type RadioSession,
   type YuiClient,
 } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
 import { Badge, Button, Card, Chip, SectionHeading, StateView } from '../components/ui.tsx';
+import {
+  TEXTO_BUSCA_INVALIDA, buscaValida, canaisParaEscolher, linhasDaFila, podeIniciar, podePular, rotuloDaFaixa, servidoresParaIniciar, textoDoResultado,
+} from '../radioLogic.ts';
 import { colors, radius, spacing } from '../theme.ts';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu errado.');
@@ -24,14 +31,84 @@ const STATUS: Record<string, { label: string; color: string }> = {
 
 const MODE_LABEL: Record<string, string> = { OFF: 'desligado', DIRECT: 'direto', IA: 'IA' };
 
+/** As opções de uma busca ambígua: o painel devolve só o NÚMERO da escolhida (as faixas ficam no servidor). */
+function OpcoesDaBusca({ opcoes, onEscolher, busy, testID }: { opcoes: RadioFaixa[]; onEscolher: (i: number) => void; busy: boolean; testID: string }) {
+  return (
+    <View style={{ gap: spacing.xs }} testID={testID}>
+      {opcoes.map((o, i) => (
+        <Button key={`${i}-${o.title}`} testID={`${testID}-${i}`} label={rotuloDaFaixa(o)} variant="ghost" compact disabled={busy} onPress={() => onEscolher(i)} />
+      ))}
+    </View>
+  );
+}
+
+/** Tocar um gênero, uma música ou um link no rádio de um servidor (com a escolha quando a busca é ambígua). */
+function Tocar({ client, guildId, onDone }: { client: YuiClient; guildId: string; onDone: () => Promise<void> | void }) {
+  const [q, setQ] = useState('');
+  const [opcoes, setOpcoes] = useState<RadioFaixa[] | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function rodar(fn: () => Promise<RadioResultado>) {
+    setBusy(true);
+    setErro(null);
+    try {
+      const r = await fn();
+      setOpcoes(r.resultado === 'escolher' ? r.opcoes ?? [] : null);
+      setInfo(textoDoResultado(r) || null);
+      if (r.resultado !== 'escolher') {
+        setQ('');
+        await onDone();
+      }
+    } catch (e) {
+      setErro(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function tocar() {
+    const busca = buscaValida(q);
+    if (!busca) { setErro(TEXTO_BUSCA_INVALIDA); return; }
+    rodar(() => client.admin.radioTocar(guildId, busca));
+  }
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <View style={styles.formRow}>
+        <TextInput
+          testID={`radio-busca-${guildId}`}
+          style={[styles.input, { flex: 1, minWidth: 180 }]}
+          value={q}
+          onChangeText={setQ}
+          placeholder="Gênero, música ou link…"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          onSubmitEditing={tocar}
+        />
+        <Button testID={`radio-tocar-${guildId}`} label="Tocar" onPress={tocar} loading={busy} style={styles.smallBtn} />
+      </View>
+      {opcoes ? <OpcoesDaBusca opcoes={opcoes} busy={busy} testID={`radio-opcao-${guildId}`} onEscolher={(i) => rodar(() => client.admin.radioEscolher(guildId, i))} /> : null}
+      {info ? <Text style={styles.ok}>{info}</Text> : null}
+      {erro ? <Text style={styles.error}>{erro}</Text> : null}
+    </View>
+  );
+}
+
 function SessionCard({ s, client, reload }: { s: RadioSession; client: YuiClient; reload: () => Promise<void> }) {
   const [msg, setMsg] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [verFila, setVerFila] = useState(false);
   const st = STATUS[s.status] ?? { label: s.status, color: colors.muted };
+  const fila = linhasDaFila(s);
 
   async function act(action: RadioAction) {
     setMsg(null);
+    setInfo(null);
     try {
-      await client.admin.radioAction(s.guildId, action);
+      const r = await client.admin.radioAction(s.guildId, action);
+      if (action === 'skip') setInfo(textoDoResultado(r) || null);
       await reload();
     } catch (e) {
       setMsg(errText(e));
@@ -61,9 +138,17 @@ function SessionCard({ s, client, reload }: { s: RadioSession; client: YuiClient
         {s.loopMode !== 'OFF' ? <Badge label={`Repetir: ${s.loopMode}`} color={colors.muted} /> : null}
         <Badge label={`Voz: ${MODE_LABEL[s.voiceMode] ?? s.voiceMode}`} color={colors.muted} />
       </View>
+      {fila.linhas.length ? (
+        <View style={{ gap: 2 }}>
+          <Button testID={`radio-fila-${s.guildId}`} label={verFila ? 'Esconder a fila' : `Ver a fila (${s.queueLength})`} variant="ghost" compact onPress={() => setVerFila(!verFila)} />
+          {verFila ? fila.linhas.map((l) => <Text key={l} style={styles.hint}>{l}</Text>) : null}
+          {verFila && fila.resto ? <Text style={styles.hint}>e mais {fila.resto}.</Text> : null}
+        </View>
+      ) : null}
       <View style={styles.badges}>
         {s.status === 'PLAYING' ? <Button testID={`radio-pause-${s.guildId}`} label="Pausar" variant="ghost" onPress={() => act('pause')} style={styles.smallBtn} /> : null}
         {s.status === 'PAUSED' ? <Button testID={`radio-resume-${s.guildId}`} label="Retomar" variant="ghost" onPress={() => act('resume')} style={styles.smallBtn} /> : null}
+        {podePular(s) ? <Button testID={`radio-skip-${s.guildId}`} label="Pular" variant="ghost" onPress={() => act('skip')} style={styles.smallBtn} /> : null}
         {s.status !== 'STOPPED' ? (
           <Button
             testID={`radio-stop-${s.guildId}`}
@@ -81,12 +166,135 @@ function SessionCard({ s, client, reload }: { s: RadioSession; client: YuiClient
           style={styles.smallBtn}
         />
       </View>
+      {info ? <Text style={styles.ok}>{info}</Text> : null}
       {msg ? <Text style={styles.error}>{msg}</Text> : null}
+      <Tocar client={client} guildId={s.guildId} onDone={reload} />
     </Card>
   );
 }
 
-/** Sessões do Modo Rádio. Atualiza sozinho a cada 10 segundos. */
+/**
+ * Iniciar o rádio SEM ninguém na call: escolher o servidor (os que ainda não têm rádio), o canal de voz e o de texto (só os em que a Yui pode entrar e
+ * falar / escrever) e, se quiser, já um gênero ou uma música. O servidor confere tudo de novo.
+ */
+function IniciarRadio({ client, sessions, onStarted }: { client: YuiClient; sessions: RadioSession[]; onStarted: () => Promise<void> }) {
+  const [aberto, setAberto] = useState(false);
+  const [guilds, setGuilds] = useState<AdminGuild[] | null>(null);
+  const [guildId, setGuildId] = useState<string | null>(null);
+  const [canais, setCanais] = useState<RadioCanais | null>(null);
+  const [voz, setVoz] = useState<string | null>(null);
+  const [texto, setTexto] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [opcoes, setOpcoes] = useState<RadioFaixa[] | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!aberto || guilds) return;
+    client.admin.guilds().then(setGuilds).catch((e) => setErro(errText(e)));
+  }, [aberto, guilds, client]);
+
+  useEffect(() => {
+    setCanais(null);
+    setVoz(null);
+    setTexto(null);
+    setOpcoes(null);
+    if (!guildId) return;
+    let vivo = true;
+    client.admin.radioCanais(guildId).then((c) => { if (vivo) setCanais(c); }).catch((e) => { if (vivo) setErro(errText(e)); });
+    return () => { vivo = false; };
+  }, [guildId, client]);
+
+  const escolha = canaisParaEscolher(canais);
+  const servidores = servidoresParaIniciar(guilds, sessions);
+
+  async function iniciar() {
+    if (!guildId || !podeIniciar(canais, voz, texto)) return;
+    const busca = q.trim() ? buscaValida(q) : null;
+    if (q.trim() && !busca) { setErro(TEXTO_BUSCA_INVALIDA); return; }
+    setBusy(true);
+    setErro(null);
+    setInfo(null);
+    try {
+      const r = await client.admin.radioIniciar(guildId, { voiceChannelId: voz as string, textChannelId: texto as string });
+      setInfo(textoDoResultado(r));
+      // o gênero ou a música vão num pedido à parte (entrar na call e buscar, juntos, podem passar do prazo entre o cérebro e o bot)
+      if (busca) {
+        const t = await client.admin.radioTocar(guildId, busca);
+        setOpcoes(t.resultado === 'escolher' ? t.opcoes ?? [] : null);
+        setInfo(`${textoDoResultado(r)} ${textoDoResultado(t)}`.trim());
+      }
+      setQ('');
+      await onStarted();
+    } catch (e) {
+      setErro(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function escolher(i: number) {
+    if (!guildId) return;
+    setBusy(true);
+    setErro(null);
+    try {
+      const r = await client.admin.radioEscolher(guildId, i);
+      setOpcoes(null);
+      setInfo(textoDoResultado(r) || null);
+      await onStarted();
+    } catch (e) {
+      setErro(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!aberto) return <Button testID="radio-iniciar-abrir" label="Iniciar o rádio num servidor" variant="ghost" icon="add" onPress={() => setAberto(true)} />;
+  return (
+    <Card style={styles.card}>
+      <View style={styles.rowBetween}>
+        <Text style={styles.cardTitle}>Iniciar o rádio</Text>
+        <Button label="Fechar" variant="ghost" compact onPress={() => setAberto(false)} />
+      </View>
+      <Text style={styles.hint}>Ninguém precisa estar na call: a Yui entra no canal escolhido e espera alguém chegar por até 10 minutos.</Text>
+      {!guilds && !erro ? <ActivityIndicator color={colors.accent} /> : null}
+      {guilds && !servidores.length ? <Text style={styles.hint}>Todos os servidores já estão com o rádio ligado.</Text> : null}
+      <View style={styles.badges}>
+        {servidores.map((g) => <Chip key={g.id} testID={`radio-servidor-${g.id}`} label={g.name} on={guildId === g.id} onPress={() => setGuildId(g.id)} />)}
+      </View>
+      {guildId && !canais && !erro ? <ActivityIndicator color={colors.accent} /> : null}
+      {canais ? (
+        <>
+          <Text style={styles.label}>Canal de voz</Text>
+          {escolha.voz.length ? (
+            <View style={styles.badges}>{escolha.voz.map((c) => <Chip key={c.id} testID={`radio-voz-${c.id}`} label={c.rotulo} on={voz === c.id} onPress={() => setVoz(c.id)} />)}</View>
+          ) : <Text style={styles.hint}>Nenhum canal de voz em que a Yui possa entrar e falar.</Text>}
+          <Text style={styles.label}>Canal de texto (onde fica o painel do rádio)</Text>
+          {escolha.texto.length ? (
+            <View style={styles.badges}>{escolha.texto.map((c) => <Chip key={c.id} testID={`radio-texto-${c.id}`} label={c.rotulo} on={texto === c.id} onPress={() => setTexto(c.id)} />)}</View>
+          ) : <Text style={styles.hint}>Nenhum canal de texto em que a Yui possa escrever.</Text>}
+          {escolha.indisponiveis ? <Text style={styles.hint}>{escolha.indisponiveis}</Text> : null}
+          <TextInput
+            testID="radio-iniciar-busca"
+            style={styles.input}
+            value={q}
+            onChangeText={setQ}
+            placeholder="Gênero, música ou link (opcional)"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Button testID="radio-iniciar" label="Iniciar" onPress={iniciar} loading={busy} disabled={!podeIniciar(canais, voz, texto)} />
+        </>
+      ) : null}
+      {opcoes ? <OpcoesDaBusca opcoes={opcoes} busy={busy} testID="radio-iniciar-opcao" onEscolher={escolher} /> : null}
+      {info ? <Text style={styles.ok}>{info}</Text> : null}
+      {erro ? <Text style={styles.error}>{erro}</Text> : null}
+    </Card>
+  );
+}
+
+/** Sessões do Modo Rádio (e iniciar, pular, tocar e ver a fila). Atualiza sozinho a cada 10 segundos. */
 export function Radio({ client }: { client: YuiClient }) {
   const [data, setData] = useState<RadioSession[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,8 +319,9 @@ export function Radio({ client }: { client: YuiClient }) {
   return (
     <View style={styles.section}>
       <SectionHeading title="Modo Rádio" right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} />} />
-      <Text style={styles.hint}>Servidores em que o Modo Rádio está ativo. Escolher música e pular faixa continuam no menu do próprio rádio no Discord. A tela atualiza sozinha.</Text>
+      <Text style={styles.hint}>Servidores em que o Modo Rádio está ativo: pause, pule, peça um gênero ou uma música e veja a fila. Dá para iniciar mesmo sem ninguém na call. A tela atualiza sozinha.</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      <IniciarRadio client={client} sessions={data} onStarted={reload} />
       {data.length === 0 ? <StateView testID="radio-empty" kind="empty" title="Nenhuma sessão de rádio ativa." /> : null}
       {data.map((s) => (
         <SessionCard key={s.guildId} s={s} client={client} reload={reload} />
@@ -230,6 +439,8 @@ const styles = StyleSheet.create({
   cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700', flexShrink: 1 },
   value: { color: colors.text, fontSize: 14, flexShrink: 1 },
   hint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  label: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+  ok: { color: colors.success, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },

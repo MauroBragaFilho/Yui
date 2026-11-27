@@ -84,28 +84,55 @@ function buildAgentPrompt(message, toolNames, skills = []) {
   ].join('\n');
 }
 
+/**
+ * A ferramenta aparece neste contexto? `disponivel(ctx)` é opcional na definição (ex.: a imagem do app só aparece com a chave ligada); quem não declara
+ * está sempre disponível. Erro ao perguntar = indisponível (nunca libera por engano).
+ */
+function toolDisponivel(tool, ctx) {
+  if (!tool) return false;
+  if (typeof tool.disponivel !== 'function') return true;
+  try { return tool.disponivel(ctx) === true; } catch { return false; }
+}
+
+/** Campos extras que uma ferramenta pode devolver ao app junto do texto (hoje só a imagem do chat e o aviso do limite por hora). */
+function camposExtras(result) {
+  const out = {};
+  const img = result?.imagem;
+  if (img && typeof img.url === 'string' && typeof img.alt === 'string') out.imagem = { url: img.url, alt: img.alt, expiresInSec: Number(img.expiresInSec) || null };
+  if (result?.limite && Number.isFinite(Number(result.limite.minutos))) out.limiteImagem = { minutos: Number(result.limite.minutos) };
+  return out;
+}
+
 async function execute(tool, args, ctx) {
   const started = Date.now();
+  const timeoutMs = Number.isInteger(tool.timeoutMs) && tool.timeoutMs > 0 ? tool.timeoutMs : TOOL_TIMEOUT_MS;
+  let timer = null;
   try {
     const result = await Promise.race([
       Promise.resolve(tool.run(args, ctx)),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('tempo limite da ferramenta excedido')), TOOL_TIMEOUT_MS)),
+      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('tempo limite da ferramenta excedido')), timeoutMs); }),
     ]);
     audit('agent.tool.ok', ctx, { tool: tool.name, ms: Date.now() - started });
+    // Ferramenta que devolve { texto, ... } (a imagem do app): o texto vira a resposta e os campos conhecidos seguem para o app.
+    if (result && typeof result === 'object' && typeof result.texto === 'string') return { ok: true, text: result.texto, extra: camposExtras(result) };
     return { ok: true, text: String(result ?? 'Pronto.') };
   } catch (err) {
     audit('agent.tool.error', ctx, { tool: tool.name, error: String(err.message).slice(0, 200) });
     return { ok: false, text: `Não consegui executar ${tool.name}: ${err.message}` };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 /**
- * @returns {Promise<{ type: 'reply'|'tool_result'|'needs_confirmation'|'denied', reply: string, tool?: string, pendingId?: string }>}
+ * @returns {Promise<{ type: 'reply'|'tool_result'|'needs_confirmation'|'denied', reply: string, tool?: string, pendingId?: string,
+ *   imagem?: { url: string, alt: string, expiresInSec: number|null }, limiteImagem?: { minutos: number } }>}
+ *   `imagem` e `limiteImagem`: só a ferramenta de imagem do app (src/core/imagemDoApp.js); `imagem.url` é o link curto, nunca um caminho.
  */
 export async function runAgent(ctx, message, { history = [], memoryBlock = '', origin = undefined, perfil = null } = {}) {
   purgePending();
-  // Só ferramentas realmente registradas (uma política órfã nunca pode derrubar o agent).
-  const allowed = listAllowedTools(ctx).filter((n) => getTool(n));
+  // Só ferramentas realmente registradas (uma política órfã nunca pode derrubar o agent) e disponíveis agora (ex.: a imagem do app com a chave desligada some).
+  const allowed = listAllowedTools(ctx).filter((n) => toolDisponivel(getTool(n), ctx));
   const skills = skillsFor(ctx);
   // Perfil de IA desta conversa (etapa 10: o app com o cérebro separado; o seletor é o do cérebro, ver api/perfilDoApp.js). Sem perfil, a chamada de IA não ganha campo nenhum.
   // O perfil só diz COMO chamar a IA: a escolha da ferramenta, a política e o guardToolCall abaixo valem iguais para qualquer perfil.
@@ -138,7 +165,7 @@ export async function runAgent(ctx, message, { history = [], memoryBlock = '', o
 
   const name = String(decision.tool || '');
   const tool = getTool(name);
-  const access = tool ? checkToolAccess(ctx, name) : { allowed: false, reason: 'ferramenta inexistente' };
+  const access = !tool ? { allowed: false, reason: 'ferramenta inexistente' } : !toolDisponivel(tool, ctx) ? { allowed: false, reason: 'ferramenta indisponível agora' } : checkToolAccess(ctx, name);
   // Motor de políticas: em 'observe' só registra (decisão antiga vale); em 'enforce' vale a mais restritiva.
   const gated = tool ? getPolicyEngine().gate({ action: name, ctx, origin, legacy: !access.allowed ? 'deny' : access.confirm ? 'ask' : 'allow' }) : null;
   if (!tool || !access.allowed || gated.decision === POLICY_STATES.DENY) {
@@ -176,7 +203,7 @@ export async function runAgent(ctx, message, { history = [], memoryBlock = '', o
   }
 
   const out = await execute(tool, args, ctx);
-  return { type: 'tool_result', reply: out.text, tool: name };
+  return { type: 'tool_result', reply: out.text, tool: name, ...(out.extra ?? {}) };
 }
 
 /** Confirma (ou cancela) uma ação pendente. Single-use, mesmo usuário, com revalidação de permissão. */
@@ -196,7 +223,7 @@ export async function resolvePending(ctx, id, approve = true) {
     return { type: 'reply', reply: 'Ação cancelada.' };
   }
   const tool = getTool(p.tool);
-  const access = tool ? checkToolAccess(ctx, p.tool) : { allowed: false };
+  const access = tool && toolDisponivel(tool, ctx) ? checkToolAccess(ctx, p.tool) : { allowed: false };
   if (!tool || !access.allowed) return { type: 'denied', reply: 'Não tenho mais permissão para essa ação.' };
   const engine = getPolicyEngine();
   if (engine.mode() === 'enforce') {
@@ -210,7 +237,7 @@ export async function resolvePending(ctx, id, approve = true) {
   }
   const out = await execute(tool, p.args, ctx);
   if (p.ticketId) approvals.enacted(p.ticketId, {});
-  return { type: 'tool_result', reply: out.text, tool: p.tool };
+  return { type: 'tool_result', reply: out.text, tool: p.tool, ...(out.extra ?? {}) };
 }
 
 export function _pendingCount() {

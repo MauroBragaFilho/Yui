@@ -118,6 +118,7 @@ Na tela do Google:
 | `YUI_GOOGLE_GMAIL` | Libera o código do Gmail (somente leitura). **Só funciona** com a rota privada de IA validada (hoje desligada); sem ela, nada é baixado | `false` |
 | `YUI_GOOGLE_TOKEN_ARQUIVO` | Caminho do arquivo da autorização | `secrets/google-token.json` |
 | `YUI_GOOGLE_FUSO` | Fuso (nome IANA, como `America/Cuiaba`) dos "hoje", "amanhã" e "semana". Se não existir, vale `YUI_FUSO` | o valor de `YUI_FUSO` (`America/Sao_Paulo` se também faltar) |
+| `YUI_GOOGLE_REAUTORIZAR_PAINEL` | Reautorizar pelo painel web, só com a autorização já feita pelo script (veja [Reautorizar pelo painel web](#reautorizar-pelo-painel-web)). O Gmail nunca entra por ali | `false` |
 
 ---
 
@@ -130,9 +131,28 @@ O Google pode **invalidar** a autorização:
 - se a pessoa **revogar** o acesso (https://myaccount.google.com/permissions);
 - se a senha for alterada, para autorizações com permissões do Gmail.
 
-Quando o Google recusa (`invalid_grant`), a Yui marca a integração como "precisa autorizar de novo", **para de tentar** e **avisa o dono** por mensagem privada. O aviso só conta como **entregue depois que a mensagem de fato saiu**: se o Discord estiver fora do ar ou a mensagem falhar, a Yui tenta de novo no próximo uso (no mínimo a cada 15 minutos) até a entrega ser confirmada, uma entrega por vez. Confirmada, a hora do aviso fica dentro do arquivo de token e **nunca mais se repete**: um processo novo lê a marca, não chama o Google e não manda outra mensagem, nem 1 minuto, nem 48 horas depois. Um arquivo **novo** (de uma nova autorização) volta a funcionar sozinho. Se a pasta do arquivo não puder ser gravada, a marca fica só em memória e um reinício tenta uma vez e avisa de novo. Para renovar: rode o script de novo, copie o arquivo e reinicie.
+Quando o Google recusa (`invalid_grant`), a Yui marca a integração como "precisa autorizar de novo", **para de tentar** e **avisa o dono** por mensagem privada. O aviso só conta como **entregue depois que a mensagem de fato saiu**: se o Discord estiver fora do ar ou a mensagem falhar, a Yui tenta de novo no próximo uso (no mínimo a cada 15 minutos) até a entrega ser confirmada, uma entrega por vez. Confirmada, a hora do aviso fica dentro do arquivo de token e **nunca mais se repete**: um processo novo lê a marca, não chama o Google e não manda outra mensagem, nem 1 minuto, nem 48 horas depois. Um arquivo **novo** (de uma nova autorização) volta a funcionar sozinho. Se a pasta do arquivo não puder ser gravada, a marca fica só em memória e um reinício tenta uma vez e avisa de novo. Para renovar: rode o script de novo, copie o arquivo e reinicie; ou, com `YUI_GOOGLE_REAUTORIZAR_PAINEL=true`, renove pelo painel web (abaixo), sem copiar arquivo nem reiniciar.
 
 Falhas passageiras (rede, prazo, erro do servidor do Google) **não** contam como expiração: a Yui espera 30 segundos antes de tentar de novo.
+
+### Reautorizar pelo painel web
+
+Com `YUI_GOOGLE_REAUTORIZAR_PAINEL=true` (cofre, Configuração e chaves, grupo Geral; padrão desligado, ligar pede confirmação) e **já existindo** um arquivo de autorização feito pelo script, Admin > Integrações mostra o botão **"Reautorizar o Google"**. É o mesmo fluxo do script (cliente "App para computador", PKCE S256 e `state`), com o endereço do retorno colado de volta, porque esse tipo de cliente só aceita retorno em `127.0.0.1` e o `127.0.0.1` do seu aparelho não é o do servidor:
+
+1. O painel pede confirmação e o servidor lê o `client_id` do arquivo atual, gera o PKCE (o verificador fica **só na memória do servidor**) e um `state` aleatório, e devolve **só o link** de consentimento. O retorno é fixo em **`http://127.0.0.1:47615`** (nada escuta nessa porta).
+2. Você abre o link, entra com a sua conta e autoriza (marque todas as caixas). O navegador vai para `127.0.0.1:47615` e mostra "não foi possível conectar": **é esperado**. Copie o **endereço inteiro** da barra (ele tem `?state=...&code=...`).
+3. Cole o endereço no painel e envie. O servidor confere o protocolo, o host, a porta e o caminho, o `state` (em tempo constante) e a validade, troca o código com o verificador, confere os escopos e grava o arquivo pelo caminho atômico de sempre, com a permissão restrita. A tela mostra "Autorizado até <data>" (7 dias depois, no modo Testando) ou o motivo da falha.
+4. O arquivo novo não tem a marca de "precisa autorizar": a Agenda e as Tarefas voltam sozinhas, sem reiniciar.
+
+Regras:
+
+- **Escopos:** só Agenda e Tarefas, somente leitura. **O Gmail nunca entra pelo painel** (nem é pedido, nem é gravado). Se o arquivo atual tinha o Gmail, a tela avisa que ele fica para o script (`--gmail`); depois de reautorizar pelo painel, o Gmail precisa do script de novo.
+- **Sem arquivo de autorização** (primeira vez), o painel não faz nada e manda usar o script.
+- **Uso único:** a sessão vale 10 minutos, é uma por vez (um novo início descarta a anterior), só de quem a iniciou, e é apagada na **primeira tentativa** de retorno, certa ou errada. Errou o endereço? Comece de novo.
+- **Limite:** 5 inícios por hora.
+- **Nada volta à tela:** nem token, nem `client_secret`, nem o código, nem o verificador, nem o corpo de resposta do Google. A auditoria registra `google.reauth.start`, `google.reauth.ok` e `google.reauth.fail` só com um código fixo.
+- **Rotas:** `POST /v1/admin/google/autorizar/inicio` e `POST /v1/admin/google/autorizar/retorno` (corpo `{ "endereco": "..." }`), só do dono, no guarda das rotas como `admin.google_reauth` (grava credencial: com `YUI_READ_ONLY=true` em modo `enforce`, é negada).
+- **Conta:** o arquivo novo é de quem autorizou. A tela não mostra qual conta foi (não se pede `openid email`).
 
 ---
 

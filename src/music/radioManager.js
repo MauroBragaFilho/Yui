@@ -93,16 +93,30 @@ function calculatePcmRms(pcmBuffer) {
 async function startRadioMode(member, textChannel, client) {
     const voiceChannel = member?.voice?.channel;
     if (!voiceChannel) return { success: false, error: '⚠️ Você precisa estar em um canal de voz para ativar o Modo Rádio.' };
+    return startRadioIn(voiceChannel, textChannel, client, { requestedBy: member?.id });
+}
 
+/**
+ * Painel (lacunas do painel, item 10): liga o Modo Rádio num canal de voz e num canal de texto ESCOLHIDOS, sem ninguém precisar estar na call.
+ * É o mesmo miolo do /modo-radio (startRadioIn): Opus, sessão (createSession), embed no canal de texto, escuta por voz e saída do canal vazio. A única
+ * diferença: o canal pode começar vazio, então a saída automática espera `esperaSemNinguemMs` antes de valer. Quem escolhe e valida os canais (do
+ * servidor, com permissão de entrar e falar / escrever) é o painel (src/core/api/radioAdmin.js: canaisDoRadio).
+ */
+async function startRadioInChannel(voiceChannel, textChannel, client, { esperaSemNinguemMs = 0 } = {}) {
+    if (!voiceChannel?.guild?.id || !textChannel) return { success: false, error: '❌ Canal de voz ou de texto inválido.' };
+    return startRadioIn(voiceChannel, textChannel, client, { requestedBy: 'painel', esperaSemNinguemMs });
+}
+
+async function startRadioIn(voiceChannel, textChannel, client, { requestedBy = null, esperaSemNinguemMs = 0 } = {}) {
     const guildId = voiceChannel.guild.id;
 
     // Sem o codificador Opus o rádio quebra na primeira música: recusa agora, com aviso claro.
     if (!isOpusAvailable()) {
-        logger.error(`[Radio] Modo Rádio recusado: voz sem codificador Opus (usuário ${member?.id}, servidor ${guildId}).`);
+        logger.error(`[Radio] Modo Rádio recusado: voz sem codificador Opus (usuário ${requestedBy}, servidor ${guildId}).`);
         return { success: false, error: VOICE_UNAVAILABLE_MESSAGE };
     }
 
-    logger.info(`[Radio] Modo Rádio pedido por ${member?.id} no servidor ${guildId} (canal de voz ${voiceChannel.id}).`);
+    logger.info(`[Radio] Modo Rádio pedido por ${requestedBy} no servidor ${guildId} (canal de voz ${voiceChannel.id}).`);
     const existingSession = getSession(guildId);
 
     const existingConn = getVoiceConnection(guildId);
@@ -117,7 +131,7 @@ async function startRadioMode(member, textChannel, client) {
             const anterior = existingConn && radioReceiverListeners.get(existingConn.receiver);
             if (anterior?.handle.guard.isDisabled()) {
                 setupRadioVoiceReceiver(existingConn, guildId, textChannel, client, voiceChannel);
-                logger.info(`[Radio] Escuta por voz religada a pedido de ${member?.id} (servidor ${guildId}).`);
+                logger.info(`[Radio] Escuta por voz religada a pedido de ${requestedBy} (servidor ${guildId}).`);
             }
         } catch (err) {
             logger.warn(`[Radio] Não foi possível religar a escuta por voz (servidor ${guildId}): ${errMsg(err)}`);
@@ -194,10 +208,11 @@ async function startRadioMode(member, textChannel, client) {
 
     setupRadioVoiceReceiver(connection, guildId, textChannel, client, voiceChannel);
 
+    const emptyGraceUntil = Date.now() + Math.max(0, Number(esperaSemNinguemMs) || 0);
     connection.on(VoiceConnectionStatus.Ready, () => {
-        monitorEmptyChannel(guildId, voiceChannel, textChannel);
+        monitorEmptyChannel(guildId, voiceChannel, textChannel, emptyGraceUntil);
     });
-    monitorEmptyChannel(guildId, voiceChannel, textChannel);
+    monitorEmptyChannel(guildId, voiceChannel, textChannel, emptyGraceUntil);
 
     return { success: true };
 }
@@ -518,50 +533,93 @@ async function processDirectRadioVoiceCommand(prompt, userId, guildId, textChann
             return;
         }
 
-        let trackToAdd = null;
-
-        if (result.type === 'track') {
-            trackToAdd = { ...result.track, addedBy: userId };
-        } else if (result.type === 'ambiguous' && Array.isArray(result.results) && result.results.length > 0) {
-            trackToAdd = { ...result.results[0], addedBy: userId };
-        } else if (result.type === 'playlist' && Array.isArray(result.tracks) && result.tracks.length > 0) {
-            const firstNewPos = (session.playlist?.length || 0) + 1;
-            result.tracks.forEach(t => {
-                t.addedBy = userId;
-                addTrackToQueue(guildId, t);
-            });
-            const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
-            if (!isPlayingOrActive) {
-                skipToTrack(guildId, firstNewPos);
-                const current = getSession(guildId)?.currentTrack;
-                if (current) await playTrack(guildId, current, textChannel, client);
-            } else {
-                await updateEmbed(guildId, textChannel, client);
-                prefetchNextTrack(guildId).catch(() => {});
-            }
-            await sendNotify(`✅ **${result.tracks.length}** faixas adicionadas à fila!`);
+        const added = await enqueueRadioResult(guildId, result, userId, textChannel, client);
+        if (added.kind === 'playlist') {
+            await sendNotify(`✅ **${added.count}** faixas adicionadas à fila!`);
             return;
         }
-
-        if (!trackToAdd) {
+        if (!added.track) {
             await sendNotify(`Música não encontrada para **"${intent.query}"**.`);
             return;
         }
+        await sendNotify(`Adicionada à fila: **${added.track.title}** — *${added.track.artist}*`);
+        return;
+    }
+}
 
-        const queuePos = addTrackToQueue(guildId, trackToAdd);
-        const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
+/**
+ * Põe na fila o que o resolveInput achou e, com o rádio parado, já toca: a faixa, a 1ª opção de uma busca ambígua ou a playlist inteira (a partir da 1ª
+ * faixa nova). É a MESMA regra do pedido por voz Direct e pela conversa (o ADD acima) e a do painel (lacunas do painel, item 10). Não manda mensagem.
+ * @returns {Promise<{ kind: 'track'|'playlist'|null, track: object|null, count: number, playing: boolean }>} `playing`: começou a tocar agora.
+ */
+async function enqueueRadioResult(guildId, result, userId, textChannel, client) {
+    const session = getSession(guildId);
+    if (!session || !result) return { kind: null, track: null, count: 0, playing: false };
+    const isPlayingOrActive = session.status === 'PLAYING' || session.status === 'BUFFERING' || session.status === 'PAUSED';
 
+    if (result.type === 'playlist' && Array.isArray(result.tracks) && result.tracks.length > 0) {
+        const firstNewPos = (session.playlist?.length || 0) + 1;
+        result.tracks.forEach(t => {
+            t.addedBy = userId;
+            addTrackToQueue(guildId, t);
+        });
         if (!isPlayingOrActive) {
-            skipToTrack(guildId, queuePos);
+            skipToTrack(guildId, firstNewPos);
             const current = getSession(guildId)?.currentTrack;
             if (current) await playTrack(guildId, current, textChannel, client);
         } else {
             await updateEmbed(guildId, textChannel, client);
             prefetchNextTrack(guildId).catch(() => {});
         }
-        await sendNotify(`Adicionada à fila: **${trackToAdd.title}** — *${trackToAdd.artist}*`);
-        return;
+        return { kind: 'playlist', track: null, count: result.tracks.length, playing: !isPlayingOrActive };
     }
+
+    let trackToAdd = null;
+    if (result.type === 'track' && result.track) {
+        trackToAdd = { ...result.track, addedBy: userId };
+    } else if (result.type === 'ambiguous' && Array.isArray(result.results) && result.results.length > 0) {
+        trackToAdd = { ...result.results[0], addedBy: userId };
+    }
+    if (!trackToAdd) return { kind: null, track: null, count: 0, playing: false };
+
+    const queuePos = addTrackToQueue(guildId, trackToAdd);
+    if (!isPlayingOrActive) {
+        skipToTrack(guildId, queuePos);
+        const current = getSession(guildId)?.currentTrack;
+        if (current) await playTrack(guildId, current, textChannel, client);
+    } else {
+        await updateEmbed(guildId, textChannel, client);
+        prefetchNextTrack(guildId).catch(() => {});
+    }
+    return { kind: 'track', track: trackToAdd, count: 1, playing: !isPlayingOrActive };
+}
+
+/** O canal de texto do rádio (o da sessão), pelo cliente do Discord do bot; sem ele, null (o player acha o canal sozinho ao atualizar o embed). */
+function radioTextChannelOf(guildId, client) {
+    const id = getSession(guildId)?.textChannelId;
+    if (!id) return null;
+    try { return client?.channels?.cache?.get?.(id) ?? null; } catch (_) { return null; }
+}
+
+/**
+ * Painel (item 10): pula para a próxima faixa, como o botão e o radio_next_track (nextTrack + playTrack). Fim da fila: só atualiza o embed.
+ * @returns {Promise<object|null>} a faixa que começou, ou null.
+ */
+async function skipRadioTrack(guildId, client) {
+    if (!getSession(guildId)) return null;
+    const textChannel = radioTextChannelOf(guildId, client);
+    const next = nextTrack(guildId);
+    if (next) {
+        await playTrack(guildId, next, textChannel, client);
+        return next;
+    }
+    await updateEmbed(guildId, textChannel, client);
+    return null;
+}
+
+/** Painel (item 10): o resolveInput do rádio (Deezer, YouTube, Spotify), o mesmo do pedido por voz/conversa e do radio_play_music. */
+function resolveRadioInput(query, guildId) {
+    return resolveInput(query, guildId);
 }
 
 async function processRadioVoiceCommand(prompt, userId, guildId, textChannel, client) {
@@ -645,7 +703,8 @@ async function leaveRadioCall(guildId, textChannel) {
     }
 }
 
-function monitorEmptyChannel(guildId, voiceChannel, textChannel) {
+// `graceUntil` (painel, item 10): o rádio iniciado sem ninguém na call não sai do canal vazio antes dessa hora (ms). Sem ela, como sempre.
+function monitorEmptyChannel(guildId, voiceChannel, textChannel, graceUntil = 0) {
     const CHECK_INTERVAL = 10000;
     const interval = setInterval(() => {
         const session = getSession(guildId);
@@ -654,7 +713,7 @@ function monitorEmptyChannel(guildId, voiceChannel, textChannel) {
             return;
         }
         const humanMembers = voiceChannel.members?.filter(m => !m.user.bot) || new Map();
-        if (humanMembers.size === 0) {
+        if (humanMembers.size === 0 && Date.now() >= graceUntil) {
             clearInterval(interval);
             leaveRadioCall(guildId, textChannel).catch((err) => {
                 logger.warn(`[Radio] Falha ao sair do canal vazio (servidor ${guildId}): ${errMsg(err)}`);
@@ -757,6 +816,8 @@ async function runRadioChatIntent({ kind, query, member, textChannel, client }) 
 
 export { runRadioChatIntent };
 export { startRadioMode, leaveRadioCall, setupRadioVoiceReceiver, radioAmbiguousSessions, scheduleAmbiguousAutoSelect };
+// Painel (lacunas do painel, item 10; src/core/api/radioAdmin.js): iniciar num canal escolhido, pôr na fila, pular e buscar, com as mesmas regras acima.
+export { startRadioInChannel, enqueueRadioResult, skipRadioTrack, resolveRadioInput };
 // Só para os testes (M3): os caminhos que enviam texto com eco de título/busca ao canal e a regra de menção deles.
 export { processDirectRadioVoiceCommand, processRadioVoiceCommand, radioAllowedMentions };
 

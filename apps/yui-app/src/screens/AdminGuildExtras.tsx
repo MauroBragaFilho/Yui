@@ -5,9 +5,12 @@ import { ChannelPicker } from '../components/ChannelPicker.tsx';
 import { confirmAction } from '../components/confirm.ts';
 import { Badge, Button, Chip, FieldLabel, StateView } from '../components/ui.tsx';
 import {
-  FREQUENCIAS, avisoDaFerramenta, lerPorcentagem, mudancaDaPersona, perguntaDaFerramenta, perguntaDoAceite,
+  FREQUENCIAS, lerPorcentagem, mudancaDaPersona, perguntaDoAceite,
   resultadoDoAceite, resumoDosTermos, semEmoji, textoSemMarkdown, mudancaAoAlternarFalas,
 } from '../guildLogic.ts';
+import {
+  TEXTO_DO_ESTADO, estadoDoGtaAgendado, montarFuncoes, mudancaDaFuncao, perguntaDaFuncao, resultadoDaFuncao, type VistaDaFuncao,
+} from '../funcoesLogic.ts';
 import { colors, radius, spacing } from '../theme.ts';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu errado.');
@@ -53,9 +56,9 @@ function useAcao() {
 
 const Aviso = ({ msg }: { msg: Msg }) => (msg ? <Text accessibilityRole="alert" style={msg.ok ? styles.ok : styles.error}>{msg.text}</Text> : null);
 
-/** Interruptor em linha inteira (alvo de toque de pelo menos 44). */
-function Interruptor({ label, hint, aviso, on, disabled, onPress, testID }: {
-  label: string; hint?: string; aviso?: string | null; on: boolean; disabled?: boolean; onPress: () => void; testID?: string;
+/** Interruptor em linha inteira (alvo de toque de pelo menos 44). `estado`: o texto ao lado (sem ele, "Ligado" ou "Desligado"). */
+function Interruptor({ label, hint, aviso, on, disabled, onPress, testID, estado }: {
+  label: string; hint?: string; aviso?: string | null; on: boolean; disabled?: boolean; onPress: () => void; testID?: string; estado?: string;
 }) {
   return (
     <Pressable
@@ -73,7 +76,7 @@ function Interruptor({ label, hint, aviso, on, disabled, onPress, testID }: {
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         {aviso ? <Text style={styles.warn}>Atenção: {aviso}</Text> : null}
       </View>
-      <Text style={styles.hint}>{on ? 'Ligado' : 'Desligado'}</Text>
+      <Text style={styles.hint}>{estado ?? (on ? 'Ligado' : 'Desligado')}</Text>
       <View style={[styles.track, on && styles.trackOn]}>
         <View style={[styles.knob, on && styles.knobOn]} />
       </View>
@@ -81,35 +84,79 @@ function Interruptor({ label, hint, aviso, on, disabled, onPress, testID }: {
   );
 }
 
-/** Ferramentas da IA ligadas ou desligadas neste servidor (as mesmas do /yui-ferramentas). */
-function Ferramentas({ client, guildId }: { client: YuiClient; guildId: string }) {
+/**
+ * Funções da Yui neste servidor (lacunas do painel, item 8): um interruptor por função de uso, por cima das ferramentas do /yui-ferramentas (as mesmas
+ * rotas e o mesmo server_tools.json). Uma função com várias ferramentas liga ou desliga todas, uma de cada vez. Mais o GTA agendado, que é por canal.
+ */
+function Funcoes({ client, guild, irParaCanais }: { client: YuiClient; guild: AdminGuildDetail; irParaCanais?: () => void }) {
+  const guildId = guild.id;
   const { data, setData, error, reload } = useDados<GuildTool[]>(async () => (await client.admin.guildTools(guildId)).ferramentas);
   const { busy, msg, run } = useAcao();
 
   if (!data) return error ? <StateView kind="error" message={error} onRetry={reload} /> : <StateView kind="loading" />;
 
-  function alternar(f: GuildTool) {
-    const ligar = !f.ligada;
-    const p = perguntaDaFerramenta(f, ligar);
+  const { principais, outras } = montarFuncoes(data);
+  const gta = estadoDoGtaAgendado(guild.channels);
+
+  function alternar(f: VistaDaFuncao) {
+    const m = mudancaDaFuncao(f, data ?? []);
+    if (!m.ferramentas.length) return;
+    const p = perguntaDaFuncao(f, m.ligar);
     confirmAction(p.titulo, p.texto, () => run(async () => {
-      setData((await client.admin.setGuildTool(guildId, f.nome, ligar)).ferramentas);
-      return `${semEmoji(f.rotulo)}: ${ligar ? 'ligada' : 'desligada'}.`;
-    }), ligar ? 'Ligar' : 'Desligar');
+      let feitas = 0;
+      try {
+        for (const nome of m.ferramentas) {
+          setData((await client.admin.setGuildTool(guildId, nome, m.ligar)).ferramentas);
+          feitas += 1;
+        }
+      } catch (e) {
+        if (feitas === 0) throw e;
+        await reload(); // parte mudou: mostra o estado verdadeiro
+        throw new ApiError(0, resultadoDaFuncao(f.nome, m.ligar, feitas, m.ferramentas.length, errText(e)));
+      }
+      return resultadoDaFuncao(f.nome, m.ligar, feitas, m.ferramentas.length);
+    }), p.sim);
   }
 
-  const restaurar = () => confirmAction('Restaurar o padrão?', 'Todas as ferramentas deste servidor voltam ao padrão da Yui.', () => run(async () => {
+  const restaurar = () => confirmAction('Restaurar o padrão?', 'Todas as funções deste servidor voltam ao padrão da Yui.', () => run(async () => {
     setData((await client.admin.resetGuildTools(guildId)).ferramentas);
     return 'Padrão restaurado.';
   }), 'Restaurar');
 
+  const linha = (f: VistaDaFuncao) => (
+    <Interruptor
+      key={f.chave}
+      testID={`guild-funcao-${f.chave}`}
+      label={f.nome}
+      hint={f.descricao}
+      aviso={f.estado === 'ligada' ? null : f.aviso}
+      on={f.estado === 'ligada'}
+      estado={TEXTO_DO_ESTADO[f.estado]}
+      disabled={busy}
+      onPress={() => alternar(f)}
+    />
+  );
+
   return (
     <View style={styles.body}>
-      {data.length === 0 ? <StateView kind="empty" title="Nenhuma ferramenta para ajustar" /> : null}
-      {data.map((f) => (
-        <Interruptor key={f.nome} testID={`guild-tool-${f.nome}`} label={semEmoji(f.rotulo)} hint={semEmoji(f.descricao)} aviso={avisoDaFerramenta(f.nome)} on={f.ligada} disabled={busy} onPress={() => alternar(f)} />
-      ))}
-      <Button testID="guild-tools-reset" label="Restaurar padrão" variant="ghost" compact loading={busy} onPress={restaurar} />
+      <Text style={styles.hint}>Ligue ou desligue o que a Yui faz neste servidor. Desligada, a função é recusada pela conversa e pelos comandos; na DM nada muda.</Text>
+      {principais.length === 0 && outras.length === 0 ? <StateView kind="empty" title="Nenhuma função para ajustar" /> : null}
+      {principais.map(linha)}
+      {outras.length ? <Text style={styles.title}>Outras funções</Text> : null}
+      {outras.map(linha)}
+      <Button testID="guild-funcoes-reset" label="Restaurar padrão" variant="ghost" compact loading={busy} onPress={restaurar} />
       <Aviso msg={msg} />
+
+      <Text style={styles.title}>GTA agendado</Text>
+      <Text style={styles.hint}>A publicação automática do GTA é por canal: sai no canal escolhido para cada tipo. {gta.resumo}.</Text>
+      {gta.linhas.map((l) => (
+        <View key={l.tipo} testID={`guild-gta-${l.tipo}`} style={styles.kvRow}>
+          <Text style={styles.value}>{l.nome}</Text>
+          <Text style={l.configurado ? styles.hint : styles.warn}>{l.texto}</Text>
+        </View>
+      ))}
+      {irParaCanais ? <Button testID="guild-gta-canais" label="Escolher os canais" variant="ghost" compact onPress={irParaCanais} /> : null}
+      <Text style={styles.hint}>Ligar ou desligar o semanal e as notícias para todos os servidores fica em Configuração e chaves.</Text>
     </View>
   );
 }
@@ -309,13 +356,13 @@ function Canal({ client, guild, reload }: { client: YuiClient; guild: AdminGuild
   );
 }
 
-export type Secao = 'ferramentas' | 'termos' | 'canal';
+export type Secao = 'funcoes' | 'termos' | 'canal';
 
 /** Uma seção das configurações do servidor. Só é montada (e só carrega) quando a aba está aberta. */
-export function GuildExtras({ secao, client, guild, reload, onTosChange }: {
-  secao: Secao; client: YuiClient; guild: AdminGuildDetail; reload: () => Promise<void>; onTosChange?: (aceito: boolean) => void;
+export function GuildExtras({ secao, client, guild, reload, onTosChange, irParaCanais }: {
+  secao: Secao; client: YuiClient; guild: AdminGuildDetail; reload: () => Promise<void>; onTosChange?: (aceito: boolean) => void; irParaCanais?: () => void;
 }) {
-  if (secao === 'ferramentas') return <Ferramentas client={client} guildId={guild.id} />;
+  if (secao === 'funcoes') return <Funcoes client={client} guild={guild} irParaCanais={irParaCanais} />;
   if (secao === 'termos') return <Termos client={client} guild={guild} onChanged={(aceito) => { onTosChange?.(aceito); reload(); }} />;
   return <Canal client={client} guild={guild} reload={reload} />;
 }
@@ -331,6 +378,7 @@ const styles = StyleSheet.create({
   ok: { color: colors.success, fontSize: 13 },
   error: { color: colors.danger, fontSize: 13 },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingVertical: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border },
+  kvRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
   track: { width: 40, height: 24, borderRadius: radius.pill, padding: 3, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
   trackOn: { backgroundColor: colors.btnBg, borderColor: colors.btnBg },
   knob: { width: 16, height: 16, borderRadius: radius.pill, backgroundColor: colors.muted },

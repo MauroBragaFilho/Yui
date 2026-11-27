@@ -58,7 +58,7 @@ Consequências práticas:
 
 - A Yui **só responde com o notebook ligado e com Wi-Fi**. Não precisa de ninguém logado: as tarefas sobem no boot. Se o notebook desligar, ela volta sozinha quando ele for ligado de novo; se o Wi-Fi cair, ela reconecta ao Discord quando a rede volta (foi o que aconteceu na noite de 09 para 10/11/2026, com o Wi-Fi fora de ~23h41 a ~00h20).
 - Deixe o notebook **na tomada**: o `scripts/instalar-ssh.ps1` desliga a suspensão, a hibernação e a ação de fechar a tampa só para quando ele está na tomada.
-- As ferramentas que olham o computador (informações do PC, busca de arquivos, abrir projetos e a aba **Código**) agem **no notebook**, e não no PC de desenvolvimento. Se for usá-las, ajuste `YUI_PROJECTS` e `YUI_FILE_ROOTS` no `.env` do notebook (o instalador avisa quando ainda apontam para caminhos do PC antigo).
+- As ferramentas que olham o computador (informações do PC, busca de arquivos e abrir projetos) agem **no notebook**, e não no PC de desenvolvimento. Se for usá-las, ajuste `YUI_PROJECTS` e `YUI_FILE_ROOTS` no `.env` do notebook (o instalador avisa quando ainda apontam para caminhos do PC antigo).
 
 ### 🩺 Watchdog: religa só a Yui travada (`scripts/supervisor-yui.ps1`)
 
@@ -153,7 +153,7 @@ De outro computador da mesma rede, sem publicar nada, dá para usar um **túnel 
 ssh -L 8081:127.0.0.1:8081 -L 3939:127.0.0.1:3939 Yui@<ip-do-notebook>
 ```
 
-Pelo túnel, os pedidos chegam à Yui por `127.0.0.1`, sem os cabeçalhos do Tailscale: ela os trata como vindos da própria máquina, então as aprovações da aba **Código** passam a valer por ele (diferente do celular pela tailnet).
+Pelo túnel, os pedidos chegam à Yui por `127.0.0.1`, sem os cabeçalhos do Tailscale: ela os trata como vindos da própria máquina (origem `LOCAL_PC` no motor de políticas), diferente do celular pela tailnet. Aprovar uma ação **crítica** continua sendo só pelo canal local (`npm run aprovar`), nunca pela API.
 
 Nunca use `tailscale funnel` (ele abre para a internet).
 
@@ -227,7 +227,7 @@ Os caminhos são relativos à pasta da Yui: na produção, `C:\Yui\logs` no note
 ### 🔗 Auditoria com Hash Encadeado (R04)
 
 - **Integridade verificável:** qualquer linha alterada, removida ou reordenada quebra a cadeia e é detectada por `verifyAudit()`.
-- **Registro completo de aprovações:** aprovações no módulo Código registram o comando exato, caminhos, cwd e o aprovador (`approverId` e `approverRole`).
+- **Registro completo de aprovações:** cada ticket de aprovação crítica registra a ação, o hash dos parâmetros e o aprovador (`approverId`, `approverRole` e a origem); era o que a aba Código usava (removida em 27/11/2026) e hoje vale para as ações críticas do agente.
 - **Resiliência:** falhas de escrita disparam alerta de erro ao dono (`alerts.js`). Linhas legadas continuam sendo lidas normalmente.
 - **Rotação:** configurável via `YUI_AUDIT_MAX_BYTES` (padrão 10MB) e `YUI_AUDIT_MAX_ROTATE` (padrão 5 arquivos).
 - **Verificação de integridade via comando:**

@@ -96,7 +96,8 @@ try {
     const declaradas = [...classes].filter(([, c]) => c.modo === 'declarada').map(([n]) => n);
     assert.deepEqual(declaradas, ['test:dev']);
     const arquivos = fs.readdirSync(path.join(RAIZ, 'tests', 'dev')).filter((f) => /\.test\.js$/.test(f));
-    assert.ok(arquivos.length >= 4);
+    // 27/11/2026: agent.test.js e dev-core.test.js saíram com os restos da aba Código; ficam os 3 das tarefas do Yui Dev (Fase 4).
+    assert.ok(arquivos.length >= 3, `esperava ao menos 3 arquivos em tests/dev, achei ${arquivos.length}`);
     const PERIGOSO = /\b(?:spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\s*\(|\bfetch\s*\(|\bnet\.connect|createConnection|new\s+Worker\s*\(|from\s+['"]node:(?:dgram|dns)['"]/;
     for (const f of arquivos) {
       const src = fs.readFileSync(path.join(RAIZ, 'tests', 'dev', f), 'utf8');

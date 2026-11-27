@@ -4,6 +4,10 @@ export const planosLigados = (env = process.env) => String(env?.YUI_PLANOS ?? ''
 // Aprovação automática (padrão desligada): só vale junto com YUI_PLANOS e para plano inteiro de leituras marcadas com "auto".
 export const planosAuto = (env = process.env) => String(env?.YUI_PLANOS_AUTO ?? '').trim().toLowerCase() === 'true';
 
+// Aprovar e recusar pelo painel web (lacunas do painel, item 3 v2; padrão desligada). Sem ela a rota de decisão do painel responde 404 e a tela só mostra.
+// As regras da decisão são as mesmas dos botões da DM (a mesma decidir() do serviço); esta chave só abre o segundo caminho até ela.
+export const planosPeloPainel = (env = process.env) => String(env?.YUI_PLANOS_PAINEL ?? '').trim().toLowerCase() === 'true';
+
 // A primeira linha de cada parte do resultado: quem monta contexto para a IA a partir do histórico do Discord pula essas mensagens
 // (os dados lidos pelo plano não voltam a nenhum provedor). Só vale para mensagem da própria Yui.
 export const MARCA_RESULTADO = '-# resultado de plano (não entra nas conversas com a IA)';

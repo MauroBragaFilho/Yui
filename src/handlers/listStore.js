@@ -56,6 +56,35 @@ export function listSlug(name) {
 
 const queues = new Map(); // userId -> Promise (serializa leitura-modificação-gravação)
 
+/**
+ * As listas de UMA pessoa só para LER (o painel do dono, lacunas do painel item 12): { situacao, listas }. Diferente do `load` do store, não grava,
+ * não renomeia o arquivo estragado e não entra na fila: é uma leitura de um arquivo que outro processo grava de forma atômica (tmp + rename).
+ * `situacao`: 'ok', 'ausente' (a pessoa ainda não tem listas) ou 'ilegivel' (arquivo grande demais ou fora do formato). userId só dígitos.
+ * Cada lista: { nome, criadaEm, atualizadaEm, itens: [{ texto, feito }] }, na ordem em que foram criadas.
+ */
+export function lerListasDoUsuario(userId, { dir = defaultListDir() } = {}) {
+  const id = String(userId ?? '');
+  if (!USER_RE.test(id)) throw new ListError('USER', 'Usuário inválido.');
+  let raw;
+  try {
+    const file = path.join(dir, `${id}.json`);
+    if (fs.statSync(file).size > LIST_LIMITS.maxFileBytes) return { situacao: 'ilegivel', listas: [] };
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    return { situacao: err?.code === 'ENOENT' ? 'ausente' : 'ilegivel', listas: [] };
+  }
+  let data;
+  try { data = JSON.parse(raw); } catch { return { situacao: 'ilegivel', listas: [] }; }
+  if (!data || typeof data !== 'object' || !data.lists || typeof data.lists !== 'object') return { situacao: 'ilegivel', listas: [] };
+  const listas = Object.values(data.lists).filter((l) => l && typeof l === 'object' && typeof l.name === 'string' && Array.isArray(l.items)).map((l) => ({
+    nome: l.name,
+    criadaEm: Number.isFinite(Number(l.createdAt)) ? Number(l.createdAt) : null,
+    atualizadaEm: Number.isFinite(Number(l.updatedAt)) ? Number(l.updatedAt) : null,
+    itens: l.items.filter((i) => i && typeof i.text === 'string').map((i) => ({ texto: i.text, feito: i.done === true })),
+  }));
+  return { situacao: 'ok', listas };
+}
+
 export function createListStore({ dir = defaultListDir(), now = () => Date.now() } = {}) {
   function fileFor(userId) {
     const id = String(userId ?? '');

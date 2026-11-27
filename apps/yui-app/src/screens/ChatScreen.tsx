@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +16,8 @@ import {
   errorMessage,
   expireStale,
   fromAgentReply,
+  imageExpired,
+  imageLimitText,
   resolvePending,
   userMessage,
   type ChatMessage,
@@ -30,6 +33,8 @@ export function ChatScreen({ client }: Props) {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // Relógio da tela: a imagem do chat vira o aviso "expirou" quando o link curto vence (sem esperar outra mensagem).
+  const [now, setNow] = useState(Date.now());
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   useEffect(() => {
@@ -45,7 +50,10 @@ export function ChatScreen({ client }: Props) {
 
   // Confirmações antigas expiram sozinhas (a API as descarta em 2 minutos).
   useEffect(() => {
-    const t = setInterval(() => setMessages((m) => expireStale(m)), 15_000);
+    const t = setInterval(() => {
+      setMessages((m) => expireStale(m));
+      setNow(Date.now());
+    }, 15_000);
     return () => clearInterval(t);
   }, []);
 
@@ -62,7 +70,7 @@ export function ChatScreen({ client }: Props) {
     scrollToEnd();
     try {
       const reply = await client.send(text);
-      setMessages((m) => [...m, fromAgentReply(reply)]);
+      setMessages((m) => [...m, fromAgentReply(reply, Date.now(), client.baseUrl)]);
     } catch (e) {
       setMessages((m) => [...m, errorMessage(e instanceof ApiError ? e.message : 'Algo deu errado.')]);
     } finally {
@@ -76,7 +84,7 @@ export function ChatScreen({ client }: Props) {
     setBusy(true);
     try {
       const reply = await client.confirm(pendingId, approve);
-      setMessages((m) => [...m, fromAgentReply(reply)]);
+      setMessages((m) => [...m, fromAgentReply(reply, Date.now(), client.baseUrl)]);
     } catch (e) {
       setMessages((m) => [...m, errorMessage(e instanceof ApiError ? e.message : 'Algo deu errado.')]);
     } finally {
@@ -130,7 +138,8 @@ export function ChatScreen({ client }: Props) {
             </View>
           </View>
         }
-        renderItem={({ item }) => <Bubble message={item} busy={busy} onAnswer={answer} />}
+        extraData={now}
+        renderItem={({ item }) => <Bubble message={item} busy={busy} onAnswer={answer} now={now} />}
       />
 
       {busy ? (
@@ -172,18 +181,48 @@ export function ChatScreen({ client }: Props) {
   );
 }
 
+/** A imagem do chat (link curto do servidor, vence em minutos): mostra a imagem com o texto alternativo; vencida ou com erro, mostra o aviso e o texto. */
+function ChatImageView({ image, now }: { image: NonNullable<ChatMessage['image']>; now: number }) {
+  const [failed, setFailed] = useState(false);
+  if (failed || imageExpired(image, now)) {
+    return (
+      <View style={styles.imageGone} testID="chat-image-expired">
+        <Icon name="history" size={18} color={colors.muted} />
+        <Text style={styles.imageGoneText}>
+          {failed ? 'Não consegui abrir a imagem.' : 'A imagem expirou (o link vale poucos minutos). Peça de novo se quiser vê-la.'} {image.alt}
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <Image
+      testID="chat-image"
+      source={{ uri: image.uri }}
+      accessibilityRole="image"
+      accessibilityLabel={image.alt}
+      alt={image.alt}
+      resizeMode="contain"
+      onError={() => setFailed(true)}
+      style={styles.image}
+    />
+  );
+}
+
 function Bubble({
   message,
   busy,
   onAnswer,
+  now,
 }: {
   message: ChatMessage;
   busy: boolean;
   onAnswer: (pendingId: string, approve: boolean) => void;
+  now: number;
 }) {
   const mine = message.role === 'user';
   const isError = message.kind === 'error' || message.kind === 'denied';
   const fg = mine ? colors.btnFg : isError ? colors.danger : colors.text;
+  const limitText = imageLimitText(message.imageLimit);
   return (
     <View style={[styles.row, { justifyContent: mine ? 'flex-end' : 'flex-start' }]}>
       <View
@@ -194,11 +233,14 @@ function Bubble({
           message.kind === 'confirmation' ? { borderColor: colors.warning } : null,
         ]}
       >
-        {message.kind === 'tool_result' ? <Badge label={message.tool ?? 'ferramenta'} color={colors.success} /> : null}
+        {message.kind === 'tool_result' ? <Badge label={message.image ? 'Imagem' : message.tool ?? 'ferramenta'} color={colors.success} /> : null}
         {message.kind === 'confirmation' ? <Badge label="Precisa da sua confirmação" color={colors.warning} /> : null}
+        {limitText ? <Badge label="Limite de imagens" color={colors.warning} /> : null}
         <Text selectable style={[styles.bubbleText, { color: fg }]}>
           {message.text}
         </Text>
+        {message.image ? <ChatImageView image={message.image} now={now} /> : null}
+        {limitText ? <Text style={styles.limitText} testID="chat-image-limit">{limitText}</Text> : null}
 
         {message.pending ? (
           message.pending.status === 'waiting' ? (
@@ -261,6 +303,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   actionBtn: { flex: 1, minHeight: 44 },
   pendingDone: { color: colors.muted, fontSize: 12, marginTop: spacing.xs },
+  image: { width: 260, height: 260, maxWidth: '100%', borderRadius: radius.sm, backgroundColor: colors.surface },
+  imageGone: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  imageGoneText: { flex: 1, color: colors.muted, fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  limitText: { color: colors.warning, fontSize: 13, lineHeight: 19, fontWeight: '600' },
   typing: {
     flexDirection: 'row',
     alignItems: 'center',

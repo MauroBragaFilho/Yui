@@ -93,6 +93,7 @@ Detalhes em [GTA Online](GTA_ONLINE.md).
 - **`/yui` e `+yui perguntar`:** usam só o semanal válido e avisam quando ele é de outra semana. Não têm ferramentas por projeto (as ferramentas `gta_online`, `listar_lembretes` e `criar_lembrete` só existem no chat).
 - **`/gta-noticias quantidade:`** Últimas notícias do Rockstar Newswire (1 a 5).
 - **`/yui-configurar`** (Server Admin): Define os canais `noticias`, `diario` e `semanal` do servidor.
+- **Interruptor do servidor:** com a função "GTA Online" desligada no servidor (painel web, aba Funções, ou `/yui-ferramentas`, ferramenta `gta_online`), os três comandos, o `+yui diario|semanal|noticias` e a conversa recusam com a mesma frase. Na DM nada muda. A publicação automática nos canais não depende dele.
 
 ---
 
@@ -259,11 +260,11 @@ Painel gráfico unificado e público no chat para administração do servidor.
 Central de Controle Master para gerenciamento global da rede Yui (oculta e restrita ao criador).
 
 - **Subcomando `painel` / `dashboard`:** Abre o Dashboard Master por botões.
-- **Subcomando `modelo`:** Liga ou desliga o nome do modelo nas respostas (`mostrar_nome`) e durante o "Processando..." (`mostrar_pensamento`), e define as tentativas em caso de erro (`retentativas`, 0 a 10).
+- **Subcomando `modelo`:** Liga ou desliga o nome do modelo nas respostas (`mostrar_nome`) e durante o "Processando..." (`mostrar_pensamento`), e define as tentativas em caso de erro (`retentativas`, 0 a 10; fora disso é recusado). Grava no cofre do painel (o mesmo do painel web) e a resposta mostra o valor relido.
 - **Banir / Desbanir / Lista de Bans (`banir`, `desbanir`, `bans_lista`):** Gerencia a lista negra global de usuários, servidores e canais banidos (o motivo vale até 300 caracteres).
 - **AutoMod (`automod servidor_id: modo:`):** Define o modo de moderação automática do servidor: `off`, `trigger` (gatilhos), `mcp` (IA) ou `both` (ambos). Veja [Moderação](MODERATION.md).
 - **Ferramentas MCP (`ferramenta`):** Gerencia a ativação de ferramentas MCP por servidor (`toggle`, `list`, `reset`; `servidor_id` opcional).
-- **Bot Config (`bot_config`):** Abre as configurações de Runtime da IA.
+- **Bot Config (`bot_config`):** Abre o painel de configuração (IA, moderação, modelos). Desde 26/11/2026 cada página grava no **cofre do painel**, o mesmo da aba Configuração e chaves do painel web (com o cérebro separado, pelo cérebro): os dois mostram o mesmo valor e nada se perde no reinício. Valor fora da faixa é recusado; desligar os Termos, AutoMod `off` e ligar o histórico pedem confirmação; "Voltar ao padrão" tira o ajuste do cofre. Cérebro fora ou cofre travado: responde que não conseguiu e não grava. Os endereços dos provedores aparecem só para leitura (mudam no `.env`); prefixo, nome e prompt do sistema continuam mudando só na memória do bot até reiniciar.
 - **Subcomando `memorias`:** Administra a memória dos usuários **sem ver o conteúdo**: lista quem tem memória e a quantidade de lembranças, e apaga uma lembrança ou tudo de um usuário. Também disponível no app, em **Admin → Memória**.
 
 > Para controlar a Yui por um painel gráfico (servidores, banimentos, memória, auditoria, provedores de IA), use o **app da Yui**: [Assistente pessoal](ASSISTENTE_PESSOAL.md).
@@ -275,6 +276,7 @@ Comando independente para administradores de servidor gerenciarem as ferramentas
 - **Ação `list`:** Exibe um embed público com as ferramentas MCP ativas e desativadas no servidor.
 - **Ação `toggle`:** Alterna a disponibilidade de uma ferramenta específica (`join_voice_call`, `search_game`, `generate_image`, etc.). Três delas vêm **desligadas** e controlam a voz: **🎙️ Assistente de Voz (Call)** (deixa a Yui entrar e sair da call), **🔊 Resposta por Voz (TTS)** (ela responde falando; a IA nunca enxerga este interruptor; veja [TTS](TTS.md)) e **🎙️ Reconhecimento de Voz do Rádio (STT)** (`radio_voice_stt`, os comandos por voz do [Modo Rádio](RADIO.md)).
 - **Ação `reset`:** Restaura as ferramentas do servidor para os padrões de fábrica (as três de voz voltam a ficar desligadas e as demais, ligadas).
+- **Desligada vale em todo caminho (26/11/2026):** a ferramenta desligada no servidor (aqui ou no painel web) é recusada também no comando de barra equivalente (`/yui-imagem`, `/baixar_video`, `/buscar_jogo`, `/steam_jogo`, `/converter_moeda`, `/baixar_musica`, `/baixar_musica_atual` e a escolha da faixa), no `+yui musica` e na conversa feita por código (GTA, lembretes e "baixa a música que eu tô ouvindo"), sempre com a mesma frase: "A ferramenta `nome` está desativada neste servidor". Na DM nada muda. Ficam de fora de propósito o `/sair-call` (tirar a Yui da call nunca é barrado) e os `/gta-diario`, `/gta-semanal` e `/gta-noticias` (o interruptor do GTA é o da conversa; a publicação agendada é por canal).
 - **Quem pode:** *Gerenciar Servidor* ou *Gerenciar Canais*, além do dono.
 
 ### `/aceitar_tos` (Server Admin)
@@ -283,7 +285,7 @@ Exibe e registra o aceite dos Termos de Serviço da Yui para liberar e autorizar
 
 ### `/yui-config_ia` (Dono)
 
-Ajusta parâmetros técnicos de baixo nível dos modelos de IA (`Timeout`, `Temperatura`, `Max Tokens`) por provedor (`Local (LM Studio)`, `Gemini`, `Pollinations`, `HuggingFace`, `Kobold Horde`).
+Ajusta parâmetros técnicos de baixo nível dos modelos de IA (`Timeout`, `Temperatura`, `Max Tokens`) por provedor (`Local (LM Studio)`, `Gemini`, `Pollinations`, `HuggingFace`, `Kobold Horde`). Grava no cofre do painel (o mesmo do painel web, grupo Inteligência) e responde com o valor relido; fora da faixa é recusado. Sem provedor, mostra os valores atuais. O Pollinations não recebe temperatura.
 
 ### `/ajuda`
 

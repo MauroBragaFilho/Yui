@@ -57,6 +57,17 @@ function restrictFile(file) {
   }
 }
 
+/**
+ * O pedido HTTP veio do próprio computador? Conexão de loopback SEM cabeçalhos de proxy (a mesma lista que este canal recusa).
+ * O `tailscale serve` entrega os pedidos do celular em 127.0.0.1, mas com X-Forwarded-For e Tailscale-User-*: esses contam como remotos.
+ * A API principal usa isto para a origem (LOCAL_PC ou REMOTE) do motor de políticas: routeGuard e o agente. (Morava no módulo da aba Código,
+ * src/core/dev/routes.js, que saiu em 27/11/2026.)
+ */
+export function isLocalRequest(req) {
+  const addr = String(req?.socket?.remoteAddress ?? '');
+  return LOOPBACK.has(addr) && !FORWARD_HEADERS.some((h) => req?.headers?.[h] !== undefined);
+}
+
 const safeEqual = (a, b) => {
   const x = Buffer.from(String(a));
   const y = Buffer.from(String(b));

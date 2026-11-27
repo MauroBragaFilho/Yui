@@ -29,9 +29,12 @@ await test('comandos e botões que mudam algo mapeiam para ações; navegação 
     [slash('yui-seguir-youtube'), 'admin.follow_social'], [slash('yui-config_ia'), 'admin.ai_configure'], [slash('baixar_video'), 'media.download'],
     [comp('adm_remoteban_user_1'), 'admin.ban_user'], [comp('banlist_unban_user_1'), 'admin.ban_user'], [comp('unban_user_1_2'), 'admin.ban_user'],
     [comp('crtcfg_modal_ban'), 'admin.ban_user'], [comp('cfgpanel_toggle_3_true'), 'admin.bot_config'], [comp('srvcfg_x'), 'admin.guild_configure'],
+    // item 6 das lacunas do painel: os outros botões do painel de configuração que gravam no cofre
+    [comp('cfgpanel_inc_3'), 'admin.bot_config'], [comp('cfgpanel_dec_3'), 'admin.bot_config'], [comp('cfgpanel_sel_24_mcp'), 'admin.bot_config'],
+    [comp('cfgpanel_reset_3'), 'admin.bot_config'], [comp('cfgpanel_confirm_20_false'), 'admin.bot_config'], [comp('cfgpanel_confirmreset_20'), 'admin.bot_config'],
   ];
   for (const [d, a] of cases) assert.equal(actionForInteraction(d), a, JSON.stringify(d));
-  for (const d of [slash('ajuda'), slash('yui-status'), slash('yui-memoria'), comp('cfgpanel_next_1'), comp('banlist_home'), comp('radio_stop'), comp('qualquer')]) assert.equal(actionForInteraction(d), null, JSON.stringify(d));
+  for (const d of [slash('ajuda'), slash('yui-status'), slash('yui-memoria'), comp('cfgpanel_next_1'), comp('cfgpanel_back_4'), comp('cfgpanel_input_3'), comp('banlist_home'), comp('radio_stop'), comp('qualquer')]) assert.equal(actionForInteraction(d), null, JSON.stringify(d));
 });
 
 await test('/yui-criador memorias: listar e ver são inspeção; apagar e o botão de confirmar são memory.admin_wipe_user (como no canal)', () => {

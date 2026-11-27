@@ -43,6 +43,9 @@ const spy = {
   checkBan: () => null,
   currentMusic: async () => ({ success: false, message: 'sem dublê' }),
   musicDownload: async () => ({ error: 'sem dublê' }),
+  toolOff: () => false,            // isToolDisabled(guildId, ferramenta) do llmHandler (o interruptor do servidor)
+  imageCalls: 0,                   // chamadas de generateImage (/yui-imagem)
+  image: async () => null,
 };
 globalThis.__ic = spy;
 
@@ -69,6 +72,7 @@ const onlyForInteraction = {
     'export const generateResponse = (...a) => { s().generateCalls.push(a); return s().generate(...a); };',
     'export const getDisabledTools = () => [];',
     'export const getAllMcpTools = () => [];',
+    'export const isToolDisabled = (...a) => s().toolOff(...a);',
     'export const getProviderSettings = () => ({});',
     ...['setServerToolEnabled', 'resetServerTools', 'updateShowModel', 'updateShowModelThinking', 'updateErrorRetries', 'updateProviderSetting',
       'setChannelPersona', 'setChannelChatter', 'setServerEveryoneMention', 'setServerUpdateChannel', 'setServerLastChannel']
@@ -91,6 +95,7 @@ const onlyForInteraction = {
   ].join('\n'),
   '../services/activityMusicService.js': 'export const getCurrentMusicFromUser = (...a) => globalThis.__ic.currentMusic(...a);',
   '../handlers/deezerMusicHandler.js': 'export const handleMusicSearchAndDownload = (...a) => globalThis.__ic.musicDownload(...a); export const clearSession = () => {};',
+  '../handlers/imageHandler.js': 'export const generateImage = (...a) => { globalThis.__ic.imageCalls++; return globalThis.__ic.image(...a); };',
 };
 const hooks = `
 let stubs = {};
@@ -168,6 +173,9 @@ function resetSpy() {
   spy.generateCalls.length = 0;
   spy.generate = async () => '';
   spy.checkBan = () => null;
+  spy.toolOff = () => false;
+  spy.imageCalls = 0;
+  spy.image = async () => null;
 }
 
 /** Interação falsa de comando de barra (ou botão/menu, via `kind`). */
@@ -978,6 +986,101 @@ await test('interactionCreate.js: BOM preservado, todas as quebras de linha são
 await test('uploadLimit continua coerente com o que o comando usa (base 9.961.472 bytes, abaixo de 10.000.000)', () => {
   assert.strictEqual(upload.getUploadLimitBytes(null), 9961472);
   assert.ok(upload.getUploadLimitBytes({ premiumTier: 0 }) < 10000000);
+});
+
+// =================================================================================================
+console.log('8. Ferramenta desligada no servidor: o comando de barra recusa com a frase do despachante (item 1 do plano das lacunas do painel)');
+
+const G_OFF = '700000000000000001';
+const DONO = '999'; // OWNER_ID deste teste: passa pelo gate de Termos de Uso sem arquivo de aceite
+const recusa = (tool) => `⚠️ A ferramenta \`${tool}\` está desativada neste servidor.`;
+/** Comando de barra NUM SERVIDOR (guild nula de propósito: o aviso de canal de atualizações não roda aqui). */
+function guildCommand(commandName, extra = {}, guildId = G_OFF) {
+  const it = makeInteraction({ userId: DONO, commandName, guild: null, ...extra });
+  it.guildId = guildId;
+  return it;
+}
+
+await test('/yui-imagem num servidor com generate_image desligada: recusa privada com a frase do despachante; nada é gerado', async () => {
+  resetSpy();
+  spy.toolOff = (g, t) => g === G_OFF && t === 'generate_image';
+  const it = guildCommand('yui-imagem', { strings: { prompt: 'um gato astronauta' } });
+  await ic.default.execute(it, {});
+  assert.deepStrictEqual(it.events.map((e) => e[0]), ['reply'], 'só a recusa: nada de deferReply');
+  assert.strictEqual(it.events[0][1].content, recusa('generate_image'));
+  assert.strictEqual(it.events[0][1].ephemeral, true);
+  assert.deepStrictEqual(it.events[0][1].allowedMentions, NO_MENTIONS);
+  assert.strictEqual(spy.imageCalls, 0, 'generateImage não foi chamado');
+  assert.ok(logs.some((l) => /yui-imagem recusado: ferramenta desativada/.test(l)), 'o log registra a recusa');
+  assert.ok(!logs.some((l) => /gato astronauta/.test(l)), 'o log não leva o prompt');
+});
+
+await test('/yui-imagem com a ferramenta ligada no servidor e na DM (mesmo com o interruptor dizendo "desligada"): gera como antes', async () => {
+  for (const guildId of ['700000000000000002', null]) {
+    resetSpy();
+    spy.toolOff = (g) => g === G_OFF || g === null; // na DM o comando nem consulta o interruptor
+    const it = guildCommand('yui-imagem', { strings: { prompt: 'um gato astronauta' } }, guildId);
+    await ic.default.execute(it, {});
+    assert.strictEqual(it.events[0][0], 'defer', String(guildId));
+    assert.strictEqual(spy.imageCalls, 1, String(guildId));
+    assert.ok(!it.events.some((e) => String(e[1]?.content ?? '').includes('desativada')), String(guildId));
+  }
+});
+
+await test('os outros comandos de barra com a ferramenta desligada no servidor: a recusa certa, antes de qualquer trabalho', async () => {
+  const casos = [
+    ['baixar_video', { strings: { url: 'https://exemplo.test/v' } }, 'download_video'],
+    ['buscar_jogo', { strings: { nome: 'Jogo' } }, 'search_game'],
+    ['steam_jogo', { strings: { nome: 'Jogo Teste' } }, 'check_steam'],
+    ['converter_moeda', { numbers: { valor: 10 }, strings: { de: 'USD', para: 'BRL' } }, 'convert_currency'],
+    ['baixar_musica', { strings: { busca: 'artista' } }, 'search_and_download_music'],
+    ['baixar_musica', { strings: { url: 'https://exemplo.test/a' } }, 'download_audio'],
+    ['baixar_musica_atual', {}, 'get_current_music'],
+    // 27/11/2026 (decisão do Braga): os comandos do GTA obedecem ao interruptor do GTA pela conversa.
+    ['gta-diario', {}, 'gta_online'],
+    ['gta-semanal', { strings: { fonte: 'reddit' } }, 'gta_online'],
+    ['gta-noticias', { ints: { quantidade: 2 } }, 'gta_online'],
+  ];
+  for (const [cmd, extra, tool] of casos) {
+    resetSpy();
+    let steamCalls = 0; let currencyCalls = 0; let musicCalls = 0;
+    spy.steam = async () => { steamCalls++; return { ...STEAM_OK }; };
+    spy.currency = async () => { currencyCalls++; return { ...MOEDA_OK }; };
+    spy.currentMusic = async () => { musicCalls++; return { success: false, message: 'x' }; };
+    spy.toolOff = (g, t) => g === G_OFF && t === tool;
+    const it = guildCommand(cmd, extra);
+    await ic.default.execute(it, {});
+    assert.deepStrictEqual(it.events.map((e) => e[0]), ['reply'], `${cmd}: só a recusa`);
+    assert.strictEqual(it.events[0][1].content, recusa(tool), cmd);
+    assert.strictEqual(it.events[0][1].ephemeral, true, cmd);
+    assert.strictEqual(steamCalls + currencyCalls + musicCalls, 0, `${cmd}: nada foi consultado`);
+  }
+});
+
+await test('/steam_jogo num servidor com a ferramenta ligada (outra desligada): consulta e responde como antes', async () => {
+  resetSpy();
+  let steamCalls = 0;
+  spy.steam = async () => { steamCalls++; return { ...STEAM_OK }; };
+  spy.generate = async () => 'Que jogo bom!';
+  spy.toolOff = (g, t) => g === G_OFF && t === 'convert_currency';
+  const it = guildCommand('steam_jogo', { strings: { nome: 'Jogo Teste' } });
+  await ic.default.execute(it, {});
+  assert.strictEqual(it.events[0][0], 'defer');
+  assert.strictEqual(steamCalls, 1);
+  assert.strictEqual(it.edits().pop().embeds.length, 1);
+});
+
+await test('escolha da faixa (music_select_) com a busca de música desligada no servidor: recusa privada, nada é baixado', async () => {
+  resetSpy();
+  let downloads = 0;
+  spy.musicDownload = async () => { downloads++; return musicSuccess(); };
+  spy.toolOff = (g, t) => g === G_OFF && t === 'search_and_download_music';
+  const it = makeInteraction({ userId: DONO, kind: 'select', customId: `music_select_${DONO}`, values: ['1'], commandName: undefined, guild: null });
+  it.guildId = G_OFF;
+  await ic.default.execute(it, {});
+  assert.deepStrictEqual(it.events.map((e) => e[0]), ['reply']);
+  assert.strictEqual(it.events[0][1].content, recusa('search_and_download_music'));
+  assert.strictEqual(downloads, 0);
 });
 
 // ---- fim ---------------------------------------------------------------------------------------

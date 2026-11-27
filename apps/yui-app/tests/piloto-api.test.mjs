@@ -43,7 +43,8 @@ const pedidos = [];
 let resposta = { aceito: true, motivo: 'aceito' };
 const server = createApiServer({
   tokens: parseTokens(`${OWNER}=111,${MEMBER}=222`), corsOrigins: parseCorsOrigins(''),
-  admin: createAdmin({ deps: { modoDiagnostico: 'cerebro-separado', diagnostico: fontes }, exit: () => { throw new Error('o exit nunca pode ser usado quando o supervisor cuida do reinício'); }, reinicio: async (p) => { pedidos.push(p); return resposta; } }),
+  // relogio: o freio de pedido repetido (correção C6) tem a suíte dele no servidor (test:painelescritas); aqui cada pedido chega "um minuto depois".
+  admin: createAdmin({ deps: { modoDiagnostico: 'cerebro-separado', diagnostico: fontes }, exit: () => { throw new Error('o exit nunca pode ser usado quando o supervisor cuida do reinício'); }, reinicio: async (p) => { pedidos.push(p); return resposta; }, relogio: (() => { let t = 0; return () => (t += 60_000); })() }),
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const url = `http://127.0.0.1:${server.address().port}`;

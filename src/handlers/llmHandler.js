@@ -14,6 +14,7 @@ import { buildPersonaPrompt } from '../core/persona.js';
 import { toolsDefinitionText, toolsCompactText, radioPromptBlock, buildConversationSystemPrompt, searchOfferedFor } from '../core/ai/promptConversa.js';
 import { localPrivadaLigada, chamarLocalPrivada, fallbackLocalPrivada, ErroRotaLocalFechada } from '../core/ai/localPrivada.js';
 import { LIMITES_PADRAO_CADEIA } from '../core/ai/limitesTokens.js';
+import { ligarAjustesDaCadeia, lerAjusteIa, maxTokensDoPainel, VARIAVEIS_GERAIS } from '../core/ai/ajustesIa.js';
 import { stripThinking as stripThinkingCore, extractThinkingFallback, isSystemReply, EMPTY_REPLY_TEXT } from '../core/ai/limpezaResposta.js';
 import { isChatRemote, createRemoteTurn, isRemoteTurn, isCerebroUnavailable, CEREBRO_UNAVAILABLE_TEXT, forgetVoiceInCerebro } from '../discord/turnoCerebro.js';
 import { processandoStore, conversaDe as processandoConversaDe } from '../discord/processandoGuardado.js';
@@ -38,7 +39,8 @@ import { portaDePlanos } from '../core/planos/porta.js';
 import { youtubeLigado } from '../adaptadores/youtube/adaptador.js';
 import { pedidoDeLive } from '../adaptadores/youtube/pedido.js';
 import { portaDaLive } from '../adaptadores/youtube/porta.js';
-import { routeReminders, formatReminderList, scopedReminderStore, getReminderStore, reminderTextFromTool, isRemindersRemote, listRemindersFor } from '../reminders/assistant.js';
+import { routeReminders, formatReminderList, scopedReminderStore, getReminderStore, reminderTextFromTool, isRemindersRemote, listRemindersFor, parseReminderRequest } from '../reminders/assistant.js';
+import { textoFerramentaDesligada, recusaSeDesligada, recusaDeLembrete } from './ferramentaDesligada.js';
 import { logger } from '../utils/logger.js';
 import { getMediaUserMessage, formatDeezerDelivery, codeSafe, isUploadTooLargeError, MEDIA_MESSAGES } from '../utils/mediaUrls.js';
 // Textos grandes: corte que não parte emoji, limite de upload, orçamento de prompt e leitor de linhas do stream SSE (TG-02, 05, 08, 11, 16, 37).
@@ -351,7 +353,9 @@ function channelFactsForCerebro({ guildId = null, channelId = null, userId = nul
     const facts = { serverPrompt: null, channelSettings: null, radioBlock: '', toolsActive: [], toolsDisabled: [] };
     // Etapa 6 (ajustes da Liz): os limites de tokens ajustados pelo painel do Discord valem também com o cérebro separado. Só o que o
     // painel mudou (o padrão e o YUI_REPLY_MAX_TOKENS o cérebro já lê do mesmo .env).
-    if (Object.keys(painelMaxTokens).length) facts.maxTokens = { ...painelMaxTokens };
+    // Item 6 (26/11/2026): o ajuste do painel mora no cofre (lido a cada turno; vale sobre o ajuste em memória, que hoje só os testes usam).
+    const doPainel = maxTokensAjustadosPeloPainel();
+    if (Object.keys(doPainel).length) facts.maxTokens = doPainel;
     try {
         facts.serverPrompt = getServerPrompt(guildId) || null;
         const settings = channelId ? channelSettings[channelId] : null;
@@ -390,6 +394,10 @@ const providerSettings = {
     gateway:      { timeout: 60000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.gateway },
     horde:        { timeout: 60000, temperature: 0.7, max_tokens: LIMITES_PADRAO_CADEIA.horde }
 };
+// Lacunas do painel, item 6 (26/11/2026): temperatura, prazo e tamanho de LM Studio, Gemini, Pollinations, Hugging Face e Horde vêm do COFRE do painel
+// (o painel do Discord e o painel web gravam lá; core/ai/ajustesIa.js). Ler `providerSettings.x.y` devolve o ajuste do cofre, lido A CADA USO, ou o valor
+// acima (a base: o padrão, o YUI_REPLY_MAX_TOKENS e o que os testes atribuem). Sem ajuste no cofre, nada muda.
+const ajustesDaCadeia = ligarAjustesDaCadeia(providerSettings);
 /**
  * YUI_REPLY_MAX_TOKENS (opcional, 64 a 8192): sobe o max_tokens de saída de todos os provedores (o Horde fica em até 512).
  * Sem a variável nada muda; o painel ainda pode ajustar cada provedor depois (updateProviderSetting).
@@ -412,8 +420,9 @@ function maxTokensDe(provider, options) {
     const configurado = providerSettings[provider].max_tokens;
     if (typeof options?.limiteTokens !== 'function') return configurado;
     // Segunda revisão da Liz (§12): o ajuste do PAINEL do Discord vale só no Discord. O app (o único que passa limiteTokens) recebe a
-    // configuração da cadeia SEM o ajuste do painel (o padrão e o YUI_REPLY_MAX_TOKENS), cortada pela capacidade e pelo teto.
-    const semPainel = Object.prototype.hasOwnProperty.call(maxTokensAntesDoPainel, provider) ? maxTokensAntesDoPainel[provider] : configurado;
+    // configuração da cadeia SEM o ajuste do painel (o padrão e o YUI_REPLY_MAX_TOKENS), cortada pela capacidade e pelo teto. Item 6: o ajuste do
+    // painel agora mora no cofre; a base (ajustesDaCadeia.base) é o valor sem ele.
+    const semPainel = Object.prototype.hasOwnProperty.call(maxTokensAntesDoPainel, provider) ? maxTokensAntesDoPainel[provider] : ajustesDaCadeia.base(provider, 'max_tokens');
     try {
         const n = options.limiteTokens(provider, semPainel);
         return Number.isFinite(n) && n > 0 ? n : semPainel;
@@ -430,6 +439,19 @@ const painelMaxTokens = {};
 // O max_tokens de cada provedor ANTES do primeiro ajuste do painel (o padrão da cadeia e o YUI_REPLY_MAX_TOKENS): é o que o APP usa pela
 // cadeia do bot (o app nunca herda o ajuste do painel do Discord; segunda revisão da Liz, §12).
 const maxTokensAntesDoPainel = {};
+/**
+ * Lacunas do painel, item 6 (26/11/2026): os ajustes de max_tokens do painel. Desde o item 6 o painel do Discord (e o painel web) gravam no COFRE
+ * (YUI_IA_<PROVEDOR>_MAX_TOKENS, lido a cada chamada); `painelMaxTokens` em memória sobrou só para quem chama updateProviderSetting (os testes e os
+ * provedores sem item no cofre). O do cofre vence.
+ */
+function maxTokensAjustadosPeloPainel() {
+    const out = { ...painelMaxTokens };
+    for (const provider of Object.keys(providerSettings)) {
+        const n = maxTokensDoPainel(provider);
+        if (Number.isInteger(n) && n >= 64 && n <= 8192) out[provider] = n;
+    }
+    return out;
+}
 const channelSettingsPath = process.env.YUI_CHANNEL_SETTINGS_FILE || path.join(__dirname, '../data/channel_settings.json'); // idem (testes)
 let channelSettings = {};
 function loadChannelSettings() {
@@ -2765,6 +2787,13 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
         // Porta T (lembretes do dono): "me lembra amanhã às 9h de pagar a conta", "meus lembretes", "adia o lembrete 2 por 30 minutos", "resumo do dia":
         // o CÓDIGO interpreta o horário e grava no arquivo de lembretes (só o dono; o aviso sai por DM no minuto certo). Nada vai ao histórico nem ao contexto. YUI_REMINDERS_ENABLED=false desliga.
         if (directToYui && !isVoice && options.radioMode !== true && options.thirdPartyPrompt !== true && ownQuestion) {
+            // Lembretes desligados NESTE servidor (listar_lembretes / criar_lembrete no painel ou no /yui-ferramentas): a mesma recusa do despachante.
+            const remOff = recusaDeLembrete({ guildId: options.guildId || guildId, text: ownQuestion, isToolDisabled, interpretar: parseReminderRequest });
+            if (remOff) {
+                logger.info('[MCP TOOL] Porta T recusada: lembretes desativados no servidor.');
+                await unifiedReply(remOff);
+                return;
+            }
             const remRouted = await routeReminders({ text: restoreMentionIds(ownQuestion, interaction?.mentions?.users), userId, authorName: interaction?.author?.username || interaction?.user?.username || '' }, { report: async () => (await import('../reminders/service.js')).createMorningComposer()() });
             if (remRouted.handled) {
                 await unifiedReply(remRouted.text);
@@ -2830,6 +2859,13 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
             // /gta-diario e /gta-noticias e mostra aqui. Falha ou não-pedido: segue para o modelo.
             const gtaIntent = detectGtaIntent(ownQuestion, intentCtx);
             if (gtaIntent.kind !== 'none' && !coreCtx.isBlocked) {
+                // gta_online desligada NESTE servidor (painel ou /yui-ferramentas): recusa com a frase do despachante, sem buscar nada. DM igual.
+                const gtaOff = recusaSeDesligada(options.guildId || guildId, 'gta_online', isToolDisabled);
+                if (gtaOff) {
+                    logger.info('[MCP TOOL] Porta G recusada: gta_online desativada no servidor.');
+                    await unifiedReply(gtaOff);
+                    return;
+                }
                 const gtaAnswer = await composeGtaAnswer({ kind: gtaIntent.kind, question: ownQuestion, channelId, guildId, userId, sensitive: sensitiveChat, coreCtx });
                 if (gtaAnswer) {
                     await unifiedReply(gtaAnswer);
@@ -3165,7 +3201,7 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                     const targetGuildId = options?.guildId || guildId;
                     if (isToolDisabled(targetGuildId, toolData.tool)) {
                         logger.warn(`[MCP TOOL] Ferramenta '${scrubLogText(String(toolData.tool), 40)}' está desativada no servidor ${scrubLogText(String(targetGuildId), 32)}. Execução abortada.`);
-                        const disabledToolText = `⚠️ A ferramenta \`${toolData.tool}\` está desativada neste servidor.`;
+                        const disabledToolText = textoFerramentaDesligada(toolData.tool); // a mesma frase dos comandos e das pré-rotas (ferramentaDesligada.js)
                         processedResponse = disabledToolText;
                         savePromptToHistory(prompt, userTag, userId, `[TOOL: BLOCKED - ${toolData.tool}]`, interaction);
                         // F5: sem esta resposta a mensagem ficava em "Processando..." para sempre (o `return` saía sem enviar nada).
@@ -4260,8 +4296,12 @@ let yuiComment = `Teu PC **${verdictText}** com esse jogo. Quer que eu veja outr
         // Pedido com as ferramentas desligadas (o log de terceiros do /chat_resumo, o texto de um anexo lido): o atalho é uma ferramenta e o
         // prompt desses pedidos traz texto de outras pessoas, que não pode acioná-lo.
         const musicShortcutOff = !musicShortcutVoiceBlocked && options.disableTools === true;
-        const isCurrentMusicIntent = matchesCurrentMusicIntent && !musicShortcutVoiceBlocked && !musicShortcutOff;
+        // get_current_music desligada NESTE servidor: o atalho também é a ferramenta; a resposta vira a recusa do despachante (DM igual).
+        const musicShortcutToolOff = matchesCurrentMusicIntent && !musicShortcutVoiceBlocked && !musicShortcutOff
+            ? recusaSeDesligada(options.guildId || guildId, 'get_current_music', isToolDisabled) : null;
+        const isCurrentMusicIntent = matchesCurrentMusicIntent && !musicShortcutVoiceBlocked && !musicShortcutOff && !musicShortcutToolOff;
         if (matchesCurrentMusicIntent && musicShortcutVoiceBlocked) processedResponse = VOICE_TOOL_REFUSAL;
+        if (musicShortcutToolOff) processedResponse = musicShortcutToolOff;
 
         if (isCurrentMusicIntent) {
             const discordClient = getDiscordClient();
@@ -4676,13 +4716,16 @@ async function addToQueue(prompt, interaction, type, options = {}) {
         }
     }
 }
+// Lacunas do painel, item 6 (26/11/2026): mostrar o modelo, mostrar o modelo no "pensando" e as novas tentativas vêm do COFRE (YUI_IA_MOSTRAR_MODELO,
+// YUI_IA_MOSTRAR_MODELO_PENSANDO e YUI_IA_RETENTATIVAS), lidos a cada uso. Os update* abaixo só mudam o valor de reserva em memória (usado sem ajuste no
+// cofre): o painel do Discord não os chama mais (grava no cofre, src/core/ajustesPeloDiscord.js); sobraram para os testes.
 let globalShowModel = false;
 function updateShowModel(value) {
     globalShowModel = value;
     console.log(`[CONFIG] show_model atualizado para ${value}`);
 }
 function getShowModel() {
-    return globalShowModel;
+    return lerAjusteIa(VARIAVEIS_GERAIS.showModel) ?? globalShowModel;
 }
 let globalShowModelThinking = false;
 function updateShowModelThinking(value) {
@@ -4690,7 +4733,7 @@ function updateShowModelThinking(value) {
     console.log(`[CONFIG] show_model_thinking atualizado para ${value}`);
 }
 function getShowModelThinking() {
-    return globalShowModelThinking;
+    return lerAjusteIa(VARIAVEIS_GERAIS.showModelThinking) ?? globalShowModelThinking;
 }
 let globalErrorRetries = 0;
 function updateErrorRetries(value) {
@@ -4698,11 +4741,12 @@ function updateErrorRetries(value) {
     console.log(`[CONFIG] error_retries atualizado para ${value}`);
 }
 function getErrorRetries() {
-    return globalErrorRetries;
+    return lerAjusteIa(VARIAVEIS_GERAIS.errorRetries) ?? globalErrorRetries;
 }
+// Muda a BASE em memória de um campo (o cofre, quando tem ajuste, continua vencendo na leitura). Só os testes e os provedores sem item no cofre usam.
 function updateProviderSetting(provider, key, value) {
     if (providerSettings[provider] && providerSettings[provider][key] !== undefined) {
-        if (key === 'max_tokens' && !Object.prototype.hasOwnProperty.call(maxTokensAntesDoPainel, provider)) maxTokensAntesDoPainel[provider] = providerSettings[provider].max_tokens;
+        if (key === 'max_tokens' && !Object.prototype.hasOwnProperty.call(maxTokensAntesDoPainel, provider)) maxTokensAntesDoPainel[provider] = ajustesDaCadeia.base(provider, 'max_tokens');
         providerSettings[provider][key] = value;
         if (key === 'max_tokens') {
             const n = Number(value);

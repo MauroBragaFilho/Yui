@@ -181,24 +181,221 @@ export interface AiOverview { editable: boolean; providers: AiProvider[]; custom
 export interface AiCustomInput { id: string; label: string; baseUrl: string; models: string; key?: string; first?: boolean; anonymous?: boolean }
 export interface AiTestResult { ok: boolean; ms: number; via?: string | null; error?: string }
 export interface ConfigItem {
-  chave: string; rotulo: string; grupo: string; descricao: string; tipo: 'segredo' | 'bool' | 'int' | 'enum' | 'texto'; reinicio: boolean;
+  chave: string; rotulo: string; grupo: string; descricao: string; tipo: 'segredo' | 'bool' | 'int' | 'decimal' | 'enum' | 'texto'; reinicio: boolean;
   definido: boolean; origem: 'painel' | 'env' | 'padrao'; opcoes?: string[]; confirmar?: string[]; min?: number; max?: number; padrao?: string;
   secreto?: boolean; ultimos4?: string | null; valor?: string | null; alteradoEm?: string | null;
+  /** Versão do ajuste no cofre (só cresce). A tela devolve a que viu ao gravar: se o Discord gravou no meio, o servidor responde 409. */
+  versao?: number;
 }
 export interface ConfigOverview { edicaoLigada: boolean; protegido?: boolean; problema?: 'cofre-ilegivel'; itens: ConfigItem[] }
 export interface RadioTrack { title: string; artist: string; album: string | null }
+/** Uma das próximas faixas da fila: só título e duração (segundos). */
+export interface RadioUpcoming { title: string; duration: number | null }
 export interface RadioSession {
   guildId: string; guildName: string | null; voiceChannel: string | null; status: string; connected: boolean;
   current: RadioTrack | null; next: RadioTrack | null; queueLength: number; position: string | null;
   shuffle: boolean; loopMode: string; voiceMode: string; streamMode: string;
+  /** As próximas faixas (até 10). Servidores antigos não mandam. */
+  upcoming?: RadioUpcoming[];
 }
-export type RadioAction = 'pause' | 'resume' | 'stop' | 'leave';
+export type RadioAction = 'pause' | 'resume' | 'stop' | 'leave' | 'skip';
+// ── Lacunas do painel, item 10 (entrega E, parte 2): o rádio completo. O servidor nunca manda link, capa nem quem pediu uma faixa. ──
+export interface RadioFaixa { title: string; artist: string; duration: number | null }
+export type RadioResultadoTipo = 'tocando' | 'na-fila' | 'nao-encontrado' | 'escolher' | 'fim-da-fila';
+export interface RadioResultado {
+  ok: boolean;
+  /** Só no `start`. */
+  iniciado?: boolean;
+  resultado?: RadioResultadoTipo | string;
+  faixa?: RadioFaixa | null;
+  adicionadas?: number;
+  /** Só quando `resultado` é 'escolher': escolha devolvendo o NÚMERO (posição na lista, a partir de 0). */
+  opcoes?: RadioFaixa[];
+}
+export interface RadioCanalDeVoz { id: string; nome: string; pessoas: number; pode: boolean; motivo: 'sem-permissao' | 'cheio' | null | string }
+export interface RadioCanalDeTexto { id: string; nome: string; pode: boolean; motivo: 'sem-permissao' | null | string }
+export interface RadioCanais { guildId: string; voz: RadioCanalDeVoz[]; texto: RadioCanalDeTexto[] }
 export type LogKind = 'app' | 'error';
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 export interface LogEntry { time: string; level: string; text: string }
 export interface LogFile { name: string; kind: LogKind; date: string; size: number }
 export interface LogsResult { files: LogFile[]; file: string | null; entries: LogEntry[]; truncated: boolean }
 export interface LogsQuery { kind?: LogKind; date?: string | null; level?: LogLevel | null; q?: string; limit?: number }
+// ── Monitores de busca (só o dono; só com o cérebro separado e YUI_MONITORES ligado) ──
+// O servidor manda só o assunto curto (até 60 caracteres, null depois de encerrado), o estado, as datas e a contagem: nunca o texto de um resultado.
+export interface MonitorView {
+  id: number;
+  consulta: string | null;
+  estado: 'ativo' | 'pausado' | 'encerrado' | string;
+  proximaChecagem: string | null;
+  ate: string | null;
+  avisos: number;
+  entrega?: 'pendente' | 'enviando' | 'incerto' | string;
+  fim?: 'vencido' | 'cancelado' | 'barrado' | string;
+}
+/** `ligado: false` = monitores desligados (processo único ou YUI_MONITORES=false): a lista vem vazia. `resumo` só tem contadores. */
+export interface MonitoresResult { ligado: boolean; monitores: MonitorView[]; resumo?: Record<string, unknown> }
+// ── Lacunas do painel, entrega B (só leitura, só o dono): live do YouTube, Google, planos e avisos ──
+// O servidor monta cada resposta com uma lista fechada de campos: nada de token, segredo, texto do chat, autor, argumentos de plano nem texto de aviso.
+export interface LiveView {
+  ligado: boolean;
+  /** false = a chave está ligada, mas o serviço da live não subiu no servidor. */
+  disponivel: boolean;
+  estado: 'desligado' | 'ociosa' | 'procurando' | 'ouvindo' | 'encerrada' | 'interrompida' | string;
+  ativo: boolean;
+  live: { videoId: string | null; titulo: string | null } | null;
+  desde: string | null;
+  mensagens: { lidas: number; respondidas: number; espontaneas: number } | null;
+  cota: { dia: string | null; usado: number; limiteDiario: number; reserva: number; restante: number; nivel: 'ok' | 'atencao' | 'critico' | 'esgotada' | string } | null;
+  ultimoErro: { codigo: string; em: string | null } | null;
+}
+export interface GoogleView {
+  ligado: boolean;
+  conectado: boolean;
+  arquivo: 'ok' | 'ausente' | 'ilegivel' | 'invalido' | null | string;
+  /** Nomes curtos (agenda, tarefas, gmail, outro); null = o arquivo não informa. */
+  escopos: string[] | null;
+  autorizadoEm: string | null;
+  /** 7 dias depois da autorização (a regra do modo Testando); null = não informado. */
+  venceEm: string | null;
+  validade: 'testando-7-dias' | 'nao-informado' | string;
+  ultimaRenovacaoEm: string | null;
+  ultimoErro: { codigo: 'rede' | 'erro' | 'precisa-autorizar' | string; em: string | null } | null;
+  renovacaoFalhou: boolean;
+  precisaAutorizar: boolean;
+  motivoDeAutorizar: 'recusada' | 'sem-arquivo' | 'arquivo-invalido' | null | string;
+  avisoPendente: boolean;
+  renovacoes: number;
+  /** Entrega F (item 14): o botão "Reautorizar o Google" vale (YUI_GOOGLE_REAUTORIZAR_PAINEL). Servidor antigo não manda: só o script. */
+  reautorizarPeloPainel?: boolean;
+}
+// ── Lacunas do painel, entrega F, item 14 (só o dono): reautorizar o Google pelo painel. Nunca token, código, segredo nem corpo de resposta do Google. ──
+/** O início: só o link de consentimento (e até quando vale), ou um código fixo (sem arquivo de autorização: a primeira vez é pelo script). */
+export type InicioDaReautorizacao =
+  | { ok: true; link: string; expiraEm: string; gmailFicaNoScript: boolean }
+  | { ok: false; codigo: string; texto: string };
+/** O retorno (o endereço colado): "autorizado" com a nova validade e o que o Google não concedeu, ou um código fixo com a frase dele. */
+export type RetornoDaReautorizacao =
+  | { ok: true; codigo: 'autorizado'; venceEm: string; escopos: string[]; faltam: string[]; gmailFicaNoScript: boolean }
+  | { ok: false; codigo: string; texto: string };
+export interface PlanoView {
+  id: string;
+  versao: number;
+  hash: string | null;
+  estado: string;
+  criadoEm: string | null;
+  validade: string | null;
+  aprovadoEm: string | null;
+  aprovacao: 'dono' | 'automatica' | null | string;
+  encerradoEm: string | null;
+  motivo: string | null;
+  passos: { ferramenta: string; estado: string; resumo?: ResumoDoPasso }[];
+  /** Correção C1: o plano manda texto da pessoa para fora (a pesquisa): só se aprova pela DM. Servidor antigo não manda. */
+  aprovarSoPelaDm?: boolean;
+}
+/**
+ * Correção C1 do parecer da Liz: o resumo SEGURO de um passo, montado pelo servidor a partir do passo guardado. Os valores de lista fechada aparecem na
+ * ação; o texto livre (o nome buscado, a consulta, o nome da lista) só como tamanho. Nunca vem o argumento.
+ */
+export interface ResumoDoPasso {
+  acao: string;
+  servico: string;
+  acesso: 'leitura' | 'desconhecido' | string;
+  saida: 'internet' | 'google' | 'rede-local' | 'nao' | 'desconhecida' | string;
+  textoLivre: { campo: string; caracteres: number }[];
+  soPelaDm: boolean;
+}
+/** Correção C2: o pedido da chave de confirmação pela DM (aprovar um plano, com id, versão e hash; ou reautorizar o Google). */
+export type PedidoDeConfirmacao =
+  | { acao: 'plano.aprovar'; plano: { id: string; versao: number; hash: string } }
+  | { acao: 'google.reautorizar' };
+/** `painel` (entrega E): Aprovar e Recusar valem pelo painel (YUI_PLANOS_PAINEL e os planos ligados). Servidor antigo não manda: só leitura. */
+export interface PlanosResult { ligado: boolean; auto: boolean; painel?: boolean; ilegivel: boolean; total: number; planos: PlanoView[] }
+// ── Lacunas do painel, entrega E (só o dono): as ações. As respostas trazem só a frase do serviço, nunca argumentos, resultados nem o link. ──
+/** A resposta da decisão de um plano (a mesma decidir() dos botões da DM). `final: false` = dá para tentar de novo em instantes. */
+export interface DecisaoDoPlano { ok: boolean; final: boolean; texto: string }
+/** A resposta de entrar ou sair da live (o mesmo comando da conversa). `ok` = entrou / saiu de fato. */
+export interface AcaoDaLive { ok: boolean; texto: string }
+export interface AvisoNaFila { assunto: string | null; classe: string; motivo: string; ate: string | null; estado: string; criadoEm: string | null }
+export interface AvisoObservado { em: string | null; assunto: string | null; classe: string; acao: string; motivo: string | null; ate: string | null }
+export interface ObservadosDoProcesso {
+  origem: 'cerebro' | 'bot' | 'unico' | string;
+  /** O bot (com os dois processos) não respondeu: a parte dele fica sem leitura. */
+  indisponivel?: boolean;
+  desde?: string | null;
+  contagem?: { enviar: number; adiar: number; descartar: number };
+  registros?: AvisoObservado[];
+}
+export interface AvisosResult {
+  modo: 'off' | 'observar' | 'ligar' | string;
+  fila: { existe: boolean; ilegivel: boolean; resumoPendente: boolean; total: number; itens: AvisoNaFila[] };
+  observados: ObservadosDoProcesso[];
+}
+// ── Lacunas do painel, entrega D (só o dono): GTA (só leitura), listas pessoais, skills e continuidade ──
+// O servidor monta cada resposta com uma lista fechada de campos: nada do texto inteiro do post ou do artigo, da análise da IA, do caminho ou do corpo de uma skill.
+export type EstadoLigado = 'ligado' | 'desligado';
+export interface GtaPublicacao { servidorId: string; servidor: string | null; canalId: string | null; canal: string | null; em: string | null }
+/** Onde dá para republicar (item 9 v2): um servidor com o canal daquele tipo configurado. */
+export interface GtaAlvo { servidorId: string; servidor: string | null; canalId: string; canal: string | null }
+export type TipoDoGta = 'diario' | 'semanal' | 'noticia';
+export interface RepublicacaoDoGta { ok: boolean; tipo: TipoDoGta; guildId: string; canalId: string | null }
+export interface GtaView {
+  fontes: {
+    diario: { estado: 'ligado' | string; horario: string };
+    semanal: { estado: EstadoLigado | string; aoReiniciar: EstadoLigado | null | string; intervaloMin: number | null };
+    reddit: { estado: 'ligado' | 'desligado' | 'em-espera' | string; voltaEm: string | null; falhas: number };
+    reserva: { estado: EstadoLigado | string };
+    newswire: { estado: EstadoLigado | string; aoReiniciar: EstadoLigado | null | string; intervaloMin: number | null };
+  };
+  /** Quantos servidores têm canal de cada tipo configurado. */
+  canais: { diario: number; semanal: number; noticias: number };
+  /** Onde dá para republicar cada tipo (item 9 v2). Servidores antigos não mandam. */
+  alvos?: { diario: GtaAlvo[]; semanal: GtaAlvo[]; noticia: GtaAlvo[] };
+  diario: {
+    data: string | null;
+    coletadoEm: string | null;
+    vanDeArmas: { local: string | null; armas: { nome: string; desconto: number | null }[] } | null;
+    comerciantes: { local: string; produto: string | null }[];
+    naufragio: string | null;
+    baus: number;
+    desafios: { nome: string; local: string | null }[];
+    publicado: GtaPublicacao[];
+  } | null;
+  semanal: {
+    semana: string | null;
+    fonte: 'reddit' | 'gtabase' | 'newswire' | 'outra' | string;
+    titulo: string | null;
+    periodo: { inicio: string | null; fim: string | null };
+    bonus: { multiplicador: number | null; atividades: string[] }[];
+    descontos: string[];
+    podio: string | null;
+    premio: string | null;
+    temAnalise: boolean;
+    link: string | null;
+    salvoEm: string | null;
+    publicado: GtaPublicacao[];
+  } | null;
+  noticia: { titulo: string | null; categoria: string | null; publicadaEm: string | null; link: string | null; publicado: GtaPublicacao[] } | null;
+  /** O que não deu para ler: 'diario' | 'semanal' | 'noticia' | 'canais'. */
+  erros: string[];
+}
+export interface ListaPessoal { nome: string; total: number; feitos: number; atualizadaEm: string | null; itens: { texto: string; feito: boolean }[] }
+export interface ListasView { ligado: boolean; situacao: 'ok' | 'ausente' | 'ilegivel' | string; total: number; listas: ListaPessoal[] }
+export interface SkillView { nome: string; descricao: string; origem: 'yui' | 'dono' | 'extra' | string; licenca: string | null; permitida: boolean; ignorados: string[] }
+export interface SkillsView {
+  ligado: boolean;
+  /** 'todas' = YUI_SKILLS_PERMITIDAS vazia (todas as válidas valem); 'lista' = só as da lista. */
+  filtro: 'todas' | 'lista' | string;
+  permitidas: string[] | null;
+  /** Nomes da lista de permitidas que não estão instalados. */
+  naoInstaladas: string[];
+  total: number;
+  ativas: number;
+  skills: SkillView[];
+  avisos: { pasta: string; origem: string; motivo: string }[];
+}
+export interface ContinuidadeItem { id: number; tipo: 'projeto' | 'decisao' | string; texto: string; criadoEm: string | null; atualizadoEm: string | null }
+export interface ContinuidadeView { ligado: boolean; memoria: boolean; total: number; projetos: number; decisoes: number; itens: ContinuidadeItem[] }
 // ── Lembretes e relatório matinal ──
 export interface ReminderView { id: number; text: string; at: string; repeat: { kind: string; hour: number; minute: number; weekday?: number; day?: number } | null; whenText: string; repeatText: string | null; tries: number }
 export interface RemindersResult { reminders: ReminderView[]; now: string }
@@ -225,11 +422,20 @@ export interface Health {
 
 export type AgentReplyType = 'reply' | 'tool_result' | 'needs_confirmation' | 'denied';
 
+/**
+ * Imagem gerada pelo Chat do app (lacunas do painel, item 11; YUI_APP_IMAGEM no servidor). `url` é um caminho RELATIVO `/v1/imagem/<código>`: o próprio
+ * código é a credencial, vale `expiresInSec` (10 min) e nunca é um caminho de arquivo do servidor. `alt` é o texto alternativo (o assunto pedido).
+ */
+export interface AgentImage { url: string; alt: string; expiresInSec: number | null }
+
 export interface AgentReply {
   type: AgentReplyType;
   reply: string;
   tool?: string;
   pendingId?: string;
+  imagem?: AgentImage;
+  /** O limite de imagens por hora barrou o pedido (o `reply` diz quando tentar de novo). */
+  limiteImagem?: { minutos: number };
 }
 
 export interface MemoryItem {
@@ -478,11 +684,66 @@ export function createClient(options: ClientOptions) {
       aiRemoveCustom: (id: string) => request<{ ok: boolean }>('DELETE', `/v1/admin/ai/custom/${id}`, undefined, 20_000),
       aiTest: (provider: string) => request<AiTestResult>('POST', `/v1/admin/ai/test/${provider}`, {}, 60_000),
       config: () => request<ConfigOverview>('GET', '/v1/admin/config', undefined, 20_000),
-      configSet: (chave: string, valor: string, confirm = false) => request<{ ok: boolean; chave: string; reinicio: boolean; botConectado?: boolean }>('PUT', `/v1/admin/config/${chave}`, { valor, ...(confirm ? { confirm: true } : {}) }, 20_000),
-      configRemove: (chave: string, confirm = false) => request<{ ok: boolean; chave: string; reinicio: boolean; botConectado?: boolean }>('DELETE', `/v1/admin/config/${chave}`, confirm ? { confirm: true } : undefined, 20_000),
+      configSet: (chave: string, valor: string, confirm = false, versao?: number) => request<{ ok: boolean; chave: string; reinicio: boolean; versao?: number; botConectado?: boolean }>('PUT', `/v1/admin/config/${chave}`, { valor, ...(confirm ? { confirm: true } : {}), ...(typeof versao === 'number' ? { versao } : {}) }, 20_000),
+      configRemove: (chave: string, confirm = false, versao?: number) => {
+        const body = { ...(confirm ? { confirm: true } : {}), ...(typeof versao === 'number' ? { versao } : {}) };
+        return request<{ ok: boolean; chave: string; reinicio: boolean; versao?: number; botConectado?: boolean }>('DELETE', `/v1/admin/config/${chave}`, Object.keys(body).length ? body : undefined, 20_000);
+      },
       sendDiscordDm: (message: string) => request<{ ok: boolean }>('POST', '/v1/admin/discord/dm', { message }, 30_000),
       radio: async () => (await request<{ sessions: RadioSession[] }>('GET', '/v1/admin/radio', undefined, 20_000)).sessions,
-      radioAction: (guildId: string, action: RadioAction) => request<{ ok: boolean }>('POST', `/v1/admin/radio/${guildId}`, { action }, 30_000),
+      /** Pausar, retomar, parar, tirar da call ou pular (`skip` responde com a faixa que começou ou 'fim-da-fila'). */
+      radioAction: (guildId: string, action: RadioAction) => request<RadioResultado>('POST', `/v1/admin/radio/${guildId}`, { action }, 45_000),
+      /** Os canais de voz e de texto do servidor para iniciar o rádio (com quem está na call e se a Yui pode entrar/falar ou escrever). Só leitura. */
+      radioCanais: (guildId: string) => request<RadioCanais>('GET', `/v1/admin/radio/${guildId}/canais`, undefined, 25_000),
+      /** Liga o rádio sem ninguém na call, no canal de voz e no de texto escolhidos (do servidor; a Yui espera alguém entrar por até 10 min). */
+      radioIniciar: (guildId: string, input: { voiceChannelId: string; textChannelId: string }) =>
+        request<RadioResultado>('POST', `/v1/admin/radio/${guildId}`, { action: 'start', voiceChannelId: input.voiceChannelId, textChannelId: input.textChannelId }, 45_000),
+      /** Toca um gênero, uma música ou um link. Quando a busca é ambígua volta `resultado: 'escolher'` com as opções. */
+      radioTocar: (guildId: string, query: string) => request<RadioResultado>('POST', `/v1/admin/radio/${guildId}`, { action: 'play', query }, 45_000),
+      /** Escolhe uma das opções da última busca ambígua (só o número; as faixas ficam no servidor). */
+      radioEscolher: (guildId: string, opcao: number) => request<RadioResultado>('POST', `/v1/admin/radio/${guildId}`, { action: 'choose', opcao: Math.trunc(Number(opcao)) }, 45_000),
+      /** Os monitores de busca do dono (lista e estado; nunca o texto de um resultado). */
+      monitores: () => request<MonitoresResult>('GET', '/v1/admin/monitores', undefined, 20_000),
+      /** Cancela um monitor (definitivo; a tela confirma antes). 404 se já encerrou ou se os monitores estão desligados. */
+      cancelMonitor: (id: number) => request<{ ok: boolean }>('DELETE', `/v1/admin/monitores/${Math.trunc(Number(id))}`, undefined, 20_000),
+      /** A live do YouTube (estado, qual live, mensagens desta live, cota e último erro). Só leitura. */
+      live: () => request<LiveView>('GET', '/v1/admin/live', undefined, 20_000),
+      /** A autorização do Google (escopos, validade, renovação, se precisa autorizar de novo). Só leitura; nunca token. */
+      google: () => request<GoogleView>('GET', '/v1/admin/google', undefined, 20_000),
+      /** Começa a reautorização do Google (a tela confirma antes): devolve só o link de consentimento. 404 com YUI_GOOGLE_REAUTORIZAR_PAINEL desligada; 429 passou de 5 por hora. */
+      googleReautorizarInicio: (confirmacao?: string) => request<InicioDaReautorizacao>('POST', '/v1/admin/google/autorizar/inicio', confirmacao ? { confirmacao } : {}, 20_000),
+      /**
+       * Correção C2: pede a chave de confirmação de UMA ação crítica (aprovar um plano, reautorizar o Google). A chave chega só pela DM do dono (6 dígitos,
+       * 5 minutos, uma vez, presa a esta sessão); a resposta nunca a traz. 429 com pedidos demais; 502 se a DM não saiu.
+       */
+      pedirConfirmacao: (input: PedidoDeConfirmacao) => request<{ ok: boolean; acao: string; expiraEmSegundos: number }>('POST', '/v1/admin/confirmacao/pedir', input, 30_000),
+      /** Conclui com o endereço colado (o da página 127.0.0.1 que não abriu). Uso único: errou, comece de novo. */
+      googleReautorizarRetorno: (endereco: string) => request<RetornoDaReautorizacao>('POST', '/v1/admin/google/autorizar/retorno', { endereco: String(endereco ?? '') }, 30_000),
+      /** Os últimos 20 planos (estado e, dos passos, só a ferramenta e o estado). `painel: true` = dá para aprovar e recusar por aqui. */
+      planos: () => request<PlanosResult>('GET', '/v1/admin/planos', undefined, 20_000),
+      /** Aprova ou recusa UM plano (a tela confirma antes de aprovar). 404 com YUI_PLANOS_PAINEL desligada; recusa da regra vem com `ok: false` e a frase. */
+      decidirPlano: (id: string, input: { versao: number; hash: string; aprovar: boolean; confirmacao?: string }) =>
+        request<DecisaoDoPlano>('POST', `/v1/admin/planos/${encodeURIComponent(id)}/decisao`, { versao: input.versao, hash: input.hash, aprovar: input.aprovar === true, ...(input.confirmacao ? { confirmacao: input.confirmacao } : {}) }, 20_000),
+      /** Entra numa live do YouTube (o mesmo "entra na live <link> por N horas" da conversa). Pode demorar: a Yui procura o chat e cumprimenta. */
+      entrarNaLive: (input: { endereco: string; horas?: number | null }) =>
+        request<AcaoDaLive>('POST', '/v1/admin/live/entrar', { endereco: input.endereco, ...(input.horas ? { horas: input.horas } : {}) }, 75_000),
+      /** Sai da live (o mesmo "sai da live" da conversa; a tela confirma antes). */
+      sairDaLive: () => request<AcaoDaLive>('POST', '/v1/admin/live/sair', {}, 30_000),
+      /** A fila de avisos e o que o modo observar registrou (assunto, classe, motivo e até quando). Só leitura. */
+      avisos: () => request<AvisosResult>('GET', '/v1/admin/avisos', undefined, 20_000),
+      /** GTA: o último diário, o último semanal, a última notícia, onde cada um saiu e o estado das fontes. Só leitura (lido no bot). */
+      gta: () => request<GtaView>('GET', '/v1/admin/gta', undefined, 25_000),
+      /** Republica o diário, o semanal ou a notícia mais recentes num servidor, no canal daquele tipo configurado nele (a tela confirma antes). 1 a cada 10 min. */
+      republicarGta: (input: { tipo: TipoDoGta; guildId: string }) =>
+        request<RepublicacaoDoGta>('POST', '/v1/admin/gta/republicar', { tipo: input.tipo, guildId: input.guildId, confirm: true }, 30_000),
+      /** As listas pessoais do dono da sessão (nomes, itens e feito). Só leitura. */
+      listas: () => request<ListasView>('GET', '/v1/admin/listas', undefined, 20_000),
+      /** As skills instaladas e quais estão permitidas. Só leitura. */
+      skills: () => request<SkillsView>('GET', '/v1/admin/skills', undefined, 20_000),
+      /** Os projetos e as decisões registrados na memória pessoal do dono. */
+      continuidade: () => request<ContinuidadeView>('GET', '/v1/admin/continuidade', undefined, 20_000),
+      /** Apaga UM projeto ou decisão (definitivo; a tela confirma antes). 404 se não existe ou não é projeto nem decisão. */
+      apagarContinuidade: (id: number) => request<{ ok: boolean }>('DELETE', `/v1/admin/continuidade/${Math.trunc(Number(id))}`, { confirm: true }, 20_000),
       logs: (query: LogsQuery = {}) => {
         const qs = new URLSearchParams();
         if (query.kind) qs.set('kind', query.kind);

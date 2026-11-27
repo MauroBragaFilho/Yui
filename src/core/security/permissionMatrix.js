@@ -67,6 +67,18 @@ const ROWS = [
   ['admin.gateway_reset', false, 'AADDD', true],
   ['media.download', false, 'AAAAA', true],   // baixar música/vídeo/torrent (temporários); hoje qualquer não banido
   ['admin.bot_config', true, 'SDSDD', true],    // painel global do bot (config.json): só o dono, no PC ou em DM
+  // Lacunas do painel, entrega E (27/11/2026): aprovar ou recusar um plano (item 3 v2; a MESMA decidir() dos botões da DM) e entrar ou sair da live do YouTube
+  // (item 4 v2; o MESMO comando da conversa). Só o dono, no PC ou pelo app; as regras são as do serviço. Sem `modifies` de propósito: os planos só leem, e "sair da
+  // live" tem de funcionar sempre (inclusive em somente leitura), como na DM e no chat do app, que não passam por esta tabela.
+  ['admin.plan_decide', false, 'AADDD', true],
+  ['admin.live_control', false, 'AADDD', true],
+  // Entrega E, parte 2 (item 9 v2): republicar o GTA mais recente num servidor (o canal configurado, a MESMA publicação do agendador, job.publish). Só o dono,
+  // no PC ou pelo app. Sem `modifies`, como a publicação agendada: manda uma mensagem no Discord, não mexe no computador.
+  ['admin.gta_republish', false, 'AADDD', true],
+  // Entrega F, parte 2 (item 14): reautorizar o Google pelo painel (o início e o retorno). Só o dono, no PC ou pelo app (é para isso que existe: renovar sem o
+  // script). ASK porque mexe com credencial: o painel confirma antes de começar, e a decisão fica na auditoria. Com `modifies`: grava o arquivo da autorização
+  // no servidor, então o modo somente leitura (YUI_READ_ONLY=true, em enforce) nega, como nega o cofre.
+  ['admin.google_reauth', true, 'SSDDD', true],
   // Tarefas automáticas do processo (jobGuard.js): origem LOCAL_PC, papel dono. Só a manutenção altera o computador.
   ['job.publish', false, 'ADDDD', true],
   ['job.notify', false, 'ADDDD', true],
@@ -99,7 +111,10 @@ export const ACTION_ALIASES = Object.freeze({
   'apps.open': 'apps.open',
   'commands.list': 'commands.list',
   'commands.run': 'commands.run',
-  // Módulo Código (ações do agente de desenvolvimento)
+  // Lacunas do painel, item 11: a imagem no chat do app é a MESMA ação do generate_image do Discord (POLICY_CHAT_AUTONOMY aperta as duas).
+  'imagem.gerar': 'chat.generate_image',
+  // Ações de código (o vocabulário de src/core/dev/actions.js). A aba Código e o agente dela saíram em 27/11/2026; as linhas dev.* e estes apelidos
+  // ficam porque são a especificação da Fase 1 (§1.2) e a política que as tarefas do Yui Dev (src/core/dev/tarefas.js, Fase 4, desligadas) vão usar.
   'dev:list_dir': 'dev.read_file_search',
   'dev:read_file': 'dev.read_file_search',
   'dev:search_code': 'dev.read_file_search',

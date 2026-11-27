@@ -11,13 +11,13 @@ import { handleBanInteraction, checkBan, addBan, removeBan, getBans, setAutoBloc
 import {
     addToQueue,
     getDisabledTools,
+    isToolDisabled,
     getAllMcpTools,
     setServerToolEnabled,
     resetServerTools,
     updateShowModel,
     updateShowModelThinking,
     updateErrorRetries,
-    updateProviderSetting,
     getProviderSettings,
     setChannelPersona,
     setChannelChatter,
@@ -26,6 +26,7 @@ import {
     setServerLastChannel
 } from '../handlers/llmHandler.js';
 import { generateImage } from '../handlers/imageHandler.js';
+import { ferramentaDoComando, recusaSeDesligada } from '../handlers/ferramentaDesligada.js';
 import {
     downloadAudio,
     downloadVideo,
@@ -53,7 +54,7 @@ import { convertCurrency } from '../handlers/currencyHandler.js';
 // pedido, de core/ai/promptComentario.js); com ele, o chat.comentario do cérebro (discord/comentarioCerebro.js).
 import { comentarioDaYui } from '../discord/comentarioCerebro.js';
 import { buildThirdPartyLogPrompt } from '../handlers/llmSafety.js';
-import { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect } from '../handlers/configPanelHandler.js';
+import { handleConfigCommand, handleConfigButton, handleConfigModal, handleConfigSelect, handleConfigIaCommand } from '../handlers/configPanelHandler.js';
 import { handleMusicSearchAndDownload, clearSession } from '../handlers/deezerMusicHandler.js';
 import { handleRadioButton, handleRadioModal, handleAmbiguousSelect } from '../music/radioModalHandler.js';
 import { startRadioMode } from '../music/radioManager.js';
@@ -493,6 +494,9 @@ export default {
                 if (interaction.user.id !== targetUserId) {
                     return interaction.reply({ content: '❌ Esta seleção pertence a outro usuário.', ephemeral: true });
                 }
+                // A escolha da faixa continua a busca de música: com a ferramenta desligada no servidor depois da busca, nada é baixado.
+                const musicaOff = recusaSeDesligada(interaction.guildId, 'search_and_download_music', isToolDisabled);
+                if (musicaOff) return interaction.reply({ content: musicaOff, ephemeral: true, allowedMentions: { parse: [] } });
                 const selectedIndex = interaction.values[0];
                 await interaction.update({ content: '🔄 **Processando download da faixa selecionada...**', embeds: [], components: [] });
                 try {
@@ -766,6 +770,13 @@ export default {
             return;
         }
         const { commandName } = interaction;
+        // Ferramenta desligada NESTE servidor (painel ou /yui-ferramentas): o comando de barra recusa com a mesma frase da conversa, antes de qualquer
+        // trabalho. Só em servidor; na DM nada muda. /sair-call não depende do interruptor; os /gta-* obedecem ao gta_online (ferramentaDesligada.js).
+        const ferramentaOff = recusaSeDesligada(interaction.guildId, ferramentaDoComando(commandName, interaction.options), isToolDisabled);
+        if (ferramentaOff) {
+            logger.info(`[MCP TOOL] /${String(commandName).slice(0, 40)} recusado: ferramenta desativada no servidor.`);
+            return interaction.reply({ content: ferramentaOff, ephemeral: true, allowedMentions: { parse: [] } });
+        }
         if (commandName === 'yui') {
             await askCommand.execute(interaction);
         } else if (commandName === 'gta-diario') {
@@ -911,31 +922,9 @@ export default {
                     .setDescription('Comando restrito ao criador da Yui.');
                 return interaction.reply({ embeds: [errEmbed], ephemeral: true });
             }
-            const provider = interaction.options.getString('provider');
-            const setting = interaction.options.getString('setting');
-            const value = interaction.options.getNumber('value');
-            if (provider) {
-                if (!setting || value === null) {
-                    const errEmbed = new EmbedBuilder()
-                        .setColor(0xE11D48)
-                        .setTitle('❌ Dados Insuficientes')
-                        .setDescription('Para configurar um provedor de IA, especifique a configuração e o valor.');
-                    return interaction.reply({ embeds: [errEmbed], ephemeral: true });
-                }
-                updateProviderSetting(provider, setting, value);
-            }
-            const successEmbed = new EmbedBuilder()
-                .setColor(0x10B981)
-                .setTitle('⚙️ Configurações • Parâmetros de IA')
-                .setDescription('As variáveis operacionais dos modelos de IA foram ajustadas com sucesso.');
-            if (provider) {
-                successEmbed.addFields(
-                    { name: 'Provedor', value: provider, inline: true },
-                    { name: 'Configuração', value: setting, inline: true },
-                    { name: 'Valor', value: String(value), inline: true }
-                );
-            }
-            await interaction.reply({ embeds: [successEmbed], ephemeral: true });
+            // Lacunas do painel, item 6 (26/11/2026): grava no COFRE do painel (o mesmo do painel web; pelo cérebro quando ele é separado), com a faixa
+            // do cofre (fora dela é recusado, nada é cortado) e o valor relido na resposta. Antes mudava só a memória do bot e o reinício apagava.
+            await handleConfigIaCommand(interaction);
         } else if (commandName === 'steam_jogo') {
             const query = interaction.options.getString('nome');
             await interaction.deferReply();

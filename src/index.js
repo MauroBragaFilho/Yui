@@ -372,6 +372,10 @@ async function bootstrap() {
     const { carregarServidorDoBot } = await import('./discord/painelServidor.js');
     const { registrarServidorDoPainel } = await import('./core/api/admin.js');
     registrarServidorDoPainel(carregarServidorDoBot); // configurações por servidor no painel (só o processo do bot tem a ponte)
+    // Imagem no Chat do app (lacunas do painel, item 11; só vale com YUI_APP_IMAGEM=true): o gerador mora aqui, no processo do bot.
+    const { gerarImagemParaApp } = await import('./handlers/imagemParaApp.js');
+    const { registrarGeradorDeImagem } = await import('./core/imagemDoApp.js');
+    registrarGeradorDeImagem(gerarImagemParaApp);
     startApi(client);
 
     // 6. Yui Gateway (servidor de IA compatível com OpenAI; opcional: YUI_GATEWAY_ENABLED=true)

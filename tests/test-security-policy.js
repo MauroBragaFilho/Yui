@@ -24,7 +24,6 @@ const { createPolicyEngine, originFor } = await import('../src/core/security/pol
 const ai = await import('../src/core/ai/manager.js');
 const { runAgent } = await import('../src/core/agent/agent.js');
 const tools = await import('../src/core/agent/tools.js');
-const { createDev } = await import('../src/core/dev/index.js');
 
 let passed = 0;
 const test = async (name, fn) => { await fn(); passed++; console.log(`  ✔ ${name}`); };
@@ -191,45 +190,8 @@ await test('Agent: leitura (system.info) concorda; sem origem informada a API co
   assert.deepEqual([ev.decision, ev.legacy, ev.diverges, ev.origin], [AUTO, AUTO, null, 'REMOTE']);
 });
 
-await test('módulo Código: leitura concorda; gravar continua pedindo aprovação e o motor registra CRITICAL local', async () => {
-  process.env.YUI_READ_ONLY = 'false';
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-sec-proj-'));
-  fs.writeFileSync(path.join(project, 'a.js'), 'x');
-  const act = (action, params) => JSON.stringify({ action, params, thought: '' });
-  const llm = {
-    async chat({ messages }) {
-      const last = String(messages.at(-1).content);
-      if (last.includes('[RESULTADO')) return { text: 'ok', provider: 'f', model: 'm' };
-      return { text: /grave/.test(last) ? act('write_file', { path: 'n.txt', content: 'oi' }) : act('read_file', { path: 'a.js' }), provider: 'f', model: 'm' };
-    },
-  };
-  const dev = createDev({ env: { YUI_DEV_ENABLED: 'true', YUI_PROJECTS: `P=${project}`, YUI_DEV_PROJECTS_FILE: path.join(tmp, 'p.json') }, llm, historyDir: path.join(tmp, 'h'), indexDir: path.join(tmp, 'i') });
-  const ownerCtx = buildContext({ platform: 'api', userId: '111', isDM: true });
-  const finish = async (runId, onApproval) => {
-    let after = 0;
-    for (let i = 0; i < 200; i++) {
-      const r = dev.getEvents(runId, after);
-      for (const e of r.events) { after = e.seq; if (e.type === 'approval') onApproval?.(e); if (e.type === 'done') return; }
-      await new Promise((r2) => setTimeout(r2, 20));
-    }
-    throw new Error('não terminou');
-  };
-  let before = policyEvents().length;
-  await finish((await dev.startRun({ projectId: 'p', message: 'leia a.js', local: true, ctx: ownerCtx })).runId);
-  let ev = policyEvents().slice(before).filter((e) => e.action === 'dev.read_file_search');
-  assert.ok(ev.length >= 1 && ev.every((e) => e.decision === AUTO && e.diverges === null), JSON.stringify(ev));
-
-  before = policyEvents().length;
-  const run = await dev.startRun({ projectId: 'p', message: 'grave n.txt', local: true, ctx: ownerCtx });
-  let asked = false;
-  await finish(run.runId, (e) => { asked = true; assert.equal(fs.existsSync(path.join(project, 'n.txt')), false); dev.answerApproval(run.runId, e.id, false, { ctx: ownerCtx }); });
-  assert.ok(asked, 'o comportamento antigo (pedir aprovação) foi mantido');
-  ev = policyEvents().slice(before).filter((e) => e.action === 'dev.write_apply_diff');
-  assert.equal(ev.length, 1);
-  assert.deepEqual([ev[0].decision, ev[0].legacy, ev[0].origin, ev[0].diverges], [CRITICAL, ASK, 'LOCAL_PC', 'motor mais restritivo']);
-  assert.equal(ev[0].targetHash.length, 16);
-  fs.rmSync(project, { recursive: true, force: true });
-});
+// (O teste "módulo Código" saiu com a aba Código em 27/11/2026: o módulo src/core/dev/index.js não existe mais. As linhas dev.* da matriz continuam
+// conferidas acima, como especificação da Fase 1 e a política que as tarefas do Yui Dev vão usar.)
 
 await test('gate(): observe mantém a decisão antiga; enforce usa a mais restritiva; ação fora da matriz não muda', () => {
   const events = [];

@@ -41,6 +41,19 @@ const ROUTES = [
   ['POST', /^\/v1\/admin\/reminders(\/\d+(\/snooze)?)?$/, 'admin.reminders_edit'],
   ['DELETE', /^\/v1\/admin\/reminders\/\d+$/, 'admin.reminders_edit'],
   ['DELETE', /^\/v1\/admin\/monitores\/\d+$/, 'admin.reminders_edit'], // etapa 16: cancelar um monitor de busca (mesma família dos lembretes)
+  // lacunas do painel, item 12: apagar UM projeto ou decisão do dono (um item da memória PESSOAL dele, a mesma ação do DELETE /v1/memory/:id)
+  ['DELETE', /^\/v1\/admin\/continuidade\/\d+$/, 'memory.forget_item'],
+  // lacunas do painel, entrega E: aprovar ou recusar UM plano (item 3 v2, a mesma decidir() da DM) e entrar ou sair da live do YouTube (item 4 v2, o mesmo comando da conversa)
+  ['POST', /^\/v1\/admin\/planos\/[^/]+\/decisao$/, 'admin.plan_decide'],
+  ['POST', /^\/v1\/admin\/live\/(entrar|sair)$/, 'admin.live_control'],
+  // lacunas do painel, entrega F, parte 2 (item 14): reautorizar o Google pelo painel (o início devolve só o link de consentimento; o retorno recebe o endereço
+  // colado, troca o código e grava o arquivo da autorização no servidor). As duas pontas são a mesma ação: mexe com credencial.
+  ['POST', /^\/v1\/admin\/google\/autorizar\/(inicio|retorno)$/, 'admin.google_reauth'],
+  // correção C2 do parecer da Liz: pedir a chave de confirmação pela DM (aprovar plano, reautorizar o Google). Manda uma DM ao dono: a mesma família da DM de teste.
+  ['POST', /^\/v1\/admin\/confirmacao\/pedir$/, 'admin.discord_dm'],
+  // lacunas do painel, entrega E parte 2: republicar o GTA mais recente num servidor (item 9 v2; o canal configurado, as mesmas funções do agendador).
+  // O rádio completo (item 10: iniciar, pular, tocar e escolher) usa o MESMO POST /v1/admin/radio/:guildId de sempre (radio.play_control, acima).
+  ['POST', /^\/v1\/admin\/gta\/republicar$/, 'admin.gta_republish'],
   ['POST', /^\/v1\/admin\/morning\/send$/, 'admin.reminders_edit'],
   ['POST', /^\/v1\/admin\/ai\/(keys|providers\/[\w-]+|custom(\/[\w-]+\/(keys|options))?)$/, 'admin.ai_configure'],
   ['PUT', /^\/v1\/admin\/ai\/cloudflare$/, 'admin.ai_configure'],

@@ -106,7 +106,7 @@ Opções: **EAS Build** (`npx eas build -p android --profile preview`, na nuvem 
 
 ## Desktop
 
-A versão web (`dist/`) já funciona no navegador do PC. Para uma **janela própria** existe a **Yui Desktop** (Electron, em `D:\Projetos\Projeto Jarvis\Yui Desktop`, fora deste repositório): ela abre este mesmo app e acrescenta o seletor de pastas da aba Código e o botão "Iniciar a Yui" quando a API está fora do ar. Sem ela, basta abrir `http://localhost:8081` e usar "Criar atalho → Abrir como janela" no Chrome/Edge.
+A versão web (`dist/`) já funciona no navegador do PC. Para uma **janela própria** existe a **Yui Desktop** (Electron, em `D:\Projetos\Projeto Jarvis\Yui Desktop`, fora deste repositório): ela abre este mesmo app e acrescenta o botão "Iniciar a Yui" quando a API está fora do ar (o seletor de pastas era da aba Código, que saiu do app em 11/11/2026 e do servidor em 27/11/2026). Sem ela, basta abrir `http://localhost:8081` e usar "Criar atalho → Abrir como janela" no Chrome/Edge.
 
 ## Segurança
 

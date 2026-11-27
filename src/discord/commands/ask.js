@@ -18,7 +18,8 @@ import { comAvisoDeIndisponivel } from '../../search/indisponivel.js';
 // Lista de mods (Minecraft): o CÓDIGO procura cada nome no Modrinth (a IA não inventa link). Fora da fila, como o resto do /yui.
 import { routeModList } from '../../handlers/modListResolver.js';
 import { routeLists } from '../../handlers/listAssistant.js';
-import { routeReminders } from '../../reminders/assistant.js';
+import { routeReminders, parseReminderRequest } from '../../reminders/assistant.js';
+import { recusaDeLembrete } from '../../handlers/ferramentaDesligada.js';
 import { SAFE_ALLOWED_MENTIONS } from '../mentions.js';
 import { sendLongReply, parseMaxParts, formatDeliveryLog, createProgressReporter } from '../longReply.js';
 import {
@@ -518,7 +519,10 @@ export const askCommand = {
       // Porta L (listas pessoais: "anota na lista X: ...", "mostra a lista X"): o código executa; a lista é dado pessoal e não vai ao contexto.
       const listRouted = await routeLists(entry);
       // Porta T (lembretes do dono: "me lembra amanhã às 9h de ...", "meus lembretes", "resumo do dia"): o código interpreta o horário e grava; só o dono.
-      const remRouted = listRouted.handled ? listRouted : await routeReminders(entry, { report: async () => (await import('../../reminders/service.js')).createMorningComposer()() });
+      // Lembretes desligados NESTE servidor (painel ou /yui-ferramentas): a mesma recusa da conversa, sem gravar nada (DM igual).
+      const remOff = listRouted.handled ? null : recusaDeLembrete({ guildId: entry.guildId, text: pergunta, isToolDisabled, interpretar: parseReminderRequest });
+      const remRouted = listRouted.handled ? listRouted : remOff ? { handled: true, text: remOff, researched: true }
+        : await routeReminders(entry, { report: async () => (await import('../../reminders/service.js')).createMorningComposer()() });
       const modRouted = remRouted.handled ? remRouted : await routeModList(entry, deps);
       // Cérebro separado (etapa 6): depois das pré-rotas do bot (listas, lembretes, mods), o /yui INTEIRO vai ao cérebro num pedido só (chat.yui):
       // a Porta A, a resposta com a busca automática, as Portas C e D e a nova resposta com a mesma web. O bot fica com a interface (o

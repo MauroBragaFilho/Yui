@@ -20,11 +20,8 @@ import {
 import { clampText } from '../discord/embedLimits.js';
 import { buildBanListPayload } from './banListHandler.js';
 import {
-    updateShowModel,
     getShowModel,
-    updateShowModelThinking,
     getShowModelThinking,
-    updateErrorRetries,
     getErrorRetries,
     getDisabledTools,
     getAllMcpTools,
@@ -32,12 +29,39 @@ import {
     resetServerTools
 } from './llmHandler.js';
 import { handleConfigCommand } from './configPanelHandler.js';
+import { gravarVariosPeloDiscord, pedidoDaInteracao } from '../discord/cofreRemoto.js';
+import { descreverItem } from '../core/painelConfig.js';
 import { sendMcpToolsManager } from './mcpToolPanelHandler.js';
 import { handleMemoriasAdmin } from './memoryAdminHandler.js';
 
 // Eco de entrada do dono (IDs, tipos, nomes de ferramenta): cortado em 100, porque o valor de um campo de
 // embed não pode passar de 1024 e a opção/modal aceita muito mais que isso (TG-19/TG-33).
 const show = (value, max = 100) => clampText(value, max) || '—';
+
+// Lacunas do painel, item 6 (26/11/2026): "Exibir modelo", "Exibir pensamento" e "Retentativas" gravam no COFRE do painel (o mesmo do painel web e do
+// painel de configuração), pelo cérebro quando ele é separado; a resposta mostra o valor relido do cofre. Antes mudavam só a memória do bot.
+const CHAVES_DO_MODELO = { mostrar_nome: 'YUI_IA_MOSTRAR_MODELO', mostrar_pensamento: 'YUI_IA_MOSTRAR_MODELO_PENSANDO', retentativas: 'YUI_IA_RETENTATIVAS' };
+/** O formulário "Modelos & Pensamento", com (ou, se aberto antes da correção C5, sem) as versões das 3 chaves na ordem de CHAVES_DO_MODELO. */
+export const MODAL_MODELOS_RE = /^crtcfg_modal_modelos(?:~v(\d{1,12})\.(\d{1,12})\.(\d{1,12}))?$/;
+const ROTULOS_DO_MODELO = { YUI_IA_MOSTRAR_MODELO: 'Exibir Modelo', YUI_IA_MOSTRAR_MODELO_PENSANDO: 'Exibir Pensamento', YUI_IA_RETENTATIVAS: 'Tentativas de Erro' };
+function textoDoResultado(r) {
+    if (!r) return 'Não alterado';
+    if (!r.ok) return clampText(`❌ Não gravei: ${r.erro}`, 1000);
+    if (r.chave === 'YUI_IA_RETENTATIVAS') return `✅ ${r.valor}`;
+    return r.valor === 'true' ? '✅ Sim' : '❌ Não';
+}
+async function gravarModelo(interaction, pares, titulo) {
+    await interaction.deferReply({ ephemeral: true });
+    const resultados = await gravarVariosPeloDiscord({ ...pedidoDaInteracao(interaction), via: 'criador' }, pares);
+    const tudoOk = resultados.every((r) => r.ok);
+    const embed = new EmbedBuilder()
+        .setColor(tudoOk ? 0x10B981 : 0xE11D48)
+        .setTitle(titulo)
+        .setDescription(tudoOk ? 'Gravado no cofre do painel (o mesmo do painel web). Valores relidos do cofre; já valem.' : 'Algum ajuste não foi gravado (veja abaixo). O que deu certo foi gravado no cofre do painel.')
+        .addFields(Object.values(CHAVES_DO_MODELO).map((chave) => ({ name: ROTULOS_DO_MODELO[chave], value: textoDoResultado(resultados.find((r) => r.chave === chave)), inline: true })))
+        .setTimestamp();
+    return interaction.editReply({ embeds: [embed] });
+}
 
 async function handleCreatorAdminCommand(interaction, client) {
     if (!config.isOwner(interaction.user.id)) {
@@ -51,25 +75,12 @@ async function handleCreatorAdminCommand(interaction, client) {
     const sub = interaction.options.getSubcommand(false);
 
     if (sub === 'modelo') {
-        const mostrarModelo = interaction.options.getBoolean('mostrar_nome');
-        const mostrarPensamento = interaction.options.getBoolean('mostrar_pensamento');
-        const retentativas = interaction.options.getInteger('retentativas');
-
-        if (mostrarModelo !== null) updateShowModel(mostrarModelo);
-        if (mostrarPensamento !== null) updateShowModelThinking(mostrarPensamento);
-        if (retentativas !== null) updateErrorRetries(retentativas);
-
-        const successEmbed = new EmbedBuilder()
-            .setColor(0x10B981)
-            .setTitle('⚙️ Configurações • Exibição & Modelos')
-            .setDescription('As variáveis operacionais de exibição de modelo foram atualizadas.')
-            .addFields(
-                { name: 'Exibir Modelo', value: mostrarModelo !== null ? (mostrarModelo ? '✅ Sim' : '❌ Não') : 'Não alterado', inline: true },
-                { name: 'Exibir Pensamento', value: mostrarPensamento !== null ? (mostrarPensamento ? '✅ Sim' : '❌ Não') : 'Não alterado', inline: true },
-                { name: 'Tentativas de Erro', value: retentativas !== null ? String(retentativas) : 'Não alterado', inline: true }
-            )
-            .setTimestamp();
-        return interaction.reply({ embeds: [successEmbed], ephemeral: true });
+        const pares = [];
+        for (const [opcao, chave] of Object.entries(CHAVES_DO_MODELO)) {
+            const v = opcao === 'retentativas' ? interaction.options.getInteger(opcao) : interaction.options.getBoolean(opcao);
+            if (v !== null && v !== undefined) pares.push([chave, String(v)]);
+        }
+        return gravarModelo(interaction, pares, '⚙️ Configurações • Exibição & Modelos');
     }
 
     if (sub === 'banir') {
@@ -231,8 +242,10 @@ async function handleCreatorAdminInteraction(interaction, client) {
     const { customId } = interaction;
 
     if (customId === 'crtcfg_btn_modelos') {
+        // C5: o formulário leva as versões das 3 chaves que mostrou; se o painel web gravou no meio, o cofre recusa aquela chave com 409.
+        const versoes = Object.values(CHAVES_DO_MODELO).map((chave) => descreverItem(chave)?.versao ?? 0);
         const modal = new ModalBuilder()
-            .setCustomId('crtcfg_modal_modelos')
+            .setCustomId(`crtcfg_modal_modelos~v${versoes.join('.')}`)
             .setTitle('🤖 Configurar Exibição & Retentativas');
 
         const showModelInput = new TextInputBuilder()
@@ -349,26 +362,17 @@ async function handleCreatorAdminInteraction(interaction, client) {
         return handleConfigCommand(interaction);
     }
 
-    if (customId === 'crtcfg_modal_modelos') {
-        const mostrarNome = (interaction.fields.getTextInputValue('mostrar_nome') || '').toUpperCase() === 'SIM';
-        const mostrarPensamento = (interaction.fields.getTextInputValue('mostrar_pensamento') || '').toUpperCase() === 'SIM';
-        const rawRetentativas = interaction.fields.getTextInputValue('retentativas');
-        const parsedRetentativas = parseInt(rawRetentativas);
-        const retentativas = isNaN(parsedRetentativas) ? getErrorRetries() : Math.max(0, Math.min(10, parsedRetentativas));
-
-        updateShowModel(mostrarNome);
-        updateShowModelThinking(mostrarPensamento);
-        updateErrorRetries(retentativas);
-
-        const embed = new EmbedBuilder()
-            .setColor(0x10B981)
-            .setTitle('🤖 Parâmetros de Exibição Atualizados')
-            .addFields(
-                { name: 'Exibir Nome do Modelo', value: mostrarNome ? '✅ Sim' : '❌ Não', inline: true },
-                { name: 'Exibir Modelo no Pensamento', value: mostrarPensamento ? '✅ Sim' : '❌ Não', inline: true },
-                { name: 'Retentativas em Erro', value: String(retentativas), inline: true }
-            );
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+    const formularioDeModelos = MODAL_MODELOS_RE.exec(customId);
+    if (formularioDeModelos) {
+        const mostrarNome = (interaction.fields.getTextInputValue('mostrar_nome') || '').trim().toUpperCase() === 'SIM';
+        const mostrarPensamento = (interaction.fields.getTextInputValue('mostrar_pensamento') || '').trim().toUpperCase() === 'SIM';
+        const rawRetentativas = String(interaction.fields.getTextInputValue('retentativas') ?? '').trim();
+        // As versões que o formulário mostrou (C5). Formulário aberto antes desta mudança (sem o sufixo): grava sem conferir, como antes.
+        const [vNome, vPensamento, vRetentativas] = formularioDeModelos[1] ? formularioDeModelos.slice(1, 4).map(Number) : [undefined, undefined, undefined];
+        // Retentativas: o número vai como foi digitado e o cofre recusa o que estiver fora de 0 a 10 (nada é cortado em silêncio); vazio não muda.
+        const pares = [['YUI_IA_MOSTRAR_MODELO', String(mostrarNome), vNome], ['YUI_IA_MOSTRAR_MODELO_PENSANDO', String(mostrarPensamento), vPensamento]];
+        if (rawRetentativas) pares.push(['YUI_IA_RETENTATIVAS', rawRetentativas, vRetentativas]);
+        return gravarModelo(interaction, pares, '🤖 Parâmetros de Exibição Atualizados');
     }
 
     if (customId === 'crtcfg_modal_ban') {

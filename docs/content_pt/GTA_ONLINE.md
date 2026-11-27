@@ -174,6 +174,8 @@ Teste rápido no Discord: `/yui mensagem: qual a classe do Truffade Adder?` e `/
 
 Os mesmos comandos existem por prefixo: `+yui diario`, `+yui semanal`, `+yui noticias [N]` e `+yui configurar <noticias|diario|semanal> #canal` (veja [Comandos por prefixo](COMMANDS.md#-comandos-por-prefixo)). 
 
+**Interruptor do servidor:** com a função "GTA Online" desligada no servidor (painel web, aba Funções, ou `/yui-ferramentas`, ferramenta `gta_online`), os comandos de barra, os de prefixo e a conversa recusam com a mesma frase (`src/handlers/ferramentaDesligada.js`). Na DM nada muda. A publicação automática nos canais é por canal e não depende dele.
+
 ### Pela conversa
 
 Perguntas como "como está a semana no GTA?" ou "o que tem no GTA hoje?" executam o mesmo que `/gta-diario`, `/gta-semanal` e `/gta-noticias` (detecção em `detectGtaIntent`, `src/handlers/chatIntents.js`; execução em `src/handlers/gtaChat.js`). O **código** busca os dados; a IA recebe **todas as páginas** (até 14000 caracteres) e monta a resposta. Se a IA falhar, a Yui manda o texto direto (cortado em 3800 caracteres). Se o semanal for de outra semana, o aviso vai junto.

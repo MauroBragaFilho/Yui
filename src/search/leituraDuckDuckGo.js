@@ -4,8 +4,8 @@ import * as cheerio from 'cheerio';
  * LEITURA da página HTML de resultados do DuckDuckGo (só o texto já baixado: este módulo não faz nenhum pedido e não conhece o endereço do buscador; o
  * endereço mora só em src/search/providers.js, a ÚNICA porta de saída da busca externa, com a cota por hora e o dono dela).
  *
- * Veio de src/core/dev/web-search.js (o agente de código do app), que reexporta estas funções: o providers.js e os testes seguem usando-as. Ficou num módulo
- * à parte para o agente de código poder chamar o `searchWeb` (providers.js) sem um ciclo de imports.
+ * Veio de src/core/dev/web-search.js (o agente de código do app, que saiu com os restos da aba Código em 27/11/2026); o providers.js e os testes usam estas
+ * funções daqui.
  *
  * Correções em relação ao Jarvis: o link vinha de `.result__url` (que quase sempre não tem href), então a "Fonte" saía como "undefined"; os links do
  * DuckDuckGo são redirecionamentos (?uddg=...) e agora são decodificados. Anúncios (`.result--ad`, links `duckduckgo.com/y.js`) são descartados: seguir um

@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import { safeEnv } from '../dev/terminal.js';
 import { registerToolPolicy, clearToolPolicies, ROLES, TOOL_ACCESS } from '../permissions.js';
 import { readBdsConfig, runLibraryAction, FOLDER_ALIASES } from '../../services/bdsLibrary.js';
+import { FERRAMENTA_DE_IMAGEM, PEDIDO_MAX, PRAZO_DA_IMAGEM_MS, imagensDoApp } from '../imagemDoApp.js';
 
 /**
  * Registro de ferramentas do Agent.
@@ -255,6 +256,32 @@ export function registerBdsTools() {
     async run() { return runLibraryAction('status'); },
   });
   return ['bds.buscar', 'bds.listar', 'bds.recentes', 'bds.status'];
+}
+
+// ───────────────────────── Imagem no Chat do app ─────────────────────────
+
+/**
+ * Lacunas do painel, item 11: gerar imagem pelo chat do app (o mesmo que o generate_image faz no Discord). Registrada pelo startApi (server.js), mas só APARECE
+ * (`disponivel`) com YUI_APP_IMAGEM=true, o gerador registrado por quem subiu a API e a generate_image ligada no padrão global; ver src/core/imagemDoApp.js.
+ * Papel mínimo MEMBER (a matriz libera chat.generate_image para todos, com o limite por hora; o dono não tem limite). Acesso "read": gerar uma imagem
+ * não mexe no computador (o arquivo temporário é apagado na hora), então vale também no modo somente leitura, como no Discord.
+ */
+export function registerImageTool() {
+  registerTool({
+    name: FERRAMENTA_DE_IMAGEM,
+    description: 'Gera uma imagem NOVA a partir de uma descrição em texto (não edita nem vê imagens enviadas). Use só quando a pessoa pedir claramente uma imagem, foto, desenho ou ilustração; "prompt" é a descrição do que desenhar.',
+    params: { prompt: { type: 'string', required: true, max: PEDIDO_MAX } },
+    // Modelos costumam mandar os argumentos do generate_image do Discord (negative_prompt, width, height): são ignorados, não viram erro.
+    lenient: true,
+    minRole: ROLES.MEMBER,
+    privateOnly: false,
+    access: TOOL_ACCESS.READ,
+    timeoutMs: PRAZO_DA_IMAGEM_MS + 5_000, // o serviço responde "demorou" antes deste prazo
+    disponivel: (ctx) => imagensDoApp().disponivel(ctx),
+    // O runAgent já passou pelo motor de políticas (gate) antes de chegar aqui.
+    async run({ prompt }, ctx) { return imagensDoApp().gerar({ ctx, prompt, via: 'ferramenta', conferirPolitica: false }); },
+  });
+  return [FERRAMENTA_DE_IMAGEM];
 }
 
 // ───────────────────────── Ferramentas embutidas ─────────────────────────

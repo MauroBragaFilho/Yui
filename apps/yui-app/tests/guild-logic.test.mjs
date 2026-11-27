@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as g from '../src/guildLogic.ts';
-import { filtrarAjustes, gruposDosAjustes } from '../src/configLogic.ts';
+import { campoDoAjuste, filtrarAjustes, gruposDosAjustes } from '../src/configLogic.ts';
 import { createClient } from '../src/api/client.ts';
 
 test('ferramentas: avisos nas sensíveis e rótulo sem emoji', () => {
@@ -106,6 +106,13 @@ test('ajustes: confirmação só no valor que afrouxa, e o cliente leva o confir
   await admin.configRemove('YUI_ALERTS', true);
   await admin.configRemove('YUI_FUSO');
   assert.deepEqual(corpos, [{ valor: 'false', confirm: true }, { valor: 'true' }, { confirm: true }, undefined]);
+  // Correção C5 do parecer da Liz: a versão que a tela viu vai junto (0 também); sem versão, o corpo fica como antes.
+  corpos.length = 0;
+  await admin.configSet('YUI_ALERTS', 'false', true, 3);
+  await admin.configSet('YUI_ALERTS', 'true', false, 0);
+  await admin.configRemove('YUI_ALERTS', true, 4);
+  await admin.configRemove('YUI_FUSO', false, 0);
+  assert.deepEqual(corpos, [{ valor: 'false', confirm: true, versao: 3 }, { valor: 'true', versao: 0 }, { confirm: true, versao: 4 }, { versao: 0 }]);
 });
 
 test('configuração: grupos e busca sem acento em todos os grupos', () => {
@@ -118,4 +125,16 @@ test('configuração: grupos e busca sem acento em todos os grupos', () => {
   assert.equal(filtrarAjustes(itens, null, '').length, 2);
   assert.equal(filtrarAjustes(itens, 'Voz', 'relatorio')[0].chave, 'YUI_A');
   assert.equal(filtrarAjustes(itens, null, 'nada disso').length, 0);
+});
+
+test('configuração (lacunas do painel, item 6): número com casas decimais ganha campo e teclado decimal; ligado/desligado e opção não têm campo', () => {
+  const temperatura = campoDoAjuste({ tipo: 'decimal', min: 0, max: 2 });
+  assert.deepEqual([temperatura.digitado, temperatura.numerico, temperatura.teclado], [true, true, 'decimal-pad']);
+  assert.equal(temperatura.exemplo, 'Número de 0 a 2 (por exemplo 0,7)');
+  assert.deepEqual(campoDoAjuste({ tipo: 'decimal', min: 0.5, max: 1.5 }).exemplo, 'Número de 0,5 a 1,5 (por exemplo 0,7)');
+  const prazo = campoDoAjuste({ tipo: 'int', min: 5000, max: 300000 });
+  assert.deepEqual([prazo.digitado, prazo.teclado, prazo.exemplo], [true, 'numeric', 'Número de 5000 a 300000']);
+  assert.deepEqual([campoDoAjuste({ tipo: 'texto' }).digitado, campoDoAjuste({ tipo: 'texto' }).exemplo], [true, 'Novo valor']);
+  assert.deepEqual([campoDoAjuste({ tipo: 'segredo' }).digitado, campoDoAjuste({ tipo: 'segredo' }).exemplo], [true, 'Colar nova chave']);
+  for (const tipo of ['bool', 'enum']) assert.equal(campoDoAjuste({ tipo }).digitado, false, tipo);
 });

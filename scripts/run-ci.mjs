@@ -27,6 +27,9 @@ export const SUITES = [
   'test:core', 'test:core-api', 'test:core-agent', 'test:readonly', 'test:permgaps', 'test:panel', 'test:alerts', 'test:avisos', 'test:avisosfila', 'test:planos',
   'test:persona', 'test:mentions', 'test:search', 'test:gateway', 'test:config', 'test:memperm', 'test:memret', 'test:audiencia', 'test:vozaudaux', 'test:vozaudcerebro', 'test:vozaudbot', 'test:histcomp', 'test:fase2', 'test:gatewaychecagem', 'test:hybrid',
   'test:audit', 'test:backup', 'test:dmowner', 'test:chatintents', 'test:imageintent', 'test:library',
+  // Lacunas do painel, entrega F, item 11: a imagem no Chat do app (YUI_APP_IMAGEM, desligada): política, pré-rota dos dois lados, link curto, filtro, limite,
+  // auditoria sem o pedido e a entrega bot -> cérebro pelo canal de verdade (gerador falso, sem rede).
+  'test:imagemapp',
   'test:reminders', 'test:remindersapi', 'test:fusodono','test:llmsafety', 'test:context', 'test:safefetch', 'test:netdefaults',
   'test:healthreport', 'test:guilddelete', 'test:redditguard', 'test:chromeprofile', 'test:interactionstats',
   'test:dev', 'test:security', 'test:approvals', 'test:routes', 'test:discordguard', 'test:jobguard', 'test:binverify', 'test:aibaseurl', 'test:lockverify',
@@ -79,10 +82,9 @@ export const SUITES = [
   'test:falhafechada',
   'test:cobertura-bloqueio',
   'test:weeklygravado',
-  // Etapa 8, rodada de fechamento depois da 3ª revisão da Liz (§14): a busca do app (o agente de código) passa pela MESMA cota central, e quem esperava uma busca
-  // pública cancelada pelo dono dela pode fazer a PRÓPRIA busca (reserva e diário próprios, uma nova tentativa só). Os dois num processo só, com buscador falso,
-  // cota em disco numa pasta temporária e sob o bloqueio de integração externa. O test:soak2h (2 horas, MANUAL) NÃO está aqui: fora da CI, como o test:importarmemoria.
-  'test:buscaapp',
+  // Etapa 8, rodada de fechamento depois da 3ª revisão da Liz (§14): quem esperava uma busca pública cancelada pelo dono dela pode fazer a PRÓPRIA busca (reserva e
+  // diário próprios, uma nova tentativa só), num processo só, com buscador falso, cota em disco numa pasta temporária e sob o bloqueio de integração externa. (O
+  // test:buscaapp, da busca do agente de código, saiu com os restos da aba Código em 27/11/2026.) O test:soak2h (2 horas, MANUAL) NÃO está aqui: fora da CI, como o test:importarmemoria.
   'test:buscacancelada',
   // Etapa 9 (perfis de IA no Motor 0, só com o OmniRoute FALSO): as peças puras (configuração validada, os dois leitores do cabeçalho de decisão, o seletor, o motor do agente, o diagnóstico e a
   // preservação); a rota contra o servidor falso em loopback (a seleção, o privado com falha fechada, o fallback, o segredo plantado, a concorrência, o reinício e o isolamento entre pessoas); e
@@ -142,6 +144,43 @@ export const SUITES = [
   // Prova de IDENTIDADE do servidor para o app (GET /v1/identidade: assinatura Ed25519 de um desafio com a chave privada que só o servidor tem): a rota desligada e ligada, o nonce, o limite de
   // repetição por origem, o sigilo da chave privada (nunca no corpo, em log nem no repositório) e o gerador da identidade (permissão restrita, nunca sobrescreve sem --forcar). Num processo só, sem rede.
   'test:identidadeapi',
+  // Lacunas do painel, item 1 (26/11/2026): a ferramenta DESLIGADA no servidor vale em todos os caminhos (o módulo puro, a fila de verdade do llmHandler com a Porta G,
+  // a Porta T e o atalho da música do status, o /yui e o "+yui musica"); a DM não muda. Num processo só, sem rede, server_tools.json e lembretes numa pasta temporária.
+  'test:ferramentadesligada',
+  // Lacunas do painel, entrega B (26/11/2026): as leituras só do dono e só de leitura (GET /v1/admin/live, /google, /planos e /avisos e o grupo "Contas da Yui" das
+  // Integrações). As vistas com fontes envenenadas, a live contra o YouTube falso, o Google contra o Google falso, planos e fila em pasta temporária, as rotas HTTP
+  // (dono x membro, nada de segredo nem conteúdo) e o cérebro separado com o bot. Num processo só, sem rede de fora.
+  'test:painelleituras',
+  // Lacunas do painel, item 6 (26/11/2026): a configuração da IA do painel do Discord (/yui-criador e /yui-config_ia) e a do painel web gravam no MESMO cofre.
+  // Processo único e cérebro separado pelo canal de verdade: grava, relê, sobrevive ao reinício, a cadeia do bot usa na próxima chamada; não dono, fora da faixa,
+  // cofre travado e cérebro fora não gravam. Num processo só, sem rede, cofre e auditoria numa pasta temporária.
+  'test:painelia',
+  // Lacunas do painel, entrega D, item 9 v1 (27/11/2026): GET /v1/admin/gta, só do dono e só de leitura. A vista com o dado envenenado (só o resumo legível,
+  // Reddit desligado como "desligado"), o leitor do bot contra os bancos do GTA de verdade numa pasta temporária, a rota HTTP (dono x membro, sem o texto do
+  // post nem a análise da IA) e o cérebro separado (pede ao bot e limpa de novo). Num processo só, sem rede de fora.
+  'test:painelgta',
+  // Lacunas do painel, entrega D, item 12 (27/11/2026): listas pessoais, skills e continuidade, só do dono. As vistas envenenadas, o arquivo das listas (só o do
+  // dono, sem renomear o estragado), o catálogo de skills em pastas temporárias, a memória pessoal de verdade (só project e decision do próprio dono), as rotas
+  // HTTP (o apagar com confirmação, no routeGuard, auditoria sem o texto) e o cérebro (tudo local, nada ao bot). Num processo só, sem rede.
+  'test:paineltransparencia',
+  // Lacunas do painel, entrega E, parte 1 (27/11/2026; itens 3 v2 e 4 v2): aprovar e recusar planos (a MESMA decidir() dos botões da DM, com YUI_PLANOS_PAINEL)
+  // e entrar e sair da live do YouTube (o MESMO comando da conversa) pelo painel, só do dono e no routeGuard. O serviço dos planos do cérebro de verdade sobre um
+  // canal falso, a live contra o YouTube falso, a política em enforce, o processo único, o cérebro (nada ao bot) e o bot separado. Num processo só, sem rede de fora.
+  'test:painelacoes',
+  // Lacunas do painel, entrega E, parte 2 (27/11/2026; item 9 v2): republicar o GTA mais recente num servidor, no canal configurado, pelas MESMAS funções de publicação
+  // do agendador. O publicador contra os bancos de verdade numa pasta temporária e um Discord falso, o lado do bot com um publicador falso, a rota (dono x membro,
+  // limite de 10 min, auditoria sem conteúdo, routeGuard e enforce) e o cérebro separado com o bot. Num processo só, sem rede, sem Discord de verdade.
+  'test:painelrepublicar',
+  // Lacunas do painel, entrega E, parte 2 (27/11/2026; item 10): o rádio completo pelo painel (iniciar sem ninguém na call, pular, tocar com as opções da busca
+  // ambígua e a fila), com o rádio falso na rota e o radioManager de verdade sobre o player, os bancos, a voz e o Discord falsos. Num processo só, sem áudio nem rede.
+  'test:painelradio',
+  // Lacunas do painel, entrega F, parte 2 (27/11/2026; item 14): reautorizar o Google pelo painel (YUI_GOOGLE_REAUTORIZAR_PAINEL), só do dono e no routeGuard. O fluxo
+  // completo contra o Google FALSO (PKCE de verdade), o arquivo novo e o auth.js voltando a renovar com ele, o uso único, state errado, endereço de outra porta ou
+  // host, sessão vencida, Gmail nunca pedido nem gravado, sem arquivo, chave desligada, não dono, limite, enforce, o cérebro e o bot; nada de segredo nas respostas,
+  // na auditoria nem nos logs. Num processo só, pasta temporária, sem rede de fora.
+  'test:painelgoogle',
+  'test:painelescritas',
+  'test:painelconfirmacao',
 ];
 
 function argvOf(command) {

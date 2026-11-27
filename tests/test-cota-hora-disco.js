@@ -712,17 +712,13 @@ try {
     assert.ok(prov.indexOf('budget.registrarProvedor') > 0 && prov.indexOf('budget.registrarProvedor') < prov.indexOf('PROVIDERS[name].search('));
     // NENHUM outro arquivo do src fala com os buscadores externos: a exceção que existia (o agente de código do app, src/core/dev/web-search.js, que buscava no
     // DuckDuckGo por conta própria, fora da cota) acabou na revisão da Liz (§14 do relatório da etapa 8: "nenhum caminho de busca pode contornar o dono da cota").
-    // O web-search.js agora delega ao searchWeb (o test:buscaapp prova a cota, o teto, a porta e a privacidade da busca do app).
+    // Depois o próprio agente de código saiu, com os restos da aba Código (27/11/2026): o web-search.js e o módulo de código não existem mais.
     const hosts = /api\.search\.brave\.com|api\.tavily\.com|html\.duckduckgo\.com|www\.bing\.com\/search/;
     const outros = todosOsArquivos('src').filter((f) => f !== 'src/search/providers.js' && hosts.test(lerSrc(f)));
     assert.deepEqual(outros, [], 'só o providers.js conhece os endereços dos buscadores: nenhuma exceção, nem o agente de código do app');
-    const wsApp = lerSrc('src/core/dev/web-search.js');
-    assert.match(wsApp, /import \{ searchWeb \} from '\.\.\/\.\.\/search\/providers\.js'/, 'o agente de código do app chama a porta única');
-    assert.ok(!/\bfetch\s*\(/.test(wsApp.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), 'e não faz pedido de rede por conta própria');
-    const usaDev = todosOsArquivos('src').filter((f) => /\bcreateWebSearch\b/.test(lerSrc(f)) && f !== 'src/core/dev/web-search.js');
-    assert.deepEqual(usaDev, ['src/core/dev/index.js'], 'o buscador do agente de código só é ligado pelo módulo de código');
-    const donos = todosOsArquivos('src').filter((f) => /from '[^']*\/dev\/index\.js'/.test(lerSrc(f)));
-    assert.deepEqual(donos, ['src/core/api/server.js'], 'e o módulo de código só é ligado pela API');
+    assert.equal(fs.existsSync(path.join(ROOT, 'src/core/dev/web-search.js')), false, 'o buscador do agente de código saiu com a aba Código');
+    assert.deepEqual(todosOsArquivos('src').filter((f) => /\bcreateWebSearch\b/.test(lerSrc(f))), [], 'ninguém mais liga um buscador próprio');
+    assert.deepEqual(todosOsArquivos('src').filter((f) => /from '[^']*\/dev\/(?:index|web-search|routes)\.js'/.test(lerSrc(f))), [], 'e nada importa o módulo de código removido');
     const indexJs = lerSrc('src/index.js');
     const iRamoSep = indexJs.indexOf('if (SEPARADO) {\n    logger.info(\'[Bootstrap] Yui API e Gateway: sobem no cérebro');
     assert.ok(iRamoSep > 0 && indexJs.indexOf('startApi(client)') > iRamoSep, 'com o cérebro separado o bot NÃO sobe a API: o startApi só no ramo sem a chave');
@@ -738,7 +734,6 @@ try {
       'src/cerebro/pesquisa.js', // o agente da fila e do /yui no cérebro e o ramo antigo
       'src/core/ai/research.js', // o agente do app (o adaptador do Core)
       'src/core/ai/searchManager.js', // searchForAgent e a busca automática (smartSearchDetailed)
-      'src/core/dev/web-search.js', // a busca do agente de código do app: ENTROU na porta (revisão da Liz, §14 da etapa 8); era a exceção declarada fora dela
       'src/handlers/llmHandler.js', // o processo único: o agente, a busca automática e o ramo antigo
     ].sort(), 'a lista de chamadores mudou: revise se o novo caminho passa pela porta de saída');
     // TODOS usam o searchWeb do providers.js (que tem a porta): nenhum tem a sua própria cadeia de buscadores

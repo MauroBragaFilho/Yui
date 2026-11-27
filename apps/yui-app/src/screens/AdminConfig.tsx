@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { ApiError, type ConfigItem, type ConfigOverview, type YuiClient } from '../api/client.ts';
 import { confirmAction } from '../components/confirm.ts';
-import { filtrarAjustes, gruposDosAjustes } from '../configLogic.ts';
+import { campoDoAjuste, filtrarAjustes, gruposDosAjustes } from '../configLogic.ts';
 import { perguntaDoAjuste } from '../guildLogic.ts';
 import { Badge, Button, Card, Chip, FieldLabel, Icon, SectionHeading, StateView } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
@@ -42,11 +42,13 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
     setBusy(true);
     setMsg(null);
     try {
-      const r = await client.admin.configSet(item.chave, valor, confirm);
+      const r = await client.admin.configSet(item.chave, valor, confirm, item.versao);
       setText('');
       await reload();
       setMsg({ text: `Salvo. ${quandoVale(r)}`, ok: true });
     } catch (e) {
+      // 409: o ajuste mudou no meio (Discord ou outra aba). Recarrega para mostrar o valor atual; nada foi gravado.
+      if (e instanceof ApiError && e.status === 409) await reload().catch(() => undefined);
       setMsg({ text: errText(e), ok: false });
     } finally {
       setBusy(false);
@@ -57,10 +59,11 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
     setBusy(true);
     setMsg(null);
     try {
-      const r = await client.admin.configRemove(item.chave, Boolean(item.confirmar));
+      const r = await client.admin.configRemove(item.chave, Boolean(item.confirmar), item.versao);
       await reload();
       setMsg({ text: `Removido do painel. ${quandoVale(r)}`, ok: true });
     } catch (e) {
+      if (e instanceof ApiError && e.status === 409) await reload().catch(() => undefined);
       setMsg({ text: errText(e), ok: false });
     } finally {
       setBusy(false);
@@ -74,7 +77,8 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
   // Booleano/opção com edição: o valor atual já está marcado nos botões, não repete a linha "Valor atual".
   const escolhaVisivel = editable && (item.tipo === 'bool' || item.tipo === 'enum') && item.definido;
   const estado = item.secreto && !item.definido ? { label: 'Não definida', color: colors.warning } : origem;
-  const campoTexto = item.tipo === 'int' || item.tipo === 'texto' || item.tipo === 'segredo';
+  const campo = campoDoAjuste(item);
+  const campoTexto = campo.digitado;
   const voltar = editable && item.origem === 'painel' ? (
     <Button label="Desfazer ajuste" variant="ghost" compact onPress={() => confirmAction('Desfazer o ajuste?', `"${item.rotulo}" volta ao valor do .env (ou ao padrão); o valor salvo no painel será apagado.`, removeNow, 'Desfazer')} loading={busy} style={styles.smallBtn} testID={`config-remove-${item.chave}`} />
   ) : null;
@@ -120,10 +124,10 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
               style={[styles.input, { flex: 1, minWidth: 180 }]}
               value={text}
               onChangeText={setText}
-              placeholder={item.tipo === 'segredo' ? 'Colar nova chave' : item.tipo === 'int' ? `Número de ${item.min} a ${item.max}` : 'Novo valor'}
+              placeholder={campo.exemplo}
               placeholderTextColor={colors.muted}
               secureTextEntry={item.tipo === 'segredo'}
-              keyboardType={item.tipo === 'int' ? 'numeric' : 'default'}
+              keyboardType={campo.teclado}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
@@ -141,11 +145,12 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
 }
 
 /** Configuração e chaves da Yui pelo painel: tudo o que antes só dava para mudar editando o .env (lista fechada, segredo só entra). */
-export function ConfigPainel({ client }: { client: YuiClient }) {
+export function ConfigPainel({ client, grupoInicial }: { client: YuiClient; grupoInicial?: string }) {
   const [data, setData] = useState<ConfigOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [grupo, setGrupo] = useState<string | null | undefined>(undefined); // undefined = primeiro grupo; null = todos
+  // undefined = primeiro grupo; null = todos. `grupoInicial`: quem abre a tela por um atalho (a aba IA abre direto em "Inteligência").
+  const [grupo, setGrupo] = useState<string | null | undefined>(grupoInicial);
   const [busca, setBusca] = useState('');
   const [sobre, setSobre] = useState(false);
 
@@ -167,7 +172,7 @@ export function ConfigPainel({ client }: { client: YuiClient }) {
   if (!data) return <StateView kind="loading" title="Abrindo a configuração…" />;
 
   const grupos = gruposDosAjustes(data.itens);
-  const escolhido = grupo === undefined ? (grupos[0] ?? null) : grupo;
+  const escolhido = grupo === undefined || (grupo !== null && !grupos.includes(grupo)) ? (grupos[0] ?? null) : grupo;
   const visiveis = filtrarAjustes(data.itens, escolhido, busca);
   const editavel = data.edicaoLigada && data.problema !== 'cofre-ilegivel';
   return (

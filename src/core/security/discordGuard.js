@@ -51,6 +51,12 @@ const CUSTOM_ID = [
   ['crtcfg_', 'admin.guild_configure'],
   ['cfgpanel_toggle_', 'admin.bot_config'],
   ['cfgmodal_', 'admin.bot_config'],
+  // Lacunas do painel, item 6: os outros botões do painel de configuração que GRAVAM no cofre (passo, opção, voltar ao padrão e a confirmação).
+  ['cfgpanel_inc_', 'admin.bot_config'],
+  ['cfgpanel_dec_', 'admin.bot_config'],
+  ['cfgpanel_sel_', 'admin.bot_config'],
+  ['cfgpanel_reset_', 'admin.bot_config'],
+  ['cfgpanel_confirm', 'admin.bot_config'],
   ['srvcfg_', 'admin.guild_configure'],
   ['srvmcp_', 'admin.guild_configure'],
   ['tos_decline', 'admin.guild_configure'],

@@ -22,7 +22,6 @@
 - 🛠️ **Agent com ferramentas** (informações do PC, busca de arquivos, abrir projetos) na máquina onde ela roda, em **modo somente leitura**: ela não apaga, grava, move nem executa programas.
 - 📁 **Biblioteca por conversa:** com `YUI_BDS_URL` definido, procura e lista filmes, séries e arquivos do BDS Server (servidor de arquivos do dono), no privado e só para leitura. [Conversa e comandos](docs/content_pt/CONVERSA_E_COMANDOS.md)
 - 📱 **App da Yui** (Android e web) com chat, memória e **painel de administração**; entrada por usuário e senha ou por **chave de uso único enviada por DM no Discord**. [Assistente pessoal](docs/content_pt/ASSISTENTE_PESSOAL.md) · [API](docs/content_pt/YUI_API.md)
-- ⌨️ **Código:** a aba **Código** do app deixa a Yui ler e, com a sua aprovação a cada ação (dada **só no próprio computador onde a Yui roda**), editar os seus projetos e rodar comandos (o que o Projeto Jarvis queria ser, dentro da mesma Yui). Somente leitura por padrão. [Código](docs/content_pt/CODIGO.md)
 - 🔔 **Avisos automáticos:** a Yui manda DM ao dono quando a IA cai, um provedor fica sem crédito, há erro grave, tarefa agendada falha ou alguém erra o login várias vezes. [Operação](docs/content_pt/OPERACAO.md)
 - 🖥️ **Painel completo no app:** integrações, servidores (canais e seguidos), rádio, IA (chaves e provedores, como o OmniRoute), logs, auditoria e mensagem no seu Discord.
 

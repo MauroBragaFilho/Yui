@@ -7,6 +7,7 @@
 //    - contexto por horas: só o apagar (context.forgetUser e context.forgetGuild);
 //    - lembretes por conversa: reminders.route e reminders.list;
 //    - listas por conversa (só com YUI_APP_COMANDOS=true): lists.route;
+//    - o painel de configuração do Discord (/yui-criador bot_config e /yui-config_ia) grava no cofre do painel: painel.config.discord;
 //    - a CONVERSA (etapa 5, discord/turnoCerebro.js): cada pedido da fila do llmHandler e cada /yui viram um turno do cérebro (chat.turn e
 //      chat.commit); o cérebro é o dono do contexto por horas e do histórico.
 //    Cérebro fora: a memória responde "indisponível agora" e a conversa responde "a Yui está indisponível agora" (sem prender a fila).
@@ -17,7 +18,9 @@
 //      ficam em <DATABASE_DIR>/idempotencia-bot.json (core/channel/idemPersistente.js, etapa 4);
 //    - discord.status: Discord ligado, servidores e banimentos (para o painel e a passada dos lembretes);
 //    - guild.list, guild.get, guild.setChannel e panel.admin (telas do painel que dependem do bot), executadas pelo
-//      createAdmin daqui (com o cliente do Discord e os bancos do bot). Quem pede tem de ser o dono (conferido de novo aqui).
+//      createAdmin daqui (com o cliente do Discord e os bancos do bot). Quem pede tem de ser o dono (conferido de novo aqui);
+//    - imagem.gerar: só a GERAÇÃO da imagem do Chat do app (a regra e a política são do cérebro; src/core/imagemDoApp.js);
+//    - imagem.cota: o limite por hora da imagem do app, contado AQUI, na mesma memória do Discord (correção C4: um limite só por pessoa).
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { connectChannel } from '../core/channel/client.js';
@@ -41,12 +44,13 @@ import { definirPortaDaLive } from '../adaptadores/youtube/porta.js';
 import { definirPortaDePlanos } from '../core/planos/porta.js';
 import { applyAiSettings } from '../core/aiSettings.js';
 import { recarregarAoVivo } from '../core/painelConfig.js';
+import { definirCofreRemoto } from './cofreRemoto.js';
 import { getGateway, resetGateway } from '../gateway/index.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 
 export const BOT_CAPABILITIES = Object.freeze(['discord.dm', 'discord.status', 'guild.admin', 'panel.admin']);
 /** As telas do painel que o cérebro pode pedir por panel.admin (a mesma lista do src/cerebro/painel.js). */
-export const BOT_PANEL_ACTIONS = Object.freeze(['setAutomod', 'bans', 'addBan', 'removeBan', 'addYoutubeFollow', 'setYoutubeLiveMode', 'removeYoutubeFollow', 'addTwitchFollow', 'removeTwitchFollow', 'radio', 'radioAction', 'integrations', 'guildTools', 'setGuildTool', 'resetGuildTools', 'tosTerms', 'guildTos', 'acceptGuildTos', 'revokeGuildTos', 'channelConfig', 'setPersona', 'resetPersona', 'setChatter', 'setMentions']);
+export const BOT_PANEL_ACTIONS = Object.freeze(['setAutomod', 'bans', 'addBan', 'removeBan', 'addYoutubeFollow', 'setYoutubeLiveMode', 'removeYoutubeFollow', 'addTwitchFollow', 'removeTwitchFollow', 'radio', 'radioAction', 'integrations', 'guildTools', 'setGuildTool', 'resetGuildTools', 'tosTerms', 'guildTos', 'acceptGuildTos', 'revokeGuildTos', 'channelConfig', 'setPersona', 'resetPersona', 'setChatter', 'setMentions', 'avisosObservados', 'gta', 'republicarGta', 'radioCanais']);
 const DM_MOTIVOS = new Set(['lembrete', 'relatorio', 'alerta', 'painel', 'plano']);
 const MAX_DM_CHARS = 8000;
 const ID_RE = /^\d{5,25}$/;
@@ -139,7 +143,7 @@ export function registerBotActions(channel, { getClient, admin = null, getBans =
     if (cachedAdmin) return cachedAdmin;
     const client = getClient();
     if (!client) throw coded('DISCORD_OFFLINE', 'O cliente do Discord ainda não foi criado.');
-    cachedAdmin = createAdmin({ client, servidor: carregarServidorDoBot });
+    cachedAdmin = createAdmin({ client, servidor: carregarServidorDoBot, processo: 'bot' }); // 'bot': as Integrações daqui não montam o Google nem a live (o cérebro acrescenta)
     return cachedAdmin;
   };
   const run = async (fn) => { try { return await fn(); } catch (err) { throw adminFailure(err); } };
@@ -253,6 +257,25 @@ export function registerBotActions(channel, { getClient, admin = null, getBans =
     return { online, tag: online ? client.user?.tag ?? null : null, guilds: online ? client.guilds?.cache?.size ?? 0 : 0, bans };
   });
 
+  // Imagem no Chat do app (lacunas do painel, item 11): o cérebro decide (chave, política, filtro, limite por hora) e pede SÓ a geração; o gerador mora
+  // aqui (src/handlers/imagemParaApp.js). A imagem volta por um arquivo de nome aleatório na pasta de entrega (o quadro do canal tem 1 MB), nunca no quadro.
+  channel.handle('imagem.gerar', async (p) => {
+    const prompt = typeof p?.prompt === 'string' ? p.prompt.trim() : '';
+    if (!prompt || prompt.length > 400) throw coded('BAD_PARAMS', 'Pedido de imagem vazio ou grande demais.');
+    const { entregarImagemAoCerebro } = await import('../handlers/imagemParaApp.js');
+    return (await entregarImagemAoCerebro({ prompt })) ?? { falhou: true };
+  }, { timeoutMs: 100_000 });
+
+  // O limite por hora da imagem do app (correção C4 do parecer da Liz): a MESMA takeImageQuota e a MESMA memória do despachante do Discord, então
+  // Discord e app somam no mesmo limite. Quem é o dono e qual é o limite são decididos aqui, pelas regras do Discord; do cérebro vem só o ID.
+  channel.handle('imagem.cota', async (p) => {
+    const userId = typeof p?.userId === 'string' ? p.userId : '';
+    if (!ID_RE.test(userId)) throw coded('BAD_PARAMS', 'Quem pediu a imagem não veio no pedido.');
+    const { takeImageQuota, imageLimitPerHour } = await import('../handlers/imageIntent.js');
+    const q = takeImageQuota(userId, { isOwner: isOwnerId(userId) || userId === ownerUserId(), limit: imageLimitPerHour() });
+    return q.ok ? { ok: true } : { ok: false, retryAfterMs: Math.max(0, Math.round(Number(q.retryAfterMs) || 0)) };
+  });
+
   channel.handle('guild.list', async (p) => run(() => adminFor().guilds(ownerContext(p))));
   channel.handle('guild.get', async (p) => run(() => adminFor().guildDetail(ownerContext(p), String(p?.guildId ?? ''))));
   channel.handle('guild.setChannel', async (p) => run(() => adminFor().setGuildChannel(ownerContext(p), String(p?.guildId ?? ''), p?.type, p?.channelId ?? null, p?.confirm)));
@@ -284,6 +307,8 @@ export function startBotChannel({ getClient, logger = defaultLogger, connect = c
     list: (params) => channel.request('reminders.list', params),
   });
   setListsRemote({ route: (params) => channel.request('lists.route', params, { idem: effect('lists.route') }) });
+  // O painel de configuração do Discord grava no cofre do painel, que é do cérebro (lacunas do painel, item 6): sem o canal, ele recusa (nunca grava aqui).
+  definirCofreRemoto((corpo) => channel.request('painel.config.discord', corpo, { idem: effect('painel.config.discord'), timeoutMs: 15_000 }));
   // A conversa do Discord pelo cérebro (etapa 5): o llmHandler passa a montar turnos (chat.turn/chat.commit) em vez de chamar a IA daqui.
   setChatRemote(channel, { logger });
   if (planosLigados(process.env)) {

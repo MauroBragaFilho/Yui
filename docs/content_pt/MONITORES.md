@@ -93,6 +93,8 @@ O aviso sai pelo mesmo caminho dos lembretes: uma DM do bot ao dono, com chave d
 
 Detalhes e o formato das respostas estão em [Yui API](YUI_API.md).
 
+**No painel web (26/11/2026):** Admin, grupo **Operação**, seção **Monitores**. Mostra cada monitor com o assunto (até 60 caracteres), o estado, a próxima checagem, até quando vale e quantos avisos já saíram; o botão **Cancelar** pede confirmação antes (cancelar é definitivo). Com a chave desligada (ou no processo único) a seção avisa que os monitores estão desligados e onde ligar. O painel nunca recebe o texto de um resultado.
+
 ## 2. Alertas por evento
 
 Verificações leves e periódicas, a cada `YUI_ALERTAS_EVENTOS_MS` (padrão 5 min), que avisam o **dono** com o mesmo mecanismo dos avisos de erro (`alertOwner`): mensagem curta, com o limite por hora que ele já tem. Nada novo vai para mais ninguém.

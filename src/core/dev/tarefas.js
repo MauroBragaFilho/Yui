@@ -62,7 +62,8 @@ export function validarSolicitante({ papel, canal } = {}) {
 }
 
 /**
- * O projeto está na lista PERMITIDA (a mesma de src/core/dev/projects.js: YUI_PROJECTS ou o cadastro do app) e a pasta existe? O caminho nunca vem do pedido: só o id.
+ * O projeto está na lista PERMITIDA (quem chama passa a lista: YUI_PROJECTS; o cadastro pelo app, src/core/dev/projects.js, saiu com a aba Código em 27/11/2026)
+ * e a pasta existe? O caminho nunca vem do pedido: só o id.
  * @param {string} id
  * @param {readonly (string | { id: string, exists?: boolean })[]} permitidos
  */

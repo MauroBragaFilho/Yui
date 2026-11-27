@@ -38,7 +38,8 @@ const limpar = () => { cfg.esquecerParaTeste(); fs.rmSync(path.join(tmp, 'secret
 
 section('A. A lista fechada');
 await test('o catálogo não tem nada que o painel nunca deve mudar', () => {
-  const proibidos = [/^DISCORD_/, /^YUI_PANEL_/, /^YUI_OWNER/, /^YUI_TRUSTED/, /POLICY/, /READ_ONLY/, /PRIVATE_SEARCH/, /PRIVADA/, /GMAIL/, /CEREBRO_EXTERNO/, /_FILE$/, /_PATH$/, /_DIR$/, /MEMORY/, /RETENTION/, /TOOLS_PC/, /^YUI_API_TOKENS/, /ED25519|PRIVATE_KEY|IDENTIDADE/i, /COMMAND/i, /^PATH$/, /^NODE_/];
+  // A memória: só o interruptor (YUI_MEMORY_ENABLED, item 2 das lacunas, com confirmação para desligar) entra; a retenção e o resto da memória continuam de fora.
+  const proibidos = [/^DISCORD_/, /^YUI_PANEL_/, /^YUI_OWNER/, /^YUI_TRUSTED/, /POLICY/, /READ_ONLY/, /PRIVATE_SEARCH/, /PRIVADA/, /GMAIL/, /CEREBRO_EXTERNO/, /_FILE$/, /_PATH$/, /_DIR$/, /MEMORY(?!_ENABLED$)/, /RETENTION/, /TOOLS_PC/, /^YUI_API_TOKENS/, /ED25519|PRIVATE_KEY|IDENTIDADE/i, /COMMAND/i, /^PATH$/, /^NODE_/];
   for (const c of cfg.CATALOGO) for (const re of proibidos) assert.ok(!re.test(c.chave), `${c.chave} não pode estar no painel (${re})`);
   assert.ok(cfg.CATALOGO.length >= 15);
   assert.equal(new Set(cfg.CATALOGO.map((c) => c.chave)).size, cfg.CATALOGO.length, 'sem chave repetida');
@@ -46,10 +47,12 @@ await test('o catálogo não tem nada que o painel nunca deve mudar', () => {
 await test('todo item tem rótulo, grupo, tipo válido e se precisa de reinício; segredo é marcado; o catálogo é congelado', () => {
   for (const c of cfg.CATALOGO) {
     assert.ok(c.rotulo && c.grupo && c.descricao, c.chave);
-    assert.ok(['segredo', 'bool', 'int', 'enum', 'texto'].includes(c.tipo), c.chave);
+    // 'decimal': item 6 das lacunas do painel (a temperatura da IA), com faixa e casas
+    assert.ok(['segredo', 'bool', 'int', 'decimal', 'enum', 'texto'].includes(c.tipo), c.chave);
     assert.equal(typeof c.reinicio, 'boolean', c.chave);
     assert.equal(Boolean(c.secreto), c.tipo === 'segredo', c.chave);
     if (c.tipo === 'int') assert.ok(Number.isInteger(c.min) && Number.isInteger(c.max), c.chave);
+    if (c.tipo === 'decimal') assert.ok(Number.isFinite(c.min) && Number.isFinite(c.max) && Number.isInteger(c.casas) && c.casas > 0, c.chave);
     if (c.tipo === 'enum') assert.ok(c.opcoes.length >= 2, c.chave);
   }
   assert.ok(Object.isFrozen(cfg.CATALOGO));
@@ -70,6 +73,125 @@ await test('o padrão de cada item passa na própria validação; os tetos de m�
   for (const ruim of ['http://exemplo.com', 'exemplo.com:70000', 'exemplo.com:0', 'a b', '-x']) assert.throws(() => cfg.validarValor(alvo, ruim), cfg.PainelConfigError, ruim);
   assert.throws(() => cfg.validarValor(item('YUI_TTS_EDGE_VOICE'), '"/><voz'), cfg.PainelConfigError);
   assert.throws(() => cfg.validarValor(item('YUI_PESQUISA_POR_INTENCAO'), 'tudo'), cfg.PainelConfigError);
+});
+
+// ── Item 2 das lacunas do painel (26/11/2026): as 10 chaves que só existiam no .env ────────────────────────────────────────────────
+const ITEM2 = {
+  // chave: [grupo, tipo, padrão (o do código), reinício, confirmação]
+  GTA_WEEKLY_ENABLED: ['Geral', 'bool', 'true', true, undefined],
+  NEWSWIRE_ENABLED: ['Geral', 'bool', 'false', true, undefined],
+  REQUIRE_TOS: ['Moderação', 'bool', 'true', true, ['false']],
+  YUI_RESEARCH_ENABLED: ['Conversa', 'bool', 'true', false, undefined],
+  YUI_MEMORY_ENABLED: ['Conversa', 'bool', 'false', false, ['false']],
+  YUI_LISTS_ENABLED: ['Conversa', 'bool', 'true', false, undefined],
+  YUI_REMINDERS_ENABLED: ['Conversa', 'bool', 'true', false, undefined],
+  YUI_VISION: ['Inteligência', 'bool', 'true', false, undefined],
+  YUI_AUTOMOD_AI_BAN: ['Moderação', 'enum', 'review', false, ['auto']],
+  YUI_HEALTH_REPORT: ['Relatório', 'bool', 'true', true, undefined],
+};
+const AO_VIVO = Object.keys(ITEM2).filter((k) => ITEM2[k][3] === false);
+const NA_SUBIDA = Object.keys(ITEM2).filter((k) => ITEM2[k][3] === true);
+await test('item 2 (26/11): as 10 chaves que só existiam no .env estão no catálogo, com grupo, padrão, reinício e confirmação certos', () => {
+  for (const [chave, [grupo, tipo, padrao, reinicio, confirmar]] of Object.entries(ITEM2)) {
+    const c = item(chave);
+    assert.ok(c, chave);
+    assert.deepEqual([c.grupo, c.tipo, c.padrao, c.reinicio, c.confirmar], [grupo, tipo, padrao, reinicio, confirmar], chave);
+    assert.ok(!c.soNaSubida, `${chave}: o cérebro aplica na hora`);
+  }
+  assert.deepEqual(item('YUI_AUTOMOD_AI_BAN').opcoes, ['review', 'auto']);
+  for (const c of ['REQUIRE_TOS', 'YUI_MEMORY_ENABLED', 'YUI_AUTOMOD_AI_BAN']) assert.match(item(c).descricao, /ATENÇÃO/, `${c}: o aviso na tela`);
+  for (const c of ['MEMORY_RETENTION_DAYS', 'YUI_MEMORY_RETENTION_DAYS', 'YUI_REMINDERS_ALL_USERS', 'YUI_VISION_FIRST', 'YUI_HEALTH_REPORT_HOUR']) assert.ok(!item(c), `${c} continua fora`);
+  // confirmação: gravar o valor perigoso ou remover o item (que pode voltar a um .env mais frouxo) pede confirm; o lado seguro não
+  for (const [chave, perigoso, seguro] of [['REQUIRE_TOS', 'false', 'true'], ['YUI_MEMORY_ENABLED', 'false', 'true'], ['YUI_AUTOMOD_AI_BAN', 'auto', 'review']]) {
+    assert.equal(cfg.exigeConfirmacao(chave, perigoso), true, chave);
+    assert.equal(cfg.exigeConfirmacao(chave, ` ${perigoso.toUpperCase()} `), true, `${chave} com espaço e maiúscula`);
+    assert.equal(cfg.exigeConfirmacao(chave, seguro), false, chave);
+    assert.equal(cfg.exigeConfirmacao(chave), true, `${chave}: remover`);
+  }
+  for (const chave of Object.keys(ITEM2).filter((k) => !ITEM2[k][4])) assert.equal(cfg.exigeConfirmacao(chave), false, chave);
+});
+await test('item 2: o padrão de cada uma é o do CÓDIGO (sem a variável e sem o cofre o comportamento é o mesmo de antes)', async () => {
+  for (const k of Object.keys(ITEM2)) assert.equal(process.env[k], undefined, `${k} fora do ambiente do teste`);
+  const { visionSettings } = await import('../src/services/vision.js');
+  const { readResearchConfig } = await import('../src/core/ai/researchAgent.js');
+  const { healthReportSchedule } = await import('../src/core/healthReport.js');
+  const { isMemoryEnabled } = await import('../src/core/discordAdapter.js');
+  const { routeReminders } = await import('../src/reminders/assistant.js');
+  const { createReminderStore } = await import('../src/reminders/store.js');
+  const { routeLists } = await import('../src/handlers/listAssistant.js');
+  const { createListStore } = await import('../src/handlers/listStore.js');
+  const ligado = (k) => item(k).padrao === 'true';
+  assert.equal(visionSettings({}).enabled, ligado('YUI_VISION'));
+  assert.equal(readResearchConfig({}).enabled, ligado('YUI_RESEARCH_ENABLED'));
+  assert.equal(healthReportSchedule({}) !== null, ligado('YUI_HEALTH_REPORT'));
+  assert.equal(isMemoryEnabled(), ligado('YUI_MEMORY_ENABLED'));
+  const USER = '123456789012345678';
+  const reminders = createReminderStore({ file: path.join(tmp, 'lembretes-padrao.json') });
+  assert.equal((await routeReminders({ text: 'meus lembretes', userId: USER }, { store: reminders, env: {}, isOwner: () => true })).handled, ligado('YUI_REMINDERS_ENABLED'));
+  assert.equal((await routeLists({ text: 'mostra a lista de compras', userId: USER }, { store: createListStore({ dir: path.join(tmp, 'listas-padrao') }), env: {} })).handled, ligado('YUI_LISTS_ENABLED'));
+  // As 3 lidas pelo src/config/index.js NA SUBIDA: uma cópia nova do módulo, numa pasta sem .env (o dotenv olha a pasta atual), sem as variáveis.
+  const antes = process.cwd();
+  process.chdir(tmp);
+  try {
+    const fresco = await import(`../src/config/index.js?padrao=${Date.now()}`);
+    assert.equal(fresco.config.weekly.enabled, ligado('GTA_WEEKLY_ENABLED'));
+    assert.equal(fresco.config.newswire.enabled, ligado('NEWSWIRE_ENABLED'));
+    assert.equal(fresco.default.requireTos, ligado('REQUIRE_TOS'));
+  } finally { process.chdir(antes); }
+  // O ban da IA: só "auto" bane sozinho; sem a variável vale "review" (lido a cada ban, na função abaixo).
+  const llm = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'handlers', 'llmHandler.js'), 'utf8');
+  assert.match(llm, /function aiBanIsAutomatic\(\) \{\s*return String\(process\.env\.YUI_AUTOMOD_AI_BAN \?\? 'review'\)\.trim\(\)\.toLowerCase\(\) === 'auto';\s*\}/);
+});
+await test('item 2: "vale na hora" só onde TODO consumidor lê a cada uso; os 4 lidos na subida pedem reinício (a lista de leitores é conferida)', async () => {
+  // Quem lê cada variável no src/ (leitura de verdade: process.env.X, env.X, env?.X): se aparecer um leitor novo, este teste obriga a rever o "reinicio".
+  const leitores = {
+    GTA_WEEKLY_ENABLED: ['src/config/index.js', 'src/core/api/integrations.js'], // integrations.js: só mostra o estado na tela
+    NEWSWIRE_ENABLED: ['src/config/index.js', 'src/core/api/integrations.js'],
+    REQUIRE_TOS: ['src/config/index.js'],
+    YUI_RESEARCH_ENABLED: ['src/core/ai/researchAgent.js'],
+    YUI_MEMORY_ENABLED: ['src/core/discordAdapter.js'],
+    YUI_LISTS_ENABLED: ['src/handlers/listAssistant.js'],
+    YUI_REMINDERS_ENABLED: ['src/handlers/ferramentaDesligada.js', 'src/reminders/assistant.js'],
+    YUI_VISION: ['src/services/vision.js'],
+    YUI_AUTOMOD_AI_BAN: ['src/handlers/llmHandler.js'],
+    YUI_HEALTH_REPORT: ['src/core/healthReport.js'],
+  };
+  const raiz = path.resolve(import.meta.dirname, '..');
+  const arquivos = [];
+  const andar = (dir) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) andar(p); else if (/\.(?:m?js)$/.test(e.name)) arquivos.push(p); } };
+  andar(path.join(raiz, 'src'));
+  for (const [k, esperado] of Object.entries(leitores)) {
+    const re = new RegExp(`\\benv\\??\\.${k}\\b|env\\[['"]${k}['"]\\]`);
+    const achados = arquivos.filter((f) => fs.readFileSync(f, 'utf8').split('\n').some((l) => !/^\s*(?:\/\/|\*|\/\*)/.test(l) && re.test(l))).map((f) => path.relative(raiz, f).replace(/\\/g, '/')).sort();
+    assert.deepEqual(achados, [...esperado].sort(), k);
+  }
+  // Lidas a cada uso, sem reimportar nada: trocar o ambiente muda a próxima chamada.
+  const { visionSettings } = await import('../src/services/vision.js');
+  const { readResearchConfig } = await import('../src/core/ai/researchAgent.js');
+  const { isMemoryEnabled } = await import('../src/core/discordAdapter.js');
+  const { routeLists } = await import('../src/handlers/listAssistant.js');
+  const { routeReminders } = await import('../src/reminders/assistant.js');
+  assert.equal(visionSettings({ YUI_VISION: 'false' }).enabled, false);
+  assert.equal(readResearchConfig({ YUI_RESEARCH_ENABLED: 'false' }).enabled, false);
+  try {
+    process.env.YUI_MEMORY_ENABLED = 'true'; assert.equal(isMemoryEnabled(), true);
+    process.env.YUI_MEMORY_ENABLED = 'false'; assert.equal(isMemoryEnabled(), false);
+  } finally { delete process.env.YUI_MEMORY_ENABLED; }
+  assert.equal((await routeLists({ text: 'mostra a lista de compras', userId: '123456789012345678' }, { env: { YUI_LISTS_ENABLED: 'false' } })).handled, false);
+  assert.equal((await routeReminders({ text: 'meus lembretes', userId: '123456789012345678' }, { env: { YUI_REMINDERS_ENABLED: 'false' } })).handled, false);
+  // O bot, ao receber o aviso do cérebro, aplica só as 6 lidas a cada uso; as 4 da subida esperam o reinício.
+  limpar();
+  const valores = { YUI_VISION: 'false', YUI_RESEARCH_ENABLED: 'false', YUI_MEMORY_ENABLED: 'true', YUI_LISTS_ENABLED: 'false', YUI_REMINDERS_ENABLED: 'false', YUI_AUTOMOD_AI_BAN: 'auto', GTA_WEEKLY_ENABLED: 'false', NEWSWIRE_ENABLED: 'true', REQUIRE_TOS: 'false', YUI_HEALTH_REPORT: 'false' };
+  const cerebro = {};
+  for (const [k, v] of Object.entries(valores)) cfg.definir(k, v, cerebro);
+  for (const [k, v] of Object.entries(valores)) assert.equal(cerebro[k], v, `${k}: o cérebro (quem grava) aplica na hora`);
+  const bot = {};
+  assert.deepEqual([...cfg.recarregarAoVivo(bot)].sort(), [...AO_VIVO].sort());
+  for (const k of AO_VIVO) assert.equal(bot[k], valores[k], k);
+  for (const k of NA_SUBIDA) assert.ok(!(k in bot), `${k}: só depois de reiniciar`);
+  assert.equal(visionSettings(bot).enabled, false, 'e o consumidor do bot já enxerga');
+  assert.equal(cfg.descrever(bot).itens.filter((i) => Object.hasOwn(ITEM2, i.chave)).every((i) => i.origem === 'painel'), true);
+  limpar();
 });
 
 section('B. A validação');
@@ -330,7 +452,9 @@ try {
     assert.ok(!fs.existsSync(ARQ));
   });
   await test('ajuste que afrouxa privacidade ou segurança exige confirm: true para gravar e para remover', async () => {
-    const perigosos = [['YUI_VOZ_UNIFICADA', 'true', 'false'], ['YUI_VOZ_GOOGLE', 'true', 'false'], ['YUI_CONTEXT_ENABLED', 'true', 'false'], ['YUI_HISTORICO_COMPARTILHADO', 'true', 'false'], ['YUI_ALERTS', 'false', 'true']];
+    const perigosos = [['YUI_VOZ_UNIFICADA', 'true', 'false'], ['YUI_VOZ_GOOGLE', 'true', 'false'], ['YUI_CONTEXT_ENABLED', 'true', 'false'], ['YUI_HISTORICO_COMPARTILHADO', 'true', 'false'], ['YUI_ALERTS', 'false', 'true'],
+      // item 2 das lacunas (26/11): desligar os Termos de Uso ou a memória
+      ['REQUIRE_TOS', 'false', 'true'], ['YUI_MEMORY_ENABLED', 'false', 'true']];
     const lista = (await call('GET', '/v1/admin/config', { token: OWNER })).json.itens;
     for (const [chave, perigoso, seguro] of perigosos) {
       assert.deepEqual(lista.find((i) => i.chave === chave).confirmar, [perigoso], chave);
@@ -343,6 +467,23 @@ try {
       assert.equal((await call('DELETE', rota, { token: OWNER })).status, 400, `${chave}: remover sem confirm`);
       assert.equal((await call('DELETE', rota, { token: OWNER, body: { confirm: true } })).status, 200, chave);
     }
+  });
+
+  await test('item 2: o ban automático pela IA (YUI_AUTOMOD_AI_BAN=auto) só grava com confirm: true; "review" não pergunta; a auditoria só leva o nome', async () => {
+    limpar();
+    const rota = '/v1/admin/config/YUI_AUTOMOD_AI_BAN';
+    for (const body of [{ valor: 'auto' }, { valor: ' AUTO ' }, { valor: 'auto', confirm: 'true' }]) assert.equal((await call('PUT', rota, { token: OWNER, body })).status, 400, JSON.stringify(body));
+    assert.equal((await call('PUT', rota, { token: OWNER, body: { valor: 'talvez', confirm: true } })).status, 400, 'fora das opções');
+    assert.equal((await call('PUT', rota, { token: MEMBER, body: { valor: 'auto', confirm: true } })).status, 403, 'só o dono');
+    assert.equal((await call('PUT', rota, { token: OWNER, body: { valor: 'review' } })).status, 200);
+    const put = await call('PUT', rota, { token: OWNER, body: { valor: 'auto', confirm: true } });
+    assert.deepEqual([put.status, put.json.reinicio], [200, false], 'vale na hora (lido a cada ban)');
+    assert.equal(process.env.YUI_AUTOMOD_AI_BAN, 'auto');
+    assert.equal((await call('DELETE', rota, { token: OWNER })).status, 400, 'remover sem confirm');
+    assert.equal((await call('DELETE', rota, { token: OWNER, body: { confirm: true } })).status, 200);
+    assert.equal(process.env.YUI_AUTOMOD_AI_BAN, undefined, 'volta ao padrão do código (review)');
+    const linhas = fs.readFileSync(process.env.YUI_AUDIT_FILE, 'utf8').split('\n').filter((l) => /admin\.config\.(set|remove)/.test(l) && /YUI_AUTOMOD_AI_BAN/.test(l));
+    assert.ok(linhas.length >= 2 && linhas.every((l) => !/"auto"|"review"/.test(l)), 'a auditoria registra o NOME do ajuste, nunca o valor');
   });
 
   await test('YUI_PAINEL_CONFIG_EDIT=false trava a edição pela API (a leitura continua)', async () => {

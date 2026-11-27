@@ -187,6 +187,10 @@ export function setListsRemote(remote) {
   listsRemote = remote && typeof remote.route === 'function' ? remote : null;
   listasNoCerebro = false;
 }
+/** As listas pela conversa estão ligadas? (YUI_LISTS_ENABLED; só "false" desliga; lido a cada uso. O painel do dono usa a mesma leitura.) */
+export function listasLigadas(env = process.env) {
+  return String(env?.YUI_LISTS_ENABLED ?? 'true').trim().toLowerCase() !== 'false';
+}
 export function appComandosLigado(env = process.env) {
   return String(env?.YUI_APP_COMANDOS ?? '').trim().toLowerCase() === 'true';
 }
@@ -197,7 +201,7 @@ export function appComandosLigado(env = process.env) {
  * Caso contrário { handled: false }. YUI_LISTS_ENABLED=false desliga. Exige userId (lista é por pessoa).
  */
 export async function routeLists({ text, userId } = {}, { store: injected = null, env = process.env } = {}) {
-  if (String(env?.YUI_LISTS_ENABLED ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
+  if (!listasLigadas(env)) return { handled: false };
   if (!userId || !/^\d{5,25}$/.test(String(userId))) return { handled: false };
   if (listsRemote && !injected && (listasNoCerebro || appComandosLigado(env))) {
     if (!parseListRequest(text)) return { handled: false };

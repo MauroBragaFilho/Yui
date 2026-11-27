@@ -69,6 +69,15 @@ export const config = {
   },
 };
 
+// Ligado/desligado lido na hora (item 6 das lacunas do painel): só 'true' e 'false' contam; outro valor vale o padrão.
+const lerLigado = (nome, padrao) => {
+  const v = String(process.env[nome] ?? '').trim().toLowerCase();
+  return v === 'true' ? true : v === 'false' ? false : padrao;
+};
+const AUTOMOD_MODOS = ['off', 'mcp', 'trigger', 'both'];
+const fixados = new Map();
+const fixadoOu = (nome, ler) => (fixados.has(nome) ? fixados.get(nome) : ler());
+
 // Chaves lidas na hora (getters): o painel pode adicionar chaves sem reiniciar a Yui.
 const keyList = (...names) => [...new Set(names.flatMap((n) => String(process.env[n] || '').split(',')).map((key) => key.trim()).filter(Boolean))];
 
@@ -83,10 +92,22 @@ export default {
   ownerId: process.env.OWNER_ID || '',
   ownerIds: (process.env.OWNER_IDS || '').split(',').map((id) => id.trim()).filter(Boolean),
   requireTos: process.env.REQUIRE_TOS !== 'false',
-  saveHistory: true,
-  defaultAutoMod: true,
-  automodMode: 'both',
-  sendEnvironmentInfo: true,
+  // Lacunas do painel, item 6 (26/11/2026): estes eram fixos aqui e o painel do Discord só os mudava na memória (e no JSON antigo desta pasta, que nada lê).
+  // Agora vêm do COFRE do painel (src/core/painelConfig.js; o Discord e o painel web gravam lá) e são lidos A CADA USO (getters). Sem a variável, o
+  // padrão de sempre. Nomes YUI_* novos: os antigos (SAVE_HISTORY, DEFAULT_AUTOMOD...) nunca foram lidos e não voltam a valer de surpresa.
+  // Atribuir (config.saveHistory = false) fixa o valor neste processo: só os testes fazem isso (para nunca escrever no historico.txt real).
+  get saveHistory() { return fixadoOu('saveHistory', () => lerLigado('YUI_SALVAR_HISTORICO', true)); },
+  set saveHistory(v) { fixados.set('saveHistory', v); },
+  get defaultAutoMod() { return fixadoOu('defaultAutoMod', () => lerLigado('YUI_AUTOMOD_PADRAO', true)); },
+  set defaultAutoMod(v) { fixados.set('defaultAutoMod', v); },
+  get automodMode() { return fixadoOu('automodMode', () => { const m = String(process.env.YUI_AUTOMOD_MODO_PADRAO ?? '').trim().toLowerCase(); return AUTOMOD_MODOS.includes(m) ? m : 'both'; }); },
+  set automodMode(v) { fixados.set('automodMode', v); },
+  get sendEnvironmentInfo() { return fixadoOu('sendEnvironmentInfo', () => lerLigado('YUI_IA_CONTEXTO_DO_SERVIDOR', true)); },
+  set sendEnvironmentInfo(v) { fixados.set('sendEnvironmentInfo', v); },
+  get keepMusicEmbed() { return fixadoOu('keepMusicEmbed', () => lerLigado('YUI_MUSICA_MANTER_CARTAO', true)); },
+  set keepMusicEmbed(v) { fixados.set('keepMusicEmbed', v); },
+  get appealChannelId() { return fixadoOu('appealChannelId', () => { const id = String(process.env.YUI_CANAL_APELACOES ?? '').trim(); return /^\d{17,20}$/.test(id) ? id : ''; }); },
+  set appealChannelId(v) { fixados.set('appealChannelId', v); },
   localLlmUrl: process.env.LOCAL_LLM_URL || process.env.AI_BASE_URL || 'http://localhost:1234/v1/chat/completions',
   localLlmModel: process.env.LOCAL_LLM_MODEL || process.env.AI_MODEL || 'local-model',
   lmStudioApiKey: process.env.LM_STUDIO_API_KEY || process.env.AI_API_KEY || '',

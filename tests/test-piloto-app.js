@@ -124,7 +124,9 @@ try {
   };
   let respostaDoSupervisor = { aceito: true, motivo: 'aceito' };
   const reinicio = async (pedido) => { pedidos.push(pedido); if (respostaDoSupervisor instanceof Error) throw respostaDoSupervisor; return respostaDoSupervisor; };
-  const comSupervisor = await subir({ admin: createAdmin({ reinicio, exit }) });
+  // O freio de pedido repetido (correção C6) tem a suíte dele (test:painelescritas); aqui cada pedido chega "um minuto depois" do anterior.
+  const relogioQueAnda = (() => { let t = 0; return () => (t += 60_000); })();
+  const comSupervisor = await subir({ admin: createAdmin({ reinicio, exit, relogio: relogioQueAnda }) });
   const zerarR = () => { pedidos.length = 0; saidas.length = 0; agendadas.length = 0; respostaDoSupervisor = { aceito: true, motivo: 'aceito' }; };
 
   await test('sem token, sem ser o dono ou sem `confirm: true` (booleano): 401, 403 ou 400, e o supervisor nem é consultado', async () => {

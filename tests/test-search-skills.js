@@ -23,7 +23,7 @@ delete process.env.AI_BACKEND;
 const { searchWeb, activeProviders, resetCooldowns, keyOf } = await import('../src/search/providers.js');
 const { createBudget, monthlyCap, userLimitPerHour, globalLimitPerHour } = await import('../src/search/budget.js');
 const { buildIntegrations } = await import('../src/core/api/integrations.js');
-const { parseResults: parseDuckDuckGo } = await import('../src/core/dev/web-search.js');
+const { parseResults: parseDuckDuckGo } = await import('../src/search/leituraDuckDuckGo.js'); // (o web-search.js da aba Código, que reexportava, saiu em 27/11/2026)
 const { buildContext } = await import('../src/core/permissions.js');
 const ai = await import('../src/core/ai/manager.js');
 const { runAgent, resolvePending } = await import('../src/core/agent/agent.js');

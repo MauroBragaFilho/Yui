@@ -8,19 +8,19 @@ import { diagnosticoDosLimites } from '../ai/limitesTokens.js';
 import { buildMemoryBlock, captureFromUserText, isMemoryEnabled } from '../discordAdapter.js';
 import { audit } from '../audit.js';
 import { runAgent, resolvePending } from '../agent/agent.js';
-import { registerBuiltinTools } from '../agent/tools.js';
+import { registerBuiltinTools, registerImageTool } from '../agent/tools.js';
 import { logger } from '../../utils/logger.js';
 import { loadPanelCredentials, createSessionStore, createLoginLimiter, createPairing, ownerUserId } from './auth.js';
-import { createAdmin } from './admin.js';
-import { createDev } from '../dev/index.js';
-import { createDevRoutes, isLocalRequest } from '../dev/routes.js';
-import { guardRoute } from '../security/routeGuard.js';
-import { startLocalApprovalChannel } from '../security/localChannel.js';
+import { createAdmin, TEXTO_PEDIDO_REPETIDO } from './admin.js';
+import { confirmacoesDoPainel, marcarSessao, sessaoDe } from './confirmacao.js';
+import { guardRoute, actionForRoute } from '../security/routeGuard.js';
+import { startLocalApprovalChannel, isLocalRequest } from '../security/localChannel.js';
 import { getApprovalManager } from '../security/approvalManager.js';
 import { createBdsProxy, BdsProxyError, JSON_ROUTES as BDS_JSON_ROUTES, LINK_TTL_MS } from './bds.js';
 import { perfilDoApp } from './perfilDoApp.js';
 import { fioCompartilhado } from './historicoCompartilhado.js';
-import { preRotaDoApp } from './preRotas.js';
+import { preRotaDoApp, preRotaDeImagem } from './preRotas.js';
+import { imagensDoApp, FERRAMENTA_DE_IMAGEM } from '../imagemDoApp.js';
 import { descartarContinuidade } from '../continuidade.js';
 import { forgetUserContext } from '../context/contextStore.js';
 import { criarIdentidade } from './identidade.js';
@@ -51,8 +51,8 @@ const MAX_MESSAGE = 4000;
 // Dois baldes por usuário: rotas de IA (custam tokens) e todo o resto (painel, memória, status).
 const RATE_LIMIT = { windowMs: 60_000, ai: 30, other: 240 };
 const AI_ROUTES = new Set(['POST /v1/chat', 'POST /v1/agent', 'POST /v1/agent/confirm']);
-const isDevRunStart = (route) => /^POST \/v1\/dev\/projects\/[^/]+\/runs$/.test(route);
 const MAX_HISTORY_TURNS = 10;
+const IMAGEM_RE = /^\/v1\/imagem\/([A-Za-z0-9_-]{16,64})$/;
 
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest();
 
@@ -194,7 +194,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * @param {object} [options.sessions]     armazenamento de sessões
  * @param {object} [options.limiter]      limite de tentativas de login
  * @param {object} [options.admin]        funções de administração (createAdmin)
- * @param {object} [options.dev]          módulo de código (createDev); rotas /v1/dev/*
  * @param {number} [options.loginDelayMs] atraso após uma falha de login (reduz força bruta)
  * @param {Function} [options.notify]     envia uma mensagem privada: (userId, texto) => Promise. Liga a "chave por DM".
  * @param {object} [options.pairing]      chave de uso único (createPairing)
@@ -209,7 +208,6 @@ export function createApiServer({
   sessions = createSessionStore(),
   limiter = createLoginLimiter(),
   admin = createAdmin(),
-  dev = createDev(),
   loginDelayMs = 400,
   notify = null,
   pairing = createPairing(),
@@ -227,14 +225,22 @@ export function createApiServer({
   const hits = new Map();       // userId -> [timestamps]
   const histories = new Map();  // userId -> [{role, content}]
 
-  /** Pré-rotas por código do chat (preRotas.js). A auditoria leva só o tipo e o tamanho. */
-  async function preRota(ctx, message) {
-    const pre = await preRotaDoApp({ ctx, message, histories }, { aoMudar: lembretesMudaram, aoApagarMemoria });
+  /**
+   * Pré-rotas por código do chat (preRotas.js): as do dono e, depois, a da imagem (lacunas do painel, item 11). A auditoria leva só o tipo e o tamanho.
+   * `origin`: LOCAL_PC ou REMOTE (isLocalRequest), para o motor de políticas da imagem.
+   */
+  async function preRota(ctx, message, origin) {
+    const pre = (await preRotaDoApp({ ctx, message, histories }, { aoMudar: lembretesMudaram, aoApagarMemoria }))
+      ?? (await preRotaDeImagem({ ctx, message, origin }));
     if (pre) audit('api.prerota', ctx, { kind: pre.kind, chars: message.length });
     return pre;
   }
 
-  const devRoute = createDevRoutes(dev);
+  /** Campos da imagem do chat na resposta (o link curto e o aviso do limite por hora); vazio para as outras pré-rotas. */
+  const camposDaImagem = (pre) => ({
+    ...(pre?.imagem ? { tool: FERRAMENTA_DE_IMAGEM, imagem: pre.imagem } : {}),
+    ...(pre?.limiteImagem ? { limiteImagem: pre.limiteImagem } : {}),
+  });
 
   /** Escreve a resposta de um download/preview do BDS Server (Range incluído) e fecha a conexão com ele se o navegador desistir. */
   async function pipeBdsDownload(req, res, { caminho, inline }) {
@@ -327,9 +333,12 @@ export function createApiServer({
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/channels\/(\d+)\/espontaneo$/)) && m === 'PUT') return admin.setChatter(ctx, r[1], r[2], await readJson(req));
     if ((r = p.match(/^\/v1\/admin\/guilds\/(\d+)\/mentions$/)) && m === 'PUT') return admin.setMentions(ctx, r[1], await readJson(req));
     if (m === 'GET' && p === '/v1/admin/radio') return admin.radio(ctx);
+    // Lacunas do painel, item 10: os canais de voz e de texto do servidor para iniciar o rádio (só leitura, fora do routeGuard) e as ações no mesmo POST
+    // de sempre (no routeGuard como radio.play_control): start { voiceChannelId, textChannelId }, skip, play { query } e choose { opcao }.
+    if ((r = p.match(/^\/v1\/admin\/radio\/(\d+)\/canais$/)) && m === 'GET') return admin.radioCanais(ctx, r[1]);
     if ((r = p.match(/^\/v1\/admin\/radio\/(\d+)$/)) && m === 'POST') {
       const body = await readJson(req);
-      return admin.radioAction(ctx, r[1], body.action);
+      return admin.radioAction(ctx, r[1], body.action, body);
     }
     if (m === 'GET' && p === '/v1/admin/logs') {
       const sp = url.searchParams;
@@ -356,6 +365,31 @@ export function createApiServer({
     // Monitores de busca (etapa 16, só o dono): lista e cancelamento; sem YUI_MONITORES a lista diz "ligado: false"
     if (m === 'GET' && p === '/v1/admin/monitores') return admin.monitores(ctx);
     if ((r = p.match(/^\/v1\/admin\/monitores\/(\d+)$/)) && m === 'DELETE') return admin.removeMonitor(ctx, r[1]);
+    // Lacunas do painel, entrega B (só leitura, só o dono; fora do routeGuard como as outras leituras): live do YouTube, autorização do Google, planos e avisos.
+    if (m === 'GET' && p === '/v1/admin/live') return admin.live(ctx);
+    if (m === 'GET' && p === '/v1/admin/google') return admin.google(ctx);
+    if (m === 'GET' && p === '/v1/admin/planos') return admin.planos(ctx);
+    if (m === 'GET' && p === '/v1/admin/avisos') return admin.avisos(ctx);
+    // Lacunas do painel, entrega E (só o dono, no routeGuard): aprovar ou recusar UM plano (a MESMA decidir() dos botões da DM; YUI_PLANOS_PAINEL) e entrar ou
+    // sair da live do YouTube (o MESMO comando da conversa; YUI_YOUTUBE_LIVE).
+    if ((r = p.match(/^\/v1\/admin\/planos\/([0-9a-f]{6,32})\/decisao$/)) && m === 'POST') return admin.decidirPlano(ctx, r[1], await readJson(req));
+    if (m === 'POST' && p === '/v1/admin/live/entrar') return admin.entrarNaLive(ctx, await readJson(req));
+    if (m === 'POST' && p === '/v1/admin/live/sair') return admin.sairDaLive(ctx);
+    // Lacunas do painel, entrega F, parte 2 (item 14; só o dono, no routeGuard como admin.google_reauth): reautorizar o Google pelo painel
+    // (YUI_GOOGLE_REAUTORIZAR_PAINEL). O início devolve só o link; o retorno recebe { endereco } (o endereço colado) e grava o token só no servidor.
+    // Correção C2: a chave de confirmação pela DM (aprovar plano e começar a reautorização do Google pedem; a chave chega só pela DM).
+    if (m === 'POST' && p === '/v1/admin/confirmacao/pedir') return admin.pedirConfirmacao(ctx, await readJson(req));
+    if (m === 'POST' && p === '/v1/admin/google/autorizar/inicio') return admin.googleReautorizarInicio(ctx, await readJson(req));
+    if (m === 'POST' && p === '/v1/admin/google/autorizar/retorno') return admin.googleReautorizarRetorno(ctx, await readJson(req));
+    // Lacunas do painel, entrega D (só o dono): GTA (lido no bot), listas pessoais, skills e continuidade (só leitura, fora do routeGuard como as outras leituras),
+    // e o único apagar desta entrega, o de UM projeto ou decisão (no routeGuard, com confirm: true).
+    if (m === 'GET' && p === '/v1/admin/gta') return admin.gta(ctx);
+    // Entrega E, parte 2 (item 9 v2; só o dono, no routeGuard como admin.gta_republish): republicar o mais recente de um tipo num servidor, no canal configurado.
+    if (m === 'POST' && p === '/v1/admin/gta/republicar') return admin.republicarGta(ctx, await readJson(req));
+    if (m === 'GET' && p === '/v1/admin/listas') return admin.listas(ctx);
+    if (m === 'GET' && p === '/v1/admin/skills') return admin.skills(ctx);
+    if (m === 'GET' && p === '/v1/admin/continuidade') return admin.continuidade(ctx);
+    if ((r = p.match(/^\/v1\/admin\/continuidade\/(\d{1,12})$/)) && m === 'DELETE') return admin.removerContinuidade(ctx, r[1], await readJson(req));
     if (m === 'GET' && p === '/v1/admin/morning') return admin.morningPreview(ctx);
     if (m === 'POST' && p === '/v1/admin/morning/send') return admin.morningSend(ctx);
 
@@ -363,9 +397,12 @@ export function createApiServer({
     if (m === 'GET' && p === '/v1/admin/config') return admin.config(ctx);
     if ((r = p.match(/^\/v1\/admin\/config\/([A-Z0-9_]{3,80})$/)) && m === 'PUT') {
       const body = await readJson(req);
-      return admin.configSet(ctx, r[1], body.valor, body.confirm);
+      return admin.configSet(ctx, r[1], body.valor, body.confirm, body.versao);
     }
-    if ((r = p.match(/^\/v1\/admin\/config\/([A-Z0-9_]{3,80})$/)) && m === 'DELETE') return admin.configRemove(ctx, r[1], (await readJson(req))?.confirm);
+    if ((r = p.match(/^\/v1\/admin\/config\/([A-Z0-9_]{3,80})$/)) && m === 'DELETE') {
+      const body = (await readJson(req)) ?? {};
+      return admin.configRemove(ctx, r[1], body.confirm, body.versao);
+    }
     if (m === 'GET' && p === '/v1/admin/ai') return admin.ai(ctx);
     if (m === 'POST' && p === '/v1/admin/ai/keys') {
       const body = await readJson(req);
@@ -498,6 +535,23 @@ export function createApiServer({
         return;
       }
 
+      // ── Link curto da imagem do chat (lacunas do painel, item 11): o mesmo molde do link do BDS, o código é a credencial e vale o mesmo prazo curto ──
+      // Os bytes ficam na memória do processo (src/core/imagemDoApp.js); nenhum caminho de arquivo do servidor entra no link nem na resposta.
+      const img = req.method === 'GET' ? url.pathname.match(IMAGEM_RE) : null;
+      if (img || (req.method === 'GET' && url.pathname.startsWith('/v1/imagem/'))) {
+        const achada = img ? imagensDoApp().resolver(img[1]) : null;
+        if (!achada) return send(res, 404, { error: 'link expirado ou inválido' });
+        res.writeHead(200, {
+          'Content-Type': achada.tipo,
+          'Content-Length': achada.buffer.length,
+          'Cache-Control': 'private, no-store',
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Security-Policy': "default-src 'none'; sandbox",
+          'Content-Disposition': 'inline; filename="imagem-yui"',
+        });
+        return res.end(achada.buffer);
+      }
+
       // ── Login por usuário e senha (públicas) ──
       if (route === 'GET /v1/auth/status') {
         return send(res, 200, { passwordLogin: panel.enabled, discordKey: discordKeyEnabled });
@@ -583,16 +637,19 @@ export function createApiServer({
       if (authBlocked(failKey)) return send(res, 429, { error: 'muitas tentativas inválidas; aguarde alguns minutos' });
       const session = authenticate(req, tokens, sessions);
       if (!session) { recordAuthFail(failKey); return send(res, 401, { error: 'não autorizado' }); }
-      if (rateLimited(session.userId, AI_ROUTES.has(route) || isDevRunStart(route) ? 'ai' : 'other')) return send(res, 429, { error: 'muitas requisições' });
+      if (rateLimited(session.userId, AI_ROUTES.has(route) ? 'ai' : 'other')) return send(res, 429, { error: 'muitas requisições' });
 
       const ctx = buildContext({ platform: 'api', userId: session.userId, isDM: true });
       if (ctx.role === 'BLOCKED') return send(res, 403, { error: 'acesso negado' });
+      // Correção C2: a sessão deste pedido (só um resumo do Bearer), para a chave de confirmação pela DM valer só na sessão que a pediu.
+      marcarSessao(ctx, bearerOf(req));
 
       // Motor de políticas nas rotas que mudam estado: em observe só registra; em enforce nega/exige aprovação local.
       const blocked = guardRoute({ ctx, method: req.method, pathname: url.pathname, local: isLocalRequest(req) });
       if (blocked) return send(res, blocked.status, blocked.body);
 
       if (route === 'POST /v1/auth/logout') {
+        try { confirmacoesDoPainel().esquecerSessao(sessaoDe(ctx)); } catch { /* sair nunca falha por causa das chaves */ }
         const revoked = session.via === 'session' ? sessions.revoke(bearerOf(req)) : false;
         audit('auth.logout', ctx, { revoked });
         return send(res, 200, { ok: true, revoked });
@@ -606,19 +663,27 @@ export function createApiServer({
       if (await bdsRoute(req, res, url, ctx)) return;
 
       // ── Painel de administração (só o dono) ──
-      const adminResult = await adminRoute(req, url, ctx);
+      // Correção C6 do parecer da Liz: a tentativa NEGADA de uma ação do painel que muda algo (as rotas do routeGuard) também vai para a auditoria, com a
+      // ação e o código HTTP: nunca a mensagem, o corpo nem os argumentos. As concluídas já são auditadas por cada ação; os bloqueios da política, pelo routeGuard.
+      const acaoDaRota = actionForRoute(req.method, url.pathname);
+      const auditarNegada = (status) => {
+        if (!acaoDaRota || !(status >= 400 && status < 500)) return;
+        try { audit('admin.negado', ctx, { acao: acaoDaRota, status }); } catch { /* a auditoria nunca muda a resposta */ }
+      };
+      let adminResult;
+      try {
+        adminResult = await adminRoute(req, url, ctx);
+      } catch (err) {
+        if (!(err?.status === 429 && err?.message === TEXTO_PEDIDO_REPETIDO)) auditarNegada(err?.status); // o freio de repetição já registrou o dele
+        throw err;
+      }
       if (adminResult !== undefined) {
         if (adminResult && adminResult.__notFound) return send(res, 404, { error: 'rota não encontrada' });
-        if (adminResult && adminResult.__status) return send(res, adminResult.__status, { error: adminResult.error });
+        if (adminResult && adminResult.__status) {
+          auditarNegada(adminResult.__status);
+          return send(res, adminResult.__status, { error: adminResult.error });
+        }
         return send(res, 200, adminResult);
-      }
-
-      // ── Módulo de código (só o dono; as funções do Jarvis dentro da Yui) ──
-      const devResult = await devRoute(req, url, ctx, readJson);
-      if (devResult !== undefined) {
-        if (devResult && devResult.__notFound) return send(res, 404, { error: 'rota não encontrada' });
-        if (devResult && devResult.__status) return send(res, devResult.__status, { error: devResult.error });
-        return send(res, 200, devResult);
       }
 
       if (route === 'POST /v1/chat') {
@@ -628,8 +693,8 @@ export function createApiServer({
         if (message.length > MAX_MESSAGE) return send(res, 400, { error: `message excede ${MAX_MESSAGE} caracteres` });
 
         // Pré-rotas por código (chaves próprias, desligadas por padrão): não entram no histórico, no fio nem na captura de memória.
-        const pre = await preRota(ctx, message);
-        if (pre) return send(res, 200, { type: 'reply', reply: pre.reply, memoryScope: ctx.memoryScope });
+        const pre = await preRota(ctx, message, isLocalRequest(req) ? 'LOCAL_PC' : 'REMOTE');
+        if (pre) return send(res, 200, { type: 'reply', reply: pre.reply, memoryScope: ctx.memoryScope, ...camposDaImagem(pre) });
 
         // Fase 2: com a chave ligada, o dono conversa no app sobre o mesmo fio da DM (senão, o histórico em RAM de sempre).
         const fio = await fioCompartilhado(ctx);
@@ -662,8 +727,9 @@ export function createApiServer({
         if (!message) return send(res, 400, { error: 'message obrigatória' });
         if (message.length > MAX_MESSAGE) return send(res, 400, { error: `message excede ${MAX_MESSAGE} caracteres` });
 
-        const pre = await preRota(ctx, message);
-        if (pre) return send(res, 200, { type: 'reply', reply: pre.reply });
+        // A imagem gerada pela pré-rota volta como resultado de ferramenta (o app mostra a imagem e o selo); o resto, como conversa.
+        const pre = await preRota(ctx, message, isLocalRequest(req) ? 'LOCAL_PC' : 'REMOTE');
+        if (pre) return send(res, 200, { type: pre.imagem ? 'tool_result' : 'reply', reply: pre.reply, ...camposDaImagem(pre) });
 
         // Fase 2: com a chave ligada, o dono conversa no app sobre o mesmo fio da DM (senão, o histórico em RAM de sempre).
         const fio = await fioCompartilhado(ctx);
@@ -779,6 +845,8 @@ export function startApi(client = null, overrides = {}) {
   for (const w of panel.warnings) logger.warn(`[API] ${w}`);
 
   const registered = registerBuiltinTools();
+  // A imagem do chat do app (lacunas do painel, item 11) fica registrada sempre, mas só aparece com YUI_APP_IMAGEM=true e o gerador registrado (core/imagemDoApp.js).
+  registered.push(...registerImageTool());
   if (registered.length) logger.info(`[Agent] Ferramentas registradas: ${registered.join(', ')}`);
 
   const host = process.env.YUI_API_HOST || '127.0.0.1';
@@ -798,7 +866,6 @@ export function startApi(client = null, overrides = {}) {
     sessions: createSessionStore({ ttlMs: hours * 60 * 60 * 1000 }),
     // `servidor`: a ponte das configurações por servidor, que só o processo do bot passa (src/index.js).
     admin: overrides.admin ?? createAdmin({ client, servidor: overrides.servidor ?? null }),
-    dev: overrides.dev ?? createDev(),
     // Chave por DM: usa o próprio bot do Discord para falar com o dono em privado (fora de qualquer servidor).
     notify: overrides.notify ?? (client ? async (userId, text) => (await client.users.fetch(userId)).send(text) : null),
     // O supervisor lê o estado do Discord aqui: API de pé com o Discord fora por muito tempo é motivo para religar.
@@ -816,15 +883,16 @@ export function startApi(client = null, overrides = {}) {
   );
   server.on('error', (err) => logger.error(`[API] Falha ao iniciar: ${err.message}`));
 
-  // Canal LOCAL de aprovação crítica (127.0.0.1:3940 + segredo em secrets/approval-channel.json): só com a aba Código ligada.
-  // Gravar código e rodar comandos só se aprovam por aqui (node scripts/yui-aprovar.mjs), nunca pela API principal.
+  // Canal LOCAL de aprovação crítica (127.0.0.1:3940 + segredo em secrets/approval-channel.json). Ações críticas do agente (com YUI_POLICY_MODE=enforce,
+  // ex.: commands.run) só se aprovam por aqui (node scripts/yui-aprovar.mjs), nunca pela API principal. A aba Código saiu (seus restos foram removidos em
+  // 27/11/2026), mas a chave que abre o canal continua a mesma, YUI_DEV_ENABLED=true, para nada mudar em quem já usa: desligada, o canal não abre.
   if (String(process.env.YUI_DEV_ENABLED || 'false').toLowerCase() === 'true' && String(process.env.YUI_APPROVAL_CHANNEL || 'true').toLowerCase() !== 'false' && overrides.approvalChannel !== false) {
-    startLocalApprovalChannel({ manager: overrides.dev?.approvals ?? getApprovalManager() })
+    startLocalApprovalChannel({ manager: getApprovalManager() })
       .then((channel) => {
         server.on('close', () => { channel.close(); });
         logger.info(`[Aprovação] Canal local em 127.0.0.1:${channel.port} (segredo em ${channel.file}${channel.restricted ? '' : '; NÃO consegui restringir a permissão do arquivo'}).`);
       })
-      .catch((err) => logger.warn(`[Aprovação] Canal local indisponível (${err.message}): ações críticas da aba Código não poderão ser aprovadas.`));
+      .catch((err) => logger.warn(`[Aprovação] Canal local indisponível (${err.message}): ações críticas do agente não poderão ser aprovadas.`));
   }
   return server;
 }

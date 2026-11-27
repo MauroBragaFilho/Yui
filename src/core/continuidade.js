@@ -163,3 +163,26 @@ export function juntarContinuidade(achadas, todas) {
   const recentes = todas.filter((r) => TIPOS.includes(r.type)).slice(0, TETO_NO_PROMPT).filter((r) => !vistos.has(r.id));
   return [...achadas, ...recentes];
 }
+
+// ── O painel do dono (lacunas do painel, item 12): ver e apagar o que foi registrado ──
+// Não dependem de YUI_CONTINUIDADE: o que já foi guardado continua visível (e apagável) com a chave desligada. As mesmas regras de sempre: só o dono,
+// só a memória pessoal, numa conversa 1:1 (o painel equivale a uma DM). Fora disso, nada é lido nem apagado.
+const MAX_LIDAS = 2000;
+
+/** Os projetos e as decisões registrados (lembranças do tipo project ou decision), do mais recente para o mais antigo: [{ id, tipo, texto, criadoEm, atualizadoEm }]. */
+export async function listarContinuidade(ctx, memory) {
+  if (!podeContinuidade(ctx)) return [];
+  const rows = await memory.listMemories(ctx, { limit: MAX_LIDAS });
+  return (Array.isArray(rows) ? rows : []).filter((r) => TIPOS.includes(r?.type)).map((r) => ({
+    id: Number(r.id), tipo: r.type, texto: String(r.content ?? ''), criadoEm: r.created_at ?? null, atualizadoEm: r.updated_at ?? null,
+  }));
+}
+
+/** Apaga UM projeto ou UMA decisão pelo número: { apagado, tipo }. Outra lembrança (fato, preferência, nota) nunca sai por aqui: { apagado: false }. */
+export async function apagarDaContinuidade(ctx, memory, id) {
+  const n = Number(id);
+  if (!podeContinuidade(ctx) || !Number.isInteger(n) || n < 1) return { apagado: false };
+  const alvo = (await listarContinuidade(ctx, memory)).find((r) => r.id === n);
+  if (!alvo) return { apagado: false };
+  return { apagado: (await memory.forget(ctx, n)) === true, tipo: alvo.tipo };
+}

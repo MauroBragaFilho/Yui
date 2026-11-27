@@ -1,8 +1,9 @@
 // Pré-rotas por código do chat do app/painel (POST /v1/agent e POST /v1/chat), antes da pesquisa e da IA:
 //  - continuidade (projetos e decisões), chave YUI_CONTINUIDADE: ver core/continuidade.js;
 //  - listas, lembretes/resumo do dia e memória por conversa, chave YUI_APP_COMANDOS: as MESMAS funções da DM do Discord.
-//  - comandos da live do YouTube, chave YUI_YOUTUBE_LIVE (adaptadores/youtube/pedido.js).
-// As chaves nascem desligadas e só valem para o DONO na memória pessoal. A resposta daqui não entra no histórico, no fio
+//  - comandos da live do YouTube, chave YUI_YOUTUBE_LIVE (adaptadores/youtube/pedido.js);
+//  - imagem por conversa (preRotaDeImagem, abaixo), chave YUI_APP_IMAGEM: a Porta I do Discord; esta vale para quem a política permite, não só o dono.
+// As chaves nascem desligadas e (menos a imagem) só valem para o DONO na memória pessoal. A resposta daqui não entra no histórico, no fio
 // compartilhado nem na captura automática de memória; a auditoria leva só o tipo e o tamanho, nunca o texto.
 import * as memoryStore from '../memory/store.js';
 import { isMemoryEnabled } from '../discordAdapter.js';
@@ -15,6 +16,10 @@ import { routeReminders, parseReminderRequest, getReminderStore } from '../../re
 import { youtubeLigado } from '../../adaptadores/youtube/adaptador.js';
 import { pedidoDeLive } from '../../adaptadores/youtube/pedido.js';
 import { portaDaLive } from '../../adaptadores/youtube/porta.js';
+import { detectImageRequest, imagePreRouteEnabled, pickCreativePrompt } from '../../handlers/imageIntent.js';
+import { preRouteDecision } from '../ai/searchIntent.js';
+import { imagensDoApp } from '../imagemDoApp.js';
+import { POLICY_STATES } from '../permissions.js';
 import { logger as defaultLogger } from '../../utils/logger.js';
 
 export const FALHA_LEMBRETES = 'Não consegui mexer nos lembretes agora. Confira com "meus lembretes" e tente de novo daqui a pouco.';
@@ -86,4 +91,22 @@ export async function preRotaDoApp({ ctx, message, histories }, {
     if (run.handled) return { kind: `memoria.${intent.kind}`, reply: run.text };
   }
   return null;
+}
+
+/**
+ * Pré-rota da IMAGEM (lacunas do painel, item 11; a Porta I do Discord, src/handlers/imageIntent.js): "gera uma imagem de um gato" e "desenha um dragão"
+ * viram imagem pelo CÓDIGO, sem depender de o modelo lembrar da ferramenta. Só com a ferramenta disponível para esta pessoa (YUI_APP_IMAGEM=true, o gerador
+ * registrado, a generate_image ligada no padrão global e o papel da política) e com YUI_IMAGE_PRE_ROUTE (padrão ligada). Pergunta de capacidade, negação,
+ * edição, link e pedido explícito de PESQUISA nunca viram imagem (as mesmas regras do Discord). Se a política pede confirmação (ASK) ou aprovação
+ * (CRITICAL), a pré-rota sai e o pedido segue para o agente, que sabe pedir a confirmação.
+ * @returns {Promise<null | { kind: string, reply: string, imagem?: { url: string, alt: string, expiresInSec: number }, limiteImagem?: { minutos: number } }>}
+ */
+export async function preRotaDeImagem({ ctx, message, origin }, { env = process.env, imagens = imagensDoApp(), rnd = Math.random } = {}) {
+  if (!ctx?.userId || !imagePreRouteEnabled(env) || !imagens.disponivel(ctx)) return null;
+  const pedido = detectImageRequest(message, { direct: true });
+  if (!pedido.explicit) return null;
+  if (preRouteDecision(message, { direct: true }).explicit) return null;
+  const r = await imagens.gerar({ ctx, prompt: pedido.vague ? pickCreativePrompt(rnd) : pedido.subject, via: 'prerota', origin });
+  if (r.kind === 'imagem.negada' && (r.decisao === POLICY_STATES.ASK || r.decisao === POLICY_STATES.CRITICAL)) return null;
+  return { kind: r.kind, reply: r.texto, ...(r.imagem ? { imagem: r.imagem } : {}), ...(r.limite ? { limiteImagem: { minutos: r.limite.minutos } } : {}) };
 }

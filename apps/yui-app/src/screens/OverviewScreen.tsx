@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ApiError, type AdminOverview, type GatewayStatus, type Me, type RadioSession, type ReminderView, type YuiClient } from '../api/client.ts';
+import { ApiError, type AdminOverview, type GatewayStatus, type GoogleView, type LiveView, type Me, type RadioSession, type ReminderView, type YuiClient } from '../api/client.ts';
 import { Badge, Button, Card, Icon, PageHeader, SectionHeading, StateView, type TabKey } from '../components/ui.tsx';
 import { buildAlerts, chartBars, formatUptime, groupEvents, corDoMedidor, levelForFree, medidorDeUso, percent, relativeTime, resumoDaVoz, resumoDasRespostas, RESPOSTAS_PARA_GRAFICO, systemSummary, type DiagnosticoResumo, type Level } from '../overviewLogic.ts';
 import { groupReminders, summarizeReminders } from '../remindersLogic.ts';
+import { cartaoDaLive, type TomDaConta } from '../contasLogic.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 
 type Props = { client: YuiClient; me: Me; onNavigate: (tab: TabKey) => void };
@@ -11,6 +12,7 @@ type Props = { client: YuiClient; me: Me; onNavigate: (tab: TabKey) => void };
 const REFRESH_MS = 30_000;
 const LEVEL_COLOR: Record<Level, string> = { ok: colors.success, warn: colors.warning, danger: colors.danger, unknown: colors.muted };
 const LEVEL_TEXT: Record<Level, string> = { ok: 'Folgado', warn: 'Apertado', danger: 'Crítico', unknown: 'Sem leitura' };
+const TOM_COR: Record<TomDaConta, string> = { ok: colors.success, atencao: colors.warning, critico: colors.danger, neutro: colors.muted };
 
 /** Tipos crus do registro (ex.: "chat", "tool") viram rótulos em português; o que não é conhecido volta com inicial maiúscula. */
 const TIPO_PT: Record<string, string> = {
@@ -43,9 +45,14 @@ export function OverviewScreen({ client, onNavigate }: Props) {
   // Diagnóstico (os mesmos motivos da aba Status) e sessões de voz: se o servidor não responder, o Início só não afirma nada sobre eles.
   const [diag, setDiag] = useState<DiagnosticoResumo | null>(null);
   const [voz, setVoz] = useState<RadioSession[] | null>(null);
+  // Live do YouTube (o cartão só aparece enquanto a Yui está numa live) e Google (avisos de autorização): servidor antigo ou falha = o Início não afirma nada.
+  const [live, setLive] = useState<LiveView | null>(null);
+  const [google, setGoogle] = useState<GoogleView | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
-    const [overview, gw, rem, dg, rd] = await Promise.allSettled([client.admin.overview(), client.admin.gateway(), client.reminders.list(), client.admin.diagnostico(), client.admin.radio()]);
+    const [overview, gw, rem, dg, rd, lv, gg] = await Promise.allSettled([client.admin.overview(), client.admin.gateway(), client.reminders.list(), client.admin.diagnostico(), client.admin.radio(), client.admin.live(), client.admin.google()]);
+    setLive(lv.status === 'fulfilled' ? lv.value : null);
+    setGoogle(gg.status === 'fulfilled' ? gg.value : null);
     setReminders(rem.status === 'fulfilled' ? rem.value.reminders : null); // servidor antigo sem lembretes: o cartão só diz que não há dado
     setDiag(dg.status === 'fulfilled' ? { motivos: dg.value.motivos, bancosComAlerta: dg.value.bancos?.comAlerta, reconexoesDoDiscord24h: dg.value.erros?.reconexoesDoDiscord24h } : null);
     setVoz(rd.status === 'fulfilled' ? rd.value : null);
@@ -77,7 +84,8 @@ export function OverviewScreen({ client, onNavigate }: Props) {
   const diskLevel = levelForFree(diskFree);
   const worst: Level = [ramLevel, diskLevel].includes('danger') ? 'danger' : [ramLevel, diskLevel].includes('warn') ? 'warn' : ramLevel === 'unknown' && diskLevel === 'unknown' ? 'unknown' : 'ok';
   const bars = chartBars(data?.interactions?.series);
-  const alerts = data ? buildAlerts({ discordOnline: data.discord.online, aiOk, hostLevel: worst, problems: data.problems, diagnostico: diag }) : [];
+  const alerts = data ? buildAlerts({ discordOnline: data.discord.online, aiOk, hostLevel: worst, problems: data.problems, diagnostico: diag, google }) : [];
+  const cartaoLive = cartaoDaLive(live);
   const vozResumo = resumoDaVoz(voz);
   const totalRespostas = bars.reduce((s, b) => s + b.count, 0);
   // RAM do processo que responde a API: o cérebro (dois processos) ou a Yui inteira (processo único).
@@ -119,6 +127,29 @@ export function OverviewScreen({ client, onNavigate }: Props) {
               />
               <HealthCard icon="graphic_eq" title="Voz no Discord" level={vozResumo.level} text={vozResumo.text} />
             </View>
+
+            {cartaoLive ? (
+              <Card style={styles.card}>
+                <View style={styles.rowBetween}>
+                  <SectionTitle icon="chat_bubble" title="Live do YouTube" />
+                  <Badge label={cartaoLive.estado.texto} color={TOM_COR[cartaoLive.estado.tom]} />
+                </View>
+                <Text testID="overview-live-titulo" style={styles.eventLabel} numberOfLines={2}>{cartaoLive.titulo}</Text>
+                {cartaoLive.linhas.map((l) => (
+                  <View key={l.rotulo} style={styles.rowBetween}>
+                    <Text style={styles.hint}>{l.rotulo}</Text>
+                    <Text style={styles.meterLabel}>{l.valor}</Text>
+                  </View>
+                ))}
+                {cartaoLive.cota ? (
+                  <View style={styles.track} accessibilityLabel={`Cota de hoje: ${cartaoLive.cota.percentual}%`}>
+                    <View style={[styles.fill, { width: `${cartaoLive.cota.percentual}%`, backgroundColor: cartaoLive.cota.tom === 'ok' ? colors.accent : TOM_COR[cartaoLive.cota.tom] }]} />
+                  </View>
+                ) : null}
+                {cartaoLive.nota ? <Text style={styles.hint}>{cartaoLive.nota}</Text> : null}
+                <Text style={styles.hint}>Só números: o texto do chat e quem escreveu nunca saem do servidor. Para sair: "sai da live" na sua DM ou no Chat, ou o botão em Admin, Live do YouTube.</Text>
+              </Card>
+            ) : null}
 
             <SectionHeading title="Números do dia" />
             <View style={styles.grid}>

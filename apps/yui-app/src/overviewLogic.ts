@@ -3,6 +3,7 @@
  * texto de "há quanto tempo" e como cada evento do registro de auditoria aparece para o dono.
  * Nada aqui inventa número: o que a API não trouxe vira null e a tela mostra "—".
  */
+import { alertasDoGoogle, type GoogleLike } from './contasLogic.ts';
 
 export type Level = 'ok' | 'warn' | 'danger' | 'unknown';
 
@@ -122,6 +123,7 @@ const EXACT: Record<string, EventView> = {
   'channel.dm_incerta': { label: 'Mensagem privada com entrega incerta', icon: 'warning', tone: 'bad' },
   'api.prerota': { label: 'Comando reconhecido no app', icon: 'chat_bubble', tone: 'normal' },
   'api.agent': { label: 'Pedido ao agente pelo app', icon: 'chat_bubble', tone: 'normal' },
+  'api.imagem': { label: 'Imagem pelo Chat do app', icon: 'chat_bubble', tone: 'normal' },
   'monitor.cancelado': { label: 'Monitor cancelado', icon: 'cancel', tone: 'normal' },
 };
 
@@ -244,8 +246,11 @@ export function alertasDoDiagnostico(d: DiagnosticoResumo | null | undefined): A
   return out;
 }
 
-/** Alertas para o dono, só com o que a API mediu: estado atual (Discord, IA, computador), problemas das últimas 24 h e os motivos do diagnóstico. Lista vazia = nada a avisar. */
-export function buildAlerts(input: { discordOnline: boolean; aiOk: boolean | null; hostLevel: Level; problems?: Problems | null; diagnostico?: DiagnosticoResumo | null }): AlertItem[] {
+/**
+ * Alertas para o dono, só com o que a API mediu: estado atual (Discord, IA, computador), problemas das últimas 24 h, os motivos do diagnóstico e a autorização
+ * do Google (GET /v1/admin/google: perto de vencer, renovação falhando, autorizar de novo; contasLogic.ts). Lista vazia = nada a avisar.
+ */
+export function buildAlerts(input: { discordOnline: boolean; aiOk: boolean | null; hostLevel: Level; problems?: Problems | null; diagnostico?: DiagnosticoResumo | null; google?: GoogleLike | null; agora?: Date }): AlertItem[] {
   const out: AlertItem[] = [];
   if (!input.discordOnline) out.push({ level: 'danger', text: 'O Discord está desconectado.' });
   if (input.aiOk === false) out.push({ level: 'danger', text: 'Nenhum provedor de IA está disponível.' });
@@ -258,6 +263,7 @@ export function buildAlerts(input: { discordOnline: boolean; aiOk: boolean | nul
   if (p?.toolDenied) out.push({ level: 'warn', text: `${plural(p.toolDenied, 'ferramenta negada', 'ferramentas negadas')} nas últimas 24 h.` });
   if (p?.alertFail) out.push({ level: 'danger', text: `${plural(p.alertFail, 'aviso ao dono que não foi entregue', 'avisos ao dono que não foram entregues')} nas últimas 24 h.` });
   out.push(...alertasDoDiagnostico(input.diagnostico));
+  out.push(...alertasDoGoogle(input.google, input.agora ?? new Date()));
   return out;
 }
 

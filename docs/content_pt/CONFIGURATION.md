@@ -2,7 +2,7 @@
 
 Como a configuração da Yui é montada em `src/config/index.js`, como funcionam o rodízio de chaves e os donos. Para a lista de todas as variáveis, veja [ENVIRONMENT.md](ENVIRONMENT.md).
 
-> ℹ️ A configuração vem do `.env` e dos padrões do código. O `src/config/config.json` **não é lido ao iniciar**: o painel de configuração do Discord grava nele e o valor vale na hora, mas, ao reiniciar a Yui, volta o do `.env` (que tem prioridade) ou o padrão.
+> ℹ️ A configuração vem do `.env`, dos padrões do código e do **cofre do painel** (`secrets/painel-config.json`), que vence o `.env` sem reescrevê-lo. Desde 26/11/2026 o painel de configuração do Discord (`/yui-criador` e `/yui-config_ia`) grava no mesmo cofre do painel web: os dois mostram o mesmo valor e nada se perde no reinício (veja [ENVIRONMENT.md](ENVIRONMENT.md#-2-ia-cadeia-de-provedores)). O `src/config/config.json` não é lido nem gravado; só o prefixo, o nome e o prompt do sistema ainda mudam pelo Discord apenas na memória do bot, até reiniciar.
 
 ---
 
