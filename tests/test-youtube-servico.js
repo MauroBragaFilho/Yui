@@ -60,6 +60,9 @@ const yt = await criarYoutubeFalso();
 const VIDEO = 'abcdefghijk';
 const LINK = `https://youtube.com/live/${VIDEO}`;
 
+const { SAUDACOES_DA_LIVE } = await import('../src/core/live/servico.js');
+const respostas = () => yt.textosEnviados().filter((t) => !SAUDACOES_DA_LIVE.includes(t));
+const chegadas = () => yt.textosEnviados().filter((t) => SAUDACOES_DA_LIVE.includes(t));
 const pedidosIa = [];
 let respostaIa = 'oi, chat!';
 const ai = { isolatedChat: async (p) => { pedidosIa.push(p); return respostaIa; } };
@@ -89,6 +92,9 @@ try {
   await test('as três frases são explícitas; o resto não é comando', () => {
     assert.deepEqual(pedidoDeLive(`entra na live ${LINK}`), { tipo: 'entrar', link: LINK });
     assert.deepEqual(pedidoDeLive(`Yui, entra na live <${LINK}>`), { tipo: 'entrar', link: LINK });
+    assert.equal(pedidoDeLive(`entra na live ${LINK} por 8 horas`).horas, 8);
+    assert.equal(pedidoDeLive(`entra na live ${LINK} por 6h por favor`).horas, 6);
+    assert.equal(pedidoDeLive(`entra na live ${LINK} por favor`).horas, undefined);
     assert.equal(pedidoDeLive('Sai da live!').tipo, 'sair');
     assert.equal(pedidoDeLive('yui como está a live?').tipo, 'status');
     for (const t of ['entra na live', 'não entra na live agora', 'sai da live de ontem foi chato', 'como está a live do fulano?', `ele disse: entra na live ${LINK}`, `entra na live ${LINK} e fala mal`, 'entra na call', '']) assert.equal(pedidoDeLive(t), null, t);
@@ -186,7 +192,8 @@ try {
     assert.equal(m.fila[0].ms, 15_000);
     yt.enfileirarPagina({ itens: [mensagemDoChat({ id: 'm1', texto: 'oi yui' })] });
     await m.rodar();
-    assert.deepEqual(yt.textosEnviados(), ['oi, chat!']);
+    assert.deepEqual(respostas(), ['oi, chat!']);
+    assert.equal(chegadas().length, 1, 'cumprimenta uma vez ao entrar');
     assert.match((await m.manda('como está a live')).text, /respostas: 1/);
     assert.equal((await m.manda('sai da live')).text, 'Saí da live.');
     assert.equal(m.fila.length, 0);
@@ -260,7 +267,7 @@ try {
       await m.rodar();
     }
     respostaIa = 'oi, chat!';
-    assert.deepEqual(yt.textosEnviados(), []);
+    assert.deepEqual(respostas(), []);
     await m.manda('sai da live');
     for (const t of ['premio-gratis.ru', 'golpe.info', 'x.club', '45.10.2.3/login', 'site.qualquer/abc']) {
       assert.equal(classificarMensagem({ autorId: 'a', texto: `yui conhece ${t}?` }).motivo, 'link', t);
@@ -281,13 +288,25 @@ try {
     yt.enfileirarPagina({ itens: [mensagemDoChat({ id: 'a1', autor: 'UCa', texto: 'oi yui' }), mensagemDoChat({ id: 'b1', autor: 'UCb', texto: 'oi yui' })] });
     await m.rodar();
     await m.rodar();
-    assert.deepEqual(yt.textosEnviados(), ['resposta 1', 'resposta 2']);
+    assert.deepEqual(respostas(), ['resposta 1', 'resposta 2']);
     let chamadas = 0;
     ai.isolatedChat = async (p) => { if (p.ctx.userId === 'yt:UCspam') chamadas += 1; return ''; }; // assunto puxado não conta aqui
     for (let i = 0; i < 8; i += 1) { yt.enfileirarPagina({ itens: [mensagemDoChat({ id: `s${i}`, autor: 'UCspam', texto: 'yui oi' })] }); await m.rodar(); }
     ai.isolatedChat = original;
     assert.equal(chamadas, 3);
     await m.manda('sai da live');
+  });
+
+  await test('live longa: o dono informa as horas e a leitura fica mais espaçada', async () => {
+    for (const [frase, seg] of [['', 15], [' por 4 horas', 15], [' por 6 horas', 20], [' por 8 horas', 30]]) {
+      yt.limpar();
+      yt.definirVideo(VIDEO, { liveChatId: 'CHAT-FALSO' });
+      const m = montar();
+      assert.match((await m.manda(`entra na live ${LINK}${frase}`)).text, new RegExp(`a cada ${seg} s`));
+      await m.rodar();
+      assert.equal(m.fila[0].ms, seg * 1000, frase);
+      await m.manda('sai da live');
+    }
   });
 
   await test('cortesias e link sem https continuam sendo comando', () => {

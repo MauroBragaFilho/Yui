@@ -76,7 +76,7 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
 
   // ── Comandos do dono (só pelo Discord ou pelo app) ──────────────────────────────────────────────────────────────────────────────────────
 
-  async function entrar({ link, canal, papel } = {}) {
+  async function entrar({ link, canal, papel, intervaloLeituraMs } = {}) {
     if (estado === 'desligado') return { ok: false, codigo: 'desligado' };
     const quem = podeComandarALive({ canal, papel });
     if (!quem.ok) return { ok: false, codigo: quem.codigo };
@@ -85,6 +85,8 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
     if (!id.ok) return { ok: false, codigo: id.codigo };
     if (aplicar('entrar').ok !== true) return { ok: false, codigo: 'ja-esta-numa-live' };
     live = {
+      // o ritmo desta live: nunca mais rápido que o mínimo do adaptador
+      intervaloMs: Math.max(C.intervaloMinimoLeituraMs, Number(intervaloLeituraMs) || 0),
       videoId: id.videoId, liveChatId: null, titulo: '', conversa: `yt:${id.videoId}`, guarda: criarGuardaDeFala({ limites: C.limitesDaFala, agora }),
       vistas: new Set(), recentes: [], pendentes: [], pagina: null, primeiraLeitura: true, falhas: 0, ultimaTentativaDeAssuntoEm: null,
     };
@@ -107,6 +109,21 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
     live.titulo = achada.titulo;
     aplicar('chat_encontrado');
     return { ok: true, titulo: achada.titulo };
+  }
+
+  /** A fala de chegada, escolhida pelo código (nunca pela IA): uma por entrada, contando na cota e nos limites. Falhar não tira a Yui do chat. */
+  async function saudar(texto) {
+    const minha = live;
+    if (!minha || estado !== 'ouvindo' || proibido(texto) || !cota.podeGastar('liveChatMessages.insert')) return false;
+    try {
+      await cliente.enviarMensagem({ liveChatId: minha.liveChatId, texto });
+    } catch (e) {
+      if (live === minha) await reagirAoErro(e, 'enviar');
+      return false;
+    }
+    cota.gastar('liveChatMessages.insert');
+    if (live === minha) minha.guarda.registrarEnvio({ tipo: 'resposta', texto });
+    return true;
   }
 
   function sair({ canal, papel } = {}) {
@@ -243,7 +260,7 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
         if (await reagirAoErro(e, 'ler') === 'parou') return { ok: true, ativo: false, proximoEmMs: null };
         live.falhas += 1;
         if (live.falhas >= C.falhasSeguidasMax) { await parar('erro_permanente', 'falhas-seguidas'); return { ok: false, ativo: false, proximoEmMs: null, codigo: 'falhas-seguidas' }; }
-        return { ok: false, ativo: true, proximoEmMs: Math.min(60_000, C.intervaloMinimoLeituraMs * 2 ** live.falhas), codigo: 'falha-temporaria' };
+        return { ok: false, ativo: true, proximoEmMs: Math.min(60_000, live.intervaloMs * 2 ** live.falhas), codigo: 'falha-temporaria' };
       }
       live.pagina = pagina.proximaPagina ?? live.pagina;
 
@@ -279,7 +296,7 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
       await puxarAssunto();
       if (!aindaAqui()) return { ok: true, ativo: false, proximoEmMs: null };
       // o ritmo respeita o que a API mandou (pollingIntervalMillis), o mínimo configurado e a cota (que, apertada, deixa a leitura mais lenta)
-      const proximoEmMs = Math.min(300_000, Math.max(pagina.intervaloMs, C.intervaloMinimoLeituraMs) * cota.fatorDeLeitura());
+      const proximoEmMs = Math.min(300_000, Math.max(pagina.intervaloMs, minha.intervaloMs) * cota.fatorDeLeitura());
       return { ok: true, ativo: true, proximoEmMs };
     } finally {
       emPasso = false;
@@ -294,5 +311,5 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
     };
   }
 
-  return { entrar, sair, calar, liberarComentarios, passo, desligar, retrato, get estado() { return estado; } };
+  return { entrar, saudar, sair, calar, liberarComentarios, passo, desligar, retrato, get estado() { return estado; } };
 }

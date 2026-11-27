@@ -11,6 +11,13 @@ import { hostsDoGoogle } from '../../integrations/google/endpoints.js';
 
 /** Os padrões que cabem numa live de 4 horas (docs/GUIA_YOUTUBE_LIVE.md): leitura a cada 15 s = 4.800 unidades; até 5 mensagens a cada 15 min = 1.600 nas 4 horas. */
 export const PADROES_DA_LIVE = Object.freeze({ intervaloMinimoLeituraMs: 15_000 });
+/**
+ * Ritmo de leitura pela duração que o dono informar: 15 s cabem cerca de 5 h da cota diária falando no limite, 20 s cerca de 7 h, 30 s cerca de 9 h.
+ */
+export function ritmoDaLive(horas) {
+  if (!(horas > 5)) return { segundos: 15, cabemHoras: 5 };
+  return horas <= 7 ? { segundos: 20, cabemHoras: 7 } : { segundos: 30, cabemHoras: 9 };
+}
 const AVISO_TENTATIVAS = 720; // 12 horas, uma por minuto: a queda de internet que derruba a live também derruba a DM
 const AVISO_ESPERA_MS = 60_000;
 
@@ -36,6 +43,9 @@ const MOTIVO_DA_PARADA = Object.freeze({
   cota_esgotada: 'a cota diária da API do YouTube acabou',
   erro_permanente: 'deu um erro que não passa sozinho',
 });
+
+/** Fala de chegada no chat (pedido do dono): frases fixas, uma sorteada a cada entrada. */
+export const SAUDACOES_DA_LIVE = Object.freeze(['Cheguei, galera!', 'Cheguei, galera! Bora de live?', 'Oi, galera, cheguei!']);
 
 /**
  * @param {{ env?: object, ai?: object, avisarDono: (texto: string) => Promise<unknown>, ehDono: (id: string) => boolean, logger?: object, agora?: () => number,
@@ -110,20 +120,23 @@ export function criarServicoDaLive({
     }, ms);
   }
 
-  async function entrar(link, canal) {
+  async function entrar(link, canal, horas) {
     if (entrando) return 'Já estou tentando entrar. Um instante.';
     const lida = lerCredencial(arquivo);
     if (!lida.ok) return TEXTOS['sem-credencial'];
     entrando = true;
     try {
       const ad = criar(lida.dados.canalId);
-      const r = await ad.entrar({ link, canal, papel: 'dono' });
+      const ritmo = ritmoDaLive(horas);
+      const r = await ad.entrar({ link, canal, papel: 'dono', intervaloLeituraMs: ritmo.segundos * 1000 });
       if (!r.ok) return TEXTOS[r.codigo] ?? 'Não consegui entrar na live.';
       pararLaco();
       titulo = r.titulo;
       gravarMarca();
+      await ad.saudar(SAUDACOES_DA_LIVE[Math.floor(Math.random() * SAUDACOES_DA_LIVE.length)]);
+      if (ad.estado !== 'ouvindo') return 'Entrei no chat, mas o YouTube não me deixou escrever e eu saí. Confira se a conta pode falar nesse chat.';
       laco(geracao, 0);
-      return `Entrei no chat da live${titulo ? ` "${titulo}"` : ''}. Respondo quando me chamarem pelo nome. Para parar: "sai da live".`;
+      return `Entrei no chat da live${titulo ? ` "${titulo}"` : ''}. Respondo quando me chamarem pelo nome. Leio o chat a cada ${ritmo.segundos} s, o que dá para cerca de ${ritmo.cabemHoras} h${horas > ritmo.cabemHoras ? `; as ${horas} h que você disse podem estourar a cota antes do fim` : ''}. Para parar: "sai da live".`;
     } finally {
       entrando = false;
     }
@@ -161,7 +174,7 @@ export function criarServicoDaLive({
     async rotear({ userId, texto, canal = 'discord_dm' } = {}) {
       const p = youtubeLigado(env) && ehDono(String(userId ?? '')) && (canal === 'discord_dm' || canal === 'app') ? pedidoDeLive(texto) : null;
       if (!p) return { handled: false };
-      if (p.tipo === 'entrar') return { handled: true, text: await entrar(p.link, canal) };
+      if (p.tipo === 'entrar') return { handled: true, text: await entrar(p.link, canal, p.horas) };
       return { handled: true, text: p.tipo === 'sair' ? sair(canal) : status() };
     },
     /** Na subida: se havia uma live aberta quando o processo parou, avisa o dono (tentando de novo enquanto o Discord não volta). Nunca volta para ela. */

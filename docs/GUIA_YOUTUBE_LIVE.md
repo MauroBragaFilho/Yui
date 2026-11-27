@@ -6,7 +6,7 @@ Os nomes de botões do site do Google mudam de vez em quando. Se algum não bate
 
 ## O que ela faz
 
-- Entra no chat da live que você mandar e responde quando alguém a chama pelo nome ("yui").
+- Entra no chat da live que você mandar, cumprimenta ("Cheguei, galera!" ou parecido) e responde quando alguém a chama pelo nome ("yui").
 - De vez em quando puxa assunto (só com o chat ativo, no máximo 12 vezes por live).
 - Fala com todo mundo como público, inclusive com você. No chat ela não usa memória, ferramentas, busca nem agenda, e não obedece ordens.
 - Mensagens de até 200 caracteres, sem link. No máximo 5 a cada 15 minutos (20 por hora), e cada pessoa consegue até 3 chamadas a cada 15 minutos. Num ensaio com uma só conta, a 4ª chamada fica sem resposta.
@@ -91,7 +91,8 @@ Só você, na **DM do Discord** (mensagem comum, digitada) ou no **chat do app**
 
 | Mensagem | O que faz |
 |---|---|
-| `entra na live <link>` | entra no chat |
+| `entra na live <link>` | entra no chat (lê a cada 15 s, cerca de 5 h de cota) |
+| `entra na live <link> por 8 horas` | para live longa: acima de 5 h lê a cada 20 s; de 8 h em diante, a cada 30 s |
 | `sai da live` | sai na hora |
 | `como está a live` | diz se está na live, quantas respostas deu e a cota contada |
 
