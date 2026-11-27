@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { ApiError, type Diagnostico, type Health, type Me, type YuiClient } from '../api/client.ts';
 import { Badge, Button, Card, PageHeader } from '../components/ui.tsx';
-import { DIAGNOSTICO_ATUALIZA_MS, podeVerDiagnostico, visaoDoDiagnostico, type Cartao, type Tom } from '../diagnosticoLogic.ts';
+import { DIAGNOSTICO_ATUALIZA_MS, podeVerDiagnostico, separarCartoes, visaoDoDiagnostico, type Cartao, type Tom } from '../diagnosticoLogic.ts';
 import { colors, spacing } from '../theme.ts';
 import { getTheme, setTheme, type ThemeMode } from '../web.ts';
 
@@ -58,6 +58,7 @@ function DiagnosticoDoServidor({ client }: { client: YuiClient }) {
   const [loading, setLoading] = useState(false);
   const busy = useRef(false);
   const parado = useRef(false);
+  const [verTecnicos, setVerTecnicos] = useState(false);
 
   const refresh = useCallback(async () => {
     if (busy.current || parado.current) return;
@@ -83,6 +84,7 @@ function DiagnosticoDoServidor({ client }: { client: YuiClient }) {
   }, [refresh]);
 
   const visao = diag ? visaoDoDiagnostico(diag) : null;
+  const { principais, tecnicos } = separarCartoes(visao?.cartoes ?? []);
   return (
     <>
       <View style={styles.row}>
@@ -91,7 +93,21 @@ function DiagnosticoDoServidor({ client }: { client: YuiClient }) {
       </View>
       <Text style={styles.hint}>Só você vê esta parte. Só leitura: números e palavras fixas do servidor, nunca conversas, chaves nem textos de erro. Atualiza sozinho a cada 30 segundos.</Text>
       {error ? <Text testID="diag-error" style={styles.error}>{error}</Text> : null}
-      {visao ? visao.cartoes.map((c) => <CartaoDoDiagnostico key={c.chave} cartao={c} />) : null}
+      {principais.map((c) => <CartaoDoDiagnostico key={c.chave} cartao={c} />)}
+      {tecnicos.length ? (
+        <>
+          <Button
+            testID="btn-diag-tecnicos"
+            label={verTecnicos ? 'Esconder detalhes técnicos' : `Mostrar detalhes técnicos (${tecnicos.length})`}
+            icon={verTecnicos ? 'expand_less' : 'expand_more'}
+            variant="ghost"
+            onPress={() => setVerTecnicos((v) => !v)}
+          />
+          {verTecnicos ? tecnicos.map((c) => <CartaoDoDiagnostico key={c.chave} cartao={c} />) : (
+            <Text style={styles.hint}>Limites de tokens, cotas de busca, perfis, rota privada e motor do agente. Ficam recolhidos porque estão normais; um que pedir atenção aparece acima.</Text>
+          )}
+        </>
+      ) : null}
     </>
   );
 }
@@ -119,6 +135,9 @@ export function StatusScreen({ client, me, onLogout }: Props) {
   }, [refresh]);
 
   const [theme, setThemeState] = useState<ThemeMode>(getTheme);
+  // Na tela larga o menu lateral já tem o botão de tema; aqui ele só aparece no celular (onde não há menu lateral).
+  const { width } = useWindowDimensions();
+  const mostrarTema = Platform.OS === 'web' && width < 900;
   const online = Boolean(health?.ok);
   const active = health?.backends.find((b) => b.active);
 
@@ -182,7 +201,7 @@ export function StatusScreen({ client, me, onLogout }: Props) {
 
       {podeVerDiagnostico(me.role) ? <DiagnosticoDoServidor client={client} /> : null}
 
-      {Platform.OS === 'web' ? (
+      {mostrarTema ? (
         <Card style={styles.card}>
           <Text style={styles.label}>Aparência</Text>
           <View style={styles.row}>

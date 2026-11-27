@@ -59,13 +59,17 @@ export function MemoryScreen({ client }: Props) {
     }
   }
 
-  async function remove(id: number) {
-    try {
-      await client.deleteMemory(id);
-      setItems((list) => list.filter((m) => m.id !== id));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Não foi possível apagar.');
-    }
+  /** Apagar uma lembrança pede confirmação (mostra o começo do texto): não dá para desfazer e o botão fica colado ao texto. */
+  function remove(id: number, content: string) {
+    const trecho = content.length > 120 ? `${content.slice(0, 117)}…` : content;
+    confirmAction('Apagar esta lembrança?', `“${trecho}”\n\nNão dá para desfazer.`, async () => {
+      try {
+        await client.deleteMemory(id);
+        setItems((list) => list.filter((m) => m.id !== id));
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'Não foi possível apagar.');
+      }
+    }, 'Apagar');
   }
 
   function clearAll() {
@@ -138,7 +142,7 @@ export function MemoryScreen({ client }: Props) {
                 {item.expires_at ? ` • expira em ${new Date(item.expires_at).toLocaleDateString('pt-BR')}` : ' • permanente'}
               </Text>
             </View>
-            <Button testID={`btn-del-${item.id}`} label="Apagar" variant="dangerOutline" compact onPress={() => remove(item.id)} style={styles.delBtn} />
+            <Button testID={`btn-del-${item.id}`} label="Apagar" variant="dangerOutline" compact onPress={() => remove(item.id, item.content)} style={styles.delBtn} />
           </Card>
         )}
       />

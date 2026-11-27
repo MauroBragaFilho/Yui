@@ -9,6 +9,7 @@
  *  - texto em português simples, sem jargão: os códigos fixos viram frases curtas; um código que o app não conhece aparece como o próprio código (já filtrado pelo servidor).
  */
 import type { Diagnostico, DiagnosticoChamadaPerfil, DiagnosticoContadoresPerfil, DiagnosticoErro, EstadoGeral, EstadoRotaPrivada, Role } from './api/client.ts';
+import { RECONEXOES_ATENCAO } from './overviewLogic.ts';
 
 /** De quanto em quanto tempo a aba pede o diagnóstico de novo enquanto está aberta (o botão "Atualizar" pede na hora). */
 export const DIAGNOSTICO_ATUALIZA_MS = 30_000;
@@ -16,7 +17,8 @@ export const DIAGNOSTICO_ATUALIZA_MS = 30_000;
 export type Tom = 'ok' | 'atencao' | 'problema' | 'neutro';
 export interface Linha { rotulo: string; valor: string; tom?: Tom }
 export interface Item { titulo: string; detalhe?: string; tom?: Tom; /** A tela mostra rótulo à esquerda e valor à direita (em vez de título e detalhe empilhados). */ alinhado?: boolean }
-export interface Cartao { chave: string; titulo: string; selo?: { texto: string; tom: Tom }; linhas: Linha[]; itens?: Item[]; nota?: string }
+/** `tecnico`: detalhe para quem mexe na configuração; a tela o deixa recolhido em "Detalhes técnicos", salvo quando o selo pede atenção. */
+export interface Cartao { chave: string; titulo: string; selo?: { texto: string; tom: Tom }; linhas: Linha[]; itens?: Item[]; nota?: string; tecnico?: boolean }
 export interface VisaoDoDiagnostico { estado: EstadoGeral; geradoEm: string; cartoes: Cartao[] }
 
 /** Só o dono vê o diagnóstico (o servidor também confere: membro = 403). */
@@ -183,16 +185,26 @@ export function chamadaEmItem(c: DiagnosticoChamadaPerfil, agora: number): Item 
 function cartaoGeral(d: Diagnostico): Cartao {
   const e = estadoGeral(d.estado);
   const motivos = Array.isArray(d.motivos) ? d.motivos.slice(0, 20) : [];
+  // O motivo do banco diz QUAL banco (antes o nome só aparecia no fim da página, em "Erros e bancos").
+  const bancos = (Array.isArray(d.bancos?.comAlerta) ? d.bancos.comAlerta : []).slice(0, 10).map((x) => seguro(x, 40)).filter((x) => x !== VAZIO);
+  const itens: Item[] = motivos.map((m) => ({
+    titulo: m?.codigo === 'banco-com-alerta' && bancos.length ? `${bancos.length === 1 ? 'Banco de dados com alerta' : 'Bancos de dados com alerta'}: ${bancos.join(', ')}.` : seguro(m?.texto, 160),
+    tom: d.estado === 'problema' ? 'problema' : 'atencao',
+  } as Item));
+  const rec = numero(d.erros?.reconexoesDoDiscord24h) ?? 0;
+  if (rec >= RECONEXOES_ATENCAO) itens.push({ titulo: `${Math.round(rec)} reconexões do Discord nas últimas 24 h (a rede da máquina da Yui pode estar instável).`, tom: 'atencao' });
+  // Com aviso na lista, o selo nunca diz "Tudo certo".
+  const selo = itens.length && e.tom === 'ok' ? { texto: 'Atenção', tom: 'atencao' as Tom } : e;
   return {
     chave: 'geral',
     titulo: 'Estado geral',
-    selo: e,
+    selo,
     linhas: [
       { rotulo: 'Atualizado às', valor: horaLocal(d.geradoEm) },
       { rotulo: 'Funcionamento', valor: d.modo === 'cerebro-separado' ? 'Dois processos (cérebro + bot)' : d.modo === 'unico' ? 'Processo único' : VAZIO },
     ],
-    itens: motivos.map((m) => ({ titulo: seguro(m?.texto, 160), tom: d.estado === 'problema' ? 'problema' : 'atencao' } as Item)),
-    nota: motivos.length === 0 && d.estado === 'ok' ? 'Nenhum motivo de atenção agora.' : undefined,
+    itens,
+    nota: itens.length === 0 && d.estado === 'ok' ? 'Nenhum motivo de atenção agora.' : undefined,
   };
 }
 
@@ -203,7 +215,7 @@ function cartaoProcessos(d: Diagnostico): Cartao {
       chave: 'processos', titulo: 'Yui (processo único)',
       linhas: [
         { rotulo: 'Ligada há', valor: duracao(d.processo?.uptimeSegundos) },
-        { rotulo: 'Memória do processo', valor: numero(d.processo?.memoriaMB) === null ? VAZIO : `${n(d.processo.memoriaMB)} MB` },
+        { rotulo: 'RAM da Yui', valor: numero(d.processo?.memoriaMB) === null ? VAZIO : `${n(d.processo.memoriaMB)} MB` },
       ],
     };
   }
@@ -219,9 +231,14 @@ function cartaoProcessos(d: Diagnostico): Cartao {
       { rotulo: 'Discord (visto pelo bot)', valor: discord === true ? 'Conectado' : discord === false ? 'Desconectado' : 'Desconhecido', tom: discord === false ? 'atencao' : discord === true ? 'ok' : 'neutro' },
       { rotulo: 'IA que o cérebro usa', valor: c.backend ? seguro(c.backend, 40) : VAZIO },
       { rotulo: 'Travas de dono perdidas', valor: String(travas), tom: travas > 0 ? 'problema' : 'ok' },
-      { rotulo: 'Memória do processo', valor: numero(d.processo?.memoriaMB) === null ? VAZIO : `${n(d.processo.memoriaMB)} MB` },
+      { rotulo: 'RAM do cérebro', valor: numero(d.processo?.memoriaMB) === null ? VAZIO : `${n(d.processo.memoriaMB)} MB` },
     ],
   };
+}
+
+/** "(anônimo)" só quando o nome ainda não diz isso ("Pollinations (grátis, anônimo)" não vira "... (anônimo) (anônimo)"). */
+export function comAnonimo(nome: string, anonimo: boolean): string {
+  return anonimo && !/an[oô]nimo/i.test(nome) ? `${nome} (anônimo)` : nome;
 }
 
 function cartaoIa(d: Diagnostico): Cartao {
@@ -244,7 +261,7 @@ function cartaoIa(d: Diagnostico): Cartao {
       const comErro = alvos.map((a) => erroEmTexto(a.ultimoErro)).find((x) => x !== VAZIO);
       const tom: Tom = alvos.length && disponiveis === 0 ? 'problema' : (numero(p.descansoSegundos) ?? 0) > 0 || comErro ? 'atencao' : 'ok';
       return {
-        titulo: `${seguro(p.rotulo || p.id, 40)}${p.anonimo === true ? ' (anônimo)' : ''}`,
+        titulo: comAnonimo(seguro(p.rotulo || p.id, 40), p.anonimo === true),
         detalhe: [
           `${disponiveis} de ${alvos.length} ${alvos.length === 1 ? 'modelo disponível' : 'modelos disponíveis'}`,
           `${plural(p.chaves, 'chave', 'chaves')}${(numero(p.chavesEmDescanso) ?? 0) > 0 ? `, ${n(p.chavesEmDescanso)} em descanso` : ''}`,
@@ -264,7 +281,7 @@ function cartaoLimites(d: Diagnostico): Cartao {
   const app = lista(l?.app?.provedores);
   const discord = l?.discord?.aplica === true ? lista(l.discord.provedores) : [];
   return {
-    chave: 'limites', titulo: 'Limites de tokens',
+    chave: 'limites', titulo: 'Limites de tokens', tecnico: true,
     selo: l?.erroDeConfiguracao === true ? { texto: 'Configuração inválida (valendo o padrão)', tom: 'atencao' } : undefined,
     linhas: [
       { rotulo: 'Teto global', valor: numero(l?.teto) === null ? VAZIO : `${milhar(l.teto)} tokens` },
@@ -282,9 +299,10 @@ function cartaoCotas(d: Diagnostico): Cartao {
   const p = h?.persistencia;
   const cheia = g?.cheia === true;
   const indisponivel = p?.pesquisaDisponivel === false || p?.gravacaoComFalha === true;
-  const mes = Array.isArray(c?.mes) ? c.mes.slice(0, 12) : [];
+  // Provedor sem cota no mês (teto 0) e sem uso não diz nada: "Bing 0 de 0" sai da lista.
+  const mes = (Array.isArray(c?.mes) ? c.mes.slice(0, 12) : []).filter((m) => !((numero(m?.teto) ?? 0) === 0 && (numero(m?.usadas) ?? 0) === 0));
   return {
-    chave: 'cotas', titulo: 'Cotas de busca',
+    chave: 'cotas', titulo: 'Cotas de busca', tecnico: true,
     selo: indisponivel ? { texto: 'Pesquisa indisponível', tom: 'atencao' } : cheia ? { texto: 'Teto da hora atingido', tom: 'atencao' } : undefined,
     linhas: [
       { rotulo: 'Esta hora', valor: `${n(g?.usadas)} de ${n(g?.limite)}${cheia ? ` (libera em ${duracao(g?.liberaEmSegundos)})` : ''}`, tom: cheia ? 'atencao' : undefined },
@@ -319,8 +337,12 @@ function cartaoPerfis(d: Diagnostico, agora: number): Cartao | null {
       tom: x.habilitado === false ? 'neutro' : x.provedorCadastrado === false ? 'atencao' : 'ok',
     } as Item)),
   ];
+  if (p.configurado !== true && !perfis.length && !erros.length && !ultimas.length) {
+    // Sem perfil, os contadores são todos zero: uma frase basta.
+    return { chave: 'perfis', titulo: 'Perfis de IA', tecnico: true, selo: { texto: 'Nenhum perfil configurado', tom: 'neutro' }, linhas: [], nota: 'Sem perfil configurado, a IA responde pelo caminho de sempre.' };
+  }
   return {
-    chave: 'perfis', titulo: 'Perfis de IA',
+    chave: 'perfis', titulo: 'Perfis de IA', tecnico: true,
     selo: p.configurado === true ? { texto: 'Configurados', tom: erros.length ? 'atencao' : 'ok' } : { texto: 'Nenhum perfil configurado', tom: 'neutro' },
     linhas: [
       { rotulo: 'Origem da configuração', valor: p.origem === 'nenhuma' ? 'nenhuma' : p.origem === 'arquivo' ? 'arquivo' : p.origem === 'ambiente' ? 'variável de ambiente' : seguro(p.origem, 30) },
@@ -338,8 +360,12 @@ function cartaoRotaPrivada(d: Diagnostico): Cartao | null {
   const falhas = Array.isArray(r.falhasRecentes) ? r.falhasRecentes.slice(0, 5) : [];
   const ativa = r.estado !== 'desligada' && r.estado !== 'incompleta' && r.estado !== 'bloqueada';
   const seguidas = numero(r.falhasSeguidas) ?? 0;
+  if (r.estado === 'desligada' && !falhas.length && !(numero(r.violacoes) ?? 0) && !(numero(r.sondas) ?? 0)) {
+    // Desligada e sem histórico: os campos seriam todos zero ou "—"; fica só o estado e a explicação.
+    return { chave: 'rota-privada', titulo: 'Rota privada da IA', tecnico: true, selo: { texto: e.texto, tom: e.tom }, linhas: [], nota: e.explica };
+  }
   return {
-    chave: 'rota-privada', titulo: 'Rota privada da IA',
+    chave: 'rota-privada', titulo: 'Rota privada da IA', tecnico: true,
     selo: { texto: e.texto, tom: e.tom },
     linhas: [
       { rotulo: 'Estado', valor: e.texto, tom: e.tom },
@@ -359,13 +385,15 @@ function cartaoRotaPrivada(d: Diagnostico): Cartao | null {
 function cartaoMotor(d: Diagnostico): Cartao | null {
   const m = d.motorAgente;
   if (!m) return null;
+  const ativo = seguro(m.ativo, 30);
+  const pedido = seguro(m.pedido, 30);
   return {
-    chave: 'motor', titulo: 'Motor do agente',
+    chave: 'motor', titulo: 'Motor do agente', tecnico: true,
     selo: m.recusado === true ? { texto: 'Pedido recusado', tom: 'atencao' } : undefined,
+    // O Mastra foi descartado (18/11/2026): a linha "Mastra: ainda não implementado" saiu. O pedido só aparece quando difere do motor em uso.
     linhas: [
-      { rotulo: 'Em uso', valor: seguro(m.ativo, 30) },
-      { rotulo: 'Pedido', valor: seguro(m.pedido, 30) },
-      { rotulo: 'Mastra', valor: m.implementados?.mastra === true ? 'disponível' : 'ainda não implementado' },
+      { rotulo: 'Em uso', valor: ativo },
+      ...(pedido !== ativo ? [{ rotulo: 'Pedido', valor: pedido }] : []),
     ],
     nota: m.recusado === true ? 'O motor pedido não está implementado: a Yui segue no motor nativo.' : undefined,
   };
@@ -396,6 +424,20 @@ function cartaoAvisos(d: Diagnostico): Cartao | null {
     chave: 'avisos', titulo: 'Avisos de configuração', selo: { texto: plural(avisos.length, 'aviso', 'avisos'), tom: 'atencao' }, linhas: [],
     itens: avisos.map((a) => ({ titulo: seguro(a.variavel, 60), detalhe: `${seguro(a.problema, 160)} (valendo: ${typeof a.usando === 'number' ? String(a.usando) : seguro(a.usando, 60)})`, tom: 'atencao' } as Item)),
   };
+}
+
+/**
+ * Divide os cartões em principais (sempre à vista) e técnicos (recolhidos). Um cartão técnico que pede atenção ou acusa problema
+ * sobe para os principais: nada que precise do dono fica escondido.
+ */
+export function separarCartoes(cartoes: Cartao[]): { principais: Cartao[]; tecnicos: Cartao[] } {
+  const principais: Cartao[] = [];
+  const tecnicos: Cartao[] = [];
+  for (const c of cartoes) {
+    const alerta = c.selo?.tom === 'atencao' || c.selo?.tom === 'problema';
+    (c.tecnico && !alerta ? tecnicos : principais).push(c);
+  }
+  return { principais, tecnicos };
 }
 
 /** Tudo que a aba Status mostra do diagnóstico, na ordem da tela. Sem dado inventado: o que o servidor não mandou não vira cartão. */

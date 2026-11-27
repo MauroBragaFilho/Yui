@@ -207,7 +207,9 @@ function Geral({ client }: Props) {
             <Row label="Conta" value={data.discord.tag ?? '—'} />
             <Row label="Servidores" value={String(data.discord.guilds)} />
             <Row label="Tempo ligada" value={formatUptime(data.uptimeSeconds)} />
-            <Row label="Memória do processo" value={`${data.memoryMB} MB`} />
+            <Row label={data.cerebro ? 'RAM do cérebro' : 'RAM da Yui'} value={`${data.memoryMB} MB`} />
+            <Row label="Outras pessoas com memória" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} />
+            <Text style={styles.hint}>"Outras pessoas" não conta a sua memória pessoal, que fica na aba Memória.</Text>
           </Card>
 
           <Card style={styles.card}>
@@ -215,7 +217,6 @@ function Geral({ client }: Props) {
             <Row label="Usuários" value={String(data.bans.users)} />
             <Row label="Servidores" value={String(data.bans.guilds)} />
             <Row label="Canais" value={String(data.bans.channels)} />
-            <Row label="Usuários com memória" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} />
           </Card>
 
           <Card style={styles.card}>
@@ -624,22 +625,25 @@ export function AdminScreen({ client }: Props) {
   const [section, setSection] = useState<Section>('geral');
   const { width } = useWindowDimensions();
   const narrow = width < 700;
+  const grupoAtual = GROUPS.find((g) => g.sections.some((x) => x.key === section)) ?? GROUPS[0];
   return (
     <View style={styles.root}>
       <PageHeader title="Administração" subtitle="Servidores, memória, IA e auditoria" />
       {narrow ? (
-        // Celular: uma única fileira de chips que rola na horizontal (só a barra rola, a página não); os grupos ficam separados por um traço.
-        <View style={styles.navBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navScroll}>
-            {GROUPS.map((g, gi) => (
-              <React.Fragment key={g.title}>
-                {gi > 0 ? <View style={styles.navDivider} /> : null}
-                {g.sections.map((x) => (
-                  <Chip key={x.key} testID={`admin-tab-${x.key}`} label={x.label} on={section === x.key} onPress={() => setSection(x.key)} />
-                ))}
-              </React.Fragment>
+        // Celular: primeiro os três grupos (Operação, IA e memória, Segurança e registros), depois as seções do grupo escolhido.
+        // Tudo quebra linha em vez de rolar de lado, então nenhuma seção fica escondida fora da tela.
+        <View style={styles.navNarrow}>
+          <View style={styles.chips}>
+            {GROUPS.map((g) => (
+              <Chip key={g.title} testID={`admin-grupo-${g.sections[0].key}`} label={g.title} on={grupoAtual.title === g.title} onPress={() => setSection(g.sections[0].key)} />
             ))}
-          </ScrollView>
+          </View>
+          <View style={styles.navLine} />
+          <View style={styles.chips}>
+            {grupoAtual.sections.map((x) => (
+              <Chip key={x.key} testID={`admin-tab-${x.key}`} label={x.label} on={section === x.key} onPress={() => setSection(x.key)} />
+            ))}
+          </View>
         </View>
       ) : (
         <View style={styles.nav}>
@@ -675,9 +679,8 @@ export function AdminScreen({ client }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   nav: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.xl, rowGap: spacing.md, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  navBar: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  navScroll: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, paddingHorizontal: spacing.lg },
-  navDivider: { width: 1, height: 24, backgroundColor: colors.border, marginHorizontal: spacing.xs },
+  navNarrow: { gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  navLine: { height: 1, backgroundColor: colors.border },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
   navGroup: { gap: spacing.xs, maxWidth: '100%' },
   navTitle: { color: colors.muted, fontSize: 12, lineHeight: 16, fontWeight: '600' },

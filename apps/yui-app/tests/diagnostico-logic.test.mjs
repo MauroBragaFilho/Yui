@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  DIAGNOSTICO_ATUALIZA_MS, chamadaEmItem, duracao, erroEmTexto, estadoGeral, haQuanto, motivoEmTexto, podeVerDiagnostico, rotaPrivada, seguro, visaoDoDiagnostico,
+  DIAGNOSTICO_ATUALIZA_MS, chamadaEmItem, comAnonimo, duracao, erroEmTexto, estadoGeral, haQuanto, motivoEmTexto, podeVerDiagnostico, rotaPrivada, separarCartoes, seguro, visaoDoDiagnostico,
 } from '../src/diagnosticoLogic.ts';
 import { confirmacaoDeReinicio } from '../src/restartLogic.ts';
 import { describeEvent } from '../src/overviewLogic.ts';
@@ -211,10 +211,13 @@ test('rota privada: os seis estados (desligada, incompleta, não verificada, val
 
 test('motor do agente, erros e bancos, avisos de configuração', () => {
   const m = cartao(visaoDoDiagnostico(payload(), AGORA), 'motor');
-  assert.deepEqual(m.linhas.map((x) => x.valor), ['nativo', 'nativo', 'ainda não implementado']);
+  // O Mastra foi descartado: sem a linha dele, e o "Pedido" só aparece quando difere do motor em uso.
+  assert.deepEqual(m.linhas.map((x) => x.valor), ['nativo']);
+  assert.ok(!textoDe(m).includes('Mastra'), 'nenhuma menção ao Mastra');
   const recusado = cartao(visaoDoDiagnostico(payload({ motorAgente: { pedido: 'mastra', ativo: 'nativo', recusado: true, motivo: 'nao-implementado', implementados: { nativo: true, mastra: false } } }), AGORA), 'motor');
   assert.equal(recusado.selo.tom, 'atencao');
   assert.match(recusado.nota, /segue no motor nativo/);
+  assert.deepEqual(recusado.linhas.map((x) => x.rotulo), ['Em uso', 'Pedido'], 'pedido diferente do motor em uso aparece');
   const e = cartao(visaoDoDiagnostico(payload(), AGORA), 'erros');
   assert.equal(e.linhas[0].valor, '3');
   assert.match(e.linhas[2].valor, /^10 bancos abertos, 13 MB$/);
@@ -318,4 +321,57 @@ test('"Reiniciar a Yui": com o cérebro separado o texto diz que reinicia os DOI
   assert.match(admin, /confirmAction\(\s*c\.titulo,\s*c\.mensagem,/, 'a tela usa o texto da lógica e a confirmação explícita');
   assert.equal(describeEvent('admin.restart.recusado').tone, 'bad', 'um reinício recusado não aparece como "Yui reiniciada"');
   assert.notEqual(describeEvent('admin.restart.recusado').label, describeEvent('admin.restart').label);
+});
+
+test('Estado geral: o motivo do banco diz qual banco; muitas reconexões do Discord avisam e o selo nunca fica "Tudo certo" com aviso na lista', () => {
+  const comBanco = cartao(visaoDoDiagnostico(payload({ estado: 'atencao', motivos: [{ codigo: 'banco-com-alerta', texto: 'Algum banco de dados tem alerta.' }], bancos: { ...payload().bancos, comAlerta: ['memory-discord'] } }), AGORA), 'geral');
+  assert.deepEqual(comBanco.itens.map((i) => i.titulo), ['Banco de dados com alerta: memory-discord.']);
+  const dois = cartao(visaoDoDiagnostico(payload({ estado: 'atencao', motivos: [{ codigo: 'banco-com-alerta', texto: 'x' }], bancos: { ...payload().bancos, comAlerta: ['a', 'b'] } }), AGORA), 'geral');
+  assert.equal(dois.itens[0].titulo, 'Bancos de dados com alerta: a, b.');
+  const semNome = cartao(visaoDoDiagnostico(payload({ estado: 'atencao', motivos: [{ codigo: 'banco-com-alerta', texto: 'Algum banco de dados tem alerta.' }] }), AGORA), 'geral');
+  assert.equal(semNome.itens[0].titulo, 'Algum banco de dados tem alerta.', 'sem o nome do banco, fica a frase do servidor');
+  // Reconexões: abaixo de 5 não avisa; a partir de 5 avisa e o selo sobe para Atenção mesmo com o servidor dizendo "ok".
+  const poucas = cartao(visaoDoDiagnostico(payload({ erros: { ...payload().erros, reconexoesDoDiscord24h: 4 } }), AGORA), 'geral');
+  assert.equal(poucas.selo.tom, 'ok');
+  assert.equal(poucas.itens.length, 0);
+  const muitas = cartao(visaoDoDiagnostico(payload({ erros: { ...payload().erros, reconexoesDoDiscord24h: 10 } }), AGORA), 'geral');
+  assert.equal(muitas.selo.texto, 'Atenção');
+  assert.match(muitas.itens[0].titulo, /^10 reconexões do Discord nas últimas 24 h/);
+  assert.equal(muitas.nota, undefined, 'com aviso, não diz "nenhum motivo de atenção"');
+});
+
+test('rótulos claros: RAM do cérebro, "(anônimo)" sem repetir e provedor de busca sem cota (0 de 0) fora da lista', () => {
+  const p = cartao(visaoDoDiagnostico(payload(), AGORA), 'processos');
+  assert.equal(p.linhas.find((l) => l.rotulo === 'RAM do cérebro').valor, '105 MB');
+  const { cerebro, ...unico } = payload({ modo: 'unico' });
+  void cerebro;
+  assert.ok(cartao(visaoDoDiagnostico(unico, AGORA), 'processos').linhas.some((l) => l.rotulo === 'RAM da Yui'));
+  assert.equal(comAnonimo('Pollinations (grátis, anônimo)', true), 'Pollinations (grátis, anônimo)');
+  assert.equal(comAnonimo('OmniRoute', true), 'OmniRoute (anônimo)');
+  assert.equal(comAnonimo('Groq', false), 'Groq');
+  const c = cartao(visaoDoDiagnostico(payload({ cotasDeBusca: { ...payload().cotasDeBusca, mes: [{ provedor: 'tavily', usadas: 3, teto: 900 }, { provedor: 'bing', usadas: 0, teto: 0 }, { provedor: 'duckduckgo', usadas: 0, teto: 0 }, { provedor: 'serper', usadas: 2, teto: 0 }] } }), AGORA), 'cotas');
+  assert.deepEqual(c.itens.map((i) => i.titulo), ['Tavily (mês)', 'Serper (mês)'], 'só some o que não tem cota NEM uso');
+});
+
+test('cartões técnicos ficam recolhidos, salvo quando pedem atenção; rota privada desligada e perfis vazios viram uma frase', () => {
+  const v = visaoDoDiagnostico(payload(), AGORA);
+  const { principais, tecnicos } = separarCartoes(v.cartoes);
+  assert.deepEqual(principais.map((c) => c.chave), ['geral', 'processos', 'ia', 'erros']);
+  assert.deepEqual(tecnicos.map((c) => c.chave), ['limites', 'cotas', 'perfis', 'rota-privada', 'motor']);
+  // Um técnico com atenção sobe para os principais.
+  const cheia = visaoDoDiagnostico(payload({ cotasDeBusca: { ...payload().cotasDeBusca, hora: { ...payload().cotasDeBusca.hora, global: { usadas: 20, limite: 20, cheia: true, liberaEmSegundos: 600 } } } }), AGORA);
+  assert.ok(separarCartoes(cheia.cartoes).principais.some((c) => c.chave === 'cotas'));
+  const motorRecusado = visaoDoDiagnostico(payload({ motorAgente: { pedido: 'outro', ativo: 'nativo', recusado: true, implementados: { nativo: true } } }), AGORA);
+  assert.ok(separarCartoes(motorRecusado.cartoes).principais.some((c) => c.chave === 'motor'));
+  // Rota privada desligada e sem histórico: só o selo e a explicação.
+  const desl = cartao(visaoDoDiagnostico(payload({ perfisDeIa: { ...payload().perfisDeIa, rotaPrivada: { estado: 'desligada', motivo: null, sondas: 0, sondasValidas: 0, violacoes: 0, falhasSeguidas: 0, falhasRecentes: [] } } }), AGORA), 'rota-privada');
+  assert.deepEqual(desl.linhas, []);
+  assert.equal(desl.selo.texto, 'Desligada');
+  assert.match(desl.nota, /não está declarado/);
+  // Desligada mas COM histórico (violação antiga) continua mostrando os números.
+  const comHist = cartao(visaoDoDiagnostico(payload({ perfisDeIa: { ...payload().perfisDeIa, rotaPrivada: { estado: 'desligada', sondas: 2, sondasValidas: 1, violacoes: 1, falhasSeguidas: 0, falhasRecentes: [] } } }), AGORA), 'rota-privada');
+  assert.ok(comHist.linhas.length > 0);
+  const semPerfil = cartao(visaoDoDiagnostico(payload({ perfisDeIa: { configurado: false, origem: 'nenhuma', errosDeConfiguracao: [], perfis: [], totais: { chamadas: 0, ok: 0, erros: 0, fallbacks: 0, fechadas: 0 }, ultimas: [], rotaPrivada: payload().perfisDeIa.rotaPrivada } }), AGORA), 'perfis');
+  assert.deepEqual(semPerfil.linhas, []);
+  assert.match(semPerfil.nota, /caminho de sempre/);
 });

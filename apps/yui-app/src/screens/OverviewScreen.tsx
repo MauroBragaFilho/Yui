@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ApiError, type AdminOverview, type GatewayStatus, type Me, type ReminderView, type YuiClient } from '../api/client.ts';
+import { ApiError, type AdminOverview, type GatewayStatus, type Me, type RadioSession, type ReminderView, type YuiClient } from '../api/client.ts';
 import { Badge, Button, Card, Icon, PageHeader, SectionHeading, StateView, type TabKey } from '../components/ui.tsx';
-import { buildAlerts, chartBars, formatUptime, groupEvents, levelForFree, percent, relativeTime, systemSummary, type Level } from '../overviewLogic.ts';
+import { buildAlerts, chartBars, formatUptime, groupEvents, corDoMedidor, levelForFree, medidorDeUso, percent, relativeTime, resumoDaVoz, resumoDasRespostas, RESPOSTAS_PARA_GRAFICO, systemSummary, type DiagnosticoResumo, type Level } from '../overviewLogic.ts';
 import { groupReminders, summarizeReminders } from '../remindersLogic.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 
@@ -40,10 +40,15 @@ export function OverviewScreen({ client, onNavigate }: Props) {
 
   const [reminders, setReminders] = useState<ReminderView[] | null>(null);
   const [morningMsg, setMorningMsg] = useState<string | null>(null);
+  // Diagnóstico (os mesmos motivos da aba Status) e sessões de voz: se o servidor não responder, o Início só não afirma nada sobre eles.
+  const [diag, setDiag] = useState<DiagnosticoResumo | null>(null);
+  const [voz, setVoz] = useState<RadioSession[] | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
-    const [overview, gw, rem] = await Promise.allSettled([client.admin.overview(), client.admin.gateway(), client.reminders.list()]);
+    const [overview, gw, rem, dg, rd] = await Promise.allSettled([client.admin.overview(), client.admin.gateway(), client.reminders.list(), client.admin.diagnostico(), client.admin.radio()]);
     setReminders(rem.status === 'fulfilled' ? rem.value.reminders : null); // servidor antigo sem lembretes: o cartão só diz que não há dado
+    setDiag(dg.status === 'fulfilled' ? { motivos: dg.value.motivos, bancosComAlerta: dg.value.bancos?.comAlerta, reconexoesDoDiscord24h: dg.value.erros?.reconexoesDoDiscord24h } : null);
+    setVoz(rd.status === 'fulfilled' ? rd.value : null);
     if (overview.status === 'fulfilled') {
       setData(overview.value);
       setError(null);
@@ -72,8 +77,12 @@ export function OverviewScreen({ client, onNavigate }: Props) {
   const diskLevel = levelForFree(diskFree);
   const worst: Level = [ramLevel, diskLevel].includes('danger') ? 'danger' : [ramLevel, diskLevel].includes('warn') ? 'warn' : ramLevel === 'unknown' && diskLevel === 'unknown' ? 'unknown' : 'ok';
   const bars = chartBars(data?.interactions?.series);
-  const alerts = data ? buildAlerts({ discordOnline: data.discord.online, aiOk, hostLevel: worst, problems: data.problems }) : [];
-  const summary = data ? systemSummary({ discordOnline: data.discord.online, aiOk, hostLevel: worst }) : null;
+  const alerts = data ? buildAlerts({ discordOnline: data.discord.online, aiOk, hostLevel: worst, problems: data.problems, diagnostico: diag }) : [];
+  const vozResumo = resumoDaVoz(voz);
+  const totalRespostas = bars.reduce((s, b) => s + b.count, 0);
+  // RAM do processo que responde a API: o cérebro (dois processos) ou a Yui inteira (processo único).
+  const ramLabel = data?.cerebro ? 'RAM do cérebro' : 'RAM da Yui';
+  const summary = data ? systemSummary({ discordOnline: data.discord.online, aiOk, hostLevel: worst, avisos: alerts.length }) : null;
 
   return (
     <View style={styles.root}>
@@ -108,16 +117,16 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 level={aiOk === null ? 'unknown' : aiOk ? 'ok' : 'danger'}
                 text={aiOk === null ? 'Sem leitura' : aiOk ? `Operacional${providersUp !== null ? ` (${providersUp} provedor${providersUp === 1 ? '' : 'es'})` : ''}` : 'Indisponível'}
               />
-              <HealthCard icon="graphic_eq" title="Voz" level="unknown" text="Sem leitura aqui. Veja em Admin > Rádio." />
+              <HealthCard icon="graphic_eq" title="Voz no Discord" level={vozResumo.level} text={vozResumo.text} />
             </View>
 
             <SectionHeading title="Números do dia" />
             <View style={styles.grid}>
               <Kpi testID="kpi-servers" value={String(data.discord.guilds)} label="Servidores ativos" />
-              <Kpi testID="kpi-memory-users" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} label="Pessoas com memória" />
+              <Kpi testID="kpi-memory-users" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} label="Outras pessoas com memória" />
               <Kpi testID="kpi-interactions" value={data.interactions ? String(data.interactions.total) : '—'} label="Respostas da IA (24 h)" />
               <Kpi testID="kpi-uptime" value={formatUptime(data.uptimeSeconds)} label="Tempo ligada" />
-              <Kpi testID="kpi-ram" value={`${data.memoryMB} MB`} label="Memória da Yui" />
+              <Kpi testID="kpi-ram" value={`${data.memoryMB} MB`} label={ramLabel} />
             </View>
 
             <Card style={styles.card}>
@@ -125,12 +134,17 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 <SectionTitle icon="notifications" title="Alertas" />
                 <Badge label={alerts.length === 0 ? 'Tudo certo' : `${alerts.length} aviso${alerts.length === 1 ? '' : 's'}`} color={alerts.some((a) => a.level === 'danger') ? colors.danger : alerts.length ? colors.warning : colors.success} />
               </View>
-              {alerts.length === 0 ? <Text style={styles.hint}>Nada a avisar: Discord, IA e computador normais, sem problemas registrados nas últimas 24 h.</Text> : alerts.map((a, i) => (
+              {alerts.length === 0 ? <Text style={styles.hint}>Nada a avisar: Discord, IA, computador e diagnóstico normais, sem problemas registrados nas últimas 24 h.</Text> : alerts.map((a, i) => (
                 <View key={i} style={styles.eventRow} testID="overview-alert">
                   <Icon name={a.level === 'danger' ? 'error' : 'warning'} size={20} color={a.level === 'danger' ? colors.danger : colors.warning} />
                   <Text style={[styles.eventLabel, { flexShrink: 1 }]}>{a.text}</Text>
                 </View>
               ))}
+              {alerts.length > 0 ? (
+                <View style={styles.badges}>
+                  <Shortcut testID="alerts-go-status" icon="monitor_heart" label="Ver detalhes no Status" onPress={() => onNavigate('status')} />
+                </View>
+              ) : null}
             </Card>
 
             <Card style={styles.card}>
@@ -138,7 +152,12 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 <SectionTitle icon="bar_chart" title="Respostas da IA por hora" />
                 <Text style={styles.hint}>últimas 24 h</Text>
               </View>
-              {data.interactions ? (
+              {data.interactions && totalRespostas < RESPOSTAS_PARA_GRAFICO ? (
+                <>
+                  <Text testID="overview-respostas-resumo" style={styles.eventLabel}>{resumoDasRespostas(bars)}</Text>
+                  <Text style={styles.hint}>O gráfico por hora aparece a partir de {RESPOSTAS_PARA_GRAFICO} respostas no dia.</Text>
+                </>
+              ) : data.interactions ? (
                 <>
                   <View style={styles.chart}>
                     {bars.map((b) => (
@@ -161,10 +180,8 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 <SectionTitle icon="monitor_heart" title="Saúde do computador" />
                 <Badge label={LEVEL_TEXT[worst]} color={LEVEL_COLOR[worst]} />
               </View>
-              <Meter testID="meter-ram" label="Memória RAM livre" freePercent={ramFree} level={ramLevel}
-                detail={host?.ramFreeMB != null && host?.ramTotalMB != null ? `${host.ramFreeMB} MB de ${host.ramTotalMB} MB` : null} />
-              <Meter testID="meter-disk" label="Disco livre" freePercent={diskFree} level={diskLevel}
-                detail={host?.diskFreeGB != null && host?.diskTotalGB != null ? `${host.diskFreeGB} GB de ${host.diskTotalGB} GB` : null} />
+              <Meter testID="meter-ram" label="Memória RAM em uso" medidor={medidorDeUso(host?.ramFreeMB, host?.ramTotalMB, 'MB')} level={ramLevel} />
+              <Meter testID="meter-disk" label="Disco em uso" medidor={medidorDeUso(host?.diskFreeGB, host?.diskTotalGB, 'GB')} level={diskLevel} />
               {!host ? <Text style={styles.hint}>Este servidor ainda não informa a saúde do computador (atualize a Yui).</Text> : null}
             </Card>
 
@@ -275,18 +292,27 @@ function Kpi({ value, label, testID }: { value: string; label: string; testID?: 
   );
 }
 
-function Meter({ label, freePercent, level, detail, testID }: { label: string; freePercent: number | null; level: Level; detail: string | null; testID?: string }) {
-  const color = LEVEL_COLOR[level];
+/** Cores da barra: roxo da Yui no normal; amarelo (apertado) e vermelho (crítico) só quando há motivo. */
+const COR_DO_MEDIDOR = {
+  yui: { barra: colors.accent, texto: colors.accentText },
+  atencao: { barra: colors.warning, texto: colors.warning },
+  critico: { barra: colors.danger, texto: colors.danger },
+} as const;
+
+/** A barra mostra o que está em uso (cheia = lotado); a cor é a da Yui, e só vira amarela ou vermelha quando falta espaço. */
+function Meter({ label, medidor, level, testID }: { label: string; medidor: { usadoPercent: number | null; detalhe: string | null }; level: Level; testID?: string }) {
+  const cor = COR_DO_MEDIDOR[corDoMedidor(level)];
+  const usado = medidor.usadoPercent;
   return (
-    <View style={{ gap: 6 }} testID={testID}>
+    <View style={{ gap: 6 }} testID={testID} accessibilityLabel={usado === null ? `${label}: sem leitura` : `${label}: ${usado}%. ${medidor.detalhe ?? ''}`}>
       <View style={styles.rowBetween}>
         <Text style={styles.meterLabel}>{label}</Text>
-        <Text style={[styles.meterValue, { color }]}>{freePercent === null ? '—' : `${freePercent}% livre`}</Text>
+        <Text style={[styles.meterValue, { color: cor.texto }]}>{usado === null ? '—' : `${usado}% em uso`}</Text>
       </View>
       <View style={styles.track}>
-        <View style={[styles.fill, { width: `${freePercent ?? 0}%`, backgroundColor: color }]} />
+        <View style={[styles.fill, { width: `${usado ?? 0}%`, backgroundColor: cor.barra }]} />
       </View>
-      {detail ? <Text style={styles.hint}>{detail}</Text> : null}
+      {medidor.detalhe ? <Text style={styles.hint}>{medidor.detalhe}</Text> : null}
     </View>
   );
 }
