@@ -127,6 +127,9 @@ export function sanitizeEnhancedPrompt(raw, maxChars = 320) {
 }
 
 // ── Limite por pessoa (memória do processo; some ao reiniciar, de propósito: é só proteção de cota dos provedores) ──
+// Vale para TODO caminho de imagem do Discord e do app: a ferramenta e a Porta I (llmHandler), o /yui-imagem (interactionCreate) e o Chat do app
+// (core/imagemDoApp.js, contado no bot com o cérebro separado). A frase do Discord é esta (o llmHandler escreve a mesma; o teste confere).
+export const TEXTO_LIMITE_DE_IMAGEM = 'Calma, já gerei várias imagens para você nesta hora. Tenta de novo daqui a pouco! 🎨';
 const WINDOW_MS = 60 * 60 * 1000;
 const hits = new Map(); // userId -> [timestamps]
 

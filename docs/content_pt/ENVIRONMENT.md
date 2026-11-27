@@ -473,7 +473,7 @@ Como entrar e as rotas: [Yui API](YUI_API.md).
 | `YUI_BDS_KEY` | Chave de API do BDS Server (`Authorization: Bearer`), só se o login dele estiver ligado. Nunca vai para log nem erro | _(vazio)_ |
 | `YUI_BDS_PRE_ROUTE` | `false` desliga a **Porta B** (biblioteca por conversa); as ferramentas continuam | `true` |
 | `YUI_BDS_TIMEOUT_MS` | Tempo máximo de cada consulta ao BDS Server, em ms (1000 a 60000) | `8000` |
-| `YUI_IMAGE_PER_HOUR` | Imagens por pessoa por hora, na conversa e na ferramenta (o dono não tem limite; `0` desliga o limite) | `6` |
+| `YUI_IMAGE_PER_HOUR` | Imagens por pessoa por hora, um limite só para a conversa, a ferramenta, o `/yui-imagem` (desde 27/11/2026) e o Chat do app (o dono não tem limite; `0` desliga o limite; a contagem fica na memória do bot e zera quando ele reinicia) | `6` |
 | `YUI_APP_IMAGEM` | `true` liga a **imagem no Chat do app**: "gera uma imagem de..." e "desenha..." viram imagem pelo código (a Porta I do Discord) e o agente ganha a ferramenta `imagem.gerar`. Vale para quem a política permite (papel membro ou acima; `POLICY_CHAT_AUTONOMY` aperta), com o mesmo filtro de conteúdo e o mesmo `YUI_IMAGE_PER_HOUR` do Discord (um limite só por pessoa, somando Discord e app: com o cérebro separado, o bot conta os dois), e só com a `generate_image` ligada no padrão global (no app não há servidor). Quem gera é o processo do bot (com o cérebro separado o pedido vai pelo canal). A imagem chega por um link curto (`/v1/imagem/...`) que vence em 10 minutos; a resposta nunca traz caminho de arquivo e a auditoria nunca traz o pedido. Também no painel (vale na hora). Detalhes: [Imagem no Chat do app](YUI_API.md#imagem-no-chat-do-app) | `false` |
 
 ---

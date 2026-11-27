@@ -211,7 +211,7 @@ Rotas `/v1/admin/*`, usadas pela aba **Admin** do app (que só aparece para o do
 - **O que ela é:** usa o mesmo Discord do dono. É uma confirmação presa à operação, não um segundo fator independente.
 
 **Ações negadas e pedidos repetidos (correção C6):**
-- Toda tentativa **negada** de uma rota do painel que muda algo (as do `routeGuard`) vira a linha `admin.negado` na auditoria, só com a ação da matriz e o código HTTP: nunca a mensagem, o corpo nem os argumentos.
+- Toda tentativa **negada** de uma rota do painel que muda algo (as do `routeGuard`) vira a linha `admin.negado` na auditoria, só com a ação da matriz e o código HTTP: nunca a mensagem, o corpo nem os argumentos. Para não encher a auditoria, sai **no máximo uma linha por pessoa, ação e código por minuto**. As outras iguais nesse minuto só são contadas, e a contagem sai na próxima linha (`repetidas`).
 - As ações que **não são idempotentes** têm um freio contra o clique duplo: o mesmo pedido do dono (mesma ação, mesmos argumentos), enquanto o primeiro roda ou até 5 s depois que ele deu certo, responde `429` "Muitos pedidos iguais seguidos..." e nada é feito de novo. Valem para criar e adiar lembrete, mandar o resumo do dia, reiniciar, testar um provedor de IA e tocar no rádio.
 - Um pedido que **falhou** não segura o próximo.
 - O freio não vale para:

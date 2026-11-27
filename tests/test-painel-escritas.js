@@ -221,6 +221,27 @@ try {
     assert.deepEqual(negadas, [['admin.gta_republish', 400], ['admin.discord_dm', 403]]);
     assert.ok(!fs.readFileSync(AUDIT, 'utf8').includes('TEXTO-DA-DM-DO-TESTE'));
   });
+  await test('freio de volume das negadas (achado na revisão da Liz): no máximo UMA linha por pessoa, ação e código por minuto; as outras são contadas e saem na próxima linha', async () => {
+    const relogio = { t: 5_000_000 };
+    const srv = createApiServer({ tokens: parseTokens(`${T_OWNER}=${OWNER},${T_MEMBER}=${MEMBER}`), agora: () => relogio.t });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    try {
+      const p = srv.address().port;
+      const negadas = () => linhasDaAuditoria().filter((l) => l.event === 'admin.negado');
+      const antes = negadas().length;
+      for (let i = 0; i < 10; i++) assert.equal((await chamar(p, 'PUT', '/v1/admin/config/YUI_ALERTS', T_MEMBER, { valor: 'x' })).status, 403);
+      assert.equal(negadas().length - antes, 1, '10 negadas iguais no mesmo minuto: uma linha');
+      assert.equal((await chamar(p, 'POST', '/v1/admin/restart', T_MEMBER, { confirm: true })).status, 403);
+      assert.equal(negadas().length - antes, 2, 'outra ação: outra linha');
+      relogio.t += 60_000;
+      assert.equal((await chamar(p, 'PUT', '/v1/admin/config/YUI_ALERTS', T_MEMBER, { valor: 'x' })).status, 403);
+      const ultima = negadas().at(-1);
+      assert.deepEqual([ultima.acao, ultima.status, ultima.repetidas], ['admin.ai_configure', 403, 9], 'passou o minuto: a linha nova traz quantas foram só contadas');
+      assert.equal(negadas().length - antes, 3);
+    } finally {
+      srv.close();
+    }
+  });
   await test('leitura negada e rota que não muda nada NÃO viram admin.negado (só as de escrita)', async () => {
     const antes = linhasDaAuditoria().length;
     assert.equal((await chamar(porta, 'GET', '/v1/admin/config', T_MEMBER)).status, 403);

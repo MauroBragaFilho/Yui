@@ -1027,6 +1027,57 @@ await test('/yui-imagem com a ferramenta ligada no servidor e na DM (mesmo com o
   }
 });
 
+// Achado na revisão da Liz (27/11/2026): o /yui-imagem não contava no limite de imagens por hora (os outros caminhos contavam).
+const intentDaImagem = await imp('src/handlers/imageIntent.js');
+await test('/yui-imagem conta no limite por pessoa por hora (YUI_IMAGE_PER_HOUR=2): a terceira é recusada em privado, sem gerar; o dono não tem limite', async () => {
+  const antes = process.env.YUI_IMAGE_PER_HOUR;
+  process.env.YUI_IMAGE_PER_HOUR = '2';
+  try {
+    intentDaImagem.__resetImageQuotaForTests();
+    resetSpy();
+    spy.toolOff = () => false;
+    const pedir = (userId) => { const it = makeInteraction({ userId, commandName: 'yui-imagem', guild: null, strings: { prompt: 'um gato astronauta' } }); it.guildId = null; return it; };
+    for (let n = 1; n <= 2; n++) {
+      const it = pedir('u-membro');
+      await ic.default.execute(it, {});
+      assert.strictEqual(it.events[0][0], 'defer', `pedido ${n}`);
+    }
+    assert.strictEqual(spy.imageCalls, 2);
+    const terceira = pedir('u-membro');
+    await ic.default.execute(terceira, {});
+    assert.deepStrictEqual(terceira.events.map((e) => e[0]), ['reply'], 'só a recusa: nada de deferReply');
+    assert.deepStrictEqual([terceira.events[0][1].content, terceira.events[0][1].ephemeral], [intentDaImagem.TEXTO_LIMITE_DE_IMAGEM, true]);
+    assert.deepStrictEqual(terceira.events[0][1].allowedMentions, NO_MENTIONS);
+    assert.strictEqual(spy.imageCalls, 2, 'nada foi gerado');
+    assert.ok(logs.some((l) => /yui-imagem recusado: limite de imagens por hora/.test(l)));
+    for (let n = 1; n <= 3; n++) { const it = pedir(DONO); await ic.default.execute(it, {}); assert.strictEqual(it.events[0][0], 'defer', `dono ${n}`); }
+    assert.strictEqual(spy.imageCalls, 5, 'o dono não tem limite');
+  } finally {
+    if (antes === undefined) delete process.env.YUI_IMAGE_PER_HOUR; else process.env.YUI_IMAGE_PER_HOUR = antes;
+    intentDaImagem.__resetImageQuotaForTests();
+  }
+});
+await test('o /yui-imagem divide o MESMO limite dos outros caminhos (a mesma memória): o que a conversa gastou conta aqui; a frase é a mesma do despachante', async () => {
+  const antes = process.env.YUI_IMAGE_PER_HOUR;
+  process.env.YUI_IMAGE_PER_HOUR = '1';
+  try {
+    intentDaImagem.__resetImageQuotaForTests();
+    resetSpy();
+    spy.toolOff = () => false;
+    assert.strictEqual(intentDaImagem.takeImageQuota('u-outra', { limit: 1 }).ok, true, 'uma imagem pela conversa (o despachante conta com a takeImageQuota)');
+    const it = makeInteraction({ userId: 'u-outra', commandName: 'yui-imagem', guild: null, strings: { prompt: 'um gato' } });
+    it.guildId = null;
+    await ic.default.execute(it, {});
+    assert.deepStrictEqual(it.events.map((e) => e[0]), ['reply']);
+    assert.strictEqual(spy.imageCalls, 0);
+    const despachante = fs.readFileSync(path.join(root, 'src/handlers/llmHandler.js'), 'utf8');
+    assert.ok(despachante.includes(`processedResponse = '${intentDaImagem.TEXTO_LIMITE_DE_IMAGEM}';`), 'a frase do despachante é a mesma');
+  } finally {
+    if (antes === undefined) delete process.env.YUI_IMAGE_PER_HOUR; else process.env.YUI_IMAGE_PER_HOUR = antes;
+    intentDaImagem.__resetImageQuotaForTests();
+  }
+});
+
 await test('os outros comandos de barra com a ferramenta desligada no servidor: a recusa certa, antes de qualquer trabalho', async () => {
   const casos = [
     ['baixar_video', { strings: { url: 'https://exemplo.test/v' } }, 'download_video'],

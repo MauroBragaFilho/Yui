@@ -292,3 +292,24 @@ Todas as chaves novas continuam desligadas até o OK final, como a Liz pediu.
 - **No app:** o componente `ChaveDaDm` (campo de 6 dígitos, Confirmar, Pedir outra e Cancelar) aparece no plano depois da confirmação, e no Google antes do link. Erro da chave mantém o campo aberto.
 - **Testes:** suíte nova `test:painelconfirmacao` (14). As antigas `test:painelacoes` e `test:painelgoogle` usam um substituto que aceita a chave, porque o assunto delas é outro. App: `confirmacao-logic` (4) e as telas. 4 mutações.
 - **Bateria completa:** a primeira rodada deu 123/124 e pegou a chave de aviso sem regra; corrigido, a segunda deu `test:ci` **124/124**. App 183/183; painel recompilado (carimbo 38e216c8a927).
+
+## Parecer da Liz sobre a publicação (27/11/2026, tarde)
+
+**Parecer:** favorável à publicação do `07b534f`, com ressalvas operacionais. Ela não pede reversão. Para uma revisão conclusiva, ela pede o diff do commit.
+
+**O que ela pediu para conferir, e o que eu conferi:**
+- **C5, apagar e recriar uma chave:** a versão não reinicia. A remoção sobe a versão e a mantém no arquivo; o teste "a remoção não zera" cobre isso (gravar 1, 2; tirar 3; gravar 4). Hoje só o cérebro grava o cofre; com mais de uma instância seria preciso uma trava entre processos.
+- **C2, hash e sessão:** a comparação usa `crypto.timingSafeEqual`. A sessão é o SHA-256 do Bearer com prefixo, cortado em 32 caracteres; o Bearer nunca é guardado nem registrado. Sair do painel leva as chaves (testado). A sessão vencida não autentica mais, e a chave vence em 5 minutos. Reiniciar o processo invalida as chaves pendentes, que viram vencidas.
+- **C4, todos os caminhos da imagem pelo contador:** **NÃO.** O `/yui-imagem` (comando de barra) gera direto e nunca contou. A ferramenta da IA, a Porta I e o app contam. Isso já era assim antes; fica como pendência para o Braga decidir.
+- **C6, volume das negadas:** o limite geral da API é de 240 pedidos por minuto por usuário, então um token de membro poderia gerar até 240 linhas `admin.negado` por minuto. A auditoria gira em 10 MB, mas vale limitar (por exemplo, uma linha por usuário, ação e código por minuto, com contagem). Pendência.
+- **C1, execução com o objeto validado:** a execução lê o plano guardado e confere, a cada passo, o hash do plano e o hash dos argumentos do passo (`servico.js`). Não reconstrói nada depois da aprovação.
+
+**Também registrado:**
+- O limite de imagem vale por período de execução do bot, porque reiniciar zera a contagem.
+- O freio de 5 segundos protege contra o clique duplo, não contra abuso: as operações sensíveis mantêm os limites próprios (decisões de plano, chaves, reautorização).
+
+**As duas pendências da revisão foram corrigidas (27/11/2026, ~13h50)**, sem commit:
+- **`/yui-imagem`:** conta no mesmo limite por pessoa por hora (`takeImageQuota`, na memória do bot, a mesma da conversa, da ferramenta e do app). Estourou: a frase de sempre em privado, sem gerar. O dono não tem limite. A frase virou `TEXTO_LIMITE_DE_IMAGEM` em `imageIntent.js`, e um teste confere que o despachante usa a mesma.
+- **`admin.negado`:** no máximo uma linha por pessoa, ação e código por minuto. As outras são contadas e saem na próxima linha (`repetidas`).
+- **Testes:** `test-interaction-limits` (63) e `test:painelescritas` (13), com uma mutação em cada. `test:ci` 124/124.
+- **Visto e não mexido:** o `/yui-imagem` também pula o reforço de segurança do pedido negativo (`bypassSafety: true`), como já era. Fica para decisão do Braga.

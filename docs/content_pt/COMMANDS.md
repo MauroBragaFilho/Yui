@@ -108,7 +108,7 @@ Gera imagens usando diversos modelos de difusão.
 - **Width/Height:** Dimensões da imagem (512px a 1280px; padrão 1024).
 - **Provider:** Escolha o gerador: `Auto` (padrão), `Gradio`, `HuggingFace`, `Stable Horde`, `Together AI` ou `Pollinations AI`.
 - **Advanced:** O modo `Auto` tenta os provedores em sequência até um funcionar: Stability AI (só com `STABILITY_API_KEY`; não aparece na lista de escolha), Gradio, HuggingFace, Stable Horde, Together AI e Pollinations.
-- **Pela conversa:** "yui, gera uma imagem de um gato" também gera a imagem, sem comando (Porta I; pedido vago ganha um assunto criativo). Por conversa vale o limite de `YUI_IMAGE_PER_HOUR` (6 por pessoa por hora; o dono não tem limite). Veja [Conversa e comandos](CONVERSA_E_COMANDOS.md).
+- **Pela conversa:** "yui, gera uma imagem de um gato" também gera a imagem, sem comando (Porta I; pedido vago ganha um assunto criativo). Vale o limite de `YUI_IMAGE_PER_HOUR` (6 por pessoa por hora; o dono não tem limite), o mesmo para a conversa, o `/yui-imagem` e o Chat do app. Veja [Conversa e comandos](CONVERSA_E_COMANDOS.md).
 
 ---
 

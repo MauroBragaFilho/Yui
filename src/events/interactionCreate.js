@@ -26,6 +26,7 @@ import {
     setServerLastChannel
 } from '../handlers/llmHandler.js';
 import { generateImage } from '../handlers/imageHandler.js';
+import { takeImageQuota, imageLimitPerHour, TEXTO_LIMITE_DE_IMAGEM } from '../handlers/imageIntent.js';
 import { ferramentaDoComando, recusaSeDesligada } from '../handlers/ferramentaDesligada.js';
 import {
     downloadAudio,
@@ -838,6 +839,12 @@ export default {
             const width = interaction.options.getInteger('width') || 1024;
             const height = interaction.options.getInteger('height') || 1024;
             const provider = interaction.options.getString('provider') || 'auto';
+            // Limite por pessoa por hora (YUI_IMAGE_PER_HOUR; o dono não tem limite): o MESMO da conversa, da ferramenta da IA e do app, contado na MESMA
+            // memória (este processo, que é o bot). O /yui-imagem ficava de fora (achado na revisão da Liz, 27/11/2026). Nada é gerado quando estoura.
+            if (!takeImageQuota(interaction.user.id, { isOwner: config.isOwner(interaction.user.id), limit: imageLimitPerHour() }).ok) {
+                logger.info('[MCP TOOL] /yui-imagem recusado: limite de imagens por hora.');
+                return interaction.reply({ content: TEXTO_LIMITE_DE_IMAGEM, ephemeral: true, allowedMentions: { parse: [] } });
+            }
             await interaction.deferReply({ ephemeral: false });
             try {
                 const imageData = await generateImage(prompt, negativePrompt, width, height, { provider, bypassSafety: true });

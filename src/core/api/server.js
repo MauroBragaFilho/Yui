@@ -220,9 +220,24 @@ export function createApiServer({
   lembretesMudaram = null,
   aoApagarMemoria = null, // (userId) => avisa o bot (processo separado) para descartar a proposta de continuidade da DM
   identidade = criarIdentidade({ arquivo: null }), // prova de identidade do servidor (GET /v1/identidade, assinatura Ed25519); o startApi liga com a chave do arquivo. Sem ela, a rota responde 404
+  agora = () => Date.now(), // o relógio da auditoria das negadas (abaixo). Injetável para teste.
 } = {}) {
   const discordKeyEnabled = Boolean(notify && ownerId);
   const hits = new Map();       // userId -> [timestamps]
+  // Auditoria das tentativas NEGADAS das rotas de escrita (correção C6), com freio de volume (achado na revisão da Liz, 27/11/2026): no máximo UMA linha
+  // `admin.negado` por pessoa, ação e código a cada JANELA_DAS_NEGADAS_MS. As outras iguais nessa janela só são contadas, e a contagem sai na próxima
+  // linha (`repetidas`). Sem isso, um token de membro faria até 240 linhas por minuto (o limite geral da API).
+  const JANELA_DAS_NEGADAS_MS = 60_000;
+  const negadasRecentes = new Map(); // pessoa|ação|código -> { ate, repetidas }
+  function auditarNegadaComFreio(ctx, acao, status) {
+    const t = agora();
+    const chave = `${String(ctx?.userId ?? '')}|${acao}|${status}`;
+    const anterior = negadasRecentes.get(chave);
+    if (anterior && t < anterior.ate) { anterior.repetidas += 1; return; }
+    try { audit('admin.negado', ctx, { acao, status, ...(anterior?.repetidas ? { repetidas: anterior.repetidas } : {}) }); } catch { /* a auditoria nunca muda a resposta */ }
+    negadasRecentes.set(chave, { ate: t + JANELA_DAS_NEGADAS_MS, repetidas: 0 });
+    if (negadasRecentes.size > 2000) for (const [k, v] of negadasRecentes) if (t >= v.ate && !v.repetidas) negadasRecentes.delete(k);
+  }
   const histories = new Map();  // userId -> [{role, content}]
 
   /**
@@ -668,7 +683,7 @@ export function createApiServer({
       const acaoDaRota = actionForRoute(req.method, url.pathname);
       const auditarNegada = (status) => {
         if (!acaoDaRota || !(status >= 400 && status < 500)) return;
-        try { audit('admin.negado', ctx, { acao: acaoDaRota, status }); } catch { /* a auditoria nunca muda a resposta */ }
+        auditarNegadaComFreio(ctx, acaoDaRota, status);
       };
       let adminResult;
       try {
