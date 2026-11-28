@@ -78,7 +78,7 @@ Cada usuário vê e controla o que a Yui lembra sobre ele (preferências, nome, 
 - **`ver`:** Lista as suas lembranças com um número.
 - **`lembrar texto:`** Pede para guardar uma informação (até 300 caracteres).
 - **`esquecer id:`** Apaga uma lembrança pelo número.
-- **`apagar-tudo`:** Apaga toda a sua memória com a Yui e também as falas guardadas pelo **contexto por horas** (se o recurso estiver ligado), em todos os canais. O registro de uso do bot (`historico.txt`) não é apagado por este comando, e a resposta avisa isso.
+- **`apagar-tudo`:** Apaga toda a sua memória com a Yui e também as falas guardadas pelo **contexto por horas** (se o recurso estiver ligado), em todos os canais. As suas entradas no registro de uso do bot (`historico.txt`) também são apagadas, e a resposta diz quantas saíram.
 - **Advanced:** A resposta é só para você. A memória **pessoal** do dono (permanente) não aparece em canais públicos. Veja [Assistente pessoal](ASSISTENTE_PESSOAL.md).
 
 ---

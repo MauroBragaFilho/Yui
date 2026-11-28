@@ -860,6 +860,7 @@ section('D. Fila do llmHandler de verdade (provedor local falso)');
 // ═════════════════════════════════════════════════════════════════════════════════════════════════
 const { default: config } = await import('../src/config/index.js');
 config.saveHistory = false; // NUNCA escrever no historico.txt real
+(await import('../src/core/historico.js')).definirArquivoDoHistoricoParaTeste(path.join(os.tmpdir(), `yui-sem-historico-${process.pid}.txt`)); // nem apagar dele
 const llm = await import('../src/handlers/llmHandler.js');
 const { generateResponse } = llm;
 const core = await import('../src/core/index.js');
@@ -1189,7 +1190,7 @@ await test('sem vazar entre itens da fila: depois de um pedido com contexto, o s
   assert.deepEqual(historyPart(lastMessages()), [], 'o não-dono herdou o fio do dono');
   assert.equal(currentContext(), null);
 });
-await test('/yui-memoria apagar-tudo apaga o contexto (DM e canais) da pessoa, avisa que historico.txt não é tocado e audita só contagens', async () => {
+await test('/yui-memoria apagar-tudo apaga o contexto (DM e canais) da pessoa, avisa o que saiu do historico.txt e audita só contagens', async () => {
   setCtx({ enabled: 'true', scope: 'all' });
   process.env.YUI_MEMORY_ENABLED = 'true';
   await ask('guardar isto no fio', fakeMention({ userId: '444', channelId: 'chan-wipe' }));
@@ -1228,6 +1229,15 @@ await test('apagar-tudo funciona mesmo com a MEMÓRIA desligada (o contexto é u
   const sem = [];
   await memoriaCommand.execute({ user: { id: '666' }, guildId: 'g1', channelId: 'chan-wipe2', options: { getSubcommand: () => 'apagar-tudo' }, reply: async (p) => { sem.push(p); } });
   assert.match(sem[0].content, /desativado/, 'sem nada para apagar e com a memória desligada, vale o aviso de sempre');
+  // exclusão do registro falhando (uma pasta no lugar do historico.txt): a resposta diz
+  const { definirArquivoDoHistoricoParaTeste } = await import('../src/core/historico.js');
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'yui-hist-falha-'));
+  definirArquivoDoHistoricoParaTeste(pasta);
+  const falha = [];
+  await memoriaCommand.execute({ user: { id: '666' }, guildId: 'g1', channelId: 'chan-wipe2', options: { getSubcommand: () => 'apagar-tudo' }, reply: async (p) => { falha.push(p); } });
+  definirArquivoDoHistoricoParaTeste();
+  fs.rmSync(pasta, { recursive: true, force: true });
+  assert.match(falha[0].content, /desativado[\s\S]*Não consegui apagar/);
   process.env.YUI_MEMORY_ENABLED = 'true';
 });
 await test('/yui (ask.js): lê o fio de quem pergunta e grava a troca pública entregue; a resposta privada só lê', async () => {

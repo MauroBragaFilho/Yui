@@ -23,6 +23,7 @@ import { preRotaDoApp, preRotaDeImagem } from './preRotas.js';
 import { imagensDoApp, FERRAMENTA_DE_IMAGEM } from '../imagemDoApp.js';
 import { descartarContinuidade } from '../continuidade.js';
 import { forgetUserContext } from '../context/contextStore.js';
+import { apagarDoHistorico } from '../historico.js';
 import { criarIdentidade } from './identidade.js';
 
 // Limite de mensagens ao Discord pedidas pelo painel; o app lê estes valores em /v1/admin/overview (limits), nada de número fixo na tela.
@@ -818,14 +819,19 @@ export function createApiServer({
       }
 
       if (route === 'DELETE /v1/memory') {
-        if (!isMemoryEnabled()) return send(res, 503, { error: 'memória desativada' });
-        const removed = memory.forgetAll(ctx);
+        // Com a memória desligada as lembranças não são tocadas (503), mas as falas recentes e o registro de uso saem mesmo assim.
+        const ligada = isMemoryEnabled();
+        const removed = ligada ? memory.forgetAll(ctx) : 0;
         // Apagar tudo vale também para as falas recentes: o histórico em RAM do app e o contexto por horas desta pessoa.
         histories.delete(ctx.userId);
         descartarContinuidade(ctx.userId);
         aoApagarMemoria?.(ctx.userId);
         await forgetUserContext(ctx.userId);
-        return send(res, 200, { removed });
+        // E as entradas desta pessoa no registro de uso (historico.txt).
+        let historico = null;
+        try { historico = await apagarDoHistorico(ctx.userId); } catch (err) { logger.warn(`[API] não consegui apagar o registro de uso: ${err.code || err.message}`); }
+        if (!ligada) return send(res, 503, { error: 'memória desativada', historico });
+        return send(res, 200, { removed, historico });
       }
 
       return send(res, 404, { error: 'rota não encontrada' });

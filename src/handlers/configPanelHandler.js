@@ -271,7 +271,7 @@ const CONFIG_PAGES = [
         persistence: 'cofre',
         chave: 'YUI_SALVAR_HISTORICO',
         summary: 'Registra prompts e respostas em arquivo.',
-        description: 'Salva todos os prompts dos usuários e respostas da IA em "src/data/historico.txt" para auditoria e debug. O arquivo cresce continuamente — considere limpar periodicamente. Desativar melhora privacidade mas perde rastreabilidade.',
+        description: 'Salva todos os prompts dos usuários e respostas da IA em "src/data/historico.txt" para auditoria e debug. As entradas são apagadas depois de 7 dias (YUI_HISTORICO_DIAS; 0 guarda sem prazo). Desativar melhora privacidade mas perde rastreabilidade.',
     },
     {
         key: 'keepMusicEmbed',

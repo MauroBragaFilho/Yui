@@ -86,7 +86,8 @@ function int16ToBuffer(i16) {
  *  - chunks quaisquer antes do `data` (LIST, fact, JUNK...); o ffmpeg põe o `data`
  *    no offset 78, então NÃO dá para assumir cabeçalho de 44 bytes;
  *  - `data` com tamanho 0 ou 0xFFFFFFFF (WAV em streaming): usa o resto do buffer;
- *  - PCM de 16 bits e float32 (inclusive no formato WAVE_FORMAT_EXTENSIBLE).
+ *  - PCM de 16 bits e float32 (inclusive no formato WAVE_FORMAT_EXTENSIBLE);
+ *  - manifesto C2PA contado como áudio no fim do `data` (Gemini TTS via OmniRoute): cortado.
  *
  * @param {Buffer} buf
  * @returns {{ pcm: Buffer, sampleRate: number, channels: number }}
@@ -128,7 +129,23 @@ export function parseWav(buf) {
   throw audioError('WAV_INVALID', fmt ? 'chunk data ausente' : 'chunk fmt ausente');
 }
 
-function decodeWavData(data, fmt) {
+/**
+ * Onde começa um chunk `C2PA` (credenciais de conteúdo, ~7,6 KB) que veio dentro do `data` e vai até o fim dele, ou -1.
+ * Só vale a assinatura completa: 'C2PA' + tamanho + caixa JUMBF 'jumb' + descrição 'jumd', sem nada depois do chunk.
+ */
+function c2paStart(data) {
+  for (let at = data.indexOf('C2PA', 0, 'latin1'); at !== -1; at = data.indexOf('C2PA', at + 1, 'latin1')) {
+    if (at + 24 > data.length) break;
+    const size = data.readUInt32LE(at + 4);
+    if (data.toString('latin1', at + 12, at + 16) !== 'jumb' || data.toString('latin1', at + 20, at + 24) !== 'jumd') continue;
+    if (at + 8 + size + (size & 1) >= data.length) return at;
+  }
+  return -1;
+}
+
+function decodeWavData(body, fmt) {
+  const cut = c2paStart(body);
+  const data = cut === -1 ? body : body.subarray(0, cut);
   const { format, channels, sampleRate, bits } = fmt;
   if (channels < 1 || channels > 8 || sampleRate < 1) throw audioError('WAV_INVALID', 'fmt inválido');
   const isInt16 = format === 1 && bits === 16;

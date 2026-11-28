@@ -19,6 +19,7 @@ export const TABELA = Object.freeze({
   'lock-confirmacao': CRITICO, // correção C2: chaves de confirmação pela DM erradas demais (a mesma classe das travas do login)
   'audit.write.fail': CRITICO,
   'memory.backup.fail': CRITICO,
+  'memory.backup.parcial': IMPORTANTE,
   'ia-rota-privada-bloqueada': CRITICO,
   // Hora marcada
   lembrete: HORA_MARCADA,

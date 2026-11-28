@@ -148,7 +148,7 @@ Além da memória (fatos sobre você), a Yui pode lembrar **as últimas falas da
 - **Prazo por idade de cada fala:** 6 horas por padrão (1 a 48 em `YUI_CONTEXT_TTL_HOURS`), no máximo 20 falas e 6000 caracteres (`YUI_CONTEXT_MAX_TURNS`, `YUI_CONTEXT_MAX_CHARS`). Uma limpeza horária apaga o que venceu.
 - **Bancos separados:** `database/memory-context.db` (público) e `database/memory-context-personal.db` (dono em DM ou canal privado). Ambos ficam fora do Git (`database/memory-*.db`).
 - **O que grava:** só a fala do próprio autor e a resposta entregue. Não guarda respostas com busca na web nem JSON de ferramenta, e ferramentas gravam só uma frase curta fixa. Falas espontâneas, `/chat_resumo`, voz e rádio não leem nem gravam.
-- **Apagar:** `/yui-memoria apagar-tudo` apaga os fios da pessoa, em todos os canais. O `historico.txt` (registro de uso do bot) não é apagado por esse comando.
+- **Apagar:** `/yui-memoria apagar-tudo` apaga os fios da pessoa, em todos os canais. As entradas da pessoa no `historico.txt` (registro de uso do bot) saem junto; as demais são apagadas depois de 7 dias (`YUI_HISTORICO_DIAS`).
 
 ## 🧭 6. Yui Gateway (servidor de IA)
 

@@ -81,6 +81,7 @@ database/*.json
 logs/
 src/data/accepted_servers.json
 src/data/bans.json
+src/data/historico.txt*
 src/data/hltb_cache.json
 src/data/presence.json
 src/data/presenceEvents.json

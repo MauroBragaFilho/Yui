@@ -123,7 +123,16 @@ export function observarParaApagarTudo(userId, text, { comAnexo = false, dirigid
     else if (!(curta && SO_DESISTIR_RE.test(dito))) clearForgetAllPending(userId);
 }
 
-const HISTORY_NOTE = '\n-# O registro de uso do bot (historico.txt) não é apagado por este pedido.';
+// As entradas da pessoa no registro de uso (historico.txt) saem junto. A função vem de quem chama (este arquivo não tem imports).
+async function apagarRegistroDeUso(wipeHistory, userId) {
+    if (typeof wipeHistory !== 'function') return { removidas: 0, nota: '' };
+    try {
+        const removidas = await wipeHistory(userId);
+        return { removidas, nota: `\n-# Registro de uso do bot (historico.txt): ${removidas} registro(s) seu(s) apagado(s).` };
+    } catch (_) {
+        return { removidas: 0, falhou: true, nota: '\n-# Não consegui apagar o seu registro de uso (historico.txt) agora. Peça de novo daqui a pouco.' };
+    }
+}
 const LIST_BUDGET = 1800;
 const LINE_MAX = 180;
 
@@ -143,12 +152,12 @@ function listLines(rows) {
 /**
  * Executa o pedido de memória. Nunca lança. `handled:false` => segue para o modelo (ex.: "esquece que ..." sem nenhuma lembrança parecida).
  * @param {object} intent  retorno de detectMemoryIntent
- * @param {object} deps    { userId, isDM, enabled, scopeLabel, memoryCtx, memory:{listMemories,forget,forgetAll}, wipeContext?, audit?, now? }
+ * @param {object} deps    { userId, isDM, enabled, scopeLabel, memoryCtx, memory:{listMemories,forget,forgetAll}, wipeContext?, wipeHistory?, audit?, now? }
  *                         pendingKey? (chave da confirmação de "apagar tudo"; padrão userId) e platform? (da auditoria; padrão 'discord')
  *                         (as funções da memória podem devolver o valor ou uma promessa: com o cérebro separado elas pedem ao cérebro)
  */
 export async function runMemoryIntent(intent, deps) {
-    const { userId, isDM = false, enabled = false, scopeLabel = '', memoryCtx, memory, wipeContext, audit, now = Date.now(), pendingKey = userId, platform = 'discord' } = deps;
+    const { userId, isDM = false, enabled = false, scopeLabel = '', memoryCtx, memory, wipeContext, wipeHistory, audit, now = Date.now(), pendingKey = userId, platform = 'discord' } = deps;
     try {
         if (intent.kind === 'cancel_forget_all') {
             clearForgetAllPending(pendingKey);
@@ -158,10 +167,11 @@ export async function runMemoryIntent(intent, deps) {
             clearForgetAllPending(pendingKey);
             const n = enabled ? await memory.forgetAll(memoryCtx) : 0;
             const removedContext = typeof wipeContext === 'function' ? await wipeContext(userId) : 0;
+            const registro = await apagarRegistroDeUso(wipeHistory, userId);
             try { audit?.('memory.forgetAll.chat', { userId, platform }, { memories: n, contextTurns: removedContext }); } catch (_) { /* auditoria nunca derruba */ }
-            if (!enabled && removedContext === 0) return { handled: true, text: '🧠 O sistema de memória da Yui está desativado no momento.' };
+            if (!enabled && removedContext === 0 && registro.removidas === 0) return { handled: true, text: `🧠 O sistema de memória da Yui está desativado no momento.${registro.falhou ? registro.nota : ''}` };
             const extra = removedContext > 0 ? ` e ${removedContext} fala(s) do contexto das conversas recentes` : '';
-            return { handled: true, text: `🗑️ Apaguei ${n} lembrança(s) da sua memória${extra}.${HISTORY_NOTE}` };
+            return { handled: true, text: `🗑️ Apaguei ${n} lembrança(s) da sua memória${extra}.${registro.nota}` };
         }
         if (!enabled) return { handled: true, text: '🧠 O sistema de memória da Yui está desativado no momento.' };
 

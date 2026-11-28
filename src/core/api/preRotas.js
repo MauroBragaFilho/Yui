@@ -8,6 +8,7 @@
 import * as memoryStore from '../memory/store.js';
 import { isMemoryEnabled } from '../discordAdapter.js';
 import { audit as coreAudit } from '../audit.js';
+import { apagarDoHistorico } from '../historico.js';
 import { forgetUserContext } from '../context/contextStore.js';
 import { rotearContinuidade, descartarContinuidade } from '../continuidade.js';
 import { routeLists, parseListRequest, appComandosLigado } from '../../handlers/listAssistant.js';
@@ -87,6 +88,7 @@ export async function preRotaDoApp({ ctx, message, histories }, {
         aoApagarMemoria?.(uid);
         return (await forgetUserContext(uid)).turns;
       },
+      wipeHistory: apagarDoHistorico,
     });
     if (run.handled) return { kind: `memoria.${intent.kind}`, reply: run.text };
   }

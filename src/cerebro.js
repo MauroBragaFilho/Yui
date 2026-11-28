@@ -18,6 +18,7 @@ import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { appComandosLigado } from './handlers/listAssistant.js';
 import { closeAllDatabases, databaseOwnerStats, databaseStats } from './database/db.js';
+import { iniciarPodaDoHistorico } from './core/historico.js';
 import { initMemory } from './core/memory/store.js';
 import { isMemoryEnabled } from './core/discordAdapter.js';
 import * as ai from './core/ai/manager.js';
@@ -223,6 +224,7 @@ async function bootstrap() {
 
   // 2. Memória: o cérebro é o dono (pega a trava de dono antes de abrir; outro cérebro vivo na mesma pasta = recusa).
   await initMemory();
+  iniciarPodaDoHistorico({ logger }); // registro de uso (historico.txt): YUI_HISTORICO_DIAS
   logger.info('[Cérebro] Memória aberta (dono: cérebro).');
   // Contexto por horas: os arquivos são do cérebro (a limpeza horária roda aqui). O bot separado só pede o apagar.
   if (contextEnabled() || contextFilesExist()) {

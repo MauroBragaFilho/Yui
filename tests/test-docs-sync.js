@@ -73,6 +73,7 @@ const NEW_VARS = [
   ['YUI_AVISOS_FILTRO', 'off'],
   ['YUI_SILENCIO', '23-07'],
   ['YUI_AVISOS_POR_DIA', '8'],
+  ['YUI_HISTORICO_DIAS', '7'],
   // a imagem no Chat do app (lacunas do painel, item 11; desligada por padrão)
   ['YUI_APP_IMAGEM', 'false'],
   // reautorizar o Google pelo painel (lacunas do painel, item 14; desligada por padrão)

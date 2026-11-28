@@ -3,6 +3,7 @@ import './core/painelConfigBoot.js'; // valores salvos no painel (secrets/painel
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { initDatabase, closeAllDatabases } from './database/db.js';
+import { iniciarPodaDoHistorico } from './core/historico.js';
 import { CORE_SCHEMA, NEWSWIRE_SCHEMA, GTA_DAILY_SCHEMA, GTA_WEEKLY_SCHEMA, YOUTUBE_SCHEMA, TWITCH_SCHEMA } from './database/schemas.js';
 import { createDiscordClient } from './discord/client.js';
 import { startScheduler } from './scheduler/scheduler.js';
@@ -132,6 +133,8 @@ async function bootstrap() {
   await initDatabase('social-twitch', TWITCH_SCHEMA);
   // Junta as chaves/provedores salvos pelo painel com o .env (antes de qualquer provedor de IA).
   applyAiSettings();
+  // Registro de uso (historico.txt): poda na subida e a cada hora (YUI_HISTORICO_DIAS).
+  iniciarPodaDoHistorico({ logger });
   // Erros de configuração dos limites de tokens (ex.: AI_MAX_TOKENS inválido): no log UMA vez e no diagnóstico (segunda revisão da Liz, §12).
   avisarConfigDosLimites(process.env, logger);
 

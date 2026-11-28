@@ -278,6 +278,8 @@ A memória da Yui (`memory-personal.db`, `memory-discord.db`, `memory-context*.d
 - **Rotação:** retenção configurável via `YUI_BACKUP_MAX_KEEP` (padrão: últimos 7 backups).
 - **Alerta de falha:** se o backup falhar, um alerta automático de erro é disparado ao dono (`alerts.js`).
 
+Os lembretes (`lembretes.json`), os planos (`planos.json`) e as listas (`listas/<id>.json`) também entram; se um deles não puder ser lido, o backup do resto segue e o dono é avisado. Na restauração, um lembrete já vencido não é avisado de novo (poderia já ter sido entregue depois do backup): o único sai da lista, o que repete passa para a próxima vez, e os originais ficam em `lembretes.vencidos-<n>.json` na pasta restaurada, para você conferir e recriar o que ainda precisar. A fila de avisos e os monitores não entram; os planos entram e, na subida, o que estava aprovado ou executando vira "interrompido" (nada roda de novo).
+
 #### Comandos de Backup e Restauração:
 
 1. **Fazer backup agora:**
@@ -297,7 +299,7 @@ A memória da Yui (`memory-personal.db`, `memory-discord.db`, `memory-context*.d
 
 #### Backup fora do notebook, num repositório privado do GitHub (`scripts/backup-offsite.mjs`)
 
-Todo dia, depois da atualização das 04:00, a tarefa `YuiBackup` (SYSTEM) cifra os bancos e os envia para o repositório **privado** `MauroBragaFilho/Yui-backup`. Só vão arquivos cifrados; o texto em claro nunca sai do notebook. Entram: memória e contexto, `core.db`, os seguidos do YouTube e da Twitch, e de `src/data` os bloqueios, os servidores que aceitaram os Termos e as configurações por servidor. **Não entram** `.env`, tokens e chaves: se o notebook morrer, recrie-os.
+Todo dia, depois da atualização das 04:00, a tarefa `YuiBackup` (SYSTEM) cifra os bancos e os envia para o repositório **privado** `MauroBragaFilho/Yui-backup`. Só vão arquivos cifrados; o texto em claro nunca sai do notebook. Entram: memória e contexto, `core.db`, os seguidos do YouTube e da Twitch, os lembretes, os planos e as listas (`database/lembretes.json`, `database/planos.json`, `database/listas/`), e de `src/data` os bloqueios, os servidores que aceitaram os Termos e as configurações por servidor. A fila de avisos e os monitores ficam de fora para a restauração não reenviar nada; os planos voltam, mas na subida o que estava aprovado ou executando vira "interrompido" e nada roda de novo. **Não entram** `.env`, tokens e chaves: se o notebook morrer, recrie-os.
 
 - **Só envia se algo mudou** desde o último envio, e mantém os últimos 30 backups (`YUI_BACKUP_KEEP`).
 - **Acesso:** uma *deploy key* do repositório (`C:\Tools\backup\yui_backup_deploy`), com escrita só nele. **Nunca** use o repositório público da Yui para isso.

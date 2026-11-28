@@ -6,6 +6,7 @@ import { contextFromDiscord, isMemoryEnabled } from '../../core/discordAdapter.j
 import { memory, audit } from '../../core/index.js';
 import { descartarContinuidade } from '../../core/continuidade.js';
 import { forgetUserContext } from '../../core/context/contextStore.js';
+import { apagarDoHistorico } from '../../core/historico.js';
 import { logger } from '../../utils/logger.js';
 
 const COLOR = 0x8B5CF6;
@@ -22,8 +23,16 @@ function fitLines(lines, budget = LIST_BUDGET) {
   return { text: first, shown, hidden: lines.length - shown };
 }
 
-// O `apagar-tudo` NÃO toca no registro de uso do bot (src/data/historico.txt): o comando avisa isso, em vez de prometer o que não faz.
-const HISTORY_NOTE = '\n-# O registro de uso do bot (historico.txt) não é apagado por este comando.';
+// O `apagar-tudo` também tira as entradas da pessoa do registro de uso do bot (src/data/historico.txt). Nunca lança.
+async function wipeUsageLog(userId) {
+  try {
+    const removed = await apagarDoHistorico(userId);
+    return { removed, note: `\n-# Registro de uso do bot (historico.txt): ${removed} registro(s) seu(s) apagado(s).` };
+  } catch (err) {
+    logger.warn(`[Memoria] não consegui apagar o registro de uso: ${String(err?.code ?? err?.message ?? err).slice(0, 120)}`);
+    return { removed: 0, failed: true, note: '\n-# Não consegui apagar o seu registro de uso (historico.txt) agora. Use o comando de novo daqui a pouco.' };
+  }
+}
 
 // Direito de exclusão do contexto por horas (falas recentes guardadas por src/core/context/contextStore.js): apaga todos os fios
 // da pessoa (DM e canais). Nunca lança, para a exclusão da memória não depender dele. Devolve quantas falas saíram.
@@ -72,11 +81,12 @@ export const memoriaCommand = {
 
     // O contexto por horas é apagável mesmo com a memória desligada ou para quem está bloqueado.
     const removedContext = sub === 'apagar-tudo' ? await wipeConversationContext(userId) : 0;
-    const contextOnlyReply = () => reply({ content: `🗑️ Apaguei ${removedContext} fala(s) do contexto das suas conversas recentes com a Yui.${HISTORY_NOTE}` });
+    const usage = sub === 'apagar-tudo' ? await wipeUsageLog(userId) : { removed: 0, note: '' };
+    const contextOnlyReply = () => reply({ content: `🗑️ Apaguei ${removedContext} fala(s) do contexto das suas conversas recentes com a Yui.${usage.note}` });
 
     if (!isMemoryEnabled()) {
-      if (removedContext > 0) return contextOnlyReply();
-      return reply({ content: '🧠 O sistema de memória da Yui está desativado no momento.' });
+      if (removedContext > 0 || usage.removed > 0) return contextOnlyReply();
+      return reply({ content: `🧠 O sistema de memória da Yui está desativado no momento.${usage.failed ? usage.note : ''}` });
     }
 
     const isBlocked = Boolean(checkBan(userId, interaction.guildId, interaction.channelId));
@@ -87,8 +97,8 @@ export const memoriaCommand = {
       isBlocked,
     });
     if (isBlocked) {
-      if (removedContext > 0) return contextOnlyReply();
-      return reply({ content: '🛑 Memória indisponível para este usuário.' });
+      if (removedContext > 0 || usage.removed > 0) return contextOnlyReply();
+      return reply({ content: `🛑 Memória indisponível para este usuário.${usage.failed ? usage.note : ''}` });
     }
 
     try {
@@ -116,7 +126,7 @@ export const memoriaCommand = {
       if (sub === 'apagar-tudo') {
         const n = await memory.forgetAll(ctx);
         const extra = removedContext > 0 ? ` e ${removedContext} fala(s) do contexto das conversas recentes` : '';
-        return reply({ content: `🗑️ Apaguei ${n} lembrança(s) da sua memória${extra}.${HISTORY_NOTE}` });
+        return reply({ content: `🗑️ Apaguei ${n} lembrança(s) da sua memória${extra}.${usage.note}` });
       }
     } catch (err) {
       // Só com o cérebro separado: o cérebro (dono da memória) está fora. No processo único o store lança como sempre.

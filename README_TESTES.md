@@ -195,6 +195,9 @@ npm run test:researchfixes # correções da revisão do agente de pesquisa, part
 npm run test:researchfixesqueue # correções da revisão do agente de pesquisa na fila real: chatter, voz, DM de qualquer pessoa, JSON cru, chamada escrita como texto, fila sem consumidor paralelo
 npm run test:modlist      # lista de mods: detector (40 mensagens), parser, correspondência de nomes, par loader+versão, complementos, links, texto hostil, limites, prazo, 429, API fora do ar, privado e trava (Modrinth falso com respostas reais, sem rede)
 npm run test:lists        # listas pessoais por conversa natural: JSON por usuário em database/listas, interpretação de pedidos em português, privacidade entre pessoas, limites
+npm run test:backupusuario # lembretes e listas no backup cifrado: ida e volta, arquivo ruim não derruba o resto, backup antigo restaura
+npm run test:historico    # historico.txt: poda por 7 dias, exclusão por pessoa e dois processos gravando (pasta temporária)
+npm run test:wavc2pa      # o manifesto C2PA no fim do WAV é cortado; áudio legítimo nunca
 npm run test:backup       # backup cifrado e rotativo da memória, restauração e alerta de falha (diretório temporário)
 npm run test:audit        # auditoria com hash encadeado: adulteração, remoção e reordenação detectadas
 npm run test:library      # biblioteca por conversa (Porta B) e cliente do BDS Server, só leitura

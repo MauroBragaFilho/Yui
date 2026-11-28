@@ -5,6 +5,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { alertOwner } from '../alerts.js';
 import { logger } from '../../utils/logger.js';
 import { config } from '../../config/index.js';
+import { nextAfterFire } from '../../reminders/when.js';
 import { readDatabaseSnapshot, removeSqliteSidecars, cleanupStaleSnapshotDirs } from '../../database/snapshot.js';
 
 const MAGIC_HEADER = 'YUI_BACKUP_V1';
@@ -134,6 +135,29 @@ export const EXTRA_DATABASES = ['core.db', 'social-youtube.db', 'social-twitch.d
 
 /** Arquivos de configuração da Yui em src/data que se perderiam com o disco (bloqueios, termos aceitos, ajustes por servidor). Só entram com `dataDir`. */
 export const DATA_FILES = ['bans.json', 'accepted_servers.json', 'server_settings.json', 'server_tools.json'];
+
+// JSON de DATABASE_DIR que são do usuário: lembretes, listas e planos. Falha em um deles não derruba o resto do backup.
+// Os planos (planos.json) entram: na subida a Yui marca o que estava aprovado/executando como interrompido e nada roda de novo (servico.js, recuperar).
+// A fila de avisos e o estado das buscas acompanhadas ficam de FORA de propósito: restaurá-los poderia reenviar.
+// No manifesto o nome não leva caminho: a lista <id>.json vira "listas__<id>.json" e volta para listas/ na restauração.
+export const REMINDERS_FILE = 'lembretes.json';
+export const PLANS_FILE = 'planos.json';
+const LIST_FILE_RE = /^\d{5,25}\.json$/;
+const LIST_ENTRY_RE = /^listas__(\d{5,25}\.json)$/;
+
+/** @returns {{ files: Array<{name: string, srcPath: string}>, errors: Array<{name: string, error: string}> }} */
+export function userDataSources(dbDir) {
+  const files = [REMINDERS_FILE, PLANS_FILE].map((name) => ({ name, srcPath: path.join(dbDir, name) }));
+  const errors = [];
+  try {
+    for (const f of fs.readdirSync(path.join(dbDir, 'listas')).filter((n) => LIST_FILE_RE.test(n)).sort()) {
+      files.push({ name: `listas__${f}`, srcPath: path.join(dbDir, 'listas', f) });
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') errors.push({ name: 'listas', error: err.code || err.name });
+  }
+  return { files, errors };
+}
 
 // ── Conclusão do backup ─────────────────────────────────────────────────────────────────────────────────────────────
 // Um lote `backup-<data>` só está CONCLUÍDO quando tem o manifesto íntegro. O manifesto é gravado por ÚLTIMO, de forma
@@ -447,14 +471,25 @@ export async function createMemoryBackup(options = {}) {
       ...[...MEMORY_DATABASES, ...EXTRA_DATABASES].map((name) => ({ name, srcPath: path.join(dbDir, name) })),
       ...(options.dataDir ? DATA_FILES.map((name) => ({ name, srcPath: path.join(options.dataDir, name) })) : []),
     ];
-    for (const { name: dbName, srcPath } of sources) {
+    const userData = userDataSources(dbDir);
+    const skipped = [...userData.errors];
+    for (const { name, srcPath } of userData.files) sources.push({ name, srcPath, optional: true });
+    for (const { name: dbName, srcPath, optional } of sources) {
       if (!fs.existsSync(srcPath)) {
         continue;
       }
 
       // Leitura consistente: arquivo clássico (sql.js) e JSON = os bytes, como sempre; banco no motor nativo (WAL) =
       // retrato consistente do .db + -wal pelo VACUUM INTO, conferido e no formato clássico (src/database/snapshot.js).
-      const snapshot = await readDatabaseSnapshot(srcPath, snapshotOptions);
+      let snapshot;
+      try {
+        snapshot = await readDatabaseSnapshot(srcPath, snapshotOptions);
+        if (optional) JSON.parse(snapshot.data.toString('utf8')); // JSON quebrado não entra (e não reprova a verificação)
+      } catch (err) {
+        if (!optional) throw err;
+        skipped.push({ name: dbName, error: err.code || err.name }); // sem a mensagem: ela pode citar o conteúdo
+        continue;
+      }
       const content = snapshot.data;
       const originalHash = snapshot.sha256;
       const encrypted = encryptBackupBuffer(content, key);
@@ -476,6 +511,12 @@ export async function createMemoryBackup(options = {}) {
 
     if (backedUpCount === 0) {
       throw new Error(`Nenhum banco de memória encontrado em ${dbDir} para efetuar backup.`);
+    }
+
+    if (skipped.length) {
+      const detail = skipped.map((s) => `${s.name} (${s.error})`).join(', ');
+      logger.warn(`[Backup] Ficaram de fora deste backup: ${detail}`);
+      alertOwner('memory.backup.parcial', 'Backup sem alguns arquivos', `O backup foi feito, mas não consegui ler: ${detail}`, { level: 'warn' });
     }
 
     // Conclusão: o manifesto (com o SHA-256 de cada arquivo cifrado) é a ÚLTIMA coisa gravada, de forma atômica.
@@ -503,6 +544,7 @@ export async function createMemoryBackup(options = {}) {
       timestamp,
       count: backedUpCount,
       manifest,
+      skipped,
     };
   } catch (err) {
     // Lote que não chegou ao fim (ou não passou na conferência) não fica para trás confundindo uma restauração. Se não der
@@ -537,6 +579,31 @@ function rotateBackups(backupDir, maxKeep) {
 }
 
 /**
+ * Lembrete vencido no arquivo restaurado pode já ter sido entregue depois do backup, e a Yui entrega tudo o que está vencido ao
+ * subir. Então o único vencido sai da lista, o que repete pula para a próxima vez, e os originais ficam em
+ * lembretes.vencidos-<n>.json (nada se perde e nada é reenviado sozinho).
+ */
+function separarLembretesVencidos(file, now) {
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!Array.isArray(raw?.items)) return null;
+  const vencidos = raw.items.filter((r) => Date.parse(r?.at) <= now);
+  if (!vencidos.length) return null;
+  const copia = path.join(path.dirname(file), `lembretes.vencidos-${now}.json`);
+  fs.writeFileSync(copia, JSON.stringify({ items: vencidos }, null, 2), 'utf8');
+  const items = raw.items.flatMap((r) => {
+    if (!vencidos.includes(r)) return [r];
+    const next = r.repeat ? nextAfterFire(r.repeat, new Date(r.at), new Date(now)) : null;
+    if (!next) return [];
+    const { entrega, ...resto } = r;
+    return [{ ...resto, at: next.toISOString(), tries: 0 }];
+  });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ ...raw, items }, null, 2), 'utf8');
+  fs.renameSync(tmp, file);
+  return { arquivo: copia, ids: vencidos.map((r) => r.id) };
+}
+
+/**
  * Restaura um lote de backup para um diretório alvo. O lote inteiro é conferido ANTES de gravar qualquer arquivo:
  * recusa lote sem manifesto (incompleto), manifesto ilegível ou corrompido, arquivo cifrado que não confere com o
  * manifesto e conteúdo decifrado com SHA-256 diferente.
@@ -567,7 +634,9 @@ export async function restoreMemoryBackup(options = {}) {
     // Grava num temporário e só depois troca: -wal/-shm/-journal velhos ao lado do destino são apagados ANTES de o banco
     // restaurado entrar no lugar (senão o SQLite reaplicaria um WAL antigo por cima dele). Se não der para apagar
     // (banco aberto), a restauração para e o arquivo de destino fica como estava.
-    const targetFile = path.join(targetDir, item.name);
+    const list = LIST_ENTRY_RE.exec(item.name);
+    const targetFile = list ? path.join(targetDir, 'listas', list[1]) : path.join(targetDir, item.name);
+    if (list) fs.mkdirSync(path.dirname(targetFile), { recursive: true });
     const tmpFile = `${targetFile}.${process.pid}.tmp`;
     let sidecarsRemoved;
     try {
@@ -580,11 +649,15 @@ export async function restoreMemoryBackup(options = {}) {
     restored.push({ name: item.name, path: targetFile, sha256, sidecarsRemoved });
   }
 
+  const lembretes = restored.find((r) => r.name === REMINDERS_FILE);
+  const vencidos = lembretes ? separarLembretesVencidos(lembretes.path, options.now ?? Date.now()) : null;
+
   logger.info(`[Backup] Restauração concluída com sucesso em ${targetDir} (${restored.length} bancos).`);
   return {
     success: true,
     targetDir,
     restored,
     manifest,
+    vencidos,
   };
 }

@@ -31,6 +31,8 @@ const { hasForgetAllPending, __resetChatIntentsForTests } = await import('../src
 const { registerCerebroMethods } = await import('../src/cerebro/metodos.js');
 const { CATALOGO } = await import('../src/core/painelConfig.js');
 await initMemory();
+const { definirArquivoDoHistoricoParaTeste } = await import('../src/core/historico.js');
+definirArquivoDoHistoricoParaTeste(path.join(tmp, 'historico.txt'));
 
 let passed = 0;
 const test = async (name, fn) => { cont.__resetContinuidadeForTests(); __resetChatIntentsForTests(); await fn(); passed++; console.log(`  ✔ ${name}`); };
@@ -126,6 +128,17 @@ await test('memória desligada: responde como a DM, sem cair na IA', async () =>
   process.env.YUI_MEMORY_ENABLED = 'false';
   try {
     assert.match(await falar('o que você sabe de mim?'), /desativado/);
+  } finally { process.env.YUI_MEMORY_ENABLED = 'true'; }
+});
+await test('DELETE /v1/memory com a memória desligada ainda apaga o registro de uso', async () => {
+  const arquivo = path.join(tmp, 'historico.txt');
+  fs.writeFileSync(arquivo, `[26/11/2026, 10:00:00] Usuário: d (ID: ${DONO})\nPrompt: "x"\nResposta IA: "y"\nLocal: {a - b} {c - d}\n-------------\n`);
+  process.env.YUI_MEMORY_ENABLED = 'false';
+  try {
+    const r = await call('DELETE', '/v1/memory');
+    assert.equal(r.status, 503);
+    assert.equal(r.json.historico, 1);
+    assert.equal(fs.readFileSync(arquivo, 'utf8'), '');
   } finally { process.env.YUI_MEMORY_ENABLED = 'true'; }
 });
 await test('erro ao escrever não cai na IA', async () => {

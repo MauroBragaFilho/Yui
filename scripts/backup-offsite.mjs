@@ -23,7 +23,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   createMemoryBackup, restoreMemoryBackup, verifyMemoryBackup, listBackups, findLatestCompleteBackup,
-  MEMORY_DATABASES, EXTRA_DATABASES, DATA_FILES,
+  MEMORY_DATABASES, EXTRA_DATABASES, DATA_FILES, userDataSources,
 } from '../src/core/memory/backup.js';
 import { createPrivateTempDir, cleanupStaleSnapshotDirs } from '../src/database/snapshot.js';
 
@@ -99,6 +99,13 @@ export function sourcesFingerprint({ dbDir = cfg.dbDir, dataDir = cfg.dataDir } 
     let walData = null;
     try { walData = fs.readFileSync(wal); } catch { /* sem -wal (ou apagado pelo checkpoint agora): nada a somar */ }
     if (walData) h.update(path.basename(wal)).update(walData);
+  }
+  // Lembretes e listas: ilegível aqui não derruba o envio do resto (o backup avisa o que ficou de fora).
+  for (const { name, srcPath } of userDataSources(dbDir).files) {
+    try {
+      const data = fs.readFileSync(srcPath);
+      h.update(name).update(data);
+    } catch { /* ausente ou ilegível */ }
   }
   return h.digest('hex');
 }

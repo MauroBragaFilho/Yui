@@ -26,7 +26,7 @@ const scripts = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf
 export const SUITES = [
   'test:core', 'test:core-api', 'test:core-agent', 'test:readonly', 'test:permgaps', 'test:panel', 'test:alerts', 'test:avisos', 'test:avisosfila', 'test:planos',
   'test:persona', 'test:mentions', 'test:search', 'test:gateway', 'test:config', 'test:memperm', 'test:memret', 'test:audiencia', 'test:vozaudaux', 'test:vozaudcerebro', 'test:vozaudbot', 'test:histcomp', 'test:fase2', 'test:gatewaychecagem', 'test:hybrid',
-  'test:audit', 'test:backup', 'test:dmowner', 'test:chatintents', 'test:imageintent', 'test:library',
+  'test:audit', 'test:backup', 'test:backupusuario', 'test:historico', 'test:wavc2pa', 'test:dmowner', 'test:chatintents', 'test:imageintent', 'test:library',
   // Lacunas do painel, entrega F, item 11: a imagem no Chat do app (YUI_APP_IMAGEM, desligada): política, pré-rota dos dois lados, link curto, filtro, limite,
   // auditoria sem o pedido e a entrega bot -> cérebro pelo canal de verdade (gerador falso, sem rede).
   'test:imagemapp',

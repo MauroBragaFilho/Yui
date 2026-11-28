@@ -3,6 +3,7 @@ import { recordInteraction } from '../core/interactionStats.js';
 import { contextFromDiscord, buildMemoryBlock, captureFromUserText, isMemoryEnabled } from '../core/discordAdapter.js';
 import { memory as coreMemory, audit as coreAudit } from '../core/index.js';
 import { forgetUserContext } from '../core/context/contextStore.js';
+import { registrarNoHistorico, neutralizarParaHistorico, apagarDoHistorico } from '../core/historico.js';
 import { continuidadeLigada, rotearContinuidade, descartarContinuidade } from '../core/continuidade.js';
 import { detectMemoryIntent, runMemoryIntent, hasForgetAllPending, clearForgetAllPending, detectSummaryRequest, takeSummaryQuota, pickMessagesToSummarize, detectGtaIntent, detectRadioIntent } from './chatIntents.js';
 import { runGtaIntent, buildGtaModelPrompt } from './gtaChat.js';
@@ -1056,13 +1057,8 @@ function savePromptToHistoryOnDisk(prompt, userTag, userId, aiResponse, interact
         const guildId = interaction?.guild?.id || interaction?.guildId || "N/A";
         const channelName = interaction?.channel?.name || "Chat";
         const channelId = interaction?.channel?.id || "N/A";
-        const logEntry = `[${timestamp}] Usuário: ${userTag} (ID: ${userId})\nPrompt: "${prompt}"\nResposta IA: "${aiResponse}"\nLocal: {${guildName} - ${guildId}} {${channelName} - ${channelId}}\n-------------\n`;
-        const historyPath = path.join(__dirname, '../data/historico.txt');
-        fs.appendFile(historyPath, logEntry, (err) => {
-            if (err) {
-                console.error('Erro ao salvar o prompt no historico.txt:', err);
-            }
-        });
+        const logEntry = `[${timestamp}] Usuário: ${userTag} (ID: ${userId})\nPrompt: "${neutralizarParaHistorico(prompt)}"\nResposta IA: "${neutralizarParaHistorico(aiResponse)}"\nLocal: {${guildName} - ${guildId}} {${channelName} - ${channelId}}\n-------------\n`;
+        registrarNoHistorico(logEntry, { userId, aoErrar: (err) => console.error('Erro ao salvar o prompt no historico.txt:', err) });
     }
     checkAndReportNSFW(prompt, userTag, userId, aiResponse, interaction);
 }
@@ -2490,7 +2486,7 @@ async function processQueueItem({ prompt, interaction, type, userTag, userId, ch
     const channelId = isVoice ? buildVoiceKey(guildId, userId) : realChannelId;
     // Voz: a transcrição de terceiros NUNCA vai para o historico.txt; só a moderação (alerta de conteúdo suspeito) continua valendo.
     const savePromptToHistoryBase = isVoice ? moderateVoiceExchange : savePromptToHistoryOnDisk;
-    // O texto de um anexo lido (options.attachmentBlock) é de terceiros: não chega ao historico.txt (sem rotação) nem ao alerta ao dono
+    // O texto de um anexo lido (options.attachmentBlock) é de terceiros: não chega ao historico.txt nem ao alerta ao dono
     // (promptForDiskHistory troca o trecho por um marcador). Todos os ramos de ferramenta gravam por aqui. (M2)
     // Voz unificada, turno PRIVADO: a resposta da IA (derivada de memória pessoal) nunca vai ao webhook de avisos nem a arquivo; o
     // alerta de prompt continua valendo. rest = [userTag, userId, aiResponse, interaction]. Fora do privado nada muda.
@@ -2848,7 +2844,8 @@ Como o projeto é open-source, você pode hospedar sua própria versão e ter co
                 const memRun = await runMemoryIntent(memIntent, {
                     userId, isDM: !guildId, enabled: isMemoryEnabled(), memoryCtx: coreCtx, memory: coreMemory, audit: coreAudit,
                     scopeLabel: coreCtx.memoryScope === 'personal' ? '🔒 memória pessoal (permanente)' : (coreMemory.isPermanent?.() ? '🕒 memória do servidor (permanente)' : `🕒 memória temporária (${coreMemory.retentionDays()} dias sem interação)`),
-                    wipeContext: async (uid) => { descartarContinuidade(uid); try { return (await forgetUserContext(uid)).turns; } catch (_) { return 0; } }
+                    wipeContext: async (uid) => { descartarContinuidade(uid); try { return (await forgetUserContext(uid)).turns; } catch (_) { return 0; } },
+                    wipeHistory: apagarDoHistorico
                 });
                 if (memRun.handled) {
                     await unifiedReply(memRun.text);

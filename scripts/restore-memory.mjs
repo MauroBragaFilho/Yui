@@ -28,6 +28,10 @@ async function main() {
   for (const item of res.restored) {
     console.log(`  - Restaurado: ${item.name} (SHA-256 verificado: ${item.sha256.slice(0, 16)}...)`);
   }
+  if (res.vencidos) {
+    console.log(`Atenção: lembretes já vencidos (#${res.vencidos.ids.join(', #')}) não serão avisados de novo (os que repetem seguem na próxima vez).`);
+    console.log(`  Originais em ${res.vencidos.arquivo}: recrie por conversa o que ainda precisar.`);
+  }
 }
 
 main().catch((err) => {
