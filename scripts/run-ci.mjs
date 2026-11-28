@@ -123,6 +123,8 @@ export const SUITES = [
   'test:youtubeservico',
   // A leitura do chat em FLUXO (gRPC, servidor falso em loopback) e a reserva na consulta, o ritmo pela duração, a cota por conexão e o fechamento sem handles abertos
   'test:youtubefluxo',
+  // Backup puxado para o Neon e reserva fria (scripts/neon-*.ps1): sintaxe e parametros dos .ps1, a decisao de ativar (recusa se o notebook responde), o selo do manifesto e a escolha do ultimo backup completo.
+  'test:neonscripts',
   'test:devtarefas',
   'test:sondahardware',
   'test:ialocal',

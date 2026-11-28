@@ -83,6 +83,7 @@
     "test:canalyoutube": "node tests/test-youtube-adaptador.js",
     "test:youtubeservico": "node tests/test-youtube-servico.js",
     "test:youtubefluxo": "node tests/test-youtube-fluxo.js",
+    "test:neonscripts": "node tests/test-neon-scripts.js",
     "youtube:autorizar": "node scripts/youtube-autorizar.mjs",
     "test:devtarefas": "node tests/test-dev-tarefas.js",
     "test:sondahardware": "node tests/test-sonda-hardware.js",
