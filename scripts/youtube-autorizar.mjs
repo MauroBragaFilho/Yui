@@ -27,10 +27,18 @@ async function canalDaConta({ base, token, fetchImpl }) {
   if (!b.ok) return null;
   try {
     const res = await fetchImpl(`${b.base}/channels?part=snippet&mine=true`, { headers: { authorization: `Bearer ${token}` }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return null;
-    const item = (await res.json())?.items?.[0];
+    const corpo = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      // Só o código e o motivo da API (sem token): diz se a API está desligada no projeto, se falta permissão etc.
+      const motivo = String(corpo?.error?.errors?.[0]?.reason ?? corpo?.error?.status ?? '').slice(0, 60);
+      process.stderr.write(`\n(o YouTube respondeu ${res.status}${motivo ? `: ${motivo}` : ''})\n`);
+      return null;
+    }
+    const item = corpo?.items?.[0];
+    if (!item) process.stderr.write('\n(o YouTube respondeu, mas essa conta não tem canal: na tela do Google, escolha o CANAL da Yui na lista de contas e canais)\n');
     return typeof item?.id === 'string' ? { id: item.id, titulo: String(item.snippet?.title ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 100) } : null;
-  } catch {
+  } catch (e) {
+    process.stderr.write(`\n(não consegui falar com o YouTube: ${String(e?.name ?? 'erro').slice(0, 40)})\n`);
     return null;
   }
 }

@@ -91,14 +91,22 @@ Só você, na **DM do Discord** (mensagem comum, digitada) ou no **chat do app**
 
 | Mensagem | O que faz |
 |---|---|
-| `entra na live <link>` | entra no chat (lê a cada 15 s, cerca de 5 h de cota) |
-| `entra na live <link> por 8 horas` | para live longa: acima de 5 h lê a cada 20 s; de 8 h em diante, a cada 30 s |
+| `entra na live <link>` | entra no chat (lê em fluxo, quase em tempo real; cabe uma live de cerca de 4 h na cota do dia) |
+| `entra na live <link> por 8 horas` | para live longa: a Yui faz uma pausa maior entre as conexões do fluxo para a cota durar (veja "Como ela lê o chat"). Na reserva (consulta), acima de 5 h lê a cada 20 s; acima de 7 h, a cada 30 s |
 | `sai da live` | sai na hora |
-| `como está a live` | diz se está na live, quantas respostas deu e a cota contada |
+| `como está a live` | diz se está na live, como está lendo (em fluxo, por consulta ou por consulta porque o fluxo falhou), quantas respostas deu e a cota contada |
 
 "agora" e "por favor" no fim também valem. Outras variações não são comando: confira se veio a resposta "Saí da live.".
 
 Não valem por voz, em servidor, em mensagem encaminhada ou com anexo. Nada do que for escrito no chat da live é comando. No app, a Yui não distingue o que foi ditado pelo teclado do que foi digitado.
+
+## Como ela lê o chat
+
+**Fluxo (padrão).** A Yui mantém uma conexão aberta com o YouTube (`liveChatMessages.streamList`, gRPC) e ele empurra cada mensagem assim que ela chega: a medição de 28/11/2026, numa live pública real, deu 1,4 s de mediana entre a mensagem no chat e a Yui recebê-la. O servidor fecha cada conexão depois de uns 10 s, com fim normal; a Yui reabre com o ponto onde parou e não perde nada (a primeira resposta de uma conexão nova pode repetir mensagens: a Yui as reconhece e não responde duas vezes). O que já estava no chat quando ela entrou continua sendo ignorado.
+
+**Consulta (reserva).** Se o fluxo não puder funcionar (o YouTube responde que não existe, o módulo gRPC não carrega ou a conexão cai 3 vezes seguidas), a Yui passa sozinha para a consulta de tempos em tempos **até o fim dessa live**, sem sair do chat: ela escreve `[Live] reserva:<motivo>` no log, e o `como está a live` passa a dizer "Lendo por consulta (o fluxo falhou)". Na live seguinte o fluxo é tentado de novo. Para usar **só** a consulta, ponha `YUI_YOUTUBE_LEITURA=consulta` (ou escolha em **Configuração > Conversa**; vale na próxima entrada numa live, sem reiniciar).
+
+Acesso negado, autorização recusada e fim da live param a Yui exatamente como na consulta.
 
 ## Quando ela para
 
@@ -108,7 +116,7 @@ Se a Yui ou o notebook **reiniciar** durante a live, ela **não volta sozinha**:
 
 **Para parar:** `sai da live`. Em emergência: esconda a Yui no chat do YouTube, desligue a opção no painel e reinicie, ou remova o acesso do app em <https://myaccount.google.com/permissions> (entrando com a conta da Yui).
 
-## Cota diária (conta para uma live de 4 horas)
+## Cota diária
 
 Custos por chamada, conferidos na [tabela de custos do Google](https://developers.google.com/youtube/v3/determine_quota_cost) em 26/11/2026:
 
@@ -129,6 +137,23 @@ Cota padrão de um projeto: **10.000 unidades por dia**. A Yui reserva 1.000 e u
 
 Sobram cerca de 2.600 unidades para o ensaio no mesmo dia (20 minutos de teste gastam perto de 500).
 
+### No fluxo (o padrão)
+
+O Google cobra **5 unidades por conexão aberta**, não por mensagem (confirmado no console do projeto). Uma conexão dura uns 10 s, então a conta depende da **pausa entre as conexões**, que a Yui escolhe pela duração que você informar (`por N horas`). As mensagens dela entram no teto de 20 por hora, ou seja 400 unidades por hora:
+
+| Duração informada | Pausa entre conexões | Conexões por hora | Unidades por hora | Total na duração |
+|---|---|---|---|---|
+| sem horas, ou até 4 h | 0 | 360 (x 5 = 1.800) | 2.200 | 4 h = 8.800 |
+| 5 a 6 h | 10 s | 180 (x 5 = 900) | 1.300 | 6 h = 7.800 |
+| 7 a 8 h | 15 s | 144 (x 5 = 720) | 1.120 | 8 h = 8.960 |
+| 9 h ou mais | 25 s | cerca de 103 (x 5 = 515) | cerca de 915 | 9 h = cerca de 8.235 |
+
+Todas cabem nas 9.000 unidades usáveis (as 1.000 de reserva ficam de fora). Com a pausa, a mensagem que chega durante ela só é lida quando a próxima conexão abre: numa live longa o fluxo deixa de ser "na hora" e fica perto da consulta. Sem cota para abrir outra conexão, a Yui não abre (e para quando a cota acaba, como sempre). A Yui conta uma conexão por abertura, inclusive a que o YouTube recusou.
+
+### Na consulta (reserva)
+
+O quadro de cima: uma leitura a cada 15 s (até 5 h), 20 s (até 7 h) ou 30 s (acima disso).
+
 Pressupostos e o que conferir:
 
 - O projeto não é usado por outra coisa.
@@ -145,4 +170,6 @@ Pressupostos e o que conferir:
 | "O YouTube recusou a autorização" | repita o passo 3 (no modo Teste ela vence em 7 dias) |
 | "O YouTube negou o acesso" | confira se a API foi ativada no projeto e se a conta não está bloqueada no chat |
 | "Não achei o chat" | a transmissão ainda não começou ou o chat está desligado |
+| `como está a live` diz "Lendo por consulta (o fluxo falhou)" | o fluxo não funcionou nessa live (veja `[Live] reserva:` no log); ela continua no chat pela consulta e tenta o fluxo de novo na próxima live. Se for `grpc-nao-carregou`, rode `npm install` na pasta da Yui |
+| Ela demora a ver as mensagens | a live é longa e a pausa entre as conexões do fluxo é maior, ou você forçou `YUI_YOUTUBE_LEITURA=consulta` |
 | Ela respondeu a um comando como conversa comum | a chave está desligada, faltou reiniciar ou a frase não é exatamente uma das três |

@@ -251,12 +251,16 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
       const aindaAqui = () => estado === 'ouvindo' && live === minha;
       let pagina;
       try {
-        pagina = await cliente.lerMensagens({ liveChatId: minha.liveChatId, pageToken: minha.pagina });
+        // `podeAbrir`: o leitor em fluxo só abre uma conexão nova (5 unidades) se a cota deixa; a consulta REST ignora o campo
+        pagina = await cliente.lerMensagens({ liveChatId: minha.liveChatId, pageToken: minha.pagina, podeAbrir: cota.podeGastar('liveChatMessages.list') });
         if (!aindaAqui()) return { ok: true, ativo: false, proximoEmMs: null };
-        cota.gastar('liveChatMessages.list');
+        // a cota é por CONEXÃO aberta no fluxo (`novaConexao`) e por leitura na consulta (que não traz o campo)
+        if (pagina.novaConexao !== false) cota.gastar('liveChatMessages.list');
+        if (pagina.conexaoExtra === true) cota.gastar('liveChatMessages.list'); // o fluxo abriu uma conexão que falhou antes de a consulta de reserva ler
         live.falhas = 0;
       } catch (e) {
         if (!aindaAqui()) return { ok: true, ativo: false, proximoEmMs: null };
+        if (e?.novaConexao === true) cota.gastar('liveChatMessages.list'); // a conexão do fluxo abriu (e foi cobrada) mesmo terminando em erro
         if (await reagirAoErro(e, 'ler') === 'parou') return { ok: true, ativo: false, proximoEmMs: null };
         live.falhas += 1;
         if (live.falhas >= C.falhasSeguidasMax) { await parar('erro_permanente', 'falhas-seguidas'); return { ok: false, ativo: false, proximoEmMs: null, codigo: 'falhas-seguidas' }; }
@@ -296,7 +300,10 @@ export function criarAdaptadorYoutube({ ligado = youtubeLigado(), cliente, cereb
       await puxarAssunto();
       if (!aindaAqui()) return { ok: true, ativo: false, proximoEmMs: null };
       // o ritmo respeita o que a API mandou (pollingIntervalMillis), o mínimo configurado e a cota (que, apertada, deixa a leitura mais lenta)
-      const proximoEmMs = Math.min(300_000, Math.max(pagina.intervaloMs, minha.intervaloMs) * cota.fatorDeLeitura());
+      // No fluxo (`novaConexao` presente) quem manda no ritmo é o leitor (1 s com dado na fila; a pausa entre conexões vem da duração da live): sem o mínimo de 15 s.
+      const proximoEmMs = typeof pagina.novaConexao === 'boolean'
+        ? Math.min(300_000, Math.max(500, pagina.intervaloMs))
+        : Math.min(300_000, Math.max(pagina.intervaloMs, minha.intervaloMs) * cota.fatorDeLeitura());
       return { ok: true, ativo: true, proximoEmMs };
     } finally {
       emPasso = false;

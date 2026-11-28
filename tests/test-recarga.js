@@ -44,7 +44,8 @@ await test('a lista das chaves que valem na hora é fechada; privacidade de voz 
     'YUI_APP_IMAGEM',
     // entrega F parte 2 (27/11/2026, item 14): YUI_GOOGLE_REAUTORIZAR_PAINEL é lida a cada pedido só pela API (as rotas de reautorizar o Google); conferida em tests/test-painel-google.js
     'YUI_GOOGLE_REAUTORIZAR_PAINEL',
-    'YUI_SILENCIO', 'YUI_SKILLS', 'YUI_UPLOAD_LIMIT_MB', 'YUI_VISION', 'YUI_YT_LIVE_AUTO_EDIT_MIN'], ...IA,
+    // leitura do chat da live em fluxo (28/11/2026): YUI_YOUTUBE_LEITURA é lida a cada entrada na live, só pelo serviço da live (cérebro); conferida em tests/test-youtube-fluxo.js
+    'YUI_SILENCIO', 'YUI_SKILLS', 'YUI_UPLOAD_LIMIT_MB', 'YUI_VISION', 'YUI_YOUTUBE_LEITURA', 'YUI_YT_LIVE_AUTO_EDIT_MIN'], ...IA,
     'YUI_AUTOMOD_MODO_PADRAO', 'YUI_AUTOMOD_PADRAO', 'YUI_CANAL_APELACOES', 'YUI_MUSICA_MANTER_CARTAO', 'YUI_SALVAR_HISTORICO'].sort());
   assert.ok(cfg.CATALOGO.filter((c) => c.chave.startsWith('YUI_VOZ_')).every((c) => c.reinicio));
   for (const chave of ['YUI_CONTEXT_TTL_HOURS', 'YUI_CONTEXT_MAX_CHARS', 'YUI_CONTEXT_MAX_TURNS']) assert.match(cfg.CATALOGO.find((c) => c.chave === chave).descricao, /apaga de vez/);

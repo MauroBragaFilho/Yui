@@ -121,6 +121,8 @@ export const SUITES = [
   'test:canalyoutube',
   // A live ligada de ponta a ponta (YouTube e OAuth FALSOS em loopback, IA falsa): comandos do dono, laço, avisos, reinício, credencial e o script de autorização.
   'test:youtubeservico',
+  // A leitura do chat em FLUXO (gRPC, servidor falso em loopback) e a reserva na consulta, o ritmo pela duração, a cota por conexão e o fechamento sem handles abertos
+  'test:youtubefluxo',
   'test:devtarefas',
   'test:sondahardware',
   'test:ialocal',
