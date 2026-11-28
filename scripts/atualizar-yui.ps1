@@ -30,6 +30,18 @@ function Log($m) {
     Write-Host $l
 }
 
+# Roda o npm e decide so pelo codigo de saida. O npm escreve "npm notice" e avisos no stderr; no Windows PowerShell 5.1, com
+# $ErrorActionPreference = 'Stop' (como este script), cada linha do stderr de um programa nativo vira um erro fatal e a atualizacao
+# parava depois de copiar o codigo, sem reiniciar. Por isso o stderr vai para o stdout DENTRO do cmd (2>&1) e o 'Stop' fica
+# desligado so aqui. Devolve o codigo de saida do npm.
+function Rodar-Npm([string]$argumentos) {
+    $ErrorActionPreference = 'Continue'
+    cmd /c "npm $argumentos 2>&1" | Out-Null
+    $codigo = $LASTEXITCODE
+    $global:LASTEXITCODE = 0
+    return $codigo
+}
+
 # Modo dois processos (etapa 4): a chave YUI_CEREBRO_EXTERNO=true no .env da Yui. Linhas comentadas e outras variaveis nao contam.
 function Modo-Separado([string]$raiz) {
     $envFile = Join-Path $raiz '.env'
@@ -360,7 +372,7 @@ try {
         Log 'package-lock mudou: instalando dependencias (npm install)...'
         $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
         Push-Location $Destino
-        try { npm install --no-audit --no-fund 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { throw "npm install saiu com codigo $LASTEXITCODE" } } finally { Pop-Location }
+        try { $codigoNpm = Rodar-Npm 'install --no-audit --no-fund'; if ($codigoNpm -ne 0) { throw "npm install saiu com codigo $codigoNpm" } } finally { Pop-Location }
     }
 
     Reiniciar-Yui
@@ -374,7 +386,7 @@ try {
         robocopy "$bk\src" "$Destino\src" /E /NFL /NDL /NJH /NJS /NP | Out-Null
         foreach ($f in 'package.json', 'package-lock.json') { if (Test-Path "$bk\$f") { Copy-Item "$bk\$f" $Destino -Force } }
         if ($lockAntes -ne $lockDepois) {
-            Push-Location $Destino; try { npm install --no-audit --no-fund 2>&1 | Out-Null } finally { Pop-Location }
+            Push-Location $Destino; try { $null = Rodar-Npm 'install --no-audit --no-fund' } finally { Pop-Location }
         }
         $global:LASTEXITCODE = 0
         Reiniciar-Yui

@@ -8,7 +8,7 @@
 $ErrorActionPreference = 'Stop'
 $repo = Resolve-Path (Join-Path $PSScriptRoot '..')
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'scripts\atualizar-yui.ps1'), [ref]$null, [ref]$null)
-foreach ($nome in 'Modo-Separado', 'Porta-Livre', 'Testar-Subida', 'Testar-Subida-Dois', 'Remover-Temporario') {
+foreach ($nome in 'Modo-Separado', 'Porta-Livre', 'Testar-Subida', 'Testar-Subida-Dois', 'Remover-Temporario', 'Rodar-Npm') {
     $fn = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $nome }, $true)[0]
     if (-not $fn) { Write-Host "FALHOU: funcao $nome nao encontrada"; exit 1 }
     Invoke-Expression $fn.Extent.Text
@@ -167,6 +167,22 @@ try {
     Check ($r -match 'supervisor do codigo novo nao carrega: .*SyntaxError') "supervisor quebrado (com o erro do node no motivo): $r"
     Check (-not (Test-Path "$supQuebrado\preflight-dois\cerebro-saida.txt")) 'supervisor quebrado: nenhum processo foi aberto'
     Write-Host "  supervisor quebrado recusado: $r"
+    # 8) npm que escreve "npm notice" no stderr: o PowerShell 5.1 (com 'Stop') NAO pode tratar como erro fatal; vale o codigo de saida
+    $fakeNpm = Join-Path $raiz 'npm-falso'
+    New-Item -ItemType Directory $fakeNpm | Out-Null
+    $pathAntes = $env:Path
+    $ErrorActionPreference = 'Stop'   # como no atualizador de verdade
+    try {
+        $env:Path = "$fakeNpm;$pathAntes"
+        Set-Content (Join-Path $fakeNpm 'npm.cmd') "@echo off`r`necho npm notice New major version available 1>&2`r`necho added 1 package`r`nexit /b 0" -Encoding ascii
+        $c = Rodar-Npm 'install --no-audit --no-fund'
+        Check ($c -eq 0) "npm com 'npm notice' no stderr e saida 0 tem de dar 0 (deu $c)"
+        Set-Content (Join-Path $fakeNpm 'npm.cmd') "@echo off`r`necho npm notice aviso 1>&2`r`necho npm error falhou 1>&2`r`nexit /b 3" -Encoding ascii
+        $c = Rodar-Npm 'install --no-audit --no-fund'
+        Check ($c -eq 3) "npm que falha de verdade tem de devolver o codigo 3 (deu $c)"
+        Check ($global:LASTEXITCODE -eq 0) 'o codigo do npm nao pode vazar para o resto do script'
+    } finally { $env:Path = $pathAntes }
+    Write-Host '  npm com stderr: decide pelo codigo de saida'
     # o registro das excecoes: qual teste abriu cada uma e quantas vezes foi usada
     Write-Host "  bloqueio de integracao externa: so as tentativas esperadas (o login no Discord e a busca dos binarios); excecoes declaradas: $((& $node $ponte resumo $bloqueioDir $arqExcecoes) -join ' ')"
 } finally {
