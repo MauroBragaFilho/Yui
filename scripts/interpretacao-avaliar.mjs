@@ -12,12 +12,13 @@ import path from 'node:path';
 import { interpretarComMeta } from '../src/core/inteligencia/interpretador.js';
 import { criarDisjuntor } from '../src/core/ai/disjuntor.js';
 import { calcularMetricas, intencaoEfetiva, percentil, pct } from '../src/core/inteligencia/metricas.js';
+import { avaliacaoLiberada } from '../src/core/inteligencia/relatorio.js';
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
 const valor = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : null; };
 
-if (!flag('--real') && process.env.YUI_AVALIAR_REAL !== '1') {
+if (!avaliacaoLiberada(args)) {
   console.log('Este script chama a IA de verdade (gasta cota). Rode com --real para confirmar. Nunca roda no CI.');
   process.exit(2);
 }

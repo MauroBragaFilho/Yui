@@ -11,7 +11,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -50,6 +49,7 @@ const say = (s) => realConsole.log(s);
 const interp = await imp('src/core/inteligencia/interpretador.js');
 const obsMod = await imp('src/core/inteligencia/observador.js');
 const met = await imp('src/core/inteligencia/metricas.js');
+const rel = await imp('src/core/inteligencia/relatorio.js');
 const { criarDisjuntor, disjuntorDeIa } = await imp('src/core/ai/disjuntor.js');
 const perfis = await imp('src/core/ai/perfis.js');
 const rota = await imp('src/core/ai/rotaPerfil.js');
@@ -481,9 +481,8 @@ try {
       { ...base, data: new Date().toISOString(), interpretacao: null, motivo: 'tempo-esgotado', latenciaMs: 4000 },
     ];
     fs.writeFileSync(arq, `${l.map((x) => JSON.stringify(x)).join('\n')}\nlinha quebrada\n`);
-    const r = spawnSync(process.execPath, [path.join(repoRoot, 'scripts', 'interpretacao-relatorio.mjs'), arq, '--json'], { encoding: 'utf8', cwd: repoRoot });
-    assert.equal(r.status, 0, r.stderr);
-    const j = JSON.parse(r.stdout);
+    const { registros, ilegiveis } = rel.lerRegistros(arq);
+    const j = rel.resumir(registros, { ilegiveis, arquivo: arq });
     assert.equal(j.registros, 4);
     assert.equal(j.linhasIlegiveis, 1);
     assert.equal(j.concordancia.comparaveis, 3);
@@ -493,14 +492,18 @@ try {
     assert.equal(j.latenciaMs.p50, 200);
     assert.equal(j.latenciaMs.p95, 4000);
     assert.equal(j.distribuicaoDeIntencoes.conversa, 1);
-    const txt = spawnSync(process.execPath, [path.join(repoRoot, 'scripts', 'interpretacao-relatorio.mjs'), arq], { encoding: 'utf8', cwd: repoRoot });
-    assert.equal(txt.status, 0);
-    assert.match(txt.stdout, /Concordância com a pré-rota: 2\/3/);
+    assert.match(rel.formatar(j), /Concordância com a pré-rota: 2\/3/);
+    assert.equal(rel.resumir(registros, { dias: 1 }).registros, 4);
+    assert.equal(rel.resumir([{ ...registros[0], data: '2020-01-01T00:00:00Z' }], { dias: 7 }).registros, 0);
   });
-  await test('o avaliador com a IA real é opt-in: sem --real não chama nada e sai com aviso', () => {
-    const r = spawnSync(process.execPath, [path.join(repoRoot, 'scripts', 'interpretacao-avaliar.mjs')], { encoding: 'utf8', cwd: repoRoot, env: { ...process.env, YUI_AVALIAR_REAL: '' } });
-    assert.equal(r.status, 2);
-    assert.match(r.stdout, /--real/);
+  await test('o avaliador com a IA real é opt-in: sem --real (ou YUI_AVALIAR_REAL=1) não é liberado', () => {
+    assert.equal(rel.avaliacaoLiberada([], {}), false);
+    assert.equal(rel.avaliacaoLiberada(['--erros'], { YUI_AVALIAR_REAL: '' }), false);
+    assert.equal(rel.avaliacaoLiberada(['--real'], {}), true);
+    assert.equal(rel.avaliacaoLiberada([], { YUI_AVALIAR_REAL: '1' }), true);
+    const fonte = fs.readFileSync(path.join(repoRoot, 'scripts', 'interpretacao-avaliar.mjs'), 'utf8');
+    assert.match(fonte, /avaliacaoLiberada/, 'o script usa a trava');
+    assert.ok(!fs.readFileSync(path.join(repoRoot, 'scripts', 'run-ci.mjs'), 'utf8').includes('interpretacao:avaliar'), 'nunca no CI');
   });
   await test('nenhuma rede foi tentada em todo o teste (a IA é sempre o dublê)', () => {
     assert.equal(redeTentada, 0);
