@@ -36,7 +36,8 @@ await test('a lista das chaves que valem na hora é fechada; privacidade de voz 
     'YUI_IA_MOSTRAR_MODELO_PENSANDO', 'YUI_IA_POLLINATIONS_MAX_TOKENS', 'YUI_IA_POLLINATIONS_TIMEOUT_MS', 'YUI_IA_RETENTATIVAS'];
   assert.deepEqual(vivas, [...['REDDIT_FETCH_MODE', 'YUI_ALERTS', 'YUI_AUTOMOD_AI_BAN', 'YUI_AVISOS_FILTRO', 'YUI_AVISOS_POR_DIA', 'YUI_CLIMA', 'YUI_CLIMA_CIDADE_PADRAO', 'YUI_CONTEXT_MAX_CHARS', 'YUI_CONTEXT_MAX_TURNS',
     'YUI_CONTEXT_TTL_HOURS', 'YUI_CONTINUIDADE', 'YUI_DL_MAX_CONCURRENT', 'YUI_DL_MAX_FILESIZE_MB', 'YUI_DL_MAX_MINUTES', 'YUI_DL_TIMEOUT_SECONDS', 'YUI_GOOGLE', 'YUI_HISTORICO_COMPARTILHADO',
-    'YUI_IA_REFAZER_RECUSA', 'YUI_IMAGE_PER_HOUR', 'YUI_LISTS_ENABLED', 'YUI_MEMORY_ENABLED', 'YUI_MONITORES_RESERVA', 'YUI_PESQUISA_POR_INTENCAO', 'YUI_REMINDERS_ENABLED', 'YUI_RESEARCH_ENABLED',
+    // live dos amigos, etapa 1 (28/11/2026): YUI_LIVE_AMIGOS é lida a cada pedido pelo serviço (no cérebro ou no processo único); conferida em tests/test-live-amigos.js
+    'YUI_IA_REFAZER_RECUSA', 'YUI_IMAGE_PER_HOUR', 'YUI_LISTS_ENABLED', 'YUI_LIVE_AMIGOS', 'YUI_MEMORY_ENABLED', 'YUI_MONITORES_RESERVA', 'YUI_PESQUISA_POR_INTENCAO', 'YUI_REMINDERS_ENABLED', 'YUI_RESEARCH_ENABLED',
     // entrega E (27/11/2026, item 3 v2): YUI_PLANOS_PAINEL é lida a cada pedido só pela API do painel (o bot nunca a lê); conferida em tests/test-painel-acoes.js
     'YUI_PLANOS_PAINEL',
     // entrega F (27/11/2026, item 11): YUI_APP_IMAGEM é lida a cada pedido só pela API (a pré-rota e a ferramenta de imagem do chat); conferida em tests/test-imagem-app.js

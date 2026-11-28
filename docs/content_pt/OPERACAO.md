@@ -229,7 +229,8 @@ Os caminhos são relativos à pasta da Yui: na produção, `C:\Yui\logs` no note
 - **Integridade verificável:** qualquer linha alterada, removida ou reordenada quebra a cadeia e é detectada por `verifyAudit()`.
 - **Registro completo de aprovações:** cada ticket de aprovação crítica registra a ação, o hash dos parâmetros e o aprovador (`approverId`, `approverRole` e a origem); era o que a aba Código usava (removida em 27/11/2026) e hoje vale para as ações críticas do agente.
 - **Resiliência:** falhas de escrita disparam alerta de erro ao dono (`alerts.js`). Linhas legadas continuam sendo lidas normalmente.
-- **Rotação:** configurável via `YUI_AUDIT_MAX_BYTES` (padrão 10MB) e `YUI_AUDIT_MAX_ROTATE` (padrão 5 arquivos).
+- **Rotação:** configurável via `YUI_AUDIT_MAX_BYTES` (padrão 10MB) e `YUI_AUDIT_MAX_ROTATE` (padrão 4 arquivos).
+- **Prazo máximo (desde 28/11/2026):** `YUI_AUDIT_RETENCAO_DIAS` (padrão 60, decisão do dono). O arquivo atual gira com 30 dias; um girado sai quando a linha mais antiga passa do prazo. Antes de apagar, a Yui grava e confere uma âncora em `logs/core-audit-ancoras.jsonl` (nome, primeira e última `seq`, último hash, datas; sem dado pessoal). Cada arquivo girado tem a própria cadeia, então os que restam continuam verificáveis.
 - **Verificação de integridade via comando:**
   ```powershell
   npm run test:audit

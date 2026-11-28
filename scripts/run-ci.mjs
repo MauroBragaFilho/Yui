@@ -45,6 +45,8 @@ export const SUITES = [
   'test:operacao',
   // Etapa 4: memory.admin_wipe_user igual nos dois modos (o mesmo roteiro do /yui-criador memorias, local e pelo canal).
   'test:memoriaadmin',
+  // Live dos amigos, etapa 1 (vínculos): processo único e cérebro + bot pelo canal de verdade.
+  'test:liveamigos', 'test:liveamigoscanal',
   // Etapa 4 (depois da revisão da Liz): entrega dos lembretes com estados e reconciliação, sem DM em dobro.
   'test:entregalembretes',
   // Etapa 5: a conversa do Discord pelo cérebro (chat.turn e chat.commit) e o contexto por horas no cérebro. A unidade roda num processo

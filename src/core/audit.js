@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { alertOwner } from './alerts.js';
 import { redact } from './api/panelLogs.js';
+import { girarAuditoria } from './auditRetencao.js';
 
 const GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000';
 let lastAuditErrorAlertTime = 0;
@@ -147,8 +148,9 @@ export function audit(event, ctx, details = {}, { env = process.env, throwOnErro
 }
 
 /**
- * Rotação do log de auditoria quando excede o limite.
- * Preserva até N arquivos rotacionados (.1, .2, etc.).
+ * Rotação do log de auditoria quando excede o limite de tamanho.
+ * Preserva até N arquivos rotacionados (.1, .2, etc.; YUI_AUDIT_MAX_ROTATE, padrão 4). O que passa do limite só sai DEPOIS de gravada
+ * e confirmada uma âncora (auditRetencao.js); sem âncora, o arquivo não gira. A retenção por idade (prazo máximo) fica em auditRetencao.js.
  */
 export function rotateAuditIfNeeded(file, env = process.env) {
   try {
@@ -156,17 +158,7 @@ export function rotateAuditIfNeeded(file, env = process.env) {
     const maxBytes = parseInt(env.YUI_AUDIT_MAX_BYTES || `${10 * 1024 * 1024}`, 10);
     const stat = fs.statSync(file);
     if (stat.size < maxBytes) return;
-
-    const maxKeep = parseInt(env.YUI_AUDIT_MAX_ROTATE || '5', 10);
-    for (let i = maxKeep - 1; i >= 1; i--) {
-      const src = `${file}.${i}`;
-      const dst = `${file}.${i + 1}`;
-      if (fs.existsSync(src)) {
-        if (i + 1 > maxKeep) fs.unlinkSync(src);
-        else fs.renameSync(src, dst);
-      }
-    }
-    fs.renameSync(file, `${file}.1`);
+    girarAuditoria(file, env);
   } catch {
     // Rotação silenciosa para não quebrar gravação
   }

@@ -51,6 +51,8 @@ import { youtubeLigado } from './adaptadores/youtube/adaptador.js';
 import { definirPortaDaLive } from './adaptadores/youtube/porta.js';
 import { criarServicoDaLive } from './core/live/servico.js';
 import { isOwnerId } from './core/permissions.js';
+import { registrarLiveAmigos } from './cerebro/liveAmigos.js';
+import { iniciarRetencaoDaAuditoria } from './core/auditRetencao.js';
 import { iniciarMonitores } from './cerebro/monitores/index.js';
 import { iniciarEventos } from './cerebro/eventos.js';
 import { activateFakeAi } from './cerebro/iaFalsa.js';
@@ -313,6 +315,10 @@ async function bootstrap() {
       live.avisarReinicio();
     }
   } catch (err) { live = null; logger.error(`[Cérebro] a live não subiu (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem ela.`); }
+  // Live dos amigos, etapa 1 (vínculos): o serviço mora aqui SEMPRE (revogar e "apagar meus dados" funcionam com YUI_LIVE_AMIGOS desligado).
+  try { registrarLiveAmigos({ channel, logger }); } catch (err) { logger.error(`[Cérebro] a live dos amigos não subiu (${err?.code ?? 'erro'}); o resto segue sem ela.`); }
+  // Retenção da auditoria (prazo máximo, YUI_AUDIT_RETENCAO_DIAS): na subida e a cada 6 horas, mesmo sem gravação nova; só o arquivo DESTE processo.
+  try { iniciarRetencaoDaAuditoria({ logger }); } catch { /* a retenção nunca derruba a subida */ }
   // 5b. Alertas por evento (etapa 16; YUI_ALERTAS_EVENTOS, padrão desligado = null): disco, memória, internet e religadas do supervisor, pelo alertOwner.
   try { eventos = iniciarEventos({ logger }); } catch (err) { eventos = null; logger.error(`[Cérebro] os alertas por evento não subiram (${err?.code ?? err?.message ?? 'erro'}); o resto segue sem eles.`); }
 

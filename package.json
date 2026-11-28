@@ -35,6 +35,8 @@
     "test:operacao": "node tests/test-operacao.js",
     "test:soak2h": "node scripts/soak-dois-processos.mjs --minutos=120",
     "test:memoriaadmin": "node tests/test-memoria-admin.js",
+    "test:liveamigos": "node tests/test-live-amigos.js",
+    "test:liveamigoscanal": "node tests/test-live-amigos-canal.js",
     "test:entregalembretes": "node tests/test-entrega-lembretes.js",
     "test:chatturn": "node tests/test-chat-turn.js",
     "test:chatturnunidade": "node tests/test-chat-turn-unidade.js",

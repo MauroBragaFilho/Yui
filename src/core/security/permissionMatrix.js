@@ -95,6 +95,14 @@ const ROWS = [
   ['bds.write', true, 'SSDDD', true],
   ['bds.delete', true, 'SSDDD', true],
   ['bds.purge', true, 'SCDDD', true],              // apagar de vez: no PC pede confirmação; remoto (app) é crítico = negado
+  // Live dos amigos, etapa 1 (vínculos; docs/PLANO_TECNICO_LIVE_AMIGOS_ETAPA1.md §5, aprovado pela Liz em 27/11/2026). A CAMADA OBRIGATÓRIA
+  // (src/core/liveAmigos/camada.js) roda antes, no serviço, e este motor só pode apertar. Revogar e "apagar meus dados" sem `modifies` de propósito, como
+  // memory.wipe_own: a exclusão de dados de pessoas tem de funcionar sempre (inclusive em somente leitura). AUTORIZAR cria um vínculo novo e persistente:
+  // com `modifies` (parecer da Liz de 28/11/2026), então o modo somente leitura (YUI_READ_ONLY=true, em enforce) nega.
+  ['live_amigos.listar', false, 'AAADD', true],
+  ['live_amigos.autorizar', true, 'SSSDD', true],
+  ['live_amigos.revogar', false, 'SSSDD', true],
+  ['live_amigos.apagar_meus_dados', false, 'SSSSS', true],
 ];
 
 export const MATRIX = Object.freeze(new Map(ROWS.map(([action, modifies, codes, proposed = false]) => {

@@ -333,6 +333,17 @@ async function bootstrap() {
       logger.warn(`[Bootstrap] Live do YouTube indisponível: ${String(err?.message ?? err).slice(0, 100)}`);
     }
   }
+  // Live dos amigos, etapa 1 (vínculos): no processo único o serviço mora aqui; separado, mora no cérebro e o bot encaminha pela porta do canal.
+  if (!SEPARADO) {
+    try {
+      const { iniciarLiveAmigosNoProcessoUnico } = await import('./discord/liveAmigosDiscord.js');
+      await iniciarLiveAmigosNoProcessoUnico({ getClient: () => client, logger });
+    } catch (err) {
+      logger.warn(`[Bootstrap] Live dos amigos indisponível (${String(err?.code ?? 'erro').slice(0, 40)}).`);
+    }
+  }
+  // Retenção da auditoria (YUI_AUDIT_RETENCAO_DIAS): cada processo cuida só do PRÓPRIO arquivo (o bot, separado, do core-audit-bot.jsonl).
+  try { (await import('./core/auditRetencao.js')).iniciarRetencaoDaAuditoria({ logger }); } catch { /* a retenção nunca derruba a subida */ }
   alertOwner('boot', 'Estou no ar', 'A Yui acabou de iniciar (ou reiniciar) e já está conectada ao Discord.', { level: 'info', cooldownMinutes: 5 });
   if (mediaStatus && !mediaStatus.opusOk) {
     alertOwner(

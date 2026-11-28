@@ -42,6 +42,7 @@ import { planosLigados } from '../core/planos/pedido.js';
 import { youtubeLigado } from '../adaptadores/youtube/adaptador.js';
 import { definirPortaDaLive } from '../adaptadores/youtube/porta.js';
 import { definirPortaDePlanos } from '../core/planos/porta.js';
+import { definirPortaLiveAmigos } from '../core/liveAmigos/porta.js';
 import { applyAiSettings } from '../core/aiSettings.js';
 import { recarregarAoVivo } from '../core/painelConfig.js';
 import { definirCofreRemoto } from './cofreRemoto.js';
@@ -246,6 +247,20 @@ export function registerBotActions(channel, { getClient, admin = null, getBans =
     });
   }
 
+  // Live dos amigos (etapa 1): o cérebro pede ao bot só a saída. O aviso a quem não é o dono é SÓ o texto fixo da revogação (conferido em acoesDoDiscord);
+  // a limpeza só edita ou apaga mensagens da própria Yui numa DM. Resposta: só o resultado e um motivo codificado (nunca conteúdo nem IDs).
+  channel.handle('liveamigos.avisar', async (p) => {
+    const { acoesDoDiscord } = await import('./liveAmigosDiscord.js');
+    try { return { enviado: await acoesDoDiscord(getClient).avisar({ userId: p?.userId ?? null, dono: p?.dono === true, texto: String(p?.texto ?? ''), chave: String(p?.chave ?? '') }) }; } catch (err) {
+      if (err?.code === 'FORBIDDEN') throw coded('FORBIDDEN', 'Aviso recusado.');
+      throw coded('DM_FALHOU', 'O aviso não saiu.');
+    }
+  });
+  channel.handle('liveamigos.limparDm', async (p) => {
+    const { acoesDoDiscord } = await import('./liveAmigosDiscord.js');
+    return acoesDoDiscord(getClient).limparDm({ messageId: String(p?.messageId ?? ''), channelId: String(p?.channelId ?? ''), acao: p?.acao === 'apagar' ? 'apagar' : 'editar', texto: p?.texto ?? undefined });
+  });
+
   channel.handle('discord.status', async () => {
     const client = getClient();
     const online = Boolean(client?.isReady?.());
@@ -320,6 +335,12 @@ export function startBotChannel({ getClient, logger = defaultLogger, connect = c
   if (youtubeLigado(process.env)) {
     definirPortaDaLive({ rotear: ({ userId, texto, idem }) => channel.request('youtube.comando', { userId, texto }, { idem: idem ? `youtube.comando:${idem}` : effect('youtube.comando'), timeoutMs: 65_000 }) });
   }
+  // Live dos amigos (etapa 1): o serviço mora no cérebro; o bot só encaminha (sempre, mesmo com YUI_LIVE_AMIGOS desligado: revogar e apagar nunca param).
+  definirPortaLiveAmigos({
+    comando: ({ userId, texto, idem }) => channel.request('liveamigos.comando', { userId, texto }, { idem: idem ? `liveamigos.comando:${idem}` : effect('liveamigos.comando'), timeoutMs: 30_000 }),
+    botao: ({ userId, customId, idem }) => channel.request('liveamigos.botao', { userId, customId }, { idem: idem ? `liveamigos.botao:${idem}` : effect('liveamigos.botao'), timeoutMs: 30_000 }),
+    mensagemEnviada: (p) => channel.request('liveamigos.mensagem', p, { idem: effect('liveamigos.mensagem'), timeoutMs: 15_000 }),
+  });
   channel.onState(({ state }) => {
     if (state !== 'open') return;
     logger.info('[Cérebro] Bot ligado ao cérebro: conversa, memória, lembretes e pesquisa pelo canal.');

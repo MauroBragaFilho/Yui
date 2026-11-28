@@ -1,4 +1,5 @@
 import { apagarPlanosDe } from '../planos/store.js';
+import { apagarVinculoDe } from '../liveAmigos/porta.js';
 import { initDatabase, getDbWrapper } from '../../database/db.js';
 import { MEMORY_PERSONAL_SCHEMA, MEMORY_DISCORD_SCHEMA } from './schemas.js';
 import { MEMORY_SCOPES, ROLES } from '../permissions.js';
@@ -184,6 +185,7 @@ export function forgetAll(ctx) {
   if (!personal) db.prepare('DELETE FROM memory_users WHERE user_id = ?').run(ctx.userId);
   audit('memory.forgetAll', ctx, { removed: changes });
   apagarPlanosDe(ctx.userId); // planos com aprovação (sem arquivo, nada acontece)
+  apagarVinculoDe(ctx.userId); // vínculo da live dos amigos (só onde o serviço mora; sem vínculo, nada acontece)
   return changes;
 }
 

@@ -556,6 +556,11 @@ export default {
                 const { handlePlanoButton } = await import('../discord/planosDiscord.js');
                 return await handlePlanoButton(interaction);
             }
+            // Live dos amigos: o prefixo fica FORA do discordGuard de propósito; a camada obrigatória e o motor rodam no serviço (no cérebro).
+            if (cid.startsWith('liveamg_')) {
+                const { handleLiveAmigosButton } = await import('../discord/liveAmigosDiscord.js');
+                return await handleLiveAmigosButton(interaction);
+            }
             if (cid.startsWith('radio_')) {
                 if (cid.startsWith('radio_ambiguous_cancel_')) {
                     return await handleAmbiguousSelect(interaction, client);

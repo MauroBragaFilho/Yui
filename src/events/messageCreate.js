@@ -16,6 +16,7 @@ import { isOwnerId } from '../core/permissions.js';
 import { fusoDoDono } from '../core/fuso.js';
 import { describeImages } from '../services/vision.js';
 import { ehResultadoDePlano } from '../core/planos/pedido.js';
+import { portaA } from '../discord/liveAmigosDiscord.js';
 
 // ---------------------------------------------------------------------------------------------
 // Bloco CONTEXTO: teto de caracteres
@@ -365,6 +366,9 @@ export default {
     once: false,
     async execute(message, client) {
         if (message.author.bot) return;
+        // Live dos amigos (Porta A): antes do descarte de DM de terceiros e da checagem de banimento, para o "apagar meus dados da live" funcionar
+        // sempre. Só as frases reconhecidas param aqui (nunca chegam à IA, ao histórico nem ao webhook); o resto segue como sempre.
+        if (!message.guildId && await portaA(message, client, { logger })) return;
         if (isForeignDirectMessage(message)) return;
         const isDirectMessage = !message.guildId; // no privado ninguém precisa citar "Yui" (com YUI_DM_EVERYONE=false só o dono chega aqui)
         // "Apagar tudo" pendente: vale só para a próxima mensagem desta pessoa, em qualquer canal.
