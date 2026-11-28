@@ -409,7 +409,9 @@ await test('o corte da fala ao desligar o interruptor vale por QUALQUER caminho 
   // o painel não duplica o corte (ele só chama setServerToolEnabled)
   const panelSrc = read('src/handlers/mcpToolPanelHandler.js');
   assert.ok(!/interruptSpeech/.test(panelSrc), 'o corte fica num lugar só (llmHandler)');
-  assert.ok(/stopSpeechOfSwitchedOffGuild\(guildId\);\s+return true;/.test(read('src/handlers/llmHandler.js')), 'setServerToolEnabled corta ao desligar');
+  // Desde 26/11 (987e30f) setServerToolEnabled devolve se o disco gravou (`gravou`) em vez de `true`; o corte da fala ao desligar continua
+  // incondicional e logo antes do retorno (a configuração em memória já mudou, então a fala para mesmo se o disco recusar).
+  assert.ok(/if \(toolName === 'voice_tts' && !enabled\) stopSpeechOfSwitchedOffGuild\(guildId\);\s+return gravou;/.test(read('src/handlers/llmHandler.js')), 'setServerToolEnabled corta ao desligar');
 }));
 await test('reset: também só vale no servidor onde o painel foi aberto', () => toolsSandbox(async () => {
   llm.setServerToolEnabled('g-panel-1', 'voice_tts', true);
@@ -960,7 +962,9 @@ await test('fontes: o gancho [TTS-HOOK] vem DEPOIS da entrega e ANTES do histór
   const block = src.slice(hook, history);
   assert.ok(/if \(voiceSpeak && delivery\.ok && sentMessage\)/.test(block), 'o gancho precisa da entrega confirmada e de item de voz FALADO');
   assert.ok(/const voiceSpeak = isVoice && options\.voiceSpeak !== false;/.test(src), 'voiceSpeak só se o item de voz não pediu silêncio');
-  assert.ok(/speakVoiceReply\(\{ guildId, userId, text: processedResponse, transcript: options\.voiceTranscript, sensitive: coreCtx\.memoryScope === 'personal', requestedAt: options\.voiceRequestedAt, fromVoice: true \}\)/.test(block), 'campos do gancho');
+  // Desde 25/11 (bddee1a, voz unificada) o gancho manda também `audienciaOk`, só quando a audiência da call é privada (a fala confere de novo
+  // quem está na call antes de tocar uma resposta pessoal). Os campos continuam exatos: os de sempre e, no máximo, esse.
+  assert.ok(/speakVoiceReply\(\{ guildId, userId, text: processedResponse, transcript: options\.voiceTranscript, sensitive: coreCtx\.memoryScope === 'personal', requestedAt: options\.voiceRequestedAt, fromVoice: true, \.\.\.\(audCtl\?\.nivel\(\) === 'privado' \? \{ audienciaOk: \(\) => audCtl\.audienciaOk\(\) \} : \{\}\) \}\)/.test(block), 'campos do gancho');
   assert.ok(!/await speakVoiceReply/.test(src), 'o gancho não pode esperar a fala');
   assert.ok(/\} catch \(_\) \{/.test(block), 'o gancho precisa de try/catch');
   assert.equal((src.match(/speakVoiceReply\(/g) || []).length, 1, 'um único ponto de fala');
@@ -1008,14 +1012,19 @@ await test('fontes: sem console.* com texto de voz nas linhas novas (o raciocín
   assert.ok(/logger\.info\(`\[MCP TOOL\] Detectado:/.test(block));
   assert.ok(/raciocínio de \$\{String\(toolData\.thought \?\? ''\)\.length\} caracteres/.test(block));
 });
-await test('fontes: mcp_tools.json válido, JSON sem BOM e fim de linha CRLF preservado nos arquivos CRLF', () => {
-  for (const rel of ['src/handlers/llmHandler.js', 'src/handlers/mcpToolPanelHandler.js', 'src/data/mcp_tools.json']) {
+// O git guarda estes arquivos em LF; a cópia de trabalho fica em CRLF ou em LF conforme o `core.autocrlf` de cada computador (no PC do dono,
+// `true`: tudo CRLF). O que importa é não MISTURAR os dois num arquivo (o `sed -i` do Git Bash, por exemplo, troca só as linhas que mexe).
+// Antes o teste exigia CRLF nos três primeiros e LF no persona.js, o que dependia de como a cópia foi feita, e não da integridade do arquivo.
+await test('fontes: mcp_tools.json válido, JSON sem BOM e fim de linha sem mistura (CRLF ou LF, nunca os dois no mesmo arquivo)', () => {
+  for (const rel of ['src/handlers/llmHandler.js', 'src/handlers/mcpToolPanelHandler.js', 'src/data/mcp_tools.json', 'src/core/persona.js']) {
     const raw = fs.readFileSync(path.join(repoRoot, rel), 'utf8');
-    assert.equal((raw.match(/(?<!\r)\n/g) || []).length, 0, `${rel} tem LF solto`);
+    const crlf = (raw.match(/\r\n/g) || []).length;
+    const lfSolto = (raw.match(/(?<!\r)\n/g) || []).length;
+    assert.ok(crlf === 0 || lfSolto === 0, `${rel} tem fim de linha misto (${crlf} CRLF e ${lfSolto} LF)`);
+    assert.equal((raw.match(/\r(?!\n)/g) || []).length, 0, `${rel} tem CR solto`);
     assert.ok(!raw.startsWith('\uFEFF'));
   }
-  const persona = fs.readFileSync(path.join(repoRoot, 'src/core/persona.js'), 'utf8');
-  assert.equal((persona.match(/\r/g) || []).length, 0, 'persona.js é LF');
+  assert.doesNotThrow(() => JSON.parse(fs.readFileSync(path.join(repoRoot, 'src/data/mcp_tools.json'), 'utf8')), 'mcp_tools.json é JSON válido');
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════
