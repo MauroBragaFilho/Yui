@@ -169,6 +169,20 @@ eq(p('me lembra de pagar a conta').action, 'ask-when');
 eq(p('me lembra ontem de x').action, 'error');
 // conversa normal nunca é capturada
 for (const frase of ['você lembra do Gabriel?', 'me lembra o que falamos ontem?', 'me avisa quando chegar', 'lembra daquele filme?', 'qual o lembrete mais comum em apps?', 'anota na lista compras: leite', 'oi tudo bem', 'amanhã às 9h tem jogo']) eq(p(frase), null, frase);
+// dois compromissos ligados por "e" viram dois lembretes (caso real de 28/11: só o primeiro horário era usado)
+{
+  const d = p('Pode colocar na agenda de ir no aniversário do João às 18h e pelas 22h ir buscar a Helena?');
+  eq(d.action, 'add-multiple', 'aniversário + Helena');
+  eq(d.items.map((i) => i.text), ['ir no aniversário do João', 'ir buscar a Helena']);
+  ok(new Date(d.items[1].at) > new Date(d.items[0].at), 'o segundo é depois do primeiro');
+  const a = p('me lembra amanhã às 9h do dentista e às 15h de buscar o carro');
+  eq(a.items.map((i) => i.text), ['dentista', 'buscar o carro']);
+  eq(new Date(a.items[1].at).getDate(), new Date(a.items[0].at).getDate(), 'o "amanhã" do primeiro vale para o segundo');
+  const r = p('me lembra de tomar remédio às 8h e 20h');
+  eq(r.items.map((i) => i.text), ['tomar remédio', 'tomar remédio'], 'o segundo horário herda o texto');
+  eq(p('me lembra de comprar pão e leite às 18h').action, 'add', 'um horário só: o "e" é do texto');
+  eq(p('me lembra às 18h de ligar pro João e pra Maria').text, 'ligar pro João e pra Maria');
+}
 // pedidos educados e perguntas (o caso real: "poderia me lembrar daqui 15 minutos parar ir para casa?")
 eq(p('poderia me lembrar daqui 15 minutos para ir para casa?').action, 'add');
 eq(p('poderia me lembrar daqui 15 minutos para ir para casa?').text, 'ir para casa');

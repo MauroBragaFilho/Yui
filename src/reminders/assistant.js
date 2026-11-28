@@ -99,6 +99,42 @@ function parseListItems(body, now) {
   return { items: unicos };
 }
 
+// Um horário dentro do texto ("18h", "às 9", "9:30", "meio-dia"): conta quantos há para só tentar dividir quando houver dois ou mais.
+const RE_HORARIO_SOLTO = /(?:\b(?:[01]?\d|2[0-3])(?::[0-5]\d|h(?:[0-5]\d)?\b|\s*horas?\b)|\bas\s+(?:[01]?\d|2[0-3])\b|\bmeio[- ]dia\b|\bmeia[- ]noite\b)/gi;
+const RE_DIA = /\b(hoje|amanha|depois de amanha|segunda(?:-feira)?|terca(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|sabado|domingo|dia\s+\d{1,2}(?:\/\d{1,2})?)\b/i;
+
+/**
+ * "X às 18h e (pelas) 22h Y" / "X às 18h e Y às 22h": tenta dividir no " e " (ou ";") em dois lembretes, cada um com o seu horário.
+ * Só divide quando a frase tem pelo menos dois horários, os dois pedaços têm horário e texto, e os instantes são diferentes.
+ * O dia dito só no primeiro pedaço ("amanhã às 18h ... e às 22h ...") vale para o segundo. Devolve null quando não se aplica.
+ */
+function parseConjuncao(body, now) {
+  const norm = normChars(body);
+  if ((norm.match(RE_HORARIO_SOLTO) ?? []).length < 2) return null;
+  const re = /\s*(?:;|,?\s+e\s+(?:depois\s+)?)/gi;
+  let m;
+  while ((m = re.exec(norm))) {
+    const a = body.slice(0, m.index).trim();
+    const b = body.slice(m.index + m[0].length).trim();
+    if (!a || !b) continue;
+    const wa = parseWhen(a, now);
+    if (!wa.ok) continue;
+    const diaA = RE_DIA.exec(normChars(a));
+    let wb = null;
+    if (diaA && !RE_DIA.test(normChars(b))) wb = parseWhen(`${diaA[1]} ${b}`, now);
+    if (!wb || !wb.ok) wb = parseWhen(b, now);
+    if (!wb.ok && /^\d/.test(b)) wb = parseWhen(`as ${b}`, now); // "8h e 20h": o segundo horário vem sem o "às"
+    if (!wb.ok) continue;
+    const ta0 = cleanBody(wa.text); const tb0 = cleanBody(wb.text);
+    // "remédio às 8h e 20h" / "às 8h e às 20h de tomar remédio": o pedaço sem texto herda o do outro
+    const ta = ta0 || tb0; const tb = tb0 || ta0;
+    if (!ta || !tb) continue;
+    if (wa.at instanceof Date && wb.at instanceof Date && wa.at.getTime() === wb.at.getTime()) continue;
+    return [{ text: ta, at: wa.at, repeat: wa.repeat }, { text: tb, at: wb.at, repeat: wb.repeat }];
+  }
+  return null;
+}
+
 export function parseReminderRequest(raw, now = new Date()) {
   const original = String(raw ?? '').normalize('NFC').slice(0, MAX_HEAD * 4);
   const lines = original.split(/\r?\n/);
@@ -169,6 +205,10 @@ export function parseReminderRequest(raw, now = new Date()) {
     const unico = listResult.items[0];
     return T({ action: 'add', text: unico.text, at: unico.at, repeat: unico.repeat });
   }
+
+  // Dois compromissos numa frase só, ligados por "e" ("ir no aniversário às 18h e pelas 22h buscar a Helena"): cada um vira o seu lembrete.
+  const dupla = parseConjuncao(body, now);
+  if (dupla) return T({ action: 'add-multiple', items: dupla });
 
   const w = parseWhen(body, now);
   if (w.ok) {
@@ -392,6 +432,15 @@ export function scopedReminderStore(store, userId, ownerView, authorName = '') {
  * YUI_REMINDERS_ALL_USERS=false volta a só o dono. Qualquer pessoa cria e mexe nos PRÓPRIOS lembretes (aviso por DM para ela);
  * só o dono tem o "resumo do dia".
  */
+function observarLembrete(texto, userId, env) {
+  if (String(env?.YUI_INTERPRETADOR ?? 'off').trim().toLowerCase() !== 'observar') return;
+  import('../core/inteligencia/observador.js').then(({ observadorPadrao }) => {
+    const h = observadorPadrao().iniciar({ texto, canal: 'lembrete', userId, role: 'OWNER', memoryScope: 'personal', principal: true });
+    h?.marcar('lembrete');
+    h?.fechar();
+  }).catch(() => {});
+}
+
 export async function routeReminders({ text, userId, authorName = '' } = {}, { store = null, env = process.env, now = new Date(), report = null, isOwner = null, audit = () => {}, aoMudar = null } = {}) {
   if (String(env?.YUI_REMINDERS_ENABLED ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
   if (!userId || !/^\d{5,25}$/.test(String(userId))) return { handled: false };
@@ -408,6 +457,8 @@ export async function routeReminders({ text, userId, authorName = '' } = {}, { s
   const ownerView = Boolean(owner(String(userId)));
   if (!ownerView && String(env?.YUI_REMINDERS_ALL_USERS ?? 'true').trim().toLowerCase() === 'false') return { handled: false };
   const reply = await runReminderRequest({ text, store: scopedReminderStore(store || defaultStore(), userId, ownerView, authorName), now, report, isOwner: ownerView, isOwnerId: (id) => Boolean(owner(String(id))), audit, aoMudar });
+  // Fase B: o pedido de lembrete do DONO também entra na observação do interpretador (só registra; YUI_INTERPRETADOR=observar). Nunca atrasa nem lança.
+  if (reply !== null && ownerView) observarLembrete(String(text ?? ''), String(userId), env);
   return reply === null ? { handled: false } : { handled: true, text: reply, researched: true };
 }
 
