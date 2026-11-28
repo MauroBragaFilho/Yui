@@ -15,8 +15,8 @@ const ENFEITE = new Set([
   'o', 'os', 'a', 'as', 'um', 'uma', 'meu', 'meus', 'minha', 'minhas', 'de', 'do', 'da', 'dos', 'das', 'na', 'no', 'nas', 'nos', 'em', 'para', 'pra', 'pro', 'eu', 'la',
 ]);
 
-const NUCLEO_AGENDA = new Set(['agenda', 'compromisso', 'compromissos', 'reuniao', 'reunioes', 'evento', 'eventos']);
-const SOBRA_AGENDA = new Set(['que', 'tenho', 'tem', 'ha', 'existe', 'quais', 'algum', 'alguma', 'agenda', 'compromisso', 'compromissos', 'reuniao', 'reunioes', 'evento', 'eventos']);
+const NUCLEO_AGENDA = new Set(['agenda', 'calendario', 'compromisso', 'compromissos', 'reuniao', 'reunioes', 'evento', 'eventos']);
+const SOBRA_AGENDA = new Set(['que', 'tenho', 'tem', 'ha', 'existe', 'quais', 'algum', 'alguma', 'como', 'esta', 'ta', 'fica', 'ficou', 'calendario', 'agenda', 'compromisso', 'compromissos', 'reuniao', 'reunioes', 'evento', 'eventos']);
 const NUCLEO_TAREFAS = new Set(['tarefa', 'tarefas', 'afazeres']);
 const SOBRA_TAREFAS = new Set(['que', 'tenho', 'tem', 'ha', 'quais', 'pendente', 'pendentes', 'fazer', 'tarefa', 'tarefas', 'afazeres', 'alguma', 'ainda']);
 const NUCLEO_EMAIL = new Set(['email', 'emails']);
@@ -60,7 +60,7 @@ function classificarAniversario(norm) {
 
 /** Quanto tempo uma consulta ao Google ainda vale como "assunto" para uma continuação ("e amanhã?"). */
 export const VALIDADE_CONTINUACAO_MS = 10 * 60_000;
-const SOBRA_CONTINUACAO = new Set(['agenda', 'compromisso', 'compromissos', 'reuniao', 'reunioes', 'evento', 'eventos', 'tarefa', 'tarefas', 'afazeres', 'aniversario', 'aniversarios', 'proximo', 'proximos', 'dias', 'dia', 'que', 'tenho']);
+const SOBRA_CONTINUACAO = new Set(['agenda', 'calendario', 'compromisso', 'compromissos', 'reuniao', 'reunioes', 'evento', 'eventos', 'tarefa', 'tarefas', 'afazeres', 'aniversario', 'aniversarios', 'proximo', 'proximos', 'dias', 'dia', 'que', 'tenho']);
 
 /**
  * A CONTINUAÇÃO de uma consulta recente ("e nesta semana?", "e amanhã?", "e as tarefas?"). `ultimo` = { tipo, periodo, em } da última consulta que a Yui fez ao Google

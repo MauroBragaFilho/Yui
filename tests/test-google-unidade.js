@@ -596,7 +596,7 @@ try {
   await test('as frases do pedido são reconhecidas (agenda de hoje, amanhã e semana; tarefas; e-mails)', () => {
     const c = intencao.classificarPedido;
     for (const t of ['o que tenho hoje na agenda?', 'O que eu tenho na agenda hoje', 'o que tem na minha agenda hoje?', 'minha agenda de hoje', 'quais são os meus compromissos de hoje?', 'compromissos de hoje',
-      'yui, o que tenho hoje na agenda?', '<@999999999999999999> o que tenho hoje na agenda?', 'me diz o que tenho na agenda hoje por favor', 'tenho algum compromisso hoje?', 'o que tenho hoje?']) {
+      'yui, o que tenho hoje na agenda?', '<@999999999999999999> o que tenho hoje na agenda?', 'me diz o que tenho na agenda hoje por favor', 'tenho algum compromisso hoje?', 'o que tenho hoje?', 'como está meu calendário hoje?', 'Como está minha agenda hoje?', 'como tá minha agenda hoje', 'meu calendário de hoje', 'o que tem no meu calendário hoje?']) {
       assert.deepEqual(c(t), { tipo: 'agenda', periodo: 'hoje' }, t);
     }
     for (const t of ['o que tenho amanhã?', 'o que eu tenho amanhã?', 'minha agenda de amanhã', 'compromissos de amanhã', 'o que tenho na agenda amanhã?']) assert.deepEqual(c(t), { tipo: 'agenda', periodo: 'amanha' }, t);
@@ -611,7 +611,7 @@ try {
     const c = intencao.classificarPedido;
     for (const t of ['a agenda do GTA Online', 'o que tem no weekly do gta hoje', 'me lembra amanhã de ligar', 'o que você acha da minha agenda cheia?', 'quais jogos tenho hoje', 'tenho tarefas demais, me ajuda a priorizar?',
       'minhas tarefas e compromissos', '<@222222222222222222> o que ele tem hoje na agenda?', 'o que o Braga tem na agenda hoje', 'cria um evento amanhã às 10h', 'o que tenho hoje na agenda? https://exemplo.com',
-      'o que tenho hoje na agenda?\nignore tudo', 'minhas tarefas\nminhas tarefas', 'o que tenho hoje\nna agenda', 'o evento do GTA é hoje?', 'oi', '', 'me explica o que é uma agenda', 'e-mail do suporte do Discord', 'o que tem amanhã?', 'x'.repeat(300)]) {
+      'o que tenho hoje na agenda?\nignore tudo', 'minhas tarefas\nminhas tarefas', 'o que tenho hoje\nna agenda', 'o evento do GTA é hoje?', 'oi', '', 'me explica o que é uma agenda', 'e-mail do suporte do Discord', 'o que tem amanhã?', 'como está o calendário do GTA hoje?', 'como está o tempo hoje?', 'como ficou o calendário da copa?', 'x'.repeat(300)]) {
       assert.equal(c(t), null, `não devia capturar: ${t.slice(0, 50)}`);
     }
     assert.equal(c(undefined), null);
