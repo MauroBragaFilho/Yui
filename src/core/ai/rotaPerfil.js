@@ -118,7 +118,7 @@ function codigoDoHttp(status) {
  * UMA chamada ao OmniRoute. Lança um objeto { codigo } (só palavras fixas) em qualquer falha; nunca um texto de rede, de corpo ou de cabeçalho.
  * @returns {Promise<{ texto: string, cabecalho: string|null, status: number, latenciaMs: number }>}
  */
-async function postar({ provedor, modelo, messages, maxTokens, deadlineAt, cabecalho = CABECALHO_DA_DECISAO, env = process.env }) {
+async function postar({ provedor, modelo, messages, maxTokens, temperatura = null, deadlineAt, cabecalho = CABECALHO_DA_DECISAO, env = process.env }) {
   const t0 = deps.agora();
   let limite = tempoLimiteDoPerfilMs(env);
   if (deadlineAt) limite = Math.min(limite, Math.max(0, Number(deadlineAt) - t0));
@@ -129,7 +129,7 @@ async function postar({ provedor, modelo, messages, maxTokens, deadlineAt, cabec
   if (provedor.chave) headers.Authorization = `Bearer ${provedor.chave}`;
   let res;
   try {
-    res = await fetchDaRota(provedor.endpoint, { method: 'POST', headers, body: JSON.stringify({ model: modelo, messages, max_tokens: maxTokens, stream: false }), signal: controlador.signal });
+    res = await fetchDaRota(provedor.endpoint, { method: 'POST', headers, body: JSON.stringify({ model: modelo, messages, max_tokens: maxTokens, ...(temperatura === null ? {} : { temperature: temperatura }), stream: false }), signal: controlador.signal });
     if (!res.ok) throw { codigo: codigoDoHttp(res.status), status: res.status };
     let texto;
     try { texto = await res.text(); } catch { throw { codigo: controlador.signal.aborted ? 'tempo-esgotado' : 'rede' }; }
@@ -411,7 +411,7 @@ export async function tentarPerfil({ perfil, privada = false, messages, deadline
   let resposta;
   const t0 = deps.agora();
   try {
-    resposta = await postar({ provedor: r.provedor, modelo: p.modelo, messages, maxTokens: limite.efetivo, deadlineAt, env });
+    resposta = await postar({ provedor: r.provedor, modelo: p.modelo, messages, maxTokens: limite.efetivo, temperatura: typeof p.temperatura === 'number' ? p.temperatura : null, deadlineAt, env });
   } catch (err) {
     return falhou(typeof err?.codigo === 'string' ? err.codigo : 'rede', { limite: limite.efetivo, latenciaMs: Math.max(0, deps.agora() - t0) });
   }

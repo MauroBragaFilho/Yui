@@ -123,6 +123,8 @@ export const SUITES = [
   'test:youtubeservico',
   // A leitura do chat em FLUXO (gRPC, servidor falso em loopback) e a reserva na consulta, o ritmo pela duração, a cota por conexão e o fechamento sem handles abertos
   'test:youtubefluxo',
+  // Fase B do interpretador de intenção (SÓ OBSERVAÇÃO, desligado por padrão, IA FALSA): esquema, prompt sem dado pessoal, timeout, disjuntor, perfil `interpretar`, só o dono, hash do texto, rotação, não bloqueia a resposta, a ligação no cérebro, o relatório e a bateria de frases.
+  'test:interpretador',
   'test:devtarefas',
   'test:sondahardware',
   'test:ialocal',
