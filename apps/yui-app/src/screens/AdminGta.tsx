@@ -149,12 +149,12 @@ export function Gta({ client }: { client: YuiClient }) {
             acao={<Republicar client={client} tipo="diario" view={data} onDone={reload} />}
           />
           <BlocoCard
-            testID="gta-semanal" titulo="Evento semanal" bloco={resumoDoSemanal(data.semanal)} vazio={TEXTO_SEM_SEMANAL} link={data.semanal?.link}
+            testID="gta-semanal" titulo="Semanal do GTA" bloco={resumoDoSemanal(data.semanal)} vazio={TEXTO_SEM_SEMANAL} link={data.semanal?.link}
             publicado={data.semanal?.publicado} comCanal={data.canais.semanal} rodape={data.semanal?.salvoEm ? `Salvo em ${dataEHora(data.semanal.salvoEm)}.` : null}
             acao={<Republicar client={client} tipo="semanal" view={data} onDone={reload} />}
           />
           <BlocoCard
-            testID="gta-noticia" titulo="Última notícia" bloco={resumoDaNoticia(data.noticia)} vazio={TEXTO_SEM_NOTICIA} link={data.noticia?.link}
+            testID="gta-noticia" titulo="Notícias da Rockstar (a mais recente)" bloco={resumoDaNoticia(data.noticia)} vazio={TEXTO_SEM_NOTICIA} link={data.noticia?.link}
             publicado={data.noticia?.publicado} comCanal={data.canais.noticias}
             acao={<Republicar client={client} tipo="noticia" view={data} onDone={reload} />}
           />

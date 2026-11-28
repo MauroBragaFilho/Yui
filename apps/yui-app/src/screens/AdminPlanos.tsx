@@ -4,6 +4,7 @@ import { ApiError, type AvisosResult, type PlanoView, type PlanosResult, type Yu
 import { confirmAction } from '../components/confirm.ts';
 import { ChaveDaDm } from '../components/ChaveDaDm.tsx';
 import { TEXTOS_DA_CHAVE, erroDaChave, textoDaChaveEnviada } from '../confirmacaoLogic.ts';
+import { rotuloDoValor } from '../valoresLogic.ts';
 import { Badge, Button, Card, SectionHeading, StateView } from '../components/ui.tsx';
 import {
   avisoDosPlanos,
@@ -205,7 +206,7 @@ export function PlanosEAvisos({ client }: { client: YuiClient }) {
         />
       ))}
 
-      <SectionHeading title="Avisos" hint={modo?.titulo} />
+      <SectionHeading title="Filtro de avisos" hint={modo?.titulo} />
       {loading && !avisos && !erroAvisos ? <StateView kind="loading" /> : null}
       {erroAvisos ? <StateView kind="error" testID="avisos-erro" message={erroAvisos} onRetry={reload} /> : null}
       {avisos && modo ? (
@@ -213,7 +214,7 @@ export function PlanosEAvisos({ client }: { client: YuiClient }) {
           <Card style={styles.card}>
             <View style={styles.rowBetween}>
               <Text style={styles.cardTitle}>{modo.titulo}</Text>
-              <Badge label={avisos.modo} color={COR[modo.tom]} />
+              <Badge label={rotuloDoValor('YUI_AVISOS_FILTRO', avisos.modo)} color={COR[modo.tom]} />
             </View>
             <Text testID="avisos-modo" style={styles.hint}>{modo.texto}</Text>
           </Card>
@@ -230,7 +231,7 @@ export function PlanosEAvisos({ client }: { client: YuiClient }) {
           {avisos.observados.map((o) => (
             <Card key={o.origem} style={styles.card}>
               <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>Modo observar: {nomeDaOrigem(o.origem)}</Text>
+                <Text style={styles.cardTitle}>Só observando: {nomeDaOrigem(o.origem)}</Text>
                 {o.indisponivel ? <Badge label="Sem leitura" color={colors.muted} /> : null}
               </View>
               {o.indisponivel ? (

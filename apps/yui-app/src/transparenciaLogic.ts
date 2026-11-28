@@ -82,7 +82,7 @@ export function vistaDaSkill(s: SkillView, ligado = true): { nome: string; orige
 
 export type FiltroDaContinuidade = 'todos' | 'projeto' | 'decisao';
 export const TEXTO_CONTINUIDADE_SEM_MEMORIA = 'A memória está desligada: os projetos e as decisões não podem ser lidos agora.';
-export const TEXTO_CONTINUIDADE_DESLIGADA = 'Registrar novos projetos e decisões pela conversa está desligado (YUI_CONTINUIDADE). O que já foi guardado continua aqui.';
+export const TEXTO_CONTINUIDADE_DESLIGADA = 'Registrar novos projetos e decisões pela conversa está desligado ("Registrar projetos e decisões" em Configuração e chaves). O que já foi guardado continua aqui.';
 export const TEXTO_CONTINUIDADE_VAZIA = 'Nada registrado ainda. Na sua DM: "novo projeto: nome do projeto" ou "registra a decisão: o que foi decidido".';
 
 /** "2 projetos e 1 decisão" / "Nada registrado". */

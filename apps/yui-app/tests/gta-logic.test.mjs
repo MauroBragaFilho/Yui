@@ -98,7 +98,7 @@ test('semanal legível: título, período, fonte, bônus por multiplicador, desc
     { rotulo: 'Veículo do pódio', valor: 'Pegassi Zentorno' },
     { rotulo: 'Análise da IA', valor: 'Saiu junto com a publicação' },
   ]);
-  assert.equal(resumoDoSemanal({ ...SEMANAL, titulo: null, fonte: 'desconhecida', periodo: { inicio: null, fim: null }, bonus: [], descontos: [], podio: null, temAnalise: false }).titulo, 'Evento semanal 2026-W47');
+  assert.equal(resumoDoSemanal({ ...SEMANAL, titulo: null, fonte: 'desconhecida', periodo: { inicio: null, fim: null }, bonus: [], descontos: [], podio: null, temAnalise: false }).titulo, 'Semanal do GTA 2026-W47');
   assert.equal(resumoDoSemanal(null), null);
   assert.deepEqual(resumoDaNoticia({ titulo: 'Novidades', categoria: null, publicadaEm: local(2026, 11, 26, 12, 0), link: null, publicado: [] }).linhas, [
     { rotulo: 'Categoria', valor: '—' }, { rotulo: 'Publicada', valor: '26/11/2026 às 12:00' },

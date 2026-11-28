@@ -86,7 +86,7 @@ export function LiveDoYoutube({ client }: { client: YuiClient }) {
   return (
     <View style={styles.section}>
       <SectionHeading
-        title="Live do YouTube"
+        title="Yui na live"
         hint={s?.titulo}
         right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} loading={loading} />}
       />

@@ -162,7 +162,7 @@ function SessionCard({ s, client, reload }: { s: RadioSession; client: YuiClient
           testID={`radio-leave-${s.guildId}`}
           label="Tirar da call"
           variant="ghost"
-          onPress={() => confirmAction('Tirar a Yui da call?', 'Encerra o Modo Rádio neste servidor.', () => act('leave'), 'Encerrar')}
+          onPress={() => confirmAction('Tirar a Yui da call?', 'Encerra o rádio neste servidor.', () => act('leave'), 'Encerrar')}
           style={styles.smallBtn}
         />
       </View>
@@ -318,8 +318,8 @@ export function Radio({ client }: { client: YuiClient }) {
   if (!data) return <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />;
   return (
     <View style={styles.section}>
-      <SectionHeading title="Modo Rádio" right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} />} />
-      <Text style={styles.hint}>Servidores em que o Modo Rádio está ativo: pause, pule, peça um gênero ou uma música e veja a fila. Dá para iniciar mesmo sem ninguém na call. A tela atualiza sozinha.</Text>
+      <SectionHeading title="Rádio" right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} />} />
+      <Text style={styles.hint}>Servidores em que o rádio está ativo: pause, pule, peça um gênero ou uma música e veja a fila. Dá para iniciar mesmo sem ninguém na call. A tela atualiza sozinha.</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <IniciarRadio client={client} sessions={data} onStarted={reload} />
       {data.length === 0 ? <StateView testID="radio-empty" kind="empty" title="Nenhuma sessão de rádio ativa." /> : null}
@@ -334,7 +334,7 @@ const LEVEL_COLOR: Record<string, string> = { error: colors.danger, warn: colors
 const LEVELS: { level: LogLevel | null; label: string }[] = [
   { level: null, label: 'Todos' },
   { level: 'error', label: 'Erros' },
-  { level: 'warn', label: 'Avisos' },
+  { level: 'warn', label: 'Atenção' },
   { level: 'info', label: 'Info' },
 ];
 

@@ -36,8 +36,14 @@ export interface AdminOverview {
   flags: { readOnly: boolean; memoryEnabled: boolean; pcToolsEnabled: boolean };
   /** Nome do dono para a saudação (YUI_OWNER_NAME no servidor), ou null. */
   ownerName?: string | null;
-  /** Saúde da máquina (RAM e disco livres). Ausente em servidores antigos; cada campo pode vir null. */
-  host?: { platform: string; ramTotalMB: number | null; ramFreeMB: number | null; diskTotalGB: number | null; diskFreeGB: number | null };
+  /** Saúde da máquina (RAM e disco livres). Ausente em servidores antigos; cada campo pode vir null. O nível vem do servidor (NivelDoComputador). */
+  host?: {
+    platform: string; ramTotalMB: number | null; ramFreeMB: number | null; diskTotalGB: number | null; diskFreeGB: number | null;
+    /** Raiz da unidade medida (ex.: "C:\"), nunca o caminho. Servidor antigo não manda. */
+    volume?: string | null;
+    /** Fase 1 do painel (R10): os limites do alerta por DM (cofre) e o nível de cada recurso pela MESMA regra. Servidor antigo não manda: o Início não colore. */
+    alerta?: { discoLivreMinGB: number | null; ramLivreMinMB: number | null; ramMinutos: number; nivelDisco: NivelDoComputador | null; nivelRam: NivelDoComputador | null } | null;
+  };
   /** Últimos eventos do registro de auditoria (só quando, o quê e por onde; nunca o conteúdo). */
   activity?: { ts: string | null; event: string; role: string | null; platform: string | null }[];
   /** Retenção da memória: a do dono é permanente; as demais expiram em `othersDays` dias. */
@@ -119,6 +125,8 @@ export interface Diagnostico {
 }
 
 export type AutomodMode = 'off' | 'trigger' | 'mcp' | 'both';
+/** O nível de RAM ou disco que o SERVIDOR calcula com os limites do alerta por DM (Fase 1 do painel, R10). */
+export type NivelDoComputador = 'ok' | 'atencao' | 'critico';
 export interface AdminGuild { id: string; name: string; members: number | null; automod: AutomodMode; tosAccepted: boolean }
 export type BanType = 'user' | 'guild' | 'channel';
 export interface BanEntry { id: string; reason: string; timestamp: string | null }

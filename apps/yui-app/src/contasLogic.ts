@@ -135,6 +135,19 @@ function faltam(ms: number): string {
 }
 
 /**
+ * A frase do resumo do dia no Início (Fase 1 do painel): o que entra no resumo por DM, com o estado REAL do Google (GET /v1/admin/google).
+ * O resumo por DM só leva a agenda e as tarefas com o Google ligado e conectado, e nunca o e-mail (src/reminders/morning.js).
+ * Sem resposta do servidor, a frase não afirma nada sobre o Google.
+ */
+export function fraseDoResumoDoDia(g: GoogleLike | null | undefined): string {
+  const base = 'Todo dia de manhã a Yui manda o resumo do dia por DM (lembretes, pendências e a saúde dela).';
+  if (!g) return base;
+  if (g.ligado !== true) return `${base} A agenda do Google não entra: a integração com o Google está desligada.`;
+  if (g.conectado !== true || g.precisaAutorizar) return `${base} A agenda do Google não entra até a autorização do Google ser refeita.`;
+  return `${base} Entram também a agenda e as tarefas de hoje do Google; o e-mail não entra.`;
+}
+
+/**
  * Os avisos do Google para o Início. Lista vazia = nada a avisar (desligado, sem resposta do servidor ou tudo certo).
  *  - autorizar de novo (o Google recusou, falta o arquivo ou ele não abre): problema;
  *  - a renovação do acesso falhou (rede ou erro) e não voltou desde então: atenção;

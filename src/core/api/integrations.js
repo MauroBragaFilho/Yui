@@ -97,7 +97,9 @@ export async function loadIntegrationData() {
   };
 }
 
-export function buildIntegrations({ env = process.env, client = null, data = {}, readOnly = true, memoryEnabled = true, tools = 0 } = {}) {
+// `retencao` (Fase 1 do painel): o texto da retenção calculado pela própria memória ("permanente" ou "30 dias sem interação"), o mesmo das outras telas.
+// Antes a frase saía direto da variável e dizia "retenção de 0 dias" com a memória permanente. Sem `retencao` (testes antigos), a linha não afirma prazo.
+export function buildIntegrations({ env = process.env, client = null, data = {}, readOnly = true, memoryEnabled = true, tools = 0, retencao = null } = {}) {
   const count = (n) => (n === 1 ? '1 chave' : `${n} chaves`);
   const subs = (n, what) => (n === null || n === undefined ? what : `${n} ${what}`);
 
@@ -116,9 +118,9 @@ export function buildIntegrations({ env = process.env, client = null, data = {},
       title: 'Núcleo',
       items: [
         item('discord', 'Discord', client?.isReady?.() ? 'ok' : 'missing', client?.isReady?.() ? `${client.guilds?.cache?.size ?? 0} servidor(es)` : 'desconectado'),
-        item('memory', 'Memória por usuário', memoryEnabled ? 'ok' : 'off', memoryEnabled ? `retenção de ${env.MEMORY_RETENTION_DAYS || 30} dias` : 'YUI_MEMORY_ENABLED=false'),
+        item('memory', 'Memória por usuário', memoryEnabled ? 'ok' : 'off', memoryEnabled ? (retencao ? `retenção: ${retencao}` : 'ligada') : 'desligada ("Memória por usuário" em Configuração e chaves)'),
         item('readonly', 'Modo somente leitura', readOnly ? 'ok' : 'missing', readOnly ? 'ligado (seguro)' : 'DESLIGADO: ferramentas podem alterar o PC'),
-        item('pctools', 'Ferramentas do PC', on(env.YUI_TOOLS_PC_ENABLED) ? 'ok' : 'off', on(env.YUI_TOOLS_PC_ENABLED) ? `${tools} ferramenta(s) registrada(s)` : 'desligadas'),
+        item('pctools', 'Ferramentas do computador', on(env.YUI_TOOLS_PC_ENABLED) ? 'ok' : 'off', on(env.YUI_TOOLS_PC_ENABLED) ? `${tools} ferramenta(s) registrada(s)` : 'desligadas'),
         item('login', 'Login por usuário e senha', panelUser ? 'ok' : 'off', panelUser ? 'configurado' : 'defina YUI_PANEL_USER e a senha (npm run panel:password)'),
         item('tokens', 'Tokens fixos da API', tokens ? 'ok' : 'off', tokens ? `${tokens} token(s)` : 'nenhum (opcional)'),
       ],
@@ -129,7 +131,7 @@ export function buildIntegrations({ env = process.env, client = null, data = {},
         item('lmstudio', 'LM Studio / modelo local', env.LOCAL_LLM_URL || env.AI_BASE_URL ? 'ok' : 'off', env.LOCAL_LLM_URL || env.AI_BASE_URL ? 'endereço configurado' : 'sem LOCAL_LLM_URL (usa o padrão localhost:1234)'),
         item('gateway', 'Yui Gateway (cadeia interna)', data.gateway?.inChain ? 'ok' : 'off', data.gateway?.inChain ? 'ativo após o LM Studio' : 'desativado ou sem provedores'),
         item('gateway-server', 'Yui Gateway (servidor OpenAI)', gwServer ? 'ok' : 'off', gwServer ? `${env.YUI_GATEWAY_HOST || '127.0.0.1'}:${env.YUI_GATEWAY_PORT || 20130}` : 'desligado'),
-        item('gemini', 'Gemini', gem ? 'ok' : 'missing', gem ? count(gem) : 'sem chave'),
+        item('gemini', 'Google Gemini', gem ? 'ok' : 'missing', gem ? count(gem) : 'sem chave'),
         item('groq', 'Groq', groq ? 'ok' : 'missing', groq ? count(groq) : 'sem chave'),
         item('hf', 'Hugging Face', env.HF_TOKEN ? 'ok' : 'missing', env.HF_TOKEN ? 'token configurado' : 'sem token'),
         item('cloudflare', 'Cloudflare Workers AI', env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? 'ok' : 'missing', env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? 'configurado' : 'falta token ou ID da conta'),
@@ -162,12 +164,12 @@ export function buildIntegrations({ env = process.env, client = null, data = {},
       title: 'GTA Online',
       items: [
         item('gta-daily', 'Reset diário (06:00 UTC)', 'ok', data.lastDaily ? `último: ${data.lastDaily}` : 'ainda sem registro'),
-        item('gta-weekly', 'Evento semanal (Reddit)', weeklyOn ? 'ok' : 'off', weeklyOn ? `a cada ${env.GTA_WEEKLY_INTERVAL_MINUTES || 30} min, via ${redditMode === 'off' ? 'nada (Reddit desligado, sem navegador)' : redditMode === 'cookies' ? 'cookies' : 'navegador'}${data.lastWeekly ? `, último: ${data.lastWeekly}` : ''}` : 'GTA_WEEKLY_ENABLED=false'),
-        item('newswire', 'Rockstar Newswire', newsOn ? 'ok' : 'off', newsOn ? `a cada ${env.NEWSWIRE_INTERVAL_MINUTES || 30} min` : 'desligado (use /gta-noticias sob demanda)'),
+        item('gta-weekly', 'Semanal do GTA', weeklyOn ? 'ok' : 'off', weeklyOn ? `a cada ${env.GTA_WEEKLY_INTERVAL_MINUTES || 30} min, consulta ao Reddit: ${redditMode === 'off' ? 'não consultar (sem navegador)' : redditMode === 'cookies' ? 'com cookies' : 'pelo navegador'}${data.lastWeekly ? `, último: ${data.lastWeekly}` : ''}` : 'desligado ("Semanal do GTA: conferir e publicar sozinho" em Configuração e chaves)'),
+        item('newswire', 'Notícias da Rockstar', newsOn ? 'ok' : 'off', newsOn ? `a cada ${env.NEWSWIRE_INTERVAL_MINUTES || 30} min` : 'desligado (use /gta-noticias sob demanda)'),
       ],
     },
     {
-      title: 'Avisos sociais',
+      title: 'Avisos de transmissão',
       items: [
         item('youtube', 'YouTube', env.YOUTUBE_API_KEY ? 'ok' : 'missing', env.YOUTUBE_API_KEY ? `${subs(data.youtubeSubs, 'inscrições')}, a cada ${env.YOUTUBE_INTERVAL_MINUTES || 5} min` : 'sem YOUTUBE_API_KEY'),
         item('twitch', 'Twitch', env.TWITCH_CLIENT_ID && env.TWITCH_CLIENT_SECRET ? 'ok' : 'missing', env.TWITCH_CLIENT_ID && env.TWITCH_CLIENT_SECRET ? `${subs(data.twitchSubs, 'inscrições')}, a cada ${env.TWITCH_INTERVAL_MINUTES || 2} min` : 'sem Client ID/Secret'),

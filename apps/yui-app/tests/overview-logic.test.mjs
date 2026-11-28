@@ -1,7 +1,7 @@
 // Testes da lógica da Visão Geral do painel (sem React e sem rede). Execução: npm test (dentro de apps/yui-app)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RECONEXOES_ATENCAO, RESPOSTAS_PARA_GRAFICO, alertasDoDiagnostico, buildAlerts, chartBars, describeEvent, formatUptime, greetingFor, groupEvents, corDoMedidor, levelForFree, medidorDeUso, percent, relativeTime, resumoDaVoz, resumoDasRespostas, systemSummary } from '../src/overviewLogic.ts';
+import { RECONEXOES_ATENCAO, RESPOSTAS_PARA_GRAFICO, alertasDoDiagnostico, buildAlerts, chartBars, describeEvent, formatUptime, greetingFor, groupEvents, corDoMedidor, medidorDeUso, nivelDoServidor, nomeDaUnidade, percent, piorNivel, textoDosLimites, relativeTime, resumoDaVoz, resumoDasRespostas, systemSummary } from '../src/overviewLogic.ts';
 import { TABS, tabVisible } from '../src/tabs.ts';
 
 test('saudação por horário', () => {
@@ -30,12 +30,16 @@ test('percentual e nível de RAM/disco livres', () => {
   assert.equal(percent(5000, 4096), 100);
   assert.equal(percent(null, 4096), null);
   assert.equal(percent(10, 0), null);
-  assert.equal(levelForFree(25), 'ok');
-  assert.equal(levelForFree(15), 'ok');
-  assert.equal(levelForFree(14), 'warn');
-  assert.equal(levelForFree(8), 'warn');
-  assert.equal(levelForFree(7), 'danger');
-  assert.equal(levelForFree(null), 'unknown');
+  // Fase 1 do painel (R10): o nível vem do SERVIDOR (os limites do alerta por DM); o app só traduz, sem regra própria de porcentagem.
+  assert.equal(nivelDoServidor('ok'), 'ok');
+  assert.equal(nivelDoServidor('atencao'), 'warn');
+  assert.equal(nivelDoServidor('critico'), 'danger');
+  assert.equal(nivelDoServidor(null), 'unknown', 'servidor antigo ou limite desligado: sem cor');
+  assert.equal(nivelDoServidor('qualquer'), 'unknown');
+  assert.equal(piorNivel('ok', 'danger'), 'danger');
+  assert.equal(piorNivel('warn', 'ok'), 'warn');
+  assert.equal(piorNivel('unknown', 'ok'), 'ok');
+  assert.equal(piorNivel('unknown', 'unknown'), 'unknown');
 });
 
 test('"há quanto tempo"', () => {
@@ -53,10 +57,11 @@ test('eventos da auditoria em texto simples', () => {
   assert.equal(describeEvent('api.chat').label, 'Conversa pelo app');
   assert.equal(describeEvent('agent.tool.denied').tone, 'bad');
   assert.equal(describeEvent('auth.login.fail').tone, 'bad');
-  assert.equal(describeEvent('admin.follow.youtube.liveMode').label, 'Modo das lives alterado');
+  assert.equal(describeEvent('admin.follow.youtube.liveMode').label, 'Modo do aviso de transmissão alterado');
   assert.equal(describeEvent('admin.algo.novo').label, 'Ajuste feito no painel', 'prefixo conhecido');
   assert.equal(describeEvent('dev.run.start').label, 'Módulo de código');
-  assert.equal(describeEvent('evento.desconhecido').label, 'evento.desconhecido', 'sem tradução: mostra o próprio nome');
+  assert.equal(describeEvent('evento.desconhecido').label, 'Evento.desconhecido', 'sem tradução: mostra o próprio nome');
+  assert.equal(describeEvent('evento.desconhecido').exato, false, 'fora do dicionário: a Auditoria mostra o identificador ao lado');
   assert.equal(describeEvent('').label, 'Evento');
 });
 
@@ -65,7 +70,7 @@ test('frase de estado diz a verdade', () => {
   assert.equal(ok.ok, true);
   assert.match(ok.text, /funcionando normalmente/);
   assert.equal(systemSummary({ discordOnline: true, aiOk: null, hostLevel: 'unknown' }).ok, true, 'sem leitura da IA não afirma problema');
-  assert.match(systemSummary({ discordOnline: true, aiOk: true, hostLevel: 'warn' }).text, /apertado/);
+  assert.match(systemSummary({ discordOnline: true, aiOk: true, hostLevel: 'warn' }).text, /perto do limite/);
   const bad = systemSummary({ discordOnline: false, aiOk: false, hostLevel: 'danger' });
   assert.equal(bad.ok, false);
   assert.match(bad.text, /Discord está desconectado, nenhum provedor de IA está disponível e o computador/);
@@ -107,10 +112,24 @@ test('leitura da saúde do computador: converte as unidades e nunca lança', asy
   const GB = 1024 * MB;
   const osFake = { platform: () => 'win32', totalmem: () => 4096 * MB, freemem: () => 1024 * MB };
   const fsFake = { statfsSync: () => ({ blocks: 100 * (GB / 4096), bavail: 25 * (GB / 4096), bsize: 4096 }) };
-  assert.deepEqual(readHostStats({ osImpl: osFake, fsImpl: fsFake }), { platform: 'win32', ramTotalMB: 4096, ramFreeMB: 1024, diskTotalGB: 100, diskFreeGB: 25 });
+  // Fase 1 do painel (R10): o disco é medido na pasta dos dados (a mesma do alerta por DM) e `alerta` traz os limites do cofre e o nível pela mesma regra.
+  const env = { YUI_ALERTA_DISCO_GB: '30', YUI_ALERTA_RAM_MB: '600' };
+  const medidas = [];
+  const fsDados = { existsSync: (p) => p === 'D:/yui-dados', statfsSync: (p) => { medidas.push(p); return fsFake.statfsSync(); } };
+  const r = readHostStats({ osImpl: osFake, fsImpl: fsDados, cwd: 'C:/Yui', env: { ...env, DATABASE_DIR: 'D:/yui-dados' } });
+  assert.deepEqual(medidas, ['D:/yui-dados'], 'mede a pasta dos dados, como o alerta');
+  assert.match(String(r.volume), /^D:[\\/]$/, 'só a raiz da unidade, nunca o caminho');
+  assert.deepEqual(r.alerta, { discoLivreMinGB: 30, ramLivreMinMB: 600, ramMinutos: 5, nivelDisco: 'critico', nivelRam: 'atencao' }, '25 GB < 30 = crítico; 1024 MB < 2 x 600 = atenção');
+  const semDados = readHostStats({ osImpl: osFake, fsImpl: { existsSync: () => false, statfsSync: (p) => { medidas.push(p); return fsFake.statfsSync(); } }, cwd: 'C:/Yui', env: { DATABASE_DIR: 'X:/nao-existe' } });
+  assert.equal(medidas.at(-1), 'C:/Yui', 'sem a pasta dos dados: a pasta de trabalho, como o alerta');
+  assert.deepEqual(semDados.alerta, { discoLivreMinGB: 5, ramLivreMinMB: 400, ramMinutos: 5, nivelDisco: 'ok', nivelRam: 'ok' }, 'os padrões do alerta');
+  const desligado = readHostStats({ osImpl: osFake, fsImpl: fsFake, cwd: 'C:/Yui', env: { YUI_ALERTA_DISCO_GB: '0', YUI_ALERTA_RAM_MB: '0' } });
+  assert.deepEqual(desligado.alerta, { discoLivreMinGB: null, ramLivreMinMB: null, ramMinutos: 5, nivelDisco: null, nivelRam: null }, '0 desliga: sem nível, sem cor');
+  const { alerta, volume, ...base } = readHostStats({ osImpl: osFake, fsImpl: fsFake, cwd: 'C:/Yui', env: {} });
+  assert.deepEqual(base, { platform: 'win32', ramTotalMB: 4096, ramFreeMB: 1024, diskTotalGB: 100, diskFreeGB: 25 });
   const broken = { platform: () => 'linux', totalmem: () => { throw new Error('x'); }, freemem: () => { throw new Error('x'); } };
   const noDisk = { statfsSync: () => { throw new Error('sem permissão'); } };
-  assert.deepEqual(readHostStats({ osImpl: broken, fsImpl: noDisk }), { platform: 'linux', ramTotalMB: null, ramFreeMB: null, diskTotalGB: null, diskFreeGB: null });
+  assert.deepEqual(readHostStats({ osImpl: broken, fsImpl: noDisk, env: {} }), { platform: 'linux', ramTotalMB: null, ramFreeMB: null, diskTotalGB: null, diskFreeGB: null, volume: null, alerta: { discoLivreMinGB: 5, ramLivreMinMB: 400, ramMinutos: 5, nivelDisco: null, nivelRam: null } });
 });
 
 test('gráfico de 24 h: altura proporcional, vazio sem inventar barra', () => {
@@ -131,7 +150,7 @@ test('alertas só com o que foi medido', () => {
   assert.equal(a[0].level, 'danger');
   assert.match(a.map((x) => x.text).join('|'), /1 tentativa de login recusada/);
   assert.match(a.map((x) => x.text).join('|'), /2 ferramentas com erro/);
-  assert.equal(a.find((x) => /apertado/.test(x.text)).level, 'warn');
+  assert.equal(a.find((x) => /perto do limite/.test(x.text)).level, 'warn');
 });
 
 test('Início usa os mesmos motivos do Status: banco com nome, sem repetir Discord e IA, problema em vermelho, reconexões a partir de 5', () => {
@@ -168,7 +187,7 @@ test('atividade recente: nomes internos da segurança viram frases', () => {
   assert.equal(describeEvent('policy.violation').tone, 'bad');
   assert.equal(describeEvent('policy.algo.novo').label, 'Verificação de segurança', 'prefixo conhecido');
   assert.equal(describeEvent('auth.discord.verify.fail').tone, 'bad');
-  assert.equal(describeEvent('auth.discord.request').label, 'Entrada pelo Discord');
+  assert.equal(describeEvent('auth.discord.request').label, 'Chave de entrada pedida pelo Discord');
   assert.equal(describeEvent('reminder.fire').label, 'Lembrete enviado');
 });
 
@@ -198,9 +217,9 @@ test('saúde do computador: a barra mostra o que está EM USO (disco 91% livre =
   assert.deepEqual(medidorDeUso(null, 100, 'MB'), { usadoPercent: null, detalhe: null }, 'sem leitura não inventa barra');
   assert.deepEqual(medidorDeUso(10, 0, 'MB'), { usadoPercent: null, detalhe: null });
   // A cor vem do LIVRE: folgado fica na cor da Yui; amarelo e vermelho só quando falta espaço.
-  assert.equal(corDoMedidor(levelForFree(91)), 'yui');
-  assert.equal(corDoMedidor(levelForFree(42)), 'yui');
-  assert.equal(corDoMedidor(levelForFree(12)), 'atencao');
-  assert.equal(corDoMedidor(levelForFree(5)), 'critico');
-  assert.equal(corDoMedidor(levelForFree(null)), 'yui', 'sem leitura não acende alerta');
+  // A cor vem do nível do SERVIDOR: folgado fica na cor da Yui; amarelo e vermelho só quando o servidor diz que falta espaço.
+  assert.equal(corDoMedidor(nivelDoServidor('ok')), 'yui');
+  assert.equal(corDoMedidor(nivelDoServidor('atencao')), 'atencao');
+  assert.equal(corDoMedidor(nivelDoServidor('critico')), 'critico');
+  assert.equal(corDoMedidor(nivelDoServidor(null)), 'yui', 'sem leitura não acende alerta');
 });

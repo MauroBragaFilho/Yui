@@ -15,6 +15,7 @@ import { ReminderError } from '../../reminders/store.js';
 import { listRadio, RADIO_ACTIONS, RADIO_ESCOLHA_MS, MAX_OPCOES_DO_RADIO, buscaDoRadio, canaisDoRadio, defaultRadioDeps, faixaCurta, opcoesDoRadio } from './radioAdmin.js';
 import { readLogs } from './panelLogs.js';
 import { buildIntegrations, comContasDaYui, loadGuildDetail, loadIntegrationData } from './integrations.js';
+import { limitesDoComputador, nivelDoLivre, pastaDoDisco } from '../limitesDoComputador.js';
 import {
   criarLeiturasPadrao, linhaCurta, montarVistaDoGta, vistaDaContinuidade, vistaDaLive, vistaDasListas, vistaDasSkills, vistaDoGoogle, vistaDosAvisos, vistaDosObservados, vistaDosPlanos,
 } from './leiturasDoPainel.js';
@@ -86,7 +87,7 @@ export const LIMITE_DAS_ENTRADAS = Object.freeze({ max: 10, janelaMs: 60_000 });
 export const LIMITE_DA_REPUBLICACAO = Object.freeze({ janelaMs: 10 * 60_000 });
 export const TIPOS_DA_REPUBLICACAO = Object.freeze(['diario', 'semanal', 'noticia']);
 const NOME_DO_TIPO = Object.freeze({ diario: 'diário', semanal: 'semanal', noticia: 'de notícias' });
-const LIVE_DESLIGADA = 'A live do YouTube está desligada ("Yui no chat de uma live do YouTube" em Configuração e chaves).';
+const LIVE_DESLIGADA = 'A live do YouTube está desligada ("Yui na live" em Configuração e chaves).';
 // Entrega F, parte 2 (item 14): reautorizar o Google pelo painel (YUI_GOOGLE_REAUTORIZAR_PAINEL; desligada = 404).
 const GOOGLE_PAINEL_DESLIGADO = 'Reautorizar o Google pelo painel está desligado ("Reautorizar o Google pelo painel" em Configuração e chaves).';
 const GOOGLE_FORA_DO_PROCESSO = 'Reautorizar o Google só funciona no processo que serve o painel.';
@@ -177,22 +178,37 @@ async function defaultDeps() {
 }
 
 /**
- * Saúde da máquina que roda a Yui: RAM e disco livres (a pasta de trabalho). Nunca lança: o que não der para ler vem null.
+ * Saúde da máquina que roda a Yui: RAM e disco livres. Nunca lança: o que não der para ler vem null.
  * Entra no painel porque o notebook tem 4 GB e HD: é o primeiro lugar onde se vê se ele está apertado.
+ * Fase 1 do painel (R10): o disco é medido na MESMA pasta que o alerta por DM mede (a dos dados; core/limitesDoComputador.js), e `alerta` traz os
+ * limites do cofre e o nível de cada recurso pela mesma regra do alerta. O app só mostra; não tem regra própria. `volume` é só a raiz da unidade
+ * medida (ex.: "C:\"), nunca o caminho, para conferir se o servidor de arquivos está no mesmo disco.
  */
-export function readHostStats({ osImpl = os, fsImpl = fs, cwd = process.cwd() } = {}) {
+export function readHostStats({ osImpl = os, fsImpl = fs, cwd = process.cwd(), env = process.env } = {}) {
   const mb = (bytes) => Math.round(bytes / 1024 / 1024);
   const gb = (bytes) => Math.round((bytes / 1024 / 1024 / 1024) * 10) / 10;
-  const out = { platform: osImpl.platform(), ramTotalMB: null, ramFreeMB: null, diskTotalGB: null, diskFreeGB: null };
+  const out = { platform: osImpl.platform(), ramTotalMB: null, ramFreeMB: null, diskTotalGB: null, diskFreeGB: null, volume: null, alerta: null };
   try {
     out.ramTotalMB = mb(osImpl.totalmem());
     out.ramFreeMB = mb(osImpl.freemem());
   } catch { /* sem leitura de RAM */ }
   try {
-    const st = fsImpl.statfsSync(cwd);
+    const pasta = pastaDoDisco(env, { fsImpl, cwd: () => cwd });
+    const st = fsImpl.statfsSync(pasta);
     out.diskTotalGB = gb(st.blocks * st.bsize);
     out.diskFreeGB = gb(st.bavail * st.bsize);
+    out.volume = path.parse(path.resolve(pasta)).root || null;
   } catch { /* sem leitura de disco */ }
+  try {
+    const lim = limitesDoComputador(env);
+    out.alerta = {
+      discoLivreMinGB: lim.discoGB > 0 ? lim.discoGB : null,
+      ramLivreMinMB: lim.ramMB > 0 ? lim.ramMB : null,
+      ramMinutos: lim.ramMin,
+      nivelDisco: nivelDoLivre(out.diskFreeGB, lim.discoGB),
+      nivelRam: nivelDoLivre(out.ramFreeMB, lim.ramMB),
+    };
+  } catch { /* sem limites: o painel não colore */ }
   return out;
 }
 
@@ -773,6 +789,8 @@ export function createAdmin({
         readOnly: isReadOnlyMode(),
         memoryEnabled: isMemoryEnabled(),
         tools: listTools().length,
+        // o mesmo cálculo da memória que as outras telas mostram (Fase 1 do painel: nada de "retenção de 0 dias" com a memória permanente)
+        retencao: safeIsPermanent() ? 'permanente' : safeRetentionDays() ? `${safeRetentionDays()} dias sem interação` : null,
       });
       // Google e live do YouTube (entrega B das lacunas do painel): só onde elas rodam. No bot separado, quem acrescenta é o cérebro.
       return processo === 'bot' ? out : comContasDaYui(out, await contasDaYui());

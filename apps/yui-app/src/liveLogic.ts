@@ -49,7 +49,7 @@ export interface SituacaoDaLive {
 export function situacaoDaLive(v: LiveLike | null | undefined): SituacaoDaLive {
   if (!v) return { titulo: 'Sem leitura', texto: 'Não consegui ler o estado da live agora.', tom: 'neutro', podeEntrar: false, podeSair: false };
   if (v.ligado !== true) {
-    return { titulo: 'Desligada', texto: 'A Yui no chat de uma live está desligada ("Yui no chat de uma live do YouTube" em Configuração e chaves; vale depois de reiniciar).', tom: 'neutro', podeEntrar: false, podeSair: false };
+    return { titulo: 'Desligada', texto: 'A Yui no chat de uma live está desligada ("Yui na live" em Configuração e chaves; vale depois de reiniciar).', tom: 'neutro', podeEntrar: false, podeSair: false };
   }
   if (v.disponivel === false) {
     return { titulo: 'Indisponível', texto: 'A chave está ligada, mas o serviço da live não subiu no servidor. Reinicie a Yui e confira o log.', tom: 'critico', podeEntrar: false, podeSair: false };

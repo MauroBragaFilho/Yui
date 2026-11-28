@@ -4,13 +4,15 @@ import { ApiError, type ConfigItem, type ConfigOverview, type YuiClient } from '
 import { confirmAction } from '../components/confirm.ts';
 import { campoDoAjuste, filtrarAjustes, gruposDosAjustes } from '../configLogic.ts';
 import { perguntaDoAjuste } from '../guildLogic.ts';
+import { rotuloDoValor } from '../valoresLogic.ts';
 import { Badge, Button, Card, Chip, FieldLabel, Icon, SectionHeading, StateView } from '../components/ui.tsx';
 import { colors, radius, spacing } from '../theme.ts';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu errado.');
 
 /** Valor para mostrar: booleanos viram Ligado/Desligado. */
-const mostra = (item: ConfigItem, v: unknown) => (item.tipo === 'bool' ? (String(v) === 'true' ? 'Ligado' : String(v) === 'false' ? 'Desligado' : String(v)) : v === '' || v === undefined ? '(vazio)' : String(v));
+// Fase 1 do painel: o valor interno de uma opção aparece em português (rotuloDoValor); o que se grava continua o valor interno.
+const mostra = (item: ConfigItem, v: unknown) => (item.tipo === 'bool' ? (String(v) === 'true' ? 'Ligado' : String(v) === 'false' ? 'Desligado' : String(v)) : v === '' || v === undefined ? '(vazio)' : item.tipo === 'enum' ? rotuloDoValor(item.chave, String(v)) : String(v));
 
 /** O que aconteceu depois de gravar. `botConectado: false` só vem com o cérebro separado e o bot fora. */
 const quandoVale = (r: { reinicio: boolean; botConectado?: boolean }) =>
@@ -110,7 +112,7 @@ function ConfigCard({ item, editable, client, reload }: { item: ConfigItem; edit
       ) : null}
       {editable && item.tipo === 'enum' ? (
         <View style={styles.chips}>
-          {(item.opcoes ?? []).map((o) => <Chip key={o} label={o} on={item.valor === o} onPress={() => save(o)} testID={`config-${item.chave}-${o}`} />)}
+          {(item.opcoes ?? []).map((o) => <Chip key={o} label={rotuloDoValor(item.chave, o)} on={item.valor === o} onPress={() => save(o)} testID={`config-${item.chave}-${o}`} />)}
           {voltar}
         </View>
       ) : null}

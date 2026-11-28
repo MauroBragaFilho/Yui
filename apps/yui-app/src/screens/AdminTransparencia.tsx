@@ -79,7 +79,7 @@ export function Skills({ client }: { client: YuiClient }) {
   return (
     <View style={styles.section}>
       <SectionHeading title="Skills" hint={data ? `${data.total} instalada(s)` : undefined} right={<Button label="Atualizar" variant="ghost" icon="refresh" compact onPress={reload} loading={loading} />} />
-      <Text style={styles.hint}>Instruções extras que a Yui pode seguir na sua DM. Só ver: ligar, desligar e a lista de permitidas ficam em Configuração e chaves.</Text>
+      <Text style={styles.hint}>Instruções extras que a Yui pode seguir na sua DM. Aqui só se vê. Ligar e desligar as skills fica em Configuração e chaves ("Skills no padrão aberto"); a lista de permitidas fica no arquivo de configuração do servidor e não muda pelo painel.</Text>
       {loading && !data ? <StateView kind="loading" /> : null}
       {error ? <StateView kind="error" testID="admin-error" message={error} onRetry={reload} /> : null}
       {filtro ? <Text testID="skills-filtro" style={[styles.value, { color: COR[filtro.tom] }]}>{filtro.texto}</Text> : null}

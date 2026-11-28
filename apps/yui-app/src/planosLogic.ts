@@ -242,7 +242,7 @@ const ASSUNTOS: Record<string, string> = {
   'google-reautorizar': 'Google: autorizar de novo',
   'ai-down': 'IA fora do ar',
   'evento:disco': 'Disco quase cheio',
-  'evento:ram': 'Memória RAM apertada',
+  'evento:ram': 'RAM apertada',
   'evento:internet': 'Internet caiu',
   'evento:internet-voltou': 'Internet voltou',
   'evento:supervisor': 'Supervisor religou a Yui',
@@ -299,7 +299,7 @@ export function linhaObservada(a: AvisoLike, agora: Date = new Date()): LinhaDeA
 /** O texto do modo do filtro de avisos. */
 export function textoDoModo(modo: string): { titulo: string; texto: string; tom: Tom } {
   if (modo === 'ligar') return { titulo: 'Filtro ligado', texto: 'Os avisos fora de hora (silêncio ou teto do dia) ficam guardados e saem depois. Críticos e lembretes saem sempre na hora.', tom: 'ok' };
-  if (modo === 'observar') return { titulo: 'Modo observar', texto: 'Tudo ainda sai na hora; abaixo está o que o filtro teria adiado, desde que cada processo ligou.', tom: 'atencao' };
+  if (modo === 'observar') return { titulo: 'Filtro só observando', texto: 'Tudo ainda sai na hora; abaixo está o que o filtro teria adiado, desde que cada processo ligou.', tom: 'atencao' };
   return { titulo: 'Filtro desligado', texto: 'Todos os avisos saem na hora. Para observar ou ligar o filtro, use "Avisos na hora certa" em Configuração e chaves.', tom: 'neutro' };
 }
 

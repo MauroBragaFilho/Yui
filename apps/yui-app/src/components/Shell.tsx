@@ -9,7 +9,6 @@ type Props = {
   onChange: (tab: TabKey) => void;
   showAdmin: boolean;
   roleLabel: string;
-  onLogout: () => void;
   children: React.ReactNode;
 };
 
@@ -28,7 +27,8 @@ function loadCollapsed(): boolean {
  * Casca do app, no formato do BDS: barra lateral (recolhível) em telas largas e
  * barra de abas embaixo em telas estreitas.
  */
-export function Shell({ tab, onChange, showAdmin, roleLabel, onLogout, children }: Props) {
+// Fase 1 do painel: um "Sair" só, o da aba Status (na Fase 2, a tela Você). A barra lateral não tem mais o seu.
+export function Shell({ tab, onChange, showAdmin, roleLabel, children }: Props) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const [collapsed, setCollapsed] = useState(loadCollapsed);
@@ -105,7 +105,6 @@ export function Shell({ tab, onChange, showAdmin, roleLabel, onLogout, children 
               onPress={toggleTheme}
             />
           ) : null}
-          <NavItem testID="btn-sidebar-logout" icon="logout" label="Sair" collapsed={collapsed} onPress={onLogout} />
           {collapsed ? null : <Text style={styles.footerText}>{roleLabel}</Text>}
         </View>
       </View>

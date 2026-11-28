@@ -64,7 +64,7 @@ export function haQuanto(segundos: unknown): string {
 /** "1 erro" / "2 erros". */
 export const plural = (q: unknown, um: string, varios: string): string => { const x = numero(q); return `${x === null ? VAZIO : Math.round(x)} ${x !== null && Math.round(x) === 1 ? um : varios}`; };
 
-const NOMES: Record<string, string> = { omniroute: 'OmniRoute', gemini: 'Gemini', tavily: 'Tavily', groq: 'Groq', serper: 'Serper', openai: 'OpenAI', openrouter: 'OpenRouter', ia: 'IA', tool: 'Ferramenta', search: 'Busca', discord: 'Discord', api: 'App' };
+const NOMES: Record<string, string> = { omniroute: 'OmniRoute', gemini: 'Google Gemini', tavily: 'Tavily', groq: 'Groq', serper: 'Serper', openai: 'OpenAI', openrouter: 'OpenRouter', ia: 'IA', tool: 'Ferramenta', search: 'Busca', discord: 'Discord', api: 'App' };
 /** Nome de provedor ou etiqueta para a tela: os conhecidos com a grafia certa, os outros com inicial maiúscula. */
 export function nomeBonito(valor: unknown): string {
   const t = seguro(valor, 40);
@@ -214,7 +214,7 @@ function cartaoProcessos(d: Diagnostico): Cartao {
     return {
       chave: 'processos', titulo: 'Yui (processo único)',
       linhas: [
-        { rotulo: 'Ligada há', valor: duracao(d.processo?.uptimeSegundos) },
+        { rotulo: 'Tempo de atividade', valor: duracao(d.processo?.uptimeSegundos) },
         { rotulo: 'RAM da Yui', valor: numero(d.processo?.memoriaMB) === null ? VAZIO : `${n(d.processo.memoriaMB)} MB` },
       ],
     };

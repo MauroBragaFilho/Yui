@@ -19,6 +19,7 @@ import { colors } from './src/theme.ts';
 type Session = { settings: Settings; me: Me };
 
 const EXPIRED = 'Sua sessão expirou. Entre novamente.';
+const SAIU_SEM_CONFIRMAR = 'Você saiu deste aparelho, mas o servidor não confirmou o encerramento da sessão: ela vence sozinha em até 12 horas.';
 
 const ROLE_LABEL: Record<string, string> = { OWNER: 'Dono', TRUSTED: 'Confiável', MEMBER: 'Membro', GUEST: 'Convidado', BLOCKED: 'Bloqueado' };
 
@@ -86,16 +87,19 @@ export default function App() {
   }
 
   async function logout() {
-    // Sessão de login: revoga no servidor (melhor esforço) antes de esquecer.
+    // Sessão de login: encerra no servidor antes de esquecer (Fase 1 do painel). Se o servidor não confirmar, o aparelho sai do mesmo jeito,
+    // mas a tela de entrada avisa que a sessão só vence sozinha no servidor (até 12 horas), em vez de fingir que encerrou.
+    let aviso: string | null = null;
     if (client && session?.settings.via === 'session') {
       try {
-        await client.logout();
+        const r = await client.logout();
+        if (!r?.revoked) aviso = SAIU_SEM_CONFIRMAR;
       } catch {
-        /* sem rede: a sessão expira sozinha no servidor */
+        aviso = SAIU_SEM_CONFIRMAR;
       }
     }
     await clearAll();
-    setNotice(null);
+    setNotice(aviso);
     setSession(null);
   }
 
@@ -115,7 +119,7 @@ export default function App() {
       {!session || !client ? (
         <ConnectScreen serverUrl={serverUrl} notice={notice} onConnected={onConnected} />
       ) : (
-        <Shell tab={tab} onChange={setTab} showAdmin={isOwner} roleLabel={ROLE_LABEL[session.me.role] ?? session.me.role} onLogout={logout}>
+        <Shell tab={tab} onChange={setTab} showAdmin={isOwner} roleLabel={ROLE_LABEL[session.me.role] ?? session.me.role}>
           {tab === 'home' && isOwner ? <OverviewScreen client={client} me={session.me} onNavigate={setTab} /> : null}
           {tab === 'chat' ? <ChatScreen client={client} /> : null}
           {tab === 'reminders' && isOwner ? <RemindersScreen client={client} /> : null}

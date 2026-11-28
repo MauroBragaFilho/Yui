@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { alertOwner } from '../core/alerts.js';
 import { jobAllowed } from '../core/security/jobGuard.js';
 import { flag } from './monitores/config.js';
+import { limitesDoComputador, numeroDoLimite, pastaDoDisco } from '../core/limitesDoComputador.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GB = 1024 ** 3;
@@ -42,19 +43,12 @@ export function alertasPorEventoLigados(env = process.env) {
   return flag(env.YUI_ALERTAS_EVENTOS, false);
 }
 
-function numero(valor, padrao, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
-  const bruto = String(valor ?? '').trim();
-  const n = Number(bruto);
-  return bruto !== '' && Number.isFinite(n) && n >= min ? Math.min(max, n) : padrao;
-}
-
-/** A configuração das verificações (cada limite, o intervalo e o alvo da internet). */
+/** A configuração das verificações (cada limite, o intervalo e o alvo da internet). Os limites de disco e RAM vêm de core/limitesDoComputador.js,
+ *  a mesma regra que o Início do painel usa (Fase 1 do painel, R10). */
 export function configDosEventos(env = process.env) {
   return {
-    tickMs: Math.round(numero(env.YUI_ALERTAS_EVENTOS_MS, 5 * MIN, { min: 200, max: 24 * 60 * MIN })),
-    discoGB: numero(env.YUI_ALERTA_DISCO_GB, 5),
-    ramMB: numero(env.YUI_ALERTA_RAM_MB, 400),
-    ramMin: numero(env.YUI_ALERTA_RAM_MIN, 5),
+    tickMs: Math.round(numeroDoLimite(env.YUI_ALERTAS_EVENTOS_MS, 5 * MIN, { min: 200, max: 24 * 60 * MIN })),
+    ...limitesDoComputador(env),
     internetAlvo: String(env.YUI_ALERTA_INTERNET_ALVO ?? '').trim(),
   };
 }
@@ -92,8 +86,7 @@ export function sondaTcp(alvo, { timeoutMs = 4000, env = process.env } = {}) {
 /** O espaço livre (GB) no disco dos dados. null se não deu para ler. */
 export function discoLivreGB(env = process.env) {
   try {
-    const dir = env.DATABASE_DIR && fs.existsSync(env.DATABASE_DIR) ? env.DATABASE_DIR : process.cwd();
-    const s = fs.statfsSync(dir);
+    const s = fs.statfsSync(pastaDoDisco(env));
     return (Number(s.bavail) * Number(s.bsize)) / GB;
   } catch {
     return null;

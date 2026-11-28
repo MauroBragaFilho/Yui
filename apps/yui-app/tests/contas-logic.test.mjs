@@ -136,5 +136,5 @@ test('a tela: o Início busca a live e o Google sem travar o resto, mostra o car
   assert.match(tela, /buildAlerts\(\{[^}]*google \}\)/);
   assert.match(tela, /const cartaoLive = cartaoDaLive\(live\);/);
   assert.match(tela, /\{cartaoLive \? \(\s*<Card/, 'o cartão só existe quando a lógica devolve um');
-  assert.ok(tela.includes('title="Live do YouTube"'));
+  assert.ok(tela.includes('title="Yui na live"'));
 });

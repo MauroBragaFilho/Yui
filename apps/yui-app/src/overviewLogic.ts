@@ -4,6 +4,7 @@
  * Nada aqui inventa número: o que a API não trouxe vira null e a tela mostra "—".
  */
 import { alertasDoGoogle, type GoogleLike } from './contasLogic.ts';
+import { describeEvent, type EventView } from './auditoriaLogic.ts';
 
 export type Level = 'ok' | 'warn' | 'danger' | 'unknown';
 
@@ -51,12 +52,46 @@ export function corDoMedidor(level: Level): 'yui' | 'atencao' | 'critico' {
   return level === 'danger' ? 'critico' : level === 'warn' ? 'atencao' : 'yui';
 }
 
-/** Quanto MENOS livre, pior: abaixo de 15% livre é atenção, abaixo de 8% é crítico. */
-export function levelForFree(freePercent: number | null): Level {
-  if (freePercent === null) return 'unknown';
-  if (freePercent < 8) return 'danger';
-  if (freePercent < 15) return 'warn';
+/**
+ * O nível de RAM ou disco no Início vem do SERVIDOR (Fase 1 do painel, R10): a mesma regra e os mesmos limites do alerta por DM
+ * (abaixo do limite = crítico; abaixo do dobro = atenção). O app não tem regra própria; servidor antigo ou sem limite = sem nível (não colore).
+ */
+export function nivelDoServidor(nivel: string | null | undefined): Level {
+  if (nivel === 'critico') return 'danger';
+  if (nivel === 'atencao') return 'warn';
+  if (nivel === 'ok') return 'ok';
+  return 'unknown';
+}
+
+/** O pior dos dois níveis (RAM e disco); os dois sem leitura = sem leitura. */
+export function piorNivel(a: Level, b: Level): Level {
+  if (a === 'danger' || b === 'danger') return 'danger';
+  if (a === 'warn' || b === 'warn') return 'warn';
+  if (a === 'unknown' && b === 'unknown') return 'unknown';
   return 'ok';
+}
+
+export interface LimitesDoAlerta { discoLivreMinGB: number | null; ramLivreMinMB: number | null; ramMinutos?: number | null }
+
+/** A linha que explica as cores do cartão "Saúde do computador": os limites do alerta por DM, que vêm do cofre. */
+export function textoDosLimites(alerta: LimitesDoAlerta | null | undefined): string {
+  if (!alerta) return 'Este servidor ainda não informa os limites do alerta (atualize a Yui): as barras ficam sem cor de alerta.';
+  const fmt = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+  const partes = [
+    alerta.ramLivreMinMB ? `RAM livre abaixo de ${fmt(alerta.ramLivreMinMB)} MB` : null,
+    alerta.discoLivreMinGB ? `disco livre abaixo de ${fmt(alerta.discoLivreMinGB)} GB` : null,
+  ].filter(Boolean) as string[];
+  if (!partes.length) return 'Os limites do alerta de RAM e disco estão desligados: as barras ficam sem cor de alerta.';
+  const minutos = alerta.ramLivreMinMB && alerta.ramMinutos ? ` (na RAM, depois de ${fmt(alerta.ramMinutos)} min seguidos)` : '';
+  // Pedido da Liz na revisão da Fase 1: o amarelo é atenção PREVENTIVA; o alerta por DM ainda não saiu.
+  return `Vermelho: ${partes.join(' ou ')}, a condição do alerta por DM${minutos}. Amarelo é só atenção preventiva: até o dobro desses limites, sem alerta por DM. Os limites ficam em Configuração e chaves, grupo Alertas.`;
+}
+
+/** "C:\" -> "C:"; "/" -> "/"; sem valor -> null. Só a unidade, nunca o caminho. */
+export function nomeDaUnidade(volume: string | null | undefined): string | null {
+  const v = String(volume ?? '').trim();
+  if (!v) return null;
+  return /^[A-Za-z]:[\\/]?$/.test(v) ? v.slice(0, 2).toUpperCase() : v;
 }
 
 const MIN = 60_000;
@@ -75,74 +110,8 @@ export function relativeTime(ts: string | null | undefined, now: number = Date.n
   return `há ${Math.floor(diff / DAY)} d`;
 }
 
-export interface EventView { label: string; icon: string; tone: 'normal' | 'good' | 'bad' }
-
-const EXACT: Record<string, EventView> = {
-  'api.chat': { label: 'Conversa pelo app', icon: 'chat_bubble', tone: 'normal' },
-  'memory.write': { label: 'Memória atualizada', icon: 'psychology', tone: 'normal' },
-  'memory.read': { label: 'Memória consultada', icon: 'psychology', tone: 'normal' },
-  'memory.forget': { label: 'Lembrança apagada', icon: 'delete', tone: 'normal' },
-  'memory.forgetAll': { label: 'Memória apagada', icon: 'delete', tone: 'normal' },
-  'context.forgetAll': { label: 'Contexto das conversas apagado', icon: 'delete', tone: 'normal' },
-  'agent.tool.ok': { label: 'Ferramenta executada', icon: 'build', tone: 'good' },
-  'agent.tool.error': { label: 'Ferramenta com erro', icon: 'warning', tone: 'bad' },
-  'agent.tool.denied': { label: 'Ferramenta negada', icon: 'lock', tone: 'bad' },
-  'agent.tool.pending': { label: 'Ferramenta aguardando aprovação', icon: 'schedule', tone: 'normal' },
-  'agent.tool.cancelled': { label: 'Ferramenta cancelada', icon: 'cancel', tone: 'normal' },
-  'agent.tool.badargs': { label: 'Ferramenta com argumentos inválidos', icon: 'warning', tone: 'bad' },
-  'agent.skill': { label: 'Habilidade usada', icon: 'bolt', tone: 'normal' },
-  'auth.login.ok': { label: 'Login no painel', icon: 'lock', tone: 'good' },
-  'auth.login.fail': { label: 'Tentativa de login recusada', icon: 'lock', tone: 'bad' },
-  'auth.logout': { label: 'Saída do painel', icon: 'logout', tone: 'normal' },
-  'alert.sent': { label: 'Alerta enviado ao dono', icon: 'notifications', tone: 'normal' },
-  'alert.fail': { label: 'Falha ao enviar alerta', icon: 'warning', tone: 'bad' },
-  'admin.restart': { label: 'Yui reiniciada pelo painel', icon: 'refresh', tone: 'normal' },
-  'admin.restart.recusado': { label: 'Reinício pedido e recusado pelo supervisor (nada reiniciou)', icon: 'warning', tone: 'bad' },
-  'admin.follow.youtube.liveMode': { label: 'Modo das lives alterado', icon: 'tune', tone: 'normal' },
-  'admin.follow.youtube.add': { label: 'Canal do YouTube adicionado', icon: 'hub', tone: 'normal' },
-  'admin.follow.youtube.remove': { label: 'Canal do YouTube removido', icon: 'hub', tone: 'normal' },
-  'admin.follow.twitch.add': { label: 'Streamer da Twitch adicionado', icon: 'hub', tone: 'normal' },
-  'admin.follow.twitch.remove': { label: 'Streamer da Twitch removido', icon: 'hub', tone: 'normal' },
-  'admin.ban.add': { label: 'Bloqueio aplicado', icon: 'lock', tone: 'normal' },
-  'admin.ban.remove': { label: 'Bloqueio removido', icon: 'lock', tone: 'normal' },
-  // Segurança (motor de política e aprovações): nomes internos viram frases.
-  'policy.evaluate': { label: 'Permissão conferida', icon: 'lock', tone: 'normal' },
-  'policy.violation': { label: 'Tentativa barrada pela segurança', icon: 'lock', tone: 'bad' },
-  'policy.approval_created': { label: 'Aprovação pedida ao dono', icon: 'schedule', tone: 'normal' },
-  'policy.approved': { label: 'Aprovação concedida', icon: 'check_circle', tone: 'good' },
-  'policy.rejected': { label: 'Aprovação recusada', icon: 'cancel', tone: 'normal' },
-  'policy.expired': { label: 'Aprovação expirou', icon: 'schedule', tone: 'normal' },
-  'policy.enacted': { label: 'Ação aprovada executada', icon: 'check_circle', tone: 'good' },
-  'auth.discord.verify.ok': { label: 'Entrada pelo Discord', icon: 'lock', tone: 'good' },
-  'auth.discord.verify.fail': { label: 'Chave do Discord recusada', icon: 'lock', tone: 'bad' },
-  'auth.discord.request.fail': { label: 'Falha ao enviar a chave pelo Discord', icon: 'lock', tone: 'bad' },
-  'reminder.fire': { label: 'Lembrete enviado', icon: 'alarm', tone: 'normal' },
-  'reminder.drop': { label: 'Lembrete descartado', icon: 'alarm', tone: 'bad' },
-  'alert.adiado': { label: 'Aviso ao dono adiado', icon: 'notifications', tone: 'normal' },
-  'channel.violation': { label: 'Pedido barrado no canal interno', icon: 'lock', tone: 'bad' },
-  'channel.dm_incerta': { label: 'Mensagem privada com entrega incerta', icon: 'warning', tone: 'bad' },
-  'api.prerota': { label: 'Comando reconhecido no app', icon: 'chat_bubble', tone: 'normal' },
-  'api.agent': { label: 'Pedido ao agente pelo app', icon: 'chat_bubble', tone: 'normal' },
-  'api.imagem': { label: 'Imagem pelo Chat do app', icon: 'chat_bubble', tone: 'normal' },
-  'monitor.cancelado': { label: 'Monitor cancelado', icon: 'cancel', tone: 'normal' },
-};
-
-const PREFIX: [string, EventView][] = [
-  ['auth.discord', { label: 'Entrada pelo Discord', icon: 'lock', tone: 'normal' }],
-  ['policy.', { label: 'Verificação de segurança', icon: 'lock', tone: 'normal' }],
-  ['reminder.', { label: 'Lembrete', icon: 'alarm', tone: 'normal' }],
-  ['memory.admin', { label: 'Administração de memória', icon: 'psychology', tone: 'normal' }],
-  ['dev.', { label: 'Módulo de código', icon: 'code', tone: 'normal' }],
-  ['admin.', { label: 'Ajuste feito no painel', icon: 'tune', tone: 'normal' }],
-];
-
-/** Como um evento da auditoria aparece na lista: texto simples, ícone e tom. Evento desconhecido mostra o próprio nome. */
-export function describeEvent(event: string): EventView {
-  const key = String(event ?? '');
-  if (EXACT[key]) return EXACT[key];
-  for (const [prefix, view] of PREFIX) if (key.startsWith(prefix)) return view;
-  return { label: key || 'Evento', icon: 'history', tone: 'normal' };
-}
+// O dicionário dos eventos da auditoria mora em auditoriaLogic.ts (Fase 1 do painel, R9): o Início e a seção Auditoria usam o MESMO.
+export { describeEvent, type EventView };
 
 export interface GroupedEvent extends EventView { ts: string | null; count: number }
 
@@ -165,9 +134,9 @@ export function systemSummary({ discordOnline, aiOk, hostLevel, avisos = 0 }: Su
   const problems: string[] = [];
   if (!discordOnline) problems.push('o Discord está desconectado');
   if (aiOk === false) problems.push('nenhum provedor de IA está disponível');
-  if (hostLevel === 'danger') problems.push('o computador está com pouca memória ou disco');
+  if (hostLevel === 'danger') problems.push('o computador está abaixo do limite de RAM ou de disco livre');
   if (problems.length === 0) {
-    const watch = hostLevel === 'warn' ? ' O computador está apertado em memória ou disco; vale ficar de olho.' : '';
+    const watch = hostLevel === 'warn' ? ' O computador está perto do limite de RAM ou de disco livre (atenção preventiva, sem alerta por DM); vale ficar de olho.' : '';
     // Com aviso no cartão de alertas, a frase do topo não promete "todos operacionais" (os principais seguem no ar).
     if (avisos > 0) return { ok: true, text: `Estou funcionando, mas há ${avisos === 1 ? '1 aviso' : `${avisos} avisos`} nos alertas abaixo.${watch}` };
     return { ok: true, text: `Estou funcionando normalmente. Todos os sistemas principais estão operacionais.${watch}` };
@@ -254,8 +223,8 @@ export function buildAlerts(input: { discordOnline: boolean; aiOk: boolean | nul
   const out: AlertItem[] = [];
   if (!input.discordOnline) out.push({ level: 'danger', text: 'O Discord está desconectado.' });
   if (input.aiOk === false) out.push({ level: 'danger', text: 'Nenhum provedor de IA está disponível.' });
-  if (input.hostLevel === 'danger') out.push({ level: 'danger', text: 'O computador está com pouca memória ou disco.' });
-  else if (input.hostLevel === 'warn') out.push({ level: 'warn', text: 'O computador está apertado em memória ou disco.' });
+  if (input.hostLevel === 'danger') out.push({ level: 'danger', text: 'O computador está abaixo do limite de RAM ou de disco livre (o mesmo do alerta por DM).' });
+  else if (input.hostLevel === 'warn') out.push({ level: 'warn', text: 'Atenção preventiva: o computador está perto do limite de RAM ou de disco livre (o alerta por DM ainda não saiu).' });
   const p = input.problems;
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   if (p?.loginFail) out.push({ level: 'warn', text: `${plural(p.loginFail, 'tentativa de login recusada', 'tentativas de login recusadas')} nas últimas 24 h.` });

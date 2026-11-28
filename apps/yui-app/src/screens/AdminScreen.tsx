@@ -20,6 +20,8 @@ import {
 import { confirmAction } from '../components/confirm.ts';
 import { confirmacaoDeReinicio } from '../restartLogic.ts';
 import { avisoDeRecarga } from '../guildLogic.ts';
+import { describeEvent } from '../auditoriaLogic.ts';
+import { ROTULOS_DO_AUTOMOD } from '../valoresLogic.ts';
 import { AiProviders } from './AdminAi.tsx';
 import { ConfigPainel } from './AdminConfig.tsx';
 import { GuildEditor } from './AdminGuild.tsx';
@@ -48,8 +50,8 @@ const GROUPS: { title: string; sections: { key: Section; label: string }[] }[] =
       { key: 'radio', label: 'Rádio' },
       { key: 'monitores', label: 'Monitores' },
       { key: 'planos', label: 'Planos e avisos' },
-      { key: 'live', label: 'Live do YouTube' },
-      { key: 'bans', label: 'Bans' },
+      { key: 'live', label: 'Yui na live' },
+      { key: 'bans', label: 'Bloqueios da Yui' },
     ],
   },
   {
@@ -67,19 +69,15 @@ const GROUPS: { title: string; sections: { key: Section; label: string }[] }[] =
   {
     title: 'Segurança e registros',
     sections: [
-      { key: 'ferramentas', label: 'Ferramentas' },
+      { key: 'ferramentas', label: 'Ferramentas do computador' },
       { key: 'auditoria', label: 'Auditoria' },
       { key: 'logs', label: 'Logs' },
     ],
   },
 ];
 
-const AUTOMOD: { mode: AutomodMode; label: string }[] = [
-  { mode: 'off', label: 'Desligado' },
-  { mode: 'trigger', label: 'Gatilhos' },
-  { mode: 'mcp', label: 'IA' },
-  { mode: 'both', label: 'Ambos' },
-];
+// Os mesmos nomes do padrão de todos os servidores (valoresLogic.ts, Fase 1 do painel).
+const AUTOMOD: { mode: AutomodMode; label: string }[] = (['off', 'trigger', 'mcp', 'both'] as AutomodMode[]).map((mode) => ({ mode, label: ROTULOS_DO_AUTOMOD[mode] }));
 
 // ───────────────────────── utilidades ─────────────────────────
 
@@ -129,17 +127,7 @@ function Status({ loading, error }: { loading: boolean; error: string | null }) 
 
 const capital = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 
-const AUDIT_ACTIONS: Record<string, string> = {
-  login: 'Entrou no painel', logout: 'Saiu do painel',
-  'admin.guild.tool': 'Mudou uma ferramenta do servidor', 'admin.guild.tools.reset': 'Restaurou as ferramentas do servidor',
-  'admin.guild.tos.accept': 'Aceitou os termos pelo painel', 'admin.guild.tos.revoke': 'Revogou o aceite dos termos',
-  'admin.guild.persona': 'Mudou a persona de um canal', 'admin.guild.persona.reset': 'Restaurou a persona de um canal',
-  'admin.guild.chatter': 'Mudou as falas espontâneas', 'admin.guild.mentions': 'Mudou a resposta a @everyone',
-  'admin.guild.channel': 'Mudou um canal do servidor',
-  'admin.continuidade.remove': 'Apagou um projeto ou decisão',
-  'google.reauth.start': 'Começou a reautorizar o Google', 'google.reauth.ok': 'Reautorizou o Google', 'google.reauth.fail': 'A reautorização do Google não foi concluída',
-};
-const auditAction = (event: string) => AUDIT_ACTIONS[event] ?? capital(String(event ?? '').replace(/[_.-]+/g, ' ').trim());
+// Fase 1 do painel (R9): o nome de cada evento vem do MESMO dicionário da Atividade recente do Início (auditoriaLogic.ts).
 const ROLE_LABEL: Record<string, string> = { OWNER: 'Dono', MEMBER: 'Membro' };
 const roleLabel = (role: string) => ROLE_LABEL[role] ?? capital(String(role).toLowerCase());
 const ACCESS_LABEL: Record<string, string> = { OWNER: 'Dono', MEMBER: 'Membro' };
@@ -223,7 +211,7 @@ function Geral({ client }: Props) {
             </View>
             <Row label="Conta" value={data.discord.tag ?? '—'} />
             <Row label="Servidores" value={String(data.discord.guilds)} />
-            <Row label="Tempo ligada" value={formatUptime(data.uptimeSeconds)} />
+            <Row label="Tempo de atividade" value={formatUptime(data.uptimeSeconds)} />
             <Row label={data.cerebro ? 'RAM do cérebro' : 'RAM da Yui'} value={`${data.memoryMB} MB`} />
             <Row label="Outras pessoas com memória" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} />
             <Text style={styles.hint}>"Outras pessoas" não conta a sua memória pessoal, que fica na aba Memória.</Text>
@@ -241,9 +229,9 @@ function Geral({ client }: Props) {
             <View style={styles.badges}>
               <Badge label={data.flags.readOnly ? 'Somente leitura' : 'Leitura e escrita liberadas'} color={data.flags.readOnly ? colors.success : colors.warning} />
               <Badge label={data.flags.memoryEnabled ? 'Memória ativa' : 'Memória desligada'} color={data.flags.memoryEnabled ? colors.success : colors.warning} />
-              <Badge label={data.flags.pcToolsEnabled ? 'Ferramentas do PC' : 'Sem ferramentas do PC'} color={data.flags.pcToolsEnabled ? colors.success : colors.muted} />
+              <Badge label={data.flags.pcToolsEnabled ? 'Ferramentas do computador' : 'Sem ferramentas do computador'} color={data.flags.pcToolsEnabled ? colors.success : colors.muted} />
             </View>
-            <Text style={styles.hint}>O modo somente leitura e a senha de entrada só mudam no arquivo .env, nunca por este painel. As chaves de IA você gerencia em Configuração e chaves.</Text>
+            <Text style={styles.hint}>O modo somente leitura e a senha de entrada só mudam no arquivo de configuração do servidor, nunca por este painel. As chaves de IA ficam na seção IA.</Text>
           </Card>
 
           <DmCard client={client} limits={data?.limits} />
@@ -265,7 +253,7 @@ const INTEGRATION_STATUS: Record<IntegrationStatus, { label: string; color: stri
   missing: { label: 'Falta configurar', color: colors.warning },
 };
 
-/** Estado de cada integração (somente leitura: chaves e ligações só mudam no .env). */
+/** Estado de cada integração (somente leitura: aqui só se vê; cada ajuste muda na seção do assunto ou em Configuração e chaves). */
 function Integracoes({ client }: Props) {
   const { data, error, loading, reload } = useLoad<IntegrationGroup[]>(() => client.admin.integrations());
   return (
@@ -274,7 +262,7 @@ function Integracoes({ client }: Props) {
       <Status loading={loading} error={error} />
       {data ? (
         <>
-          <Text style={styles.hint}>Mostra o que está configurado e ligado, sem expor chaves. Para mudar, edite o arquivo .env e reinicie a Yui.</Text>
+          <Text style={styles.hint}>Mostra o que está configurado e ligado, sem expor chaves. Para mudar: as chaves de IA ficam na seção IA; as outras chaves e os ajustes, em Configuração e chaves (alguns pedem reinício). O token do Discord, a senha do painel e as regras de segurança só mudam no arquivo de configuração do servidor.</Text>
           {data.map((g) => (
             <Card key={g.title} style={styles.card}>
               <Text style={styles.cardTitle}>{g.title}</Text>
@@ -600,10 +588,12 @@ function Auditoria({ client }: Props) {
       {data?.length === 0 ? <StateView kind="empty" title="Sem eventos." /> : null}
       {data?.map((e, i) => {
         const detail = String((e.tool ?? e.target ?? e.guild ?? e.type ?? '') || '');
+        const vista = describeEvent(e.event);
         return (
-          <View key={`${e.ts}-${i}`} style={styles.audit}>
-            <Text style={styles.auditEvent}>{auditAction(e.event)}{detail ? ` · ${detail}` : ''}</Text>
-            <Text style={styles.hint}>{formatWhen(e.ts)}{e.userId ? ` • ${e.userId}` : ''}{e.role ? ` • ${roleLabel(e.role)}` : ''}</Text>
+          <View key={`${e.ts}-${i}`} style={styles.audit} testID="audit-event">
+            <Text style={styles.auditEvent}>{vista.label}{detail ? ` · ${detail}` : ''}</Text>
+            {/* Evento fora do dicionário (antigo ou novo): o identificador técnico aparece ao lado, para o registro nunca ficar ambíguo. */}
+            <Text style={styles.hint}>{formatWhen(e.ts)}{e.userId ? ` • ${e.userId}` : ''}{e.role ? ` • ${roleLabel(e.role)}` : ''}{vista.exato ? '' : ` • ${String(e.event ?? '')}`}</Text>
           </View>
         );
       })}

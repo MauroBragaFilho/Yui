@@ -41,7 +41,7 @@ export const OUTRAS_FUNCOES: readonly DefinicaoDeFuncao[] = Object.freeze([
   { chave: 'musica', nome: 'Baixar música pelo nome', descricao: 'Procura e baixa uma música pelo nome, ou a que a pessoa está ouvindo agora.', ferramentas: ['search_and_download_music', 'get_current_music'], aviso: AVISO_DOWNLOAD },
   { chave: 'info-jogo', nome: 'Informações de jogos', descricao: 'Notas, gêneros, tempo de jogo e se o jogo roda no PC da pessoa.', ferramentas: ['check_game_info', 'check_pc_compatibility'] },
   { chave: 'menu', nome: 'Menu de ajuda', descricao: 'Mostra o menu de ajuda, as redes sociais e as novidades.', ferramentas: ['show_bot_menu'] },
-  { chave: 'radio-voz', nome: 'Comandos de voz no rádio', descricao: 'No Modo Rádio, entende pedidos de música falados na call.', ferramentas: ['radio_voice_stt'] },
+  { chave: 'radio-voz', nome: 'Comandos de voz no rádio', descricao: 'No rádio, entende pedidos de música falados na call.', ferramentas: ['radio_voice_stt'] },
 ]);
 
 export type EstadoDaFuncao = 'ligada' | 'desligada' | 'em-parte';
@@ -130,7 +130,7 @@ export const TEXTO_DO_ESTADO: Record<EstadoDaFuncao, string> = { ligada: 'Ligada
 
 export const GTA_AGENDADO: readonly { tipo: 'diario' | 'semanal' | 'noticias'; nome: string }[] = Object.freeze([
   { tipo: 'diario', nome: 'Reset diário' },
-  { tipo: 'semanal', nome: 'Evento semanal' },
+  { tipo: 'semanal', nome: 'Semanal do GTA' },
   { tipo: 'noticias', nome: 'Notícias da Rockstar' },
 ]);
 

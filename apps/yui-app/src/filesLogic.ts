@@ -161,7 +161,7 @@ export function describeBdsStatus(s: Record<string, unknown> | null | undefined)
   add('Node', str('node'));
   if (num('cpuPercent') !== null) add('Uso da CPU', `${num('cpuPercent')}%`);
   const total = num('ramTotalGB'); const free = num('ramLivreGB');
-  if (total !== null && free !== null) add('Memória RAM livre', `${free.toFixed(1).replace('.', ',')} GB de ${total.toFixed(1).replace('.', ',')} GB`);
+  if (total !== null && free !== null) add('RAM livre', `${free.toFixed(1).replace('.', ',')} GB de ${total.toFixed(1).replace('.', ',')} GB`);
   if (num('processoMB') !== null) add('Memória do BDS Server', `${num('processoMB')} MB`);
   if (num('uptimeSegundos') !== null) add('Computador ligado há', formatUptime(num('uptimeSegundos')));
   const since = str('servidorDesde');

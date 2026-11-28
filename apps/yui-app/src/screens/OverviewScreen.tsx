@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ApiError, type AdminOverview, type GatewayStatus, type GoogleView, type LiveView, type Me, type RadioSession, type ReminderView, type YuiClient } from '../api/client.ts';
 import { Badge, Button, Card, Icon, PageHeader, SectionHeading, StateView, type TabKey } from '../components/ui.tsx';
-import { buildAlerts, chartBars, formatUptime, groupEvents, corDoMedidor, levelForFree, medidorDeUso, percent, relativeTime, resumoDaVoz, resumoDasRespostas, RESPOSTAS_PARA_GRAFICO, systemSummary, type DiagnosticoResumo, type Level } from '../overviewLogic.ts';
+import { buildAlerts, chartBars, formatUptime, groupEvents, corDoMedidor, medidorDeUso, nivelDoServidor, nomeDaUnidade, piorNivel, relativeTime, textoDosLimites, resumoDaVoz, resumoDasRespostas, RESPOSTAS_PARA_GRAFICO, systemSummary, type DiagnosticoResumo, type Level } from '../overviewLogic.ts';
 import { groupReminders, summarizeReminders } from '../remindersLogic.ts';
-import { cartaoDaLive, type TomDaConta } from '../contasLogic.ts';
+import { cartaoDaLive, fraseDoResumoDoDia, type TomDaConta } from '../contasLogic.ts';
 import { colors, fonts, radius, spacing } from '../theme.ts';
 
 type Props = { client: YuiClient; me: Me; onNavigate: (tab: TabKey) => void };
@@ -13,19 +13,6 @@ const REFRESH_MS = 30_000;
 const LEVEL_COLOR: Record<Level, string> = { ok: colors.success, warn: colors.warning, danger: colors.danger, unknown: colors.muted };
 const LEVEL_TEXT: Record<Level, string> = { ok: 'Folgado', warn: 'Apertado', danger: 'Crítico', unknown: 'Sem leitura' };
 const TOM_COR: Record<TomDaConta, string> = { ok: colors.success, atencao: colors.warning, critico: colors.danger, neutro: colors.muted };
-
-/** Tipos crus do registro (ex.: "chat", "tool") viram rótulos em português; o que não é conhecido volta com inicial maiúscula. */
-const TIPO_PT: Record<string, string> = {
-  chat: 'Conversa', tool: 'Ferramenta', reminder: 'Lembrete', reminders: 'Lembrete', memory: 'Memória', auth: 'Acesso', admin: 'Painel',
-  agent: 'Agente', skill: 'Habilidade', alert: 'Alerta', dev: 'Código', voice: 'Voz', context: 'Contexto', api: 'App', files: 'Arquivos', bds: 'Arquivos',
-};
-function rotuloAtividade(label: string): string {
-  if (!/^[a-z0-9._-]+$/.test(label)) return label;
-  const key = label.split('.')[0];
-  if (TIPO_PT[label]) return TIPO_PT[label];
-  if (TIPO_PT[key]) return TIPO_PT[key];
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Não consegui carregar a visão geral.');
 
@@ -78,11 +65,11 @@ export function OverviewScreen({ client, onNavigate }: Props) {
   const providersUp = gateway ? gateway.providers.filter((p) => p.targets.some((t) => t.available)).length : null;
 
   const host = data?.host;
-  const ramFree = percent(host?.ramFreeMB, host?.ramTotalMB);
-  const diskFree = percent(host?.diskFreeGB, host?.diskTotalGB);
-  const ramLevel = levelForFree(ramFree);
-  const diskLevel = levelForFree(diskFree);
-  const worst: Level = [ramLevel, diskLevel].includes('danger') ? 'danger' : [ramLevel, diskLevel].includes('warn') ? 'warn' : ramLevel === 'unknown' && diskLevel === 'unknown' ? 'unknown' : 'ok';
+  // Fase 1 do painel (R10): o nível vem do servidor, com os limites do alerta por DM; o app não tem regra própria de porcentagem.
+  const ramLevel = nivelDoServidor(host?.alerta?.nivelRam);
+  const diskLevel = nivelDoServidor(host?.alerta?.nivelDisco);
+  const worst: Level = piorNivel(ramLevel, diskLevel);
+  const unidade = nomeDaUnidade(host?.volume);
   const bars = chartBars(data?.interactions?.series);
   const alerts = data ? buildAlerts({ discordOnline: data.discord.online, aiOk, hostLevel: worst, problems: data.problems, diagnostico: diag, google }) : [];
   const cartaoLive = cartaoDaLive(live);
@@ -112,7 +99,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
 
             <SectionHeading title="Saúde" hint="Cérebro, bot, IA e voz de relance." />
             <View style={styles.health}>
-              <HealthCard icon="psychology" title="Cérebro" level="ok" text={`No ar há ${formatUptime(data.uptimeSeconds)}`} />
+              <HealthCard icon="psychology" title="Cérebro" level="ok" text={`Tempo de atividade: ${formatUptime(data.uptimeSeconds)}`} />
               <HealthCard
                 icon="forum"
                 title="Bot do Discord"
@@ -125,13 +112,13 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 level={aiOk === null ? 'unknown' : aiOk ? 'ok' : 'danger'}
                 text={aiOk === null ? 'Sem leitura' : aiOk ? `Operacional${providersUp !== null ? ` (${providersUp} provedor${providersUp === 1 ? '' : 'es'})` : ''}` : 'Indisponível'}
               />
-              <HealthCard icon="graphic_eq" title="Voz no Discord" level={vozResumo.level} text={vozResumo.text} />
+              <HealthCard icon="graphic_eq" title="Rádio" level={vozResumo.level} text={vozResumo.text} />
             </View>
 
             {cartaoLive ? (
               <Card style={styles.card}>
                 <View style={styles.rowBetween}>
-                  <SectionTitle icon="chat_bubble" title="Live do YouTube" />
+                  <SectionTitle icon="chat_bubble" title="Yui na live" />
                   <Badge label={cartaoLive.estado.texto} color={TOM_COR[cartaoLive.estado.tom]} />
                 </View>
                 <Text testID="overview-live-titulo" style={styles.eventLabel} numberOfLines={2}>{cartaoLive.titulo}</Text>
@@ -156,7 +143,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
               <Kpi testID="kpi-servers" value={String(data.discord.guilds)} label="Servidores ativos" />
               <Kpi testID="kpi-memory-users" value={data.memoryUsers === null ? '—' : String(data.memoryUsers)} label="Outras pessoas com memória" />
               <Kpi testID="kpi-interactions" value={data.interactions ? String(data.interactions.total) : '—'} label="Respostas da IA (24 h)" />
-              <Kpi testID="kpi-uptime" value={formatUptime(data.uptimeSeconds)} label="Tempo ligada" />
+              <Kpi testID="kpi-uptime" value={formatUptime(data.uptimeSeconds)} label="Tempo de atividade" />
               <Kpi testID="kpi-ram" value={`${data.memoryMB} MB`} label={ramLabel} />
             </View>
 
@@ -211,9 +198,9 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 <SectionTitle icon="monitor_heart" title="Saúde do computador" />
                 <Badge label={LEVEL_TEXT[worst]} color={LEVEL_COLOR[worst]} />
               </View>
-              <Meter testID="meter-ram" label="Memória RAM em uso" medidor={medidorDeUso(host?.ramFreeMB, host?.ramTotalMB, 'MB')} level={ramLevel} />
-              <Meter testID="meter-disk" label="Disco em uso" medidor={medidorDeUso(host?.diskFreeGB, host?.diskTotalGB, 'GB')} level={diskLevel} />
-              {!host ? <Text style={styles.hint}>Este servidor ainda não informa a saúde do computador (atualize a Yui).</Text> : null}
+              <Meter testID="meter-ram" label="RAM em uso" medidor={medidorDeUso(host?.ramFreeMB, host?.ramTotalMB, 'MB')} level={ramLevel} />
+              <Meter testID="meter-disk" label={unidade ? `Disco dos dados da Yui (${unidade}) em uso` : 'Disco dos dados da Yui em uso'} medidor={medidorDeUso(host?.diskFreeGB, host?.diskTotalGB, 'GB')} level={diskLevel} />
+              {!host ? <Text style={styles.hint}>Este servidor ainda não informa a saúde do computador (atualize a Yui).</Text> : <Text testID="overview-limites" style={styles.hint}>{textoDosLimites(host.alerta)}</Text>}
             </Card>
 
             <Card style={styles.card}>
@@ -224,7 +211,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                   return (
                     <View key={`${v.ts}-${i}`} style={styles.eventRow} testID="overview-event">
                       {v.icon === 'history' ? <View style={[styles.dot, { backgroundColor: tone }]} /> : <Icon name={v.icon} size={20} color={tone} />}
-                      <Text style={styles.eventLabel} numberOfLines={1}>{rotuloAtividade(v.label)}{v.count > 1 ? ` ×${v.count}` : ''}</Text>
+                      <Text style={styles.eventLabel} numberOfLines={1}>{v.label}{v.count > 1 ? ` ×${v.count}` : ''}</Text>
                       <Text style={styles.eventTime}>{relativeTime(v.ts)}</Text>
                     </View>
                   );
@@ -236,7 +223,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
             </Card>
 
             <Card style={styles.card}>
-              <SectionTitle icon="psychology" title="Sistema de memória" />
+              <SectionTitle icon="psychology" title="Memória da Yui" />
               <View style={styles.memRow}>
                 <View style={styles.memBox}>
                   <Text style={styles.memTitle}>Proprietário</Text>
@@ -272,7 +259,7 @@ export function OverviewScreen({ client, onNavigate }: Props) {
                 <Shortcut testID="morning-now" icon="wb_sunny" label="Enviar o resumo do dia agora" onPress={async () => { setMorningMsg(null); try { await client.reminders.morningSend(); setMorningMsg('Resumo enviado por mensagem privada.'); } catch (e) { setMorningMsg(errText(e)); } }} />
               </View>
               {morningMsg ? <Text testID="morning-msg" style={styles.hint}>{morningMsg}</Text> : null}
-              <Text style={styles.hint}>Todo dia de manhã a Yui manda o resumo (lembretes, pendências e a saúde dela). Agenda do Google e e-mail ainda não estão ligados.</Text>
+              <Text testID="overview-resumo-google" style={styles.hint}>{fraseDoResumoDoDia(google)}</Text>
             </Card>
 
             {updatedAt ? <Text style={styles.hint}>Atualizado às {new Date(updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (a cada 30 s)</Text> : null}

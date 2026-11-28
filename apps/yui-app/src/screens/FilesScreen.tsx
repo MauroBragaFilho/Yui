@@ -177,7 +177,7 @@ export function FilesScreen({ client }: Props) {
           <Chip testID="files-tab-files" label="Arquivos" on={mode === 'files'} onPress={() => loadMode('files')} />
           <Chip testID="files-tab-recent" label="Recentes" on={mode === 'recent'} onPress={() => loadMode('recent')} />
           <Chip testID="files-tab-trash" label="Lixeira" on={mode === 'trash'} onPress={() => loadMode('trash')} />
-          <Chip testID="files-tab-server" label="Servidor" on={mode === 'server'} onPress={() => loadMode('server')} />
+          <Chip testID="files-tab-server" label="Servidor de arquivos" on={mode === 'server'} onPress={() => loadMode('server')} />
         </View>
 
         {error ? (

@@ -170,7 +170,7 @@ test('avisos: o assunto vira um nome legível; sem assunto (o servidor não pode
 });
 
 test('modo do filtro, origem, ordem (mais novas primeiro, sem mudar a lista) e contagem', () => {
-  assert.equal(textoDoModo('observar').titulo, 'Modo observar');
+  assert.equal(textoDoModo('observar').titulo, 'Filtro só observando');
   assert.equal(textoDoModo('ligar').titulo, 'Filtro ligado');
   assert.match(textoDoModo('off').texto, /Avisos na hora certa/);
   assert.equal(textoDoModo('qualquer').titulo, 'Filtro desligado');

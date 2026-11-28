@@ -6,6 +6,7 @@ import * as database from '../database/db.js';
 import { getReminderStore, isRemindersRemote } from '../reminders/assistant.js';
 import { diagnosticoDosLimites } from './ai/limitesTokens.js';
 import { fusoDoDono } from './fuso.js';
+import { pastaDoDisco } from './limitesDoComputador.js';
 
 /**
  * Relatório diário de saúde da Yui para o dono (uma mensagem por dia, 08:00 no fuso do dono, YUI_FUSO; padrão Brasília).
@@ -205,7 +206,8 @@ export function collectHealth({
     configuracao: [],
   };
   try { data.ramTotalGB = gb(osImpl.totalmem()); data.ramFreeGB = gb(osImpl.freemem()); } catch { /* sem leitura */ }
-  try { const st = fsImpl.statfsSync(cwd); data.diskTotalGB = gb(st.blocks * st.bsize); data.diskFreeGB = gb(st.bavail * st.bsize); } catch { /* sem leitura */ }
+  // o mesmo disco que o alerta por DM e o Início medem (a pasta dos dados; core/limitesDoComputador.js, Fase 1 do painel)
+  try { const st = fsImpl.statfsSync(pastaDoDisco(process.env, { fsImpl, cwd: () => cwd })); data.diskTotalGB = gb(st.blocks * st.bsize); data.diskFreeGB = gb(st.bavail * st.bsize); } catch { /* sem leitura */ }
   try { data.replies24h = interactions(now).total; } catch { /* sem contador */ }
   try {
     if (typeof dbStats === 'function') {

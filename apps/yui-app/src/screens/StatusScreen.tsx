@@ -148,7 +148,7 @@ export function StatusScreen({ client, me, onLogout }: Props) {
 
       <Card style={styles.card}>
         <View style={styles.row}>
-          <Text style={styles.label}>Servidor</Text>
+          <Text style={styles.label}>Serviço da Yui</Text>
           <Badge
             label={online ? '● Online' : health === null && !error ? '● Verificando' : '● Offline'}
             color={online ? colors.success : health === null && !error ? colors.muted : colors.danger}
@@ -223,7 +223,8 @@ export function StatusScreen({ client, me, onLogout }: Props) {
         </Card>
       ) : null}
 
-      <Button testID="btn-logout" label="Sair deste dispositivo" variant="danger" icon="logout" onPress={onLogout} />
+      <Button testID="btn-logout" label="Sair" variant="danger" icon="logout" onPress={onLogout} />
+      <Text style={styles.hint}>Encerra a sessão no servidor e apaga o acesso guardado neste aparelho.</Text>
     </ScrollView>
     </View>
   );

@@ -11,9 +11,9 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Algo deu e
 const chan = (c: ChannelRef | null) => (c ? (c.name ? `#${c.name}` : `ID ${c.id}`) : 'não definido');
 
 const CHANNEL_TYPES: { type: Exclude<GuildChannelType, 'atualizacoes'>; label: string }[] = [
-  { type: 'noticias', label: 'Notícias' },
+  { type: 'noticias', label: 'Notícias da Rockstar' },
   { type: 'diario', label: 'Reset diário' },
-  { type: 'semanal', label: 'Evento semanal' },
+  { type: 'semanal', label: 'Semanal do GTA' },
 ];
 
 type Aba = 'publicacoes' | Secao;

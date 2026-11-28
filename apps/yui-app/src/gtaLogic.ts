@@ -38,7 +38,7 @@ export function linhasDasFontes(f: GtaView['fontes'] | null | undefined): LinhaD
   return [
     { chave: 'diario', rotulo: 'Reset diário', texto: `Coleta e publica todo dia às ${f.diario?.horario ?? '06:00 UTC'}.`, tom: 'ok' },
     {
-      chave: 'semanal', rotulo: 'Evento semanal',
+      chave: 'semanal', rotulo: 'Semanal do GTA',
       texto: `${ligado(f.semanal?.estado) ? `Ligado${cada(f.semanal?.intervaloMin ?? null)}.` : 'Desligado: não confere nem publica sozinho (o /gta-semanal continua).'}${reinicio(f.semanal?.aoReiniciar ?? null)}`,
       tom: ligado(f.semanal?.estado) ? 'ok' : 'neutro',
     },
@@ -98,7 +98,7 @@ export function resumoDoDiario(d: GtaView['diario']): Bloco | null {
   return { titulo: `Reset diário de ${dia(d.data)}`, linhas };
 }
 
-const FONTES: Record<string, string> = { reddit: 'Reddit (r/gtaonline)', gtabase: 'GTABase', newswire: 'Rockstar Newswire', outra: 'outra fonte' };
+const FONTES: Record<string, string> = { reddit: 'Reddit (r/gtaonline)', gtabase: 'GTABase', newswire: 'Notícias da Rockstar (Newswire)', outra: 'outra fonte' };
 const multiplicador = (n: number | null) => (n === null ? 'Bônus' : `${String(n).replace('.', ',')}x`);
 
 /** O evento semanal em linhas: período, fonte, bônus ("2x: Corridas, ..."), descontos, pódio e prêmio. */
@@ -112,7 +112,7 @@ export function resumoDoSemanal(s: GtaView['semanal']): Bloco | null {
   if (s.podio) linhas.push({ rotulo: 'Veículo do pódio', valor: s.podio });
   if (s.premio) linhas.push({ rotulo: 'Veículo prêmio', valor: s.premio });
   linhas.push({ rotulo: 'Análise da IA', valor: s.temAnalise ? 'Saiu junto com a publicação' : 'Não foi gerada' });
-  return { titulo: s.titulo ?? `Evento semanal ${s.semana ?? ''}`.trim(), linhas };
+  return { titulo: s.titulo ?? `Semanal do GTA ${s.semana ?? ''}`.trim(), linhas };
 }
 
 /** A notícia em linhas: categoria e data. */

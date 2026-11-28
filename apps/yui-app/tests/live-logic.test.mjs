@@ -49,7 +49,7 @@ test('situação: desligada e indisponível sem botões; fora de live = Entrar; 
   assert.deepEqual(situacaoDaLive(V({ ligado: false, disponivel: false, estado: 'desligado' })), {
     titulo: 'Desligada', texto: situacaoDaLive(V({ ligado: false })).texto, tom: 'neutro', podeEntrar: false, podeSair: false,
   });
-  assert.match(situacaoDaLive(V({ ligado: false })).texto, /"Yui no chat de uma live do YouTube" em Configuração e chaves/);
+  assert.match(situacaoDaLive(V({ ligado: false })).texto, /"Yui na live" em Configuração e chaves/);
   assert.deepEqual(['titulo', 'podeEntrar', 'podeSair'].map((k) => situacaoDaLive(V({ disponivel: false }))[k]), ['Indisponível', false, false]);
   assert.deepEqual(['titulo', 'podeEntrar', 'podeSair'].map((k) => situacaoDaLive(V())[k]), ['Fora de live', true, false]);
   assert.deepEqual(['titulo', 'podeEntrar', 'podeSair'].map((k) => situacaoDaLive(V({ estado: 'encerrada' }))[k]), ['Fora de live', true, false]);
@@ -98,7 +98,7 @@ test('a tela: "Live do YouTube" no grupo Operação do Admin; Entrar com link e 
   const raiz = path.resolve(import.meta.dirname, '..', 'src', 'screens');
   const admin = fs.readFileSync(path.join(raiz, 'AdminScreen.tsx'), 'utf8');
   const operacao = admin.slice(admin.indexOf("title: 'Operação'"), admin.indexOf("title: 'IA e memória'"));
-  assert.match(operacao, /\{ key: 'live', label: 'Live do YouTube' \}/);
+  assert.match(operacao, /\{ key: 'live', label: 'Yui na live' \}/);
   assert.match(admin, /section === 'live' \? <LiveDoYoutube client=\{client\} \/>/);
   const tela = fs.readFileSync(path.join(raiz, 'AdminLive.tsx'), 'utf8');
   for (const t of ['kind="loading"', 'kind="error"', 'situacaoDaLive(live)', 'cartaoDaLive(live)', 's.podeSair ?', 's?.podeEntrar ?', 'DURACOES_SUGERIDAS.map', 'testID="live-endereco"', 'testID="live-entrar"', 'testID="live-sair"']) assert.ok(tela.includes(t), t);

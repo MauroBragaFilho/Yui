@@ -133,7 +133,7 @@ test('estado e auditoria do BDS Server em português, sem inventar campo', () =>
   const m = Object.fromEntries(rows.map((r) => [r.label, r.value]));
   assert.equal(m['Computador'], 'DESKTOP-7U30K95');
   assert.equal(m['Uso da CPU'], '12%');
-  assert.equal(m['Memória RAM livre'], '1,1 GB de 3,9 GB');
+  assert.equal(m['RAM livre'], '1,1 GB de 3,9 GB');
   assert.equal(m['Computador ligado há'], '1d 2h');
   assert.equal(m['Memória do BDS Server'], '59 MB');
   assert.deepEqual(describeBdsStatus(null), []);
