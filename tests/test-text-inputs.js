@@ -324,6 +324,50 @@ await test('a vaga é liberada mesmo se o deferReply falhar ou a entrega falhar'
   assert.notEqual(again, null, 'a vaga deveria estar livre depois da entrega falha');
   releaseAsk('rel2', again);
 });
+await test('/yui que chega depois dos 3 s do Discord (10062): sem "Erro grave", vaga liberada, recado no canal e aviso com o atraso', async () => {
+  const { TEXTO_INTERACAO_VENCIDA, idadeDaInteracao } = await import('../src/discord/commands/ask.js');
+  class DiscordAPIError extends Error { constructor(code) { super(code === 10062 ? 'Unknown interaction' : 'Interaction has already been acknowledged.'); this.name = `DiscordAPIError[${code}]`; this.code = code; } }
+  resetLocal();
+  // num servidor, resposta pública: recado no MESMO canal, mencionando só quem pediu
+  const sent = [];
+  const pub = fakeSlash({ userId: 'late1', pergunta: 'PERGUNTA-SECRETA de teste', channelId: 'chan-late' });
+  Object.assign(pub, { guildId: 'g-late', createdTimestamp: Date.now() - 4200, channel: { id: 'chan-late', async send(p) { sent.push(p); return { id: 'm1' }; } } });
+  pub.deferReply = async () => { throw new DiscordAPIError(10062); };
+  await askCommand.execute(pub); // não lança
+  assert.equal(localCalls.length, 0, 'a IA não é chamada numa interação morta');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].content, `<@late1> ${TEXTO_INTERACAO_VENCIDA}`);
+  assert.deepEqual(sent[0].allowedMentions, { users: ['late1'] });
+  assert.ok(!JSON.stringify(sent).includes('PERGUNTA-SECRETA'), 'o recado não repete a pergunta');
+  const vaga = tryAcquireAsk(askerKey(pub));
+  assert.notEqual(vaga, null, 'a vaga foi liberada');
+  releaseAsk(askerKey(pub), vaga);
+  // resposta privada pedida num servidor: nenhum recado público
+  const priv = fakeSlash({ userId: 'late2', pergunta: 'privada', visibilidade: 'private', channelId: 'chan-late2' });
+  const sentPriv = [];
+  Object.assign(priv, { guildId: 'g-late', channel: { id: 'chan-late2', async send(p) { sentPriv.push(p); } } });
+  priv.deferReply = async () => { throw new DiscordAPIError(40060); };
+  await askCommand.execute(priv);
+  assert.equal(sentPriv.length, 0);
+  // na DM: o recado vai na própria DM, sem menção
+  const dmSent = [];
+  const dm = fakeSlash({ userId: 'late3', pergunta: 'na dm', channelId: 'dm-late3' });
+  dm.user.send = async (p) => { dmSent.push(p); };
+  dm.deferReply = async () => { throw new DiscordAPIError(10062); };
+  await askCommand.execute(dm);
+  assert.deepEqual(dmSent, [{ content: TEXTO_INTERACAO_VENCIDA, allowedMentions: { parse: [] } }]);
+  // o recado falhar também não lança
+  const mudo = fakeSlash({ userId: 'late4', pergunta: 'x', channelId: 'chan-late4' });
+  Object.assign(mudo, { guildId: 'g-late', channel: { id: 'chan-late4', async send() { throw new Error('sem permissão'); } } });
+  mudo.deferReply = async () => { throw new DiscordAPIError(10062); };
+  await askCommand.execute(mudo);
+  // outro erro do deferReply continua subindo (não é engolido)
+  const outro = fakeSlash({ userId: 'late5', pergunta: 'x' });
+  outro.deferReply = async () => { throw Object.assign(new Error('Missing Access'), { name: 'DiscordAPIError[50001]', code: 50001 }); };
+  await assert.rejects(() => askCommand.execute(outro), /Missing Access/);
+  assert.equal(idadeDaInteracao({ createdTimestamp: 1000 }, 4500), 3500);
+  assert.equal(idadeDaInteracao({}, 4500), null);
+});
 await test('tryAcquireAsk/releaseAsk: sem identificação não limita; vaga esquecida (10 min) é retomada e o recibo velho não solta a nova', () => {
   assert.deepEqual(tryAcquireAsk(null), { token: 0 });
   releaseAsk(null, { token: 0 });

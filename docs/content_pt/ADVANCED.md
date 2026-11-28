@@ -81,7 +81,7 @@ No arquivo `src/handlers/llmHandler.js`, adicione a lógica de execução dentro
 ## 🏗️ 4. Personalizando a Alma (System Prompt)
 
 A personalidade da Yui não é apenas texto; é um conjunto de diretrizes de segurança e comportamento.
-- **Local:** a personalidade pública fica em `persona/yui-publica.md` (troque o arquivo com `YUI_PERSONA_PUBLIC_FILE`; ele é relido quando muda). Um prompt de sistema extra pode vir do prompt próprio do servidor ou, sem ele, de `AI_SYSTEM_PROMPT` (campo `ai.systemPrompt` de `src/config/index.js`), e entra antes da personalidade.
+- **Local:** as regras do Discord público ficam em `persona/yui-publica.md` (troque o arquivo com `YUI_PERSONA_PUBLIC_FILE`; ele é relido quando muda). A personalidade e o jeito de falar são os mesmos de todos os contextos (`persona/yui-personalidade.md` e `estiloDaYui` em `src/core/persona.js`). Um prompt de sistema extra pode vir do prompt próprio do servidor ou, sem ele, de `AI_SYSTEM_PROMPT` (campo `ai.systemPrompt` de `src/config/index.js`), e entra antes da personalidade.
 - **Dica:** Se você alterar as regras de formatação (como permitir emojis), lembre-se de que isso pode aumentar o consumo de tokens e mudar o "tom" das conversas.
 
 ---

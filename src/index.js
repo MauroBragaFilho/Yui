@@ -20,7 +20,7 @@ import path from 'node:path';
 import { startGatewayServer } from './gateway/index.js';
 import { applyAiSettings } from './core/aiSettings.js';
 import { isChromeProfileCleanupError } from './utils/chromeProfile.js';
-import { alertOwner, configureAlerts, crashAlertKey, describeReason, formatCrashDetail, isHarmlessNetworkCrash, sendOwnerMessage } from './core/alerts.js';
+import { alertOwner, configureAlerts, crashAlertKey, describeReason, firstProjectFrame, formatCrashDetail, isExpiredInteractionError, isHarmlessNetworkCrash, sendOwnerMessage } from './core/alerts.js';
 import { criarFiltroDeAvisos, criarFiltroRemoto, definirFiltroDoProcesso, iniciarDescarga } from './core/avisos/fila.js';
 import { ownerUserId } from './core/api/auth.js';
 import { jobAllowed } from './core/security/jobGuard.js';
@@ -397,9 +397,16 @@ function logHarmlessNetworkCrash(reason) {
   logger.warn(`[Discord] Falha de rede numa conexão já descartada (${reason.message}). Sem efeito: a Yui reconecta sozinha.`);
 }
 
+// Interação vencida (o comando chegou depois dos 3 s do Discord, ou já tinha resposta): aviso no log com a origem, sem DM de "Erro grave".
+function logExpiredInteraction(reason) {
+  const origem = firstProjectFrame(reason.stack) || 'sem origem em src/';
+  logger.warn(`[Discord] Interação vencida (${reason.code}): o comando chegou depois do prazo de 3 s do Discord ou já tinha resposta. Origem: ${origem}.`);
+}
+
 process.on('unhandledRejection', (reason) => {
   try {
     if (isHarmlessNetworkCrash(reason)) return logHarmlessNetworkCrash(reason);
+    if (isExpiredInteractionError(reason)) return logExpiredInteraction(reason);
     if (isChromeProfileCleanupError(reason)) {
       return logger.warn('[Chrome] Não deu para apagar o perfil temporário (arquivo em uso). Sem efeito: a Yui limpa numa próxima varredura.');
     }
@@ -413,6 +420,7 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (error) => {
   try {
     if (isHarmlessNetworkCrash(error)) return logHarmlessNetworkCrash(error);
+    if (isExpiredInteractionError(error)) return logExpiredInteraction(error);
     if (isChromeProfileCleanupError(error)) return logger.warn('[Chrome] Perfil temporário em uso na limpeza. Sem efeito.');
     logger.error(`Uncaught Exception: ${describeReason(error)}`);
     alertOwner(crashAlertKey(error), 'Erro grave na Yui', formatCrashDetail(error, { maxLines: 4 }), { level: 'error' });

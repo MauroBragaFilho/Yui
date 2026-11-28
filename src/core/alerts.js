@@ -113,6 +113,19 @@ export function isHarmlessNetworkCrash(reason, { root = PROJECT_ROOT } = {}) {
   return firstProjectFrame(stack, { root }) === null;
 }
 
+/**
+ * Interação do Discord que já não aceita resposta: passou do prazo de 3 s para a primeira resposta (10062, "Unknown interaction")
+ * ou já foi respondida (40060). Não é defeito do código: o comando chegou atrasado (computador ou rede lentos). Vai para o log como
+ * aviso, com a origem, e não vira DM de "Erro grave" (o /yui já trata o caso e avisa quem pediu: src/discord/commands/ask.js).
+ */
+export const CODIGOS_DE_INTERACAO_VENCIDA = Object.freeze([10062, 40060]);
+
+export function isExpiredInteractionError(reason) {
+  if (!(reason instanceof Error)) return false;
+  if (!CODIGOS_DE_INTERACAO_VENCIDA.includes(Number(reason.code))) return false;
+  return /DiscordAPIError/.test(`${reason.name ?? ''} ${reason.constructor?.name ?? ''} ${reason.stack ?? ''}`);
+}
+
 const ICON = { info: 'ℹ️', warn: '⚠️', error: '🚨' };
 
 export function createAlerter({ notify = null, ownerId = null, env = process.env, now = () => Date.now(), maxPerHour = 10, filtro = null } = {}) {

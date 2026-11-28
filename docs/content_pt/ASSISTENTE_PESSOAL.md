@@ -15,7 +15,7 @@ Este documento descreve a arquitetura que transformou a Yui de bot de Discord em
 5. [Memória](#-5-memória)
 6. [Agent e ferramentas](#-6-agent-e-ferramentas)
 7. [IA: AI Manager e Gateway](#-7-ia-ai-manager-e-gateway)
-8. [Personalidade por contexto](#-8-personalidade-por-contexto)
+8. [Personalidade](#-8-personalidade)
 9. [Entrada, API e painel](#-9-entrada-api-e-painel)
 10. [Modelo de ameaças](#-10-modelo-de-ameaças)
 11. [Fases e estado atual](#-11-fases-e-estado-atual)
@@ -240,19 +240,35 @@ O **AI Manager** (`src/core/ai/manager.js`) expõe `chat()` e delega a um backen
 
 ---
 
-## 🎭 8. Personalidade por contexto
+## 🎭 8. Personalidade
 
-Uma Yui, com tom diferente conforme **quem fala e onde** (`src/core/persona.js`, decidido pelo backend):
+Uma Yui só, com a **mesma personalidade e o mesmo jeito de falar em todo lugar** (`src/core/persona.js`, decidido pelo backend): no Discord público, na DM e no app do dono, para outros usuários da API, na voz e no chat de uma live. O contexto muda só **quem está do outro lado** e o que é privado; a voz e a live acrescentam as próprias regras de formato (respostas curtas).
 
-Antes das regras de cada contexto vem a **personalidade comum** (`persona/yui-personalidade.md`, escolhida por `YUI_PERSONA_FILE` no `.env`): doce, curiosa e afetuosa, acolhe primeiro quando há sinal emocional e vira objetiva quando é tarefa. Vale no Discord público, na DM e no app do dono, para outros usuários da API, na voz e na aba Código; `off` desliga. Cada contexto continua com as suas regras de segurança e de formato.
+- **Personalidade comum** (`persona/yui-personalidade.md`, escolhida por `YUI_PERSONA_FILE` no `.env`; `off` desliga): doce, curiosa e afetuosa, acolhe primeiro quando há sinal emocional e vira objetiva quando é tarefa.
+- **Jeito de falar** (`estiloDaYui`, o mesmo bloco em todos os contextos):
+  - calorosa, calma e direta, com humor leve e discreto;
+  - sem gírias exageradas nem apelidos;
+  - concisa, mas com listas e textos longos completos;
+  - **uma** recomendação clara quando pedem opinião;
+  - sem perguntas genéricas no fim;
+  - emoji só quando fizer sentido;
+  - curte jogos em geral e só fala de GTA quando o assunto é GTA.
 
-| Contexto | Perfil |
-|----------|--------|
-| Dono em **DM, canal privado ou no app** | **Pessoal:** assistente calorosa, direta, concisa e honesta. Chama você pelo nome (`YUI_OWNER_NAME`), admite que é uma IA, sabe a data e a hora no fuso do dono (`YUI_FUSO`; padrão Brasília), dá **uma** recomendação clara, não termina com perguntas genéricas e não usa gírias |
-| Outros usuários da **API** | **Assistente neutra:** sem o nome do dono e sem dados pessoais |
-| **Discord público** (qualquer usuário, e o dono em canal público) | **Pública:** texto em `persona/yui-publica.md` (gamer da turma, humor leve, curte jogos em geral e só fala de GTA quando o assunto é GTA) |
+| Contexto | O que muda |
+|----------|------------|
+| Dono em **DM, canal privado ou no app** | O nome do dono (`YUI_OWNER_NAME`), a data e a hora no fuso do dono (`YUI_FUSO`; padrão Brasília) e as regras de memória e privacidade |
+| Outros usuários da **API** | Sem o nome do dono e sem dados pessoais |
+| **Discord público** (qualquer usuário, e o dono em canal público) | As regras do servidor em `persona/yui-publica.md`, sem tom próprio |
 
-Regras do perfil pessoal: nunca inventar fatos ou ações; só dizer que fez algo no computador se uma ferramenta confirmou; perguntar **uma** coisa curta quando for ambíguo; recusar o perigoso oferecendo uma alternativa segura; usar lembranças só quando relevantes. **Ninguém é chamado de "assistente" ou "IA" por conta própria**: a Yui não se apresenta assim em nenhum perfil e só admite ser uma IA, em uma frase, se perguntarem a sério. A personalidade pública é um arquivo (`YUI_PERSONA_PUBLIC_FILE`, relido ao ser alterado) e foi enxugada para gastar poucos tokens; o contexto de GTA (dados do dia, conhecimento) só entra nas perguntas sobre GTA. Para personalizar o perfil pessoal, aponte `YUI_PERSONA_PERSONAL_FILE` para um arquivo seu (`{nome}` vira o nome do dono; só vale para o dono).
+**Regras em todos os contextos:**
+- nunca inventar fatos ou ações, e só dizer que fez algo se uma ferramenta confirmou;
+- perguntar **uma** coisa curta quando o pedido for ambíguo;
+- recusar o perigoso, oferecendo uma alternativa segura;
+- usar lembranças só quando forem relevantes.
+
+A Yui nunca se apresenta como IA, robô ou assistente, e também nunca afirma ser humana.
+
+As regras do Discord público ficam num arquivo (`YUI_PERSONA_PUBLIC_FILE`, relido ao ser alterado), e o contexto de GTA (dados do dia, conhecimento) só entra nas perguntas sobre GTA. Para personalizar o perfil do dono, aponte `YUI_PERSONA_PERSONAL_FILE` para um arquivo seu (`{nome}` vira o nome do dono; só vale para o dono). Esse arquivo substitui o perfil inteiro, inclusive o jeito de falar.
 
 ---
 
@@ -262,7 +278,7 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 
 - **Entrada nos apps:** usuário e senha (hash scrypt) **ou** chave de uso único (5 min) enviada por **DM no Discord**; resulta em uma **sessão temporária**. O app não pede endereço do servidor: ele é configuração do build.
 - **Proteções do login:** comparação em tempo constante, erro genérico, atraso nas falhas, bloqueio após 5 erros em 15 min, pedidos de chave limitados a 3 por 10 min.
-- **Painel de administração** (aba **Admin**, só o dono): visão geral, **integrações** (o que está ligado ou falta configurar), servidores (AutoMod, **canais** e **seguidos** de YouTube/Twitch, editáveis), **rádio**, banimentos (não permite banir o dono), memória (só metadados), **IA** (chaves, provedores próprios como o OmniRoute, ordem na fila, teste e botão para abrir o painel do OmniRoute), auditoria, **logs** (segredos mascarados), ferramentas, **mensagem no meu Discord** e reinício. A Yui também **avisa o dono por DM** quando algo dá errado (veja [Operação](OPERACAO.md)); a falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada (`src/discord/gatewayGuard.js` e `isHarmlessNetworkCrash` em `src/core/alerts.js`) não vira mais DM de "Erro grave": fica só no log, porque a Yui reconecta sozinha.
+- **Painel de administração** (aba **Admin**, só o dono): visão geral, **integrações** (o que está ligado ou falta configurar), servidores (AutoMod, **canais** e **seguidos** de YouTube/Twitch, editáveis), **rádio**, banimentos (não permite banir o dono), memória (só metadados), **IA** (chaves, provedores próprios como o OmniRoute, ordem na fila, teste e botão para abrir o painel do OmniRoute), auditoria, **logs** (segredos mascarados), ferramentas, **mensagem no meu Discord** e reinício. A Yui também **avisa o dono por DM** quando algo dá errado (veja [Operação](OPERACAO.md)); a falha de rede "Opening handshake has timed out" numa conexão do Discord já descartada (`src/discord/gatewayGuard.js` e `isHarmlessNetworkCrash` em `src/core/alerts.js`) não vira mais DM de "Erro grave": fica só no log, porque a Yui reconecta sozinha. O mesmo vale para a interação que o Discord cancela por atraso (códigos 10062 e 40060, `isExpiredInteractionError`): o comando chegou depois do prazo de 3 s, então fica um aviso no log com a origem, e o `/yui` manda a quem pediu um recado para repetir a pergunta.
 - **O que o painel nunca controla:** o modo somente leitura, a senha e os tokens de acesso. Só mudam no `.env`. As **chaves de IA** podem ser adicionadas pelo painel (só entram, nunca voltam; `YUI_PANEL_AI_EDIT=false` trava).
 
 ---
@@ -273,7 +289,7 @@ Detalhes e rotas em [YUI_API.md](YUI_API.md). Em resumo:
 |--------|-----------|
 | Usuário pede a memória do dono por prompt | Escopo decidido por `buildContext`; banco pessoal inacessível fora de OWNER + DM/privado |
 | Dono "imitado" por nome ou apelido | Identidade só pelo User ID da plataforma |
-| Vazamento em canal público | Em canal público o dono usa memória pública e a persona original |
+| Vazamento em canal público | Em canal público o dono usa memória pública e as regras do Discord público |
 | Prompt injection (web, arquivo, mensagem, resultado de ferramenta) | Conteúdo externo é dado; uma ferramenta por turno; resultado não volta ao LLM; ferramentas sensíveis exigem OWNER + canal privado + confirmação |
 | Texto da web (busca ou página) dando ordens à Yui | O texto entra cercado por uma marca de "dados externos não confiáveis" que a página não consegue forjar, e naquela chamada a IA fica sem ferramentas |
 | Anexo de texto (`.txt`, `.md`, `.log`) com instruções escondidas | Só `.txt`, `.md` e `.log` do CDN do Discord (host conferido antes de baixar, sem redirecionamento), até 3 arquivos, 100 KB e 12000 caracteres; o conteúdo entra cercado como dado não confiável, a IA fica **sem ferramentas** naquela chamada (o arquivo não consegue acionar banimento, download etc.), o texto do arquivo não vai ao `historico.txt`, ao alerta de conteúdo suspeito nem a provedores anônimos, e a busca e o AutoMod por palavras olham só a fala digitada |

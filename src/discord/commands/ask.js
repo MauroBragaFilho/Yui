@@ -32,6 +32,7 @@ import {
   ERROR_MARKER,
 } from '../../core/context/contextStore.js';
 import { logger } from '../../utils/logger.js';
+import { isExpiredInteractionError } from '../../core/alerts.js';
 import { searchVehicles } from '../../utils/vehicleData.js';
 import { searchWeapons } from '../../utils/weaponData.js';
 import {
@@ -416,6 +417,36 @@ async function refuseAsk(interaction, content, { asker, always }) {
   }
 }
 
+/** Recado quando o Discord cancela o /yui por atraso (a interação venceu antes da Yui conseguir responder). */
+export const TEXTO_INTERACAO_VENCIDA = 'Seu /yui chegou até mim depois do prazo do Discord, e ele cancelou a resposta. Pode mandar de novo?';
+
+/** Quanto tempo (ms) o comando levou desde que a pessoa o mandou; null sem o horário. */
+export function idadeDaInteracao(interaction, agora = Date.now()) {
+  const criado = Number(interaction?.createdTimestamp);
+  return Number.isFinite(criado) && criado > 0 ? Math.max(0, agora - criado) : null;
+}
+
+/**
+ * O /yui venceu antes do deferReply: registra o aviso (sem o texto da pergunta) e manda um recado curto por mensagem comum no mesmo
+ * canal (numa DM, a própria DM). Resposta privada pedida num servidor não ganha recado público: fica só o aviso no log. Nunca lança.
+ */
+export async function avisarInteracaoVencida(interaction, { ephemeral = false, code = null, agora = Date.now() } = {}) {
+  const idade = idadeDaInteracao(interaction, agora);
+  logger.warn(`[Ask] O Discord cancelou o /yui (${code ?? 'interação vencida'}): o comando chegou aqui ${idade === null ? 'sem horário' : `${idade} ms`} depois de enviado (o prazo é 3000 ms).`);
+  if (ephemeral && interaction?.guildId) return null;
+  const userId = interaction?.user?.id;
+  try {
+    if (interaction?.guildId && interaction.channel?.send) {
+      return await interaction.channel.send({ content: userId ? `<@${userId}> ${TEXTO_INTERACAO_VENCIDA}` : TEXTO_INTERACAO_VENCIDA, allowedMentions: { users: userId ? [userId] : [] } });
+    }
+    const dm = interaction?.channel?.send ? interaction.channel : interaction?.user;
+    return dm?.send ? await dm.send({ content: TEXTO_INTERACAO_VENCIDA, allowedMentions: { parse: [] } }) : null;
+  } catch (err) {
+    logger.warn(`[Ask] Não consegui mandar o recado da interação vencida: ${String(err?.message ?? err).slice(0, 120)}`);
+    return null;
+  }
+}
+
 export const askCommand = {
   data: setGlobalContext(
     new SlashCommandBuilder()
@@ -469,6 +500,9 @@ export const askCommand = {
       await interaction.deferReply({ ephemeral });
     } catch (deferError) {
       releaseAsk(asker, slot);
+      // O comando chegou depois dos 3 s do Discord (10062) ou já tinha resposta (40060): a interação morreu e nada mais pode ser
+      // respondido nela. Não é defeito: vira aviso no log (com quanto tempo o comando levou para chegar aqui) e um recado a quem pediu.
+      if (isExpiredInteractionError(deferError)) return avisarInteracaoVencida(interaction, { ephemeral, code: deferError.code });
       throw deferError;
     }
 

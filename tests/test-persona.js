@@ -182,6 +182,41 @@ await test('as regras de segurança continuam junto da personalidade (DM, links,
   }
   assert.match(corePersonaText(), /NUNCA diga, escreva nem sugira que você é IA/);
 });
+console.log('Persona única (pedido do dono em 27/11/2026: o jeito do chat do painel em todos os chats)');
+const { estiloDaYui } = await import('../src/core/persona.js');
+const { buildConversationSystemPrompt } = await import('../src/core/ai/promptConversa.js');
+await test('o JEITO DE FALAR é o MESMO bloco no Discord público, na DM do dono, no painel/app e para outros usuários da API', () => {
+  const estilo = estiloDaYui();
+  assert.match(estilo, /^JEITO DE FALAR/);
+  for (const [nome, p] of [['DM do dono', buildPersonaPrompt(ownerDm)], ['painel/app', buildPersonaPrompt(ownerApi)], ['API', buildPersonaPrompt(memberApi)], ['Discord público', publicPersonaText()]]) {
+    assert.ok(p.includes(estilo), `${nome} sem o jeito de falar comum`);
+    assert.equal(p.split('JEITO DE FALAR (o mesmo em todo lugar)').length - 1, 1, `${nome}: o bloco aparece uma vez só`);
+  }
+});
+await test('o Discord público não tem mais tom próprio (nada de "gamer", "casual e curto", reações e gírias)', () => {
+  const publica = publicPersonaText();
+  for (const antigo of [/gamer, curiosa/i, /casual e curto/i, /bem-humorada/i, /Conversa como gente/i, /"oi" pede "oi"/, /"boa!"/, /aí complica/]) assert.ok(!antigo.test(publica), String(antigo));
+  // o prompt REAL da conversa num canal público (sem override) leva o mesmo jeito de falar
+  const { withMemory } = buildConversationSystemPrompt({ persona: undefined });
+  assert.ok(withMemory.includes(estiloDaYui()));
+  assert.ok(withMemory.includes(buildPersonaPrompt(memberApi).match(/- Seja concisa:[^\n]*/)[0]));
+});
+await test('o perfil do dono continua com o que é só dele: o nome, a memória e a privacidade (e o público não)', () => {
+  const dono = buildPersonaPrompt(ownerDm);
+  assert.match(dono, /Trate Mauro por "você"; use o nome só de vez em quando/);
+  assert.match(dono, /MEMÓRIA E PRIVACIDADE/);
+  const publica = publicPersonaText();
+  assert.ok(!publica.includes('Mauro') && !/MEMÓRIA E PRIVACIDADE|lembranças/.test(publica));
+});
+await test('sem a personalidade comum (YUI_PERSONA_FILE=off) o jeito de falar continua igual nos contextos', () => {
+  process.env.YUI_PERSONA_FILE = 'off';
+  try {
+    const estilo = estiloDaYui();
+    assert.match(estilo, /Calorosa, calma e direta/);
+    for (const p of [buildPersonaPrompt(ownerDm), buildPersonaPrompt(memberApi), publicPersonaText()]) assert.ok(p.includes(estilo));
+  } finally { delete process.env.YUI_PERSONA_FILE; }
+});
+
 await test('o .env manda: outro arquivo em persona/ vale em todos os contextos; "off" volta ao comportamento antigo', () => {
   const alt = path.resolve(here, '..', 'persona', 'zz-teste-personalidade.md');
   fs.writeFileSync(alt, 'PERSONALIDADE-DE-TESTE doce e curiosa.');

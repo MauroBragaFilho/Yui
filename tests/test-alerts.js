@@ -217,4 +217,33 @@ await test('YUI_ALERTS=false continua desligando os avisos de erro grave', async
   assert.equal(sent.length, 0);
 });
 
+console.log('Interação vencida do Discord (10062/40060): aviso no log, não "Erro grave"');
+const { isExpiredInteractionError, CODIGOS_DE_INTERACAO_VENCIDA } = await import('../src/core/alerts.js');
+await test('isExpiredInteractionError: só DiscordAPIError com 10062 ou 40060', async () => {
+  const discordErr = (code, msg) => {
+    const e = new Error(msg);
+    e.name = `DiscordAPIError[${code}]`;
+    e.code = code;
+    e.stack = `DiscordAPIError[${code}]: ${msg}\n    at handleErrors (C:\\Yui\\node_modules\\@discordjs\\rest\\dist\\index.js:791:13)`;
+    return e;
+  };
+  assert.deepEqual([...CODIGOS_DE_INTERACAO_VENCIDA], [10062, 40060]);
+  assert.equal(isExpiredInteractionError(discordErr(10062, 'Unknown interaction')), true);
+  assert.equal(isExpiredInteractionError(discordErr(40060, 'Interaction has already been acknowledged.')), true);
+  assert.equal(isExpiredInteractionError(discordErr(50013, 'Missing Permissions')), false, 'outro erro do Discord continua grave');
+  assert.equal(isExpiredInteractionError(Object.assign(new Error('Unknown interaction'), { code: 10062 })), false, 'só o erro do Discord');
+  assert.equal(isExpiredInteractionError({ code: 10062, name: 'DiscordAPIError[10062]' }), false, 'não é Error');
+  assert.equal(isExpiredInteractionError(undefined), false);
+  assert.equal(isExpiredInteractionError('Unknown interaction'), false);
+});
+await test('o bot (src/index.js) separa a interação vencida antes do alerta de erro grave, nos dois tratadores', async () => {
+  const { fileURLToPath } = await import('url');
+  const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'index.js'), 'utf8');
+  for (const evento of ['unhandledRejection', 'uncaughtException']) {
+    const bloco = src.slice(src.indexOf(`process.on('${evento}'`));
+    const corte = bloco.indexOf('alertOwner(');
+    assert.ok(corte > 0 && bloco.slice(0, corte).includes('isExpiredInteractionError('), `${evento}: a checagem vem antes do alerta`);
+  }
+});
+
 console.log(`\n${passed} testes OK`);
