@@ -102,7 +102,7 @@ try {
       assert.deepEqual(chaves(ativos), ['conversa', 'pesquisa', 'privado', 'rapido', 'raciocinio', 'visao'].sort(), 'o local nunca fica ativo');
       assert.equal(perfis.privadoDeclarado(process.env), true);
     });
-    assert.deepEqual(perfis.NOMES_DE_PERFIL, ['conversa', 'rapido', 'pesquisa', 'raciocinio', 'privado', 'visao', 'local']);
+    assert.deepEqual(perfis.NOMES_DE_PERFIL, ['conversa', 'rapido', 'pesquisa', 'raciocinio', 'privado', 'visao', 'interpretar', 'local']);
   });
 
   await test('a privacidade é EXPLÍCITA: ausente, inválida ou incoerente com o perfil é recusada', () => {

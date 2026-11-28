@@ -125,6 +125,8 @@ export const SUITES = [
   'test:youtubefluxo',
   // Backup puxado para o Neon e reserva fria (scripts/neon-*.ps1): sintaxe e parametros dos .ps1, a decisao de ativar (recusa se o notebook responde), o selo do manifesto e a escolha do ultimo backup completo.
   'test:neonscripts',
+  // Fase B do interpretador de intenção (SÓ OBSERVAÇÃO, desligado por padrão, IA FALSA): esquema, prompt sem dado pessoal, timeout, disjuntor, perfil `interpretar`, só o dono, hash do texto, rotação, não bloqueia a resposta, a ligação no cérebro, o relatório e a bateria de frases.
+  'test:interpretador',
   'test:devtarefas',
   'test:sondahardware',
   'test:ialocal',

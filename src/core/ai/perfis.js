@@ -26,7 +26,7 @@ import { tetoGlobal, CAPACIDADE_PADRAO } from './limitesTokens.js';
 import { validarFormatoEstrito, ID_DE_PROVEDOR_RE } from './decisaoOmniRoute.js';
 
 /** Os perfis que existem. `local` é RESERVADO: aceito na configuração, mas nunca ativo nesta fase (o ponto de ligação de uma IA local, no futuro). */
-export const NOMES_DE_PERFIL = Object.freeze(['conversa', 'rapido', 'pesquisa', 'raciocinio', 'privado', 'visao', 'local']);
+export const NOMES_DE_PERFIL = Object.freeze(['conversa', 'rapido', 'pesquisa', 'raciocinio', 'privado', 'visao', 'interpretar', 'local']);
 /** O teto absoluto de saída de um perfil: nenhuma chamada por perfil pede mais que isto, qualquer que seja a configuração. */
 export const TETO_DO_PERFIL = 4096;
 export const MAX_TOKENS_MIN = 64;
@@ -34,7 +34,7 @@ export const MAX_TOKENS_MAX = 8192;
 /** O provedor padrão de um perfil: o OmniRoute cadastrado como provedor próprio (aiSettings TEMPLATES, id "omniroute"). */
 export const PROVEDOR_PADRAO = 'omniroute';
 
-const CHAVES_DO_PERFIL = new Set(['modelo', 'maxTokens', 'privacidade', 'provedor', 'habilitado', 'chaveVinculada', 'provedoresPermitidos', 'decisao']);
+const CHAVES_DO_PERFIL = new Set(['modelo', 'maxTokens', 'privacidade', 'provedor', 'habilitado', 'chaveVinculada', 'provedoresPermitidos', 'decisao', 'temperatura']);
 /** Campos que fariam do perfil um "agente" (persona, memória, ferramentas, permissão...): recusados com um aviso próprio. */
 const CAMPO_DE_AGENTE_RE = /persona|memori|memory|permiss|ferrament|tool|system|prompt|agente|agent|papel|role|identidade|skill/i;
 const MODELO_RE = /^[A-Za-z0-9][\w.:@/-]{0,119}$/;
@@ -84,6 +84,9 @@ export function validarPerfil(nome, bruto) {
   const maxTokens = bruto.maxTokens;
   if (!Number.isInteger(maxTokens) || maxTokens < MAX_TOKENS_MIN || maxTokens > MAX_TOKENS_MAX) erros.push(erro(nome, 'maxTokens', 'max-tokens-invalido', `"maxTokens" precisa ser um número inteiro de ${MAX_TOKENS_MIN} a ${MAX_TOKENS_MAX} (o efetivo nunca passa de ${TETO_DO_PERFIL}).`));
 
+  // temperatura (opcional, 0 a 2): o interpretador usa 0 (saída estável)
+  if (bruto.temperatura !== undefined && !(typeof bruto.temperatura === 'number' && Number.isFinite(bruto.temperatura) && bruto.temperatura >= 0 && bruto.temperatura <= 2)) erros.push(erro(nome, 'temperatura', 'temperatura-invalida', '"temperatura" precisa ser um número de 0 a 2.'));
+
   // privacidade (explícita)
   if (bruto.privacidade === undefined) erros.push(erro(nome, 'privacidade', 'privacidade-ausente', 'Informe a "privacidade" de forma explícita: "geral" ou "privada".'));
   else if (bruto.privacidade !== 'geral' && bruto.privacidade !== 'privada') erros.push(erro(nome, 'privacidade', 'privacidade-invalida', '"privacidade" só pode ser "geral" ou "privada".'));
@@ -122,6 +125,8 @@ export function validarPerfil(nome, bruto) {
     ok: true,
     perfil: {
       nome, modelo, maxTokens, privacidade: bruto.privacidade, provedor, habilitado: habilitado && !reservado,
+      ...(bruto.temperatura !== undefined ? { temperatura: bruto.temperatura } : {}),
+      ...(bruto.temperatura !== undefined ? { temperatura: bruto.temperatura } : {}),
       ...(privado ? { chaveVinculada: true, provedoresPermitidos, decisao } : {}),
     },
   };

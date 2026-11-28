@@ -243,6 +243,23 @@ export async function isolatedChat({ prompt, system = '', ctx = null, sensitive 
  * A privacidade é decidida AQUI, pela própria chamada (sensitive ou memória pessoal): um perfil geral nunca atende uma chamada privada, e nada é herdado
  * de outra pessoa (não há estado por conversa). AI_PRIVATE_LOCAL_ONLY com memória pessoal: a rota do perfil é nuvem, então o backend (local) atende.
  */
+/**
+ * Fase B do interpretador (docs/inteligencia): UMA chamada SÓ pelo perfil pedido, SEM cair na cadeia nem no gateway quando a rota do perfil falha
+ * (o texto do dono nunca vai a um provedor que o perfil não nomeia). Devolve { ok: true, texto, nome, combo, provedor, latenciaMs } ou
+ * { ok: false, motivo } (palavra fixa). Chamada geral (nunca privada) e sem histórico, sem memória e sem persona: só o `system` e o `prompt` dados.
+ * Nunca lança.
+ */
+export async function chamarSoPeloPerfil({ perfil, system = '', prompt, deadlineAt = null, env = process.env } = {}) {
+  try {
+    const messages = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: String(prompt ?? '') }];
+    const r = await tentarPerfil({ perfil, privada: false, messages, deadlineAt, env });
+    if (r.via === 'perfil') return { ok: true, texto: r.texto, nome: r.nome, combo: r.combo, provedor: r.provedor ?? null, latenciaMs: r.latenciaMs ?? null };
+    return { ok: false, motivo: r.via === 'fallback' ? String(r.motivo ?? 'falhou') : 'perfil-nao-ativo' };
+  } catch (err) {
+    return { ok: false, motivo: typeof err?.motivo === 'string' ? 'rota-fechada' : 'erro' };
+  }
+}
+
 async function viaPerfil({ perfil, persona, history, memoryBlock, prompt, ctx, sensitive, deadlineAt }) {
   const privada = sensitive === true || ctx?.memoryScope === 'personal';
   const somenteLocal = String(process.env.AI_PRIVATE_LOCAL_ONLY || 'false').toLowerCase() === 'true' && ctx?.memoryScope === 'personal';

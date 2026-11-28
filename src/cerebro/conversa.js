@@ -80,6 +80,8 @@ import { isGtaTopic } from '../core/ai/temaGta.js';
 // Voz unificada (Fase 1, docs/DESENHO_FASE1_YUI_PERSONAL_AI.md): a política de audiência é do CÓDIGO e vem antes da IA. Tudo atrás de YUI_VOZ_UNIFICADA (padrão desligado).
 import { decidirAudiencia, revalidar, fatosDaVoz, lerChavesVoz, NIVEL, MEDICAO_MAX_IDADE_MS } from '../core/politicaAudiencia.js';
 import { registrarAudiencia } from '../core/auditoriaAudiencia.js';
+// Interpretador de intenção (Fase B, YUI_INTERPRETADOR=observar, padrão off): roda ao lado das pré-rotas e só REGISTRA a comparação; nunca decide nem atrasa a resposta.
+import { criarObservador } from '../core/inteligencia/observador.js';
 
 const LOGGER_MUDO = Object.freeze({ debug() {}, info() {}, warn() {}, error() {} });
 const TURN_ID_RE =/^[A-Za-z0-9_.:-]{1,80}$/;
@@ -251,6 +253,8 @@ export function createChatBrain(deps = {}) {
   const escolherPerfil = deps.selecionarPerfil ?? ((t) => selecionarPerfil(t, { env }));
   // A pré-rota do Google (etapa 15): injetável para teste. Sem YUI_GOOGLE devolve null.
   const rotearGoogle = deps.google ?? ((a) => preRotaGoogle({ ...a, env }));
+  // O observador da Fase B (injetável para teste). Com YUI_INTERPRETADOR off (padrão) `iniciar` devolve null na hora: nada roda.
+  const observador = deps.observador ?? criarObservador({ env });
   const memoryBlockFor = deps.memoryBlock ?? ((ctx, query) => buildMemoryBlock(ctx, query));
   const personaFor = deps.persona ?? ((ctx) => buildPersonaPrompt(ctx));
   let toolsCache = null;
@@ -659,7 +663,25 @@ export function createChatBrain(deps = {}) {
   }
 
   /** Um passo: monta o prompt com as regras do cérebro e chama a IA. Devolve { text, model, failed, repeated? }. */
+  /** Fase B: dispara o interpretador em paralelo (sem esperar) e grava a comparação com a pré-rota quando o passo termina. Nunca lança nem atrasa o passo. */
   async function step(f, channel, o, prompt, extra = {}) {
+    let obs = null;
+    try {
+      if ((f.step ?? 1) <= 1 && o.reuseWeb !== true) {
+        obs = observador.iniciar({
+          texto: f.ownText, canal: f.ctx.channelKind ?? 'desconhecido', userId: f.ctx.userId, role: f.ctx.role, memoryScope: f.ctx.memoryScope,
+          voz: f.call.voice === true || f.call.voiceItem === true || f.call.voiceInteraction === true, terceiros: f.call.thirdParty === true || o.thirdParty === true, principal: o.main === true,
+        });
+      }
+    } catch { obs = null; }
+    try {
+      return await stepPrincipal(f, channel, o, prompt, extra, obs);
+    } finally {
+      try { obs?.fechar(); } catch { /* observar nunca derruba o passo */ }
+    }
+  }
+
+  async function stepPrincipal(f, channel, o, prompt, extra = {}, obs = null) {
     counters.steps += 1;
     const { ctx, call } = f;
     // Voz privada (só com a chave): o portão da revalidação e, como o contexto é o do dono em DM, a persona e a memória pessoal que a decisão permite
@@ -677,6 +699,7 @@ export function createChatBrain(deps = {}) {
     const googlePendente = rotearGoogle({ ctx, call: chamadaDoGoogle, texto: f.ownText || o.searchPrompt || '', prompt });
     const google = googlePendente ? await googlePendente : null; // desligado: null na hora, sem esperar nada
     portao('google');
+    if (google?.resposta || google?.prompt) obs?.marcar('google');
     if (google?.resposta) {
       marcarPesquisado(f.turnId);
       return { text: google.resposta, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 };
@@ -684,6 +707,7 @@ export function createChatBrain(deps = {}) {
     if (google?.prompt) { marcarPesquisado(f.turnId); prompt = google.prompt; o = { ...o, ...google.opcoes }; }
     // Skills (YUI_SKILLS, padrão desligado): null = não se aplica; { resposta } = a lista, por código; { bloco } = instruções do dono, sem ferramentas.
     const skill = skillDoPasso({ f, o, env, logger });
+    if (skill?.resposta || skill?.bloco) obs?.marcar('skill');
     // O texto da lista (as descrições vêm de arquivo) e a resposta que seguiu uma skill são derivados de arquivo: nunca entram no contexto por horas (como a web e o Google).
     if (skill?.resposta) { marcarPesquisado(f.turnId); return { text: skill.resposta, model: 'cérebro', failed: false, usedSearch: false, searchFailure: '', searchRetryAfterMs: 0 }; }
     if (skill?.bloco) { o = { ...o, noTools: true }; marcarPesquisado(f.turnId); }
@@ -700,6 +724,7 @@ export function createChatBrain(deps = {}) {
     portao('clima');
     const pedidoClima = pedidoDeClimaDoTurno(f, o, textoDoAutor, true);
     if (pedidoClima) {
+      obs?.marcar('clima');
       counters.climaPedidos += 1;
       if (pedidoClima.origem === 'continuacao') counters.climaContinuacoes += 1;
       const locaisPedidos = pedidoClima.locais?.length ? pedidoClima.locais.slice(0, 3) : [pedidoClima.local];
@@ -749,7 +774,7 @@ export function createChatBrain(deps = {}) {
     // Com o Google (a agenda do dono) ou uma skill no passo, ELES assumem: a busca por intenção não roda por cima (revisão independente: o prompt levava a AGENDA e a WEB).
     const intencaoDoPasso = google?.prompt || skill?.bloco ? null : extra.intencao;
     const porIntencao = !o.allowSearch && intencaoDoPasso?.buscar === true;
-    if (porIntencao && !dadosDoClima) counters.intencaoBusca += 1; // só conta a decisão que o passo de fato usou (não a que o Google, a skill ou o clima assumiram)
+    if (porIntencao && !dadosDoClima) { obs?.marcar('pesquisa-intencao'); counters.intencaoBusca += 1; } // só conta a decisão que o passo de fato usou (não a que o Google, a skill ou o clima assumiram)
     const privadaPorIntencao = (porIntencao && intencaoDoPasso.privado === true) || extra.privadaPorIntencao === true;
     if (dadosDoClima) {
       finalPrompt = montarPromptDeClima({ dados: dadosDoClima, userPrompt: prompt, semDados: semDadosDoClima });
